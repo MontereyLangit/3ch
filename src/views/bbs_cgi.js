@@ -1,7 +1,7 @@
 import { bbsCgiConfirmationTemplete } from "./_bbs_cgi_confirmation.js";
 import { bbsCgiErrorTemplete } from "./_bbs_cgi_error.js";
 import { bbsCgiSuccessTemplete } from "./_bbs_cgi_success.js";
-export const viewBbsCgiErrorHtml = model => `<html>${
+export const viewBbsCgiHtml = model => `<html>${
   model.hasErrors()
     && (model.status === "confirmation"
       ? "<!-- 2ch_X:cookie -->"
