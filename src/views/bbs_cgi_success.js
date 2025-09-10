@@ -1,7 +1,3 @@
-/*
- * @param {Object} model bbs.cgiのViewModel
- * @return {string} HTML
- */
 export const viewBbsCgiSuccessHtml = model => `
 <html lang="ja">
 <head>
