@@ -2,8 +2,8 @@
  * @param {Object} model bbs.cgiのViewModel
  * @return {string} HTML
  */
-export const getBbsCgiSuccessHtml = function(model) {
-  return `<html lang="ja">
+export const viewBbsCgiSuccessHtml = model => `
+<html lang="ja">
 <head>
 <title>書きこみました。</title>
 <meta http-equiv="Content-Type" content="text/html; charset=${model.charset}">
@@ -17,4 +17,3 @@ export const getBbsCgiSuccessHtml = function(model) {
 </body>
 </html>
 `;
-}
