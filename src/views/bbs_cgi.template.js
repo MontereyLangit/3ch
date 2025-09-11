@@ -1,6 +1,6 @@
-import { bbsCgiConfirmationTemplete } from "./_bbs_cgi_confirmation.js";
-import { bbsCgiErrorTemplete } from "./_bbs_cgi_error.js";
-import { bbsCgiSuccessTemplete } from "./_bbs_cgi_success.js";
+import { bbsCgiConfirmationTemplete } from "./_bbs_cgi_confirmation.template.js";
+import { bbsCgiErrorTemplete } from "./_bbs_cgi_error.template.js";
+import { bbsCgiSuccessTemplete } from "./_bbs_cgi_success.template.js";
 export const viewBbsCgiHtml = model => `<html>${
   model.hasErrors()
     && (model.status === "confirmation"
