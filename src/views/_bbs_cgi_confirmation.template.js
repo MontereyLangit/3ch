@@ -8,7 +8,6 @@ E-mail： ${model.form.mail}<br>
 投稿確認<br>
 ${model.confirmationText}
 </b>
-(3chiko.htmlの場合はリロード（再読み込み）してください)<br>
 変更する場合はキャンセルして書き直して下さい。<br><br>
 現在、荒らし対策でクッキーを設定していないと書きこみできないようにしています。<br>
 <font size=-1>(cookieを設定するとこの画面はでなくなります。)</font><br>

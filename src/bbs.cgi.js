@@ -71,7 +71,7 @@ export async function auth(request, env, ctx, HAP) {
     ip = `${octet[0]}:${octet[1]}:${octet[2]}:${octet[3]}`;
   }
 
-  const ninja = await env.NINJA.get(HAP);
+  const ninja = await env.USER.get(HAP);
 
   if (ninja) {
     // AUTH<>${validate}<>${gb.unixtime}<>${gb.asn}<>${gb.country}<>${gb.ken}<>${gb.city}<>${gb.userAgent}
@@ -94,7 +94,7 @@ export async function auth(request, env, ctx, HAP) {
 
   // 認証成功
   // deviceInformation<>U<>ip<>currentTime
-  await env.NINJA.put(HAP, `${deviceInformation}<>${U}<>${ip}<>${Math.floor(new Date().getTime() / 1000).toString()}`);
+  await env.USER.put(HAP, `${deviceInformation}<>${U}<>${ip}<>${Math.floor(new Date().getTime() / 1000).toString()}`);
   respondPlainText("認証成功");
 }
 
@@ -691,13 +691,13 @@ async function processIdentification(gb, request, env) {
 
   try {
     // 識別子システム（忍者データベース問い合わせ -> 各種処理）
-    // 忍者ID=HAP(8桁の数字),認証トークン=validate(6桁の数字)
-    const ninja = gb.cookies.HAP ? await env.NINJA.get(gb.cookies.HAP) : null;
+    // ユーザーID=HAP(8桁の数字),認証トークン=validate(6桁の数字)
+    const user = gb.cookies.HAP ? await env.USER.get(gb.cookies.HAP) : null;
 
-    // ninjaの中を調べて認証確認
+    // userの中を調べて認証確認
     // <>区切りで、0:D, 1:U, 2:firstIp, 3:created
-    if (ninja !== null) {
-      const userData = ninja.split("<>");
+    if (user !== null) {
+      const userData = user.split("<>");
       let deviceInfo;
 
       // userData[0]===""のとき、認証できていない
@@ -713,7 +713,7 @@ async function processIdentification(gb, request, env) {
 
     } else {
       const validate = Math.floor(Math.random() * 900000 + 100000).toString(); // 6桁のランダムな数字
-      await env.NINJA.put(newHAP, `AUTH<>${validate}<>${gb.unixtime}<>${gb.asn}<>${gb.country}<>${gb.ken}<>${gb.city}<>${gb.userAgent}`);
+      await env.USER.put(newHAP, `AUTH<>${validate}<>${gb.unixtime}<>${gb.asn}<>${gb.country}<>${gb.ken}<>${gb.city}<>${gb.userAgent}`);
 
       return dispError(gb, "ようこそ：貴方の忍者IDを作成します。２０秒～１分ほどかかるので少しの間だけ待ってちょ。。。 <br>bot・スパムでないことを確認するために認証を行う必要があります。<br><b>１分ほど待ってから</b>下のURLをWebブラウザから開き、6桁の認証コード「" + validate + "」を入力して認証を行ってください<br>https://www.3chbbs.com/auth/#!" + HAP);
     }

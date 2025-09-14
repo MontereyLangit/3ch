@@ -1,11 +1,13 @@
 ////@ts-check
-import { createHtmlResponse, createTextResponse, createErrorResponse } from "./services/service.js";
+import { createHtmlResponse, createTextResponse } from "./services/service.js";
 import { entryPost } from "./services/bbs_cgi_service.js";
 import { bbsCgiViewModel } from "./model/bbs_cgi_view_model.js";
 import { viewBbsCgiViewModel } from "./views/bbs_cgi_view_model.js";
 import { prepareAuthJs, authenticateUser } from "./services/auth_service.js";
 import { authViewModel } from "./model/auth_view_model.js";
 import { viewAuthJs } from "./views/auth.js";
+import { view404Html } from "./views/404.template.js";
+import { viewErrorHtml } from "./views/error.template.js";
 
 export default {
     async fetch(request, env, ctx) {
@@ -17,10 +19,6 @@ export default {
             if (request.method === "POST" &&
                     (pathname === "/test/bbs.cgi" || pathname === "/test/subbbs.cgi")) {
                 await entryPost(request, env, ctx, bbsCgiViewModel);
-
-                if (bbsCgiViewModel.error) {
-                    return createErrorResponse(bbsCgiViewModel);
-                }
                 
                 return createHtmlResponse(viewBbsCgiViewModel, bbsCgiViewModel);
             }
@@ -44,10 +42,13 @@ export default {
                 await authenticateUser(request, env, authViewModel);
 
                 if (authViewModel.error) {
-                    return createErrorResponse({ error: authViewModel.error, status: 400 });
+                    return new Response("認証失敗: " + authViewModel.error, {
+                        status: 400,
+                        headers: { "Content-Type": "text/plain; charset=utf-8" }
+                    });
                 }
                 
-                return new Response(authViewModel.body, {
+                return new Response("認証成功", {
                     status: 200,
                     headers: { "Content-Type": "text/plain; charset=utf-8" }
                 });
@@ -61,7 +62,10 @@ export default {
                 const datText = await thread.getDat();
 
                 if (datText === null) {
-                    return createErrorResponse({error: "Not Found", status: 404});
+                    return new Response("404 Not Found", {
+                        status: 404,
+                        headers: { "Content-Type": "text/plain; charset=utf-8" }
+                    });
                 }
 
                 return createTextResponse(datText, "Shift-JIS");
@@ -98,10 +102,11 @@ export default {
             }
 
             // Not Found
-            return createErrorResponse({error: `Not Found: ${pathname}`, status: 404});
-
+            return createHtmlResponse(view404Html, { status:404, pathname: pathname });
         } catch (err) {
-            return createErrorResponse({error: `Internal Server Error: ${err.message}`, status: 500});
+            // Internal Server Error
+            console.error(err);
+            return createHtmlResponse(viewErrorHtml, { status: 500, statusText: "Internal Server Error", errMsg: err.message });
         }
     },
 };

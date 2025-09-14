@@ -23,10 +23,12 @@ export class User extends DurableObject {
 
     // ストレージから取得
     // 0:userId/ninjaId<>1:fip<>2:deviceInfo<>3:userAgent<>4:created<>5:lastAsNum<>6:asChangingCount<>7:badCount<>8:samba24Registered<>9:tatesugiRegistered<>10:lastPostedTime<>11:samba24Count<>12:postCount<>13:postLength<>14:lastMessage<>15:lastUrls<>16:lastSubject<>17:multiPostingCount<>18:tatesugiCount<>19:lastCreatedTime<>
-    const data = (await this.ctx.storage.get("data") || "<><><><><><><><><><><><><><><><><><><><>").trim().split("<>");
+    this.rawData = await this.ctx.storage.get("data") || "";
+    const data = (this.rawData || "<><><><><><><><><><><><><><><><><><><><>").trim().split("<>");
 
     this.userId = data[0] || "";
     this.fip = data[1] || ""; // 本登録時のIPアドレス || 仮登録時のISP情報
+    // 認証フローでは、fipに "AUTH<>" や "AUTH2<>" のような文字列が入る
     this.deviceInfo = data[2] || "";
     this.userAgent = data[3] || "";
     this.created = data[4] ? new Date(parseInt(data[4])) : new Date();
@@ -59,7 +61,10 @@ export class User extends DurableObject {
       return;
     }
 
-    await this.ctx.storage.put("data", `${this.userId}<>${this.fip}<>${this.deviceInfo}<>${this.userAgent}<>${this.created.getTime()}<>${this.lastAsNum}<>${this.asChangingCount}<>${this.badCount}<>${this.samba24Registered ? this.samba24Registered.getTime() : 0}<>${this.tatesugiRegistered ? this.tatesugiRegistered.getTime() : 0}<>${this.lastPostedTime ? this.lastPostedTime.getTime() : 0}<>${this.samba24Count}<>${this.postCount}<>${this.postLength}<>${this.lastMessage}<>${this.lastUrls}<>${this.lastSubject}<>${this.multiPostingCount}<>${this.tatesugiCount}<>${this.lastCreatedTime ? this.lastCreatedTime.getTime() : 0}<>`);
+    const dataString = `${this.userId}<>${this.fip}<>${this.deviceInfo}<>${this.userAgent}<>${this.created.getTime()}<>${this.lastAsNum}<>${this.asChangingCount}<>${this.badCount}<>${this.samba24Registered ? this.samba24Registered.getTime() : 0}<>${this.tatesugiRegistered ? this.tatesugiRegistered.getTime() : 0}<>${this.lastPostedTime ? this.lastPostedTime.getTime() : 0}<>${this.samba24Count}<>${this.postCount}<>${this.postLength}<>${this.lastMessage}<>${this.lastUrls}<>${this.lastSubject}<>${this.multiPostingCount}<>${this.tatesugiCount}<>${this.lastCreatedTime ? this.lastCreatedTime.getTime() : 0}<>`;
+    
+    this.rawData = dataString;
+    await this.ctx.storage.put("data", dataString);
   }
 
   async setUserId(userId) {
@@ -137,12 +142,31 @@ export class User extends DurableObject {
    * @param ip IPアドレス
    * @param deviceInfo
    */
-  async register(userId, ip, deviceInfo) {
+  async register(userId, ip, deviceInfo, userAgentHash = "") {
     await this.load();
     this.userId = userId;
-    this.fip = ip;
+    // 認証成功後は、fipにIPアドレスを格納
+    this.fip = ip; 
     this.deviceInfo = deviceInfo;
+    if (userAgentHash) {
+      this.userAgent = userAgentHash;
+    }
     await this.save();
+  }
+
+  // auth_service.jsから呼び出すためのヘルパーメソッド
+  async getRawData() {
+    await this.load();
+    // fipに "AUTH..." が入っている場合は、それをそのまま返す
+    if (this.fip.startsWith("AUTH")) {
+      return this.fip;
+    }
+    return this.rawData;
+  }
+
+  async updateAuthStatus(authString) {
+    // 認証ステータスをfipに一時的に保存
+    await this.ctx.storage.put("data", `<>${authString}<>`);
   }
 
   /* 

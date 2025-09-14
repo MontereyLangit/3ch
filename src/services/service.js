@@ -106,36 +106,3 @@ export function createTextResponse(text, encoding = "UTF-8", rangeHeader = "", l
 
     return response;
 }
-
-/**
- * エラーレスポンスを生成します。
- * @param {object} model 
- * @returns {Response}
- */
-export function createErrorResponse(model) {
-    const status = model.status || 500;
-    const title = `${status} ${model.title || "Error"}`;
-    const errorMessage = model.error || "An unexpected error occurred.";
-
-    const html = `
-<!DOCTYPE html>
-<html>
-<head>
-<title>${title}</title>
-<meta http-equiv="Content-type" content="text/html; charset=UTF-8" />
-</head>
-<body>
-<h1>${title}</h1>
-<div id="content">
-${errorMessage.replace(/\n/g, '<br>')}
-</div>
-<hr>
-<div id="footer"><a href="https://www.3chbbs.com/">３ちゃんねる</a>(<a href="https://wiki.3chbbs.com/index.php/Project_edge">edge</a>)</div>
-</body>
-</html>`;
-
-    return new Response(html, {
-        status: status,
-        headers: { "Content-Type": "text/html;charset=UTF-8" }
-    });
-}

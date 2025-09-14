@@ -1,5 +1,6 @@
 ////@ts-check
 import { apiKey } from "../config.js";
+import { validateAuthViewModel } from "../model/auth_view_model.js";
 import { sha1Base64, md5 } from "../utils/crypto_utils.js";
 
 /**
@@ -9,38 +10,29 @@ import { sha1Base64, md5 } from "../utils/crypto_utils.js";
  * @param {import("../model/auth_view_model.js").authViewModel} model
  */
 export async function prepareAuthJs(request, env, model) {
-    const url = new URL(request.url);
-    const hap = url.searchParams.get("hap") || "";
-    if (!hap) {
-        model.error = "HAPがありません";
-        return model;
-    }
+    const url = new URL(request.url);    model.hap = url.searchParams.get("hap") || "";
 
-    const ninja = await env.NINJA.get(hap);
-    if (!ninja) {
-        model.error = "忍者IDが見つかりません";
-        return model;
-    }
+    const doId = env.USER.idFromString(model.hap);
+    const userObject = env.USER.get(doId);
+    model.userData = await userObject.getRawData(); // getRawDataはuser.jsに新規追加
 
-    const userData = ninja.split("<>");
-    if (userData[0] !== "AUTH" || !userData[7]) {
-        model.error = "不正な忍者IDです";
-        return model;
+    const validation = validateAuthViewModel(model, 'prepare');
+    
+    if (!validation.valid) {
+        model.error = validation.errorMsg;
+        return;
     }
-
-    const timeElapsed = Math.floor(Date.now() / 1000) - parseInt(userData[2]);
-    if (timeElapsed > 300) {
-        model.error = "認証の有効期限が切れています";
-        return model;
-    }
+    
+    // バリデーションが通れば、ninjaデータは有効
+    const userData = model.userData.split("<>");
 
     const ip = request.headers.get("CF-Connecting-IP");
     const token = crypto.randomUUID();
-    const authSig = await sha1Base64(md5(`${apiKey}.${ip}.${hap}.${token}.${md5(env.SALT)}`));
+    const authSig = await sha1Base64(md5(`${apiKey}.${ip}.${model.hap}.${token}.${md5(env.SALT)}`));
     const currentUnixTimeString = Math.floor(Date.now() / 1000).toString();
 
-    // KVを更新
-    await env.NINJA.put(hap, `AUTH2<>${userData[1]}<>${currentUnixTimeString}<>${userData[3]}<>${userData[4]}<>${userData[5]}<>${userData[6]}<>${userData[7]}`);
+    // Durable Objectを更新
+    await userObject.updateAuthStatus(`AUTH2<>${userData[1]}<>${currentUnixTimeString}<>${userData[3]}<>${userData[4]}<>${userData[5]}<>${userData[6]}<>${userData[7]}`);
 
     model.time = currentUnixTimeString;
     model.token = token;
@@ -52,8 +44,9 @@ export async function prepareAuthJs(request, env, model) {
  * @param {Request} request
  * @param {*} env
  * @param {import("../model/auth_view_model.js").authViewModel} model
+ * @returns {Promise<void>}
  */
-export async function authenticateUser(request, env, model) {
+export async function authenticateUser(request, env, model) {    
     const formData = await request.formData();
     model.hap = formData.get("hap") || "";
     model.turnstileToken = formData.get("cf-turnstile-response") || "";
@@ -69,54 +62,23 @@ export async function authenticateUser(request, env, model) {
     model.ken = request.cf?.region ?? "catv?";
     model.city = request.cf?.city ?? "";
 
-    // Turnstile 検証
-    const turnstileResult = await verifyTurnstile(model.turnstileToken, env.TURNSTILE_SECRET_KEY, model.ip);
-    if (!turnstileResult.success) {
-        model.error = "Turnstile認証に失敗しました: " + JSON.stringify(turnstileResult);
-        return model;
+    const doId = env.USER.idFromString(model.hap);
+    const userObject = env.USER.get(doId);
+    model.userData = await userObject.getRawData(); // getRawDataはuser.jsに新規追加
+
+    const validation = validateAuthViewModel(model, 'authenticate');
+
+    if (!validation.valid) {
+        model.error = validation.errorMsg;
+        return;
     }
 
-    // cert 検証
-    const expectedCert = await generateCertFromFormData(formData);
-    if (expectedCert !== model.cert) {
-        model.error = "不正な認証です（cert）";
-        return model;
-    }
+    // バリデーションが通れば、ninjaデータは有効
+    const userData = model.userData.split("<>");
 
-    // authSig 検証
-    const expectedAuthSig = await sha1Base64(md5(`${apiKey}.${model.ip}.${model.hap}.${model.token}.${md5(env.SALT)}`));
-    if (expectedAuthSig !== model.authSig) {
-        model.error = "不正な認証です（authSig）";
-        return model;
-    }
-
-    // 忍者ID(HAP)の検証
-    const ninja = await env.NINJA.get(model.hap);
-    if (!ninja) {
-        model.error = "認証が早すぎます（忍者IDを取得できませんでした）";
-        return model;
-    }
-
-    const userData = ninja.split("<>");
-    if (userData[0] !== "AUTH2" || !userData[7]) {
-        model.error = "不正な認証です（e4）";
-        return model;
-    }
-
-    const timeElapsed = Math.floor(Date.now() / 1000) - parseInt(userData[2]);
-    if (timeElapsed > 300) {
-        model.error = "認証が時間切れです。（5分以上経過）";
-        return model;
-    }
-
-    if (model.validate !== userData[1]) {
-        model.error = "認証コードが一致しません";
-        return model;
-    }
-
-    // 認証成功。NINJA KVを更新
+    // 認証成功。USER Durable Objectを更新
     const userAgentHash = userData[7];
-    await env.NINJA.put(model.hap, `${model.deviceInformation}<>${userAgentHash}<>${model.ip}<>${Math.floor(Date.now() / 1000).toString()}`);
+    await userObject.register(model.hap, model.ip, model.deviceInformation);
 
     model.body = "認証成功";
 }

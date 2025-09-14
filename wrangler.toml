@@ -2,11 +2,7 @@ name = "3ch"
 main = "src/index.js"
 compatibility_date = "2025-04-18"
 
-kv_namespaces = [
-  { binding = "TEST", id = "0b7e34627ddf4b6abd225faca9f10526", preview_id = "dc6cdf4c9f594bb09f7c0e956a20e469" },
-  { binding = "CAP", id = "dd7dbe03955d4c7da8797c8148739227", preview_id = "1a79d9a2fb91478c8db13e62495b69ba" },
-  { binding = "NINJA", id = "2b9714c48c924f0eadd4b197a372c683", preview_id = "" }
-]
+kv_namespaces = [  { binding = "TEST", id = "0b7e34627ddf4b6abd225faca9f10526", preview_id = "dc6cdf4c9f594bb09f7c0e956a20e469" },  { binding = "CAP", id = "dd7dbe03955d4c7da8797c8148739227", preview_id = "1a79d9a2fb91478c8db13e62495b69ba" }]
 
 [[r2_buckets]]
 #www.3chbbs.com
@@ -22,8 +18,8 @@ name = "THREAD"
 class_name = "Thread"
 
 [[durable_objects.bindings]]
-name = "NINJA"
-class_name = "Ninja"
+name = "USER"
+class_name = "User"
 
 [[migrations]]
 tag = "<v1>" # Migration identifier. This should be unique for each migration entry

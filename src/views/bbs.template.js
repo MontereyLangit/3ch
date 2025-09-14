@@ -1,5 +1,4 @@
-export const viewBbsHtml = model => 
-`<!DOCTYPE HTML>
+export const viewBbsHtml = model => `<!DOCTYPE HTML>
 <!--
 専ブラ用 旧仕様板top /<bbs>/
 -->

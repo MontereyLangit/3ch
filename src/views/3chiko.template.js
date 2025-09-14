@@ -1,5 +1,6 @@
 /*
  * クラシック版のWeb版(model不要)
+ * Cookieでwebclient=3chiko または ?webclient=3chiko の場合に利用
  */
 export const view3chikoHtml = () => `<!DOCTYPE html>
 <!-- 3chiko.html -->
