@@ -1,5 +1,6 @@
-//@ts-check
-import { sjis, respondPlainText, hexToBinary, sha1Base64, hash, md5, crypt, translateSaltChar } from "./common.js";
+////@ts-check
+import { sjis, hexToBinary, sha1Base64, hash, md5, crypt, translateSaltChar } from "./utils/crypto_utils.js";
+import { decodeSJIS } from './utils/common_utils.js';
 
 // 認証用APIKey
 export const apiKey = "6cde9d4cef741d82da3de7d179fe015bb0da538f334e3e98664f1277c23d8bd3";
@@ -540,42 +541,10 @@ function decodeSjisURIComponent(encodedURIComponent) {
     bytes.push(encodedURIComponent.charCodeAt(i));
     i++;
   }
-  return new sjis().decode(bytes);
+  return decodeSJIS(new Uint8Array(bytes));
 }
 
 /* キャップの処理 */
-async function processCap(gb, request, env) {
-  if (!gb.form.mail) return;
-  const rawCapPass = gb.form.mail.split("#");
-
-  if (rawCapPass[1]) {
-    /* キャップあるかな？ */
-    /* 先頭に!で旧仕様パスワード */
-    const capPass = rawCapPass[1].slice(0,1).includes("!") ? rawCapPass[1].slice(1) : await sha1Base64(await hash("SHA-256", md5(rawCapPass[1]) + gb.md5Salt));
-    let handle = await env.CAP.get(capPass);
-
-    if (!handle) return;
-
-    /* キャップがあったら、まずキャップフラグを立てる */
-    gb.cap = 1;
-    /* 次にキャップの種別をチェックする */
-    if (/★$/.test(handle)) {
-      /* ★つきハンドル（強力キャップ） */
-      gb.strongCap = 1;
-      handle = handle.replace(/★.*/, "");
-    }
-    /* 名前入れていたら 名前＠ハンドル ★ */
-    /* 名前なしの時は ハンドル ★ */
-    if (gb.form.FROM !== "")
-    {
-      gb.form.FROM = gb.form.FROM + "＠" + handle + " ★";
-    }
-    else
-    {
-      gb.form.FROM = handle + " ★";
-    }
-  }
-}
 
 /*
  * トリップの処理
@@ -584,9 +553,8 @@ async function processCap(gb, request, env) {
 async function processTrip(gb, request, env) {
   if (gb.tripKey === "") return;
 
-  const sjisEncoder = new sjis();
-  const sjisBytes = sjisEncoder.encode(gb.tripKey);
-  const handlePass = String.fromCharCode(...sjisBytes);
+  // トリップキーをSJISとしてバイト配列に変換し、それを文字コードとして解釈し直す
+  const handlePass = decodeSJIS(new TextEncoder().encode(gb.tripKey));
 
   if (handlePass.length >= 12) {
     const mark = handlePass.charAt(0);

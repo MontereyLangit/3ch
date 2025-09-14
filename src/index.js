@@ -1,9 +1,7 @@
 ////@ts-check
-import { handleBbsPost } from "./services/bbs_cgi_service.js";
-import { handleDat } from "./services/dat.js";
-import { handleSubject } from "./services/subject.js";
-import { handleHead } from "./services/head.js";
-import { handleSetting } from "./services/setting.js";
+import { createHtmlResponse, createTextResponse, createErrorResponse } from "./services/service.js";
+import { entryPost } from "./services/bbs_cgi_service.js";
+import { bbsCgiViewModel } from "./model/bbs_cgi_view_model.js";
 
 export default {
     async fetch(request, env, ctx) {
@@ -11,46 +9,67 @@ export default {
         const pathname = url.pathname;
 
         try {
-            // POST /test/bbs.cgi または /test/subbbs.cgi
+            // POST /test/bbs.cgi, /test/subbbs.cgi
             if (request.method === "POST" &&
                     (pathname === "/test/bbs.cgi" || pathname === "/test/subbbs.cgi")) {
-                return await handleBbsPost(request, env, ctx);
+                const model = await entryPost(request, env, ctx, bbsCgiViewModel);
+                
+                if (model.error) {
+                    return createErrorResponse(model);
+                }
+                
+                return await createHtmlResponse(bbsCgiViewModel);
             }
 
             // GET /{bbs}/{key}.dat
             const datMatch = pathname.match(/^\/([^/]+)\/([0-9]+)\.dat$/);
             if (request.method === "GET" && datMatch) {
-                const [, bbs, key] = datMatch;
-                return await handleDat(env, bbs, key);
+                const [, bbsName, key] = datMatch;
+                const thread = env.THREAD.getByName(bbsName + key);
+                const datText = await thread.getDat();
+
+                if (datText === null) {
+                    return createErrorResponse({error: "Not Found", status: 404});
+                }
+
+                return await createTextResponse(datText, "Shift-JIS");
             }
 
             // GET /{bbs}/subject.txt
             const subjectMatch = pathname.match(/^\/([^/]+)\/subject\.txt$/);
             if (request.method === "GET" && subjectMatch) {
-                const [, bbs] = subjectMatch;
-                return await handleSubject(env, bbs);
+                const [, bbsName] = subjectMatch;
+                const bbs = env.BBS.getByName(bbsName);
+                const subjectText = await bbs.getSubjectText();
+
+                return await createTextResponse(subjectText, "Shift-JIS");
             }
 
             // GET /{bbs}/head.txt
             const headMatch = pathname.match(/^\/([^/]+)\/head\.txt$/);
             if (request.method === "GET" && headMatch) {
-                const [, bbs] = headMatch;
-                return await handleHead(env, bbs);
+                const [, bbsName] = headMatch;
+                const bbs = env.BBS.getByName(bbsName);
+                const headText = await bbs.getHeadText();
+
+                return await createTextResponse(headText, "Shift-JIS");
             }
 
             // GET /{bbs}/SETTING.TXT
             const settingMatch = pathname.match(/^\/([^/]+)\/SETTING\.TXT$/i);
             if (request.method === "GET" && settingMatch) {
-                const [, bbs] = settingMatch;
-                return await handleSetting(env, bbs);
+                const [, bbsName] = settingMatch;
+                const bbs = env.BBS.getByName(bbsName);
+                const settingText = await bbs.getSettingText();
+
+                return await createTextResponse(settingText, "Shift-JIS");
             }
 
             // Not Found
-            return new Response("Not Found", { status: 404 });
+            return createErrorResponse({error: `Not Found: ${pathname}`, status: 404});
 
         } catch (err) {
-            console.error(err);
-            return new Response("Internal Server Error", { status: 500 });
+            return createErrorResponse({error: `Internal Server Error: ${err.message}`, status: 500});
         }
     },
 };

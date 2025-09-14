@@ -1,5 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { settingTxtDefault } from "./bbs.cgi.js";
+export { Bbs } from "./durable_objects/bbs.js";
+export { Thread } from "./durable_objects/thread.js";
 
 export const sjis = class {
   constructor() {
@@ -113,262 +115,10 @@ const convertThreadArrayToDat = function (threadArray) {
 }
 
 /* 
- * 板
- */
-export class Bbs extends DurableObject {
-  constructor(ctx, env) {
-    super(ctx, env);
-    this.isLoaded = false;
-
-    // インメモリのみの変数
-    this.ctx = ctx;
-    this.lastModified = new Date();
-    this.timeCheck = {};  // 各投稿の連投規制用データ:unixtime<>IP<>FIP<>識別IDのraw
-    this.tatesugiCheck = {};  // 各投稿のスレ立て制限用データ:unixtime<>IP<>FIP<>識別IDのraw
-  }
-
-  /*
-   * Storageからデータを取得します
-   */
-  async load() {
-    if (this.isLoaded) {
-      return;
-    }
-
-    // ストレージと同期する変数
-    this.settingText = (await this.ctx.storage.get("SETTING.TXT")) || settingTxtDefault;
-    this.headText = (await this.ctx.storage.get("head.txt")) || "";
-    this.subjectText = (await this.ctx.storage.get("subject.txt")) || "";
-    // ロード済みフラグ
-    this.loaded = true;
-  }
-
-  async setSettingText(text) {
-    this.settingText = text;
-    await this.ctx.storage.put("SETTING.TXT", text);
-  }
-
-  async getSettingText() {
-    await load();
-    return this.settingText;
-  }
-
-  async setHeadText(text) {
-    this.headText = text;
-    await this.ctx.storage.put("head.txt", text);
-  }
-
-  async getHeadText() {
-    await load();
-    return this.headText;
-  }
-
-  async setSubjectText(text) {
-    this.subjectText = text;
-    await this.ctx.storage.put("subject.txt", text);
-    this.lastModified = new Date();
-  }
-
-  async getSubjectText() {
-    await load();
-    return this.subjectText;
-  }
-
-  /* 
-   * 入力されたスレ一覧配列をスレ一覧テキストに変換して保存
-   * ストレージ書き込みは一定確率(書き込まないときはインメモリ変数のみ)
-   * @param {Array} subjectArray - スレッド一覧配列
-   * @param {number} [writeFrequencyMSec=1000] - ストレージ最低書き込み頻度(ミリ秒)
-   */
-  async saveSubject(subjectArray, writeFrequencyMSec = 1000) {
-    this.subjectText = convertSubjectArrayToSubjectText(subjectArray);
-
-    const currentDate = new Date();
-    if (!this.loaded || this.lastModified.getTime() + writeFrequencyMSec < currentDate.getTime()) {
-      await this.ctx.storage.put("subject.txt", this.subjectText);
-      this.lastModified = currentDate;
-    }
-  }
-
-  async loadSubject() {
-    await load();
-    return convertSubjectTextTosubjectArray(this.subjectText);
-  }
-  
-  async getLastModified() {
-    return this.lastModified;
-  }
-
-  async setTimeCheck(obj) {
-    this.timeCheck = obj;
-  }
-
-  async getTimeCheck() {
-    return this.timeCheck;
-  }
-
-  async setTatesugiCheck(obj) {
-    this.tatesugiCheck = obj;
-  }
-
-  async getTatesugiCheck() {
-    return this.tatesugiCheck;
-  }
-}
-
-/* 
- * スレッド
- */
-export class Thread extends DurableObject {
-  constructor(ctx, env) {
-    super(ctx, env);
-
-    // インメモリのみ変数
-    this.ctx = ctx;
-    this.lastModified = 0;
-    this.resNum = 0;
-  }
-
-  /*
-   * Storageからデータを取得します
-   */
-  async load() {
-    if (this.loaded) {
-      return;
-    }
-
-    // ストレージから取得
-    this.settingText = (await this.ctx.storage.get("SETTING.TXT")) || "";
-    this.dat = (await this.ctx.storage.get("dat")) || "";
-    this.logText = (await this.ctx.storage.get("logText")) || "";
-    // ロード済みフラグ
-    this.isLoaded = true;
-  }
-
-  async setSettingText(settingText) {
-    this.settingText = settingText;
-    await this.ctx.storage.put("settingText", this.settingText);
-  }
-
-  async getSettingText() {
-    await load();
-    return this.settingText;
-  }
-
-  async setDat(dat) {
-    this.dat = dat;
-    await this.ctx.storage.put("dat", this.dat);
-  }
-
-  async getDat() {
-    await load();
-    return this.dat;
-  }
-
-  /* 
-   * スレッドを更新します
-   * @param {array} threadArray スレッド配列
-   * @param {string} logText スレッドのログテキスト
-   * @param {number} [writeFrequencyMSec=1000] - ストレージ最低書き込み頻度(ミリ秒)
-   */
-  async saveThread(threadArray, logText, writeFrequencyMSec = 1000) {
-    const currentDate = new Date();
-    this.dat = convertThreadArrayToDat(threadArray);
-    this.logText = logText;
-    
-    if (getLastModified().getTime() + writeFrequencyMSec < currentDate.getTime()) {
-      await this.ctx.storage.put("dat", this.dat);
-      await this.ctx.storage.put("logText", this.logText);
-      this.lastModified = currentDate;
-    }
-  }
-
-  async setLogText(logText) {
-    this.logText = logText;
-    await this.ctx.storage.put("logText", this.logText);
-  }
-
-  async getLogText() {
-    await load();
-    return this.logText;
-  }
-
-  /* 
-   * スレッド配列を取得します
-   * @return {array} スレッド配列
-   */
-  async getThreadArray() {
-    await load();
-    return convertDatToThreadArray(this.dat);
-  }
-
-  async getLastModified() {
-    return this.lastModified || await loadThreadLastModified();
-  }
-
-  async getResNum() {
-    return this.resNum || await loadThreadResNum();
-  }
-
-  /* 
-   * 最終更新日時をdatから取得します
-   * 最終更新日時のフィールドも同時に更新します
-   * @return {Date} 最終更新時刻
-   */
-  async loadThreadLastModified() {
-    await load();
-    // スレッドの最後のレスの日時を返す
-    const threadArray = convertThreadTextToThreadArray(this.dat);
-
-    if (!threadArray) {
-      return new Date();
-    }
-
-    const lastResDateStr = threadArray.pop().date;
-
-    if (lastResDateStr) {
-      // "2025/08/31(日) 23:52:11.733 ID:zgUUuCG2"
-      const split = lastResDateStr.split(" ");
-
-      // split[0]から曜日を取り除く
-      const day = split[0].replace(/\(.+\)$/, "");
-
-      if (split[1]) {
-        // "2025/08/31 23:52:11.733"
-        this.lastModified = new Date(`${day} ${split[1]}`);
-        return this.lastModified;
-      }
-
-      return new Date();
-    }
-
-    return new Date();
-  }
-
-  /* 
-   * レス数をdatから取得します
-   * レス数のフィールドも同時に更新します
-   * @return {int} レス数
-   */
-  async loadThreadResNum() {
-    await load();
-    const threadArray = convertThreadTextToThreadArray(this.dat);
-
-    // レスが無い場合
-    if (!threadArray) {
-      return 0;
-    }
-
-    this.resNum = threadArray.length;
-    return this.resNum;
-  }
-}
-
-/* 
  * 忍法帖
  * ストレージから取得: fip, deviceInfo, userAgent, created, samba24Registered, tatesugiRegistered
  */
-export class Ninja extends DurableObject {
+export class User extends DurableObject {
 
   constructor(ctx, env) {
     super(ctx, env);
@@ -392,22 +142,22 @@ export class Ninja extends DurableObject {
     this.fip = data[1] || ""; // 本登録時のIPアドレス || 仮登録時のISP情報
     this.deviceInfo = data[2] || "";
     this.userAgent = data[3] || "";
-    this.created = data[4] ? new Date(parseInt(data[4])) || new Date();
+    this.created = data[4] ? new Date(parseInt(data[4])) : new Date();
     this.lastAsNum = data[5] || ""; // AS番号
-    this.asChangingCount = data[6] ? parseInt(data[6]) || 0; // AS番号が変わった回数 4回目で再認証必須
-    this.badCount = data[7] ? parseInt(data[7]) || 0;  // 自動規制カウント 4回貯まると自動焼き
-    this.samba24Registered = data[8] ? new Date(parseInt(data[8])) || new Date();
-    this.tatesugiRegistered = data[9] ? new Date(parseInt(data[9])) || new Date();
-    this.lastPostedTime = data[10] ? new Date(parseInt(data[10])) || new Date();
-    this.samba24Count = data[11] ? parseInt(data[11]) || 0;
-    this.postCount = data[12] ? parseInt(data[12]) || 0;
-    this.postLength = data[13] ? parseInt(data[13]) || 0;
+    this.asChangingCount = data[6] ? parseInt(data[6]) : 0; // AS番号が変わった回数 4回目で再認証必須
+    this.badCount = data[7] ? parseInt(data[7]) : 0;  // 自動規制カウント 4回貯まると自動焼き
+    this.samba24Registered = data[8] ? (new Date(parseInt(data[8]))) : new Date();
+    this.tatesugiRegistered = data[9] ? (new Date(parseInt(data[9]))) : new Date();
+    this.lastPostedTime = data[10] ? (new Date(parseInt(data[10]))) : new Date();
+    this.samba24Count = data[11] ? parseInt(data[11]) : 0;
+    this.postCount = data[12] ? parseInt(data[12]) : 0;
+    this.postLength = data[13] ? parseInt(data[13]) : 0;
     this.lastMessage = data[14] || "";
     this.lastUrls = data[15] || "";
     this.lastSubject = data[16] || "";
-    this.multiPostingCount = data[17] ? parseInt(data[17]) || 0;
-    this.tatesugiCount = data[18] ? parseInt(data[18]) || 0;
-    this.lastCreatedTime = data[19] ? new Date(parseInt(data[19])) || new Date();
+    this.multiPostingCount = data[17] ? parseInt(data[17]) : 0;
+    this.tatesugiCount = data[18] ? parseInt(data[18]) : 0;
+    this.lastCreatedTime = data[19] ? (new Date(parseInt(data[19]))) : new Date();
     // ロード済みフラグ
     this.isLoaded = true;
   }
@@ -647,7 +397,7 @@ export class Ninja extends DurableObject {
 
     // 1時間以内の投稿のみ判定
     if (keika < 3600) {
-      const totalLength this.postLength + postLength;
+      const totalLength = this.postLength + postLength;
       if (totalLength > maxRegLength) {
         this.badCount++;
         return `701 床割っても断る！(${totalLength} bytes/${maxRegLength} bytes)`;
