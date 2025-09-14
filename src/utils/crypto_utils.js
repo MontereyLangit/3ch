@@ -45,37 +45,6 @@ export async function hash(algo, str) {
  * @returns {string}
  */
 export function md5(str) {
-  // ... (md5関数の実装は長いため省略)
-  // common.jsからそのままコピーしてください
-}
-
-/**
- * Unix crypt(3) を実装します。
- * @param {string} pw 
- * @param {string} salt 
- * @returns {string}
- */
-export const crypt = (pw, salt) => unixCrypt(pw, salt);
-
-export function translateSaltChar(c) {
-    const code = c.charCodeAt(0);
-    if ((code >= 0x3A && code <= 0x40) ||
-        (code >= 0x5B && code <= 0x60) ||
-        (code >= 0x00 && code <= 0x2D) ||
-        (code >= 0x7B && code <= 0xFF)) {
-        const table = "A-Ga-f./";
-        return table[(code - (code >= 0x7B ? 0x7B : (code >= 0x5B ? 0x5B : (code >= 0x3A ? 0x3A : 0x00))) % table.length)];
-    }
-    return c;
-}
-
-
-// MD5 and Crypt implementations from common.js
-
-/*
- * md5
- */
-export function md5(str) {
   function cmn(q, a, b, x, s, t) {
     a = (((a + q) | 0) + ((x + t) | 0)) | 0;
     return (((a << s) | (a >>> (32 - s))) + b) | 0;
@@ -225,4 +194,24 @@ export function md5(str) {
   }
 
   return md51(str).map(rhex).join("");
+}
+
+/**
+ * Unix crypt(3) を実装します。
+ * @param {string} pw 
+ * @param {string} salt 
+ * @returns {string}
+ */
+export const crypt = (pw, salt) => unixCrypt(pw, salt);
+
+export function translateSaltChar(c) {
+    const code = c.charCodeAt(0);
+    if ((code >= 0x3A && code <= 0x40) ||
+        (code >= 0x5B && code <= 0x60) ||
+        (code >= 0x00 && code <= 0x2D) ||
+        (code >= 0x7B && code <= 0xFF)) {
+        const table = "A-Ga-f./";
+        return table[(code - (code >= 0x7B ? 0x7B : (code >= 0x5B ? 0x5B : (code >= 0x3A ? 0x3A : 0x00))) % table.length)];
+    }
+    return c;
 }

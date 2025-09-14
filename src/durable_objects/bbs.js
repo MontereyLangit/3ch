@@ -1,6 +1,39 @@
 import { DurableObject } from "cloudflare:workers";
-import { settingTxtDefault } from "../bbs.cgi.js";
 import { convertSubjectTextTosubjectArray, convertSubjectArrayToSubjectText } from "../utils/common_utils.js";
+
+/* デフォルト板設定 */
+export const settingTxtDefault = `BBS_TITLE=<DIR_NAME>＠3ch掲示板
+BBS_NONAME_NAME=名無しさん＠３ちゃんねる
+BBS_MAX_MENU_THREAD=300
+BBS_FORCE_SAGE=
+BBS_NINJA2=checked
+BBS_ID=checked
+BBS_ID_GROUP=
+BBS_ID_RESET=86400
+BBS_ID_LV=
+BBS_ID_SHIKIBETSU=checked
+BBS_SUBJECT_COUNT=64
+BBS_NAME_COUNT=64
+BBS_MAIL_COUNT=64
+BBS_MESSAGE_COUNT=4096
+BBS_LINE_NUMBER=30
+BBS_THREAD_TATESUGI=3/86400
+BBS_CREATETHREAD_INTERVAL=5
+BBS_COPIPE=3/86400
+timecount=18
+timeclose=10
+timecover=3600
+BBS_COOK82=10
+BBS_COOK82_POST_LIMIT=60
+BBS_LIVE=
+BBS_KISEIOFF=
+BBS_NO_MADAKANA=
+BBS_THREAD_SETTINGS=on
+BBS_DISABLE_NUSI=
+BBS_FORCE_NONAME=
+BBS_ARR=
+BBS_HEISA=
+`;
 
 /* 
  * 板

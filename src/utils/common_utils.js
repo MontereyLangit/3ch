@@ -95,14 +95,13 @@ export const convertDatToThreadArray = function (dat) {
 
     for (const line of lines) {
         const parts = line.split('<>');
-        if (parts.length >= 6) { // name, mail, date, message, title, (optional) id
+        if (parts.length >= 6) { // name, mail, date, message, title
             threadArray.push({
                 name: parts[0],
                 mail: parts[1],
                 date: parts[2],
                 message: parts[3],
-                title: parts[4],
-                id: parts[5] || ''
+                title: parts[4]
             });
         }
     }
@@ -116,8 +115,8 @@ export const convertDatToThreadArray = function (dat) {
  */
 export const convertThreadArrayToDat = function (threadArray) {
   if (!threadArray || threadArray.length === 0) return "";
-  
-  return threadArray.map(res => 
-      [res.name, res.mail, res.date, res.message, res.title, res.id].join('<>')
+
+  return threadArray.map(res =>
+      [res.name, res.mail, res.date, res.message, res.title].join('<>')
   ).join('\n') + '\n';
 }
