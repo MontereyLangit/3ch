@@ -1,5 +1,5 @@
 name = "3ch-workers"
-main = "dist/index.ts"
+main = "dist/index.js"
 compatibility_date = "2025-09-09"
 
 [vars]
