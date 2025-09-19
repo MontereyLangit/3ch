@@ -1,20 +1,15 @@
 {
-  "name": "3ch_workers",
-  "version": "0.1.1",
-  "private": true,
+  "name": "3ch",
+  "type": "module",
   "scripts": {
-    "deploy": "wrangler deploy",
-    "start": "wrangler dev"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
   },
   "dependencies": {
-    "encoding-japanese": "^2.2.0",
-    "hono": "^4.9.8",
-    "unix-crypt-td-js": "^1.1.4"
+    "hono": "^4.9.8"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240512.0",
-    "@types/node": "^24.5.2",
-    "typescript": "^5.9.2",
-    "wrangler": "^4.38.0"
+    "wrangler": "^4.4.0"
   }
 }
