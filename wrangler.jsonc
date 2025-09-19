@@ -1,38 +1,45 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "3ch",
+  "name": "3ch-workers",
   "main": "src/index.ts",
-  "compatibility_date": "2025-09-19"
-  // "compatibility_flags": [
-  //   "nodejs_compat"
-  // ],
-  // "vars": {
-  //   "MY_VAR": "my-variable"
-  // },
-  // "kv_namespaces": [
-  //   {
-  //     "binding": "MY_KV_NAMESPACE",
-  //     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-  //   }
-  // ],
-  // "r2_buckets": [
-  //   {
-  //     "binding": "MY_BUCKET",
-  //     "bucket_name": "my-bucket"
-  //   }
-  // ],
-  // "d1_databases": [
-  //   {
-  //     "binding": "MY_DB",
-  //     "database_name": "my-database",
-  //     "database_id": ""
-  //   }
-  // ],
-  // "ai": {
-  //   "binding": "AI"
-  // },
-  // "observability": {
-  //   "enabled": true,
-  //   "head_sampling_rate": 1
-  // }
+  "compatibility_date": "2025-09-19",
+  "vars": {
+    "ENVIRONMENT": "production",
+    "salt": "ch35th_md5_SALT!2328959a823239020f%4M?67343883c469360-.|tc-/*BG&f&uzxG|NG4Dnts#C4L$j2,#,^:;fd99d62ad94fd0f261d7aaa09cce38030cs55e9a6192d683bd577f2717f7ce0088334e06fb4389d01529c73a372e6b3826c4c6116d4ZWf88a2521b69a3749ddf308D2fEDUIM="
+  },
+  // KV Namespace bindings.
+  "kv_namespaces": [
+    {
+      "binding": "TEST",
+      "id": "0b7e34627ddf4b6abd225faca9f10526",
+      "preview_id": "dc6cdf4c9f594bb09f7c0e956a20e469"
+    },
+    {
+      "binding": "CAP",
+      "id": "dd7dbe03955d4c7da8797c8148739227",
+      "preview_id": "1a79d9a2fb91478c8db13e62495b69ba"
+    }
+  ],
+  // Durable Object bindings.
+  "durable_objects": {
+    "bindings": [
+      { "name": "BBS", "class_name": "Bbs" },
+      { "name": "THREAD", "class_name": "Thread" },
+      { "name": "USER", "class_name": "User" }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": [
+        "Bbs",
+        "Thread",
+        "User"
+      ]
+    }
+  ],
+  // Limits for your Worker.
+  "limits": {
+    "cpu_ms": 300000
+  }
 }
