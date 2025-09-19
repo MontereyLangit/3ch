@@ -1,9 +1,10 @@
 ////@ts-check
 import { createHtmlResponse, createTextResponse } from "./services/service.js";
-import { entryPost } from "./services/bbs_cgi_service.js";
+import { post } from "./services/bbs_cgi_service.js";
 import { bbsCgiViewModel } from "./model/bbs_cgi_view_model.js";
-import { viewBbsCgiViewModel } from "./views/bbs_cgi_view_model.js";
+import { viewBbsCgiHtml } from "./views/bbs_cgi.template.js";
 import { prepareAuthJs, authenticateUser } from "./services/auth_service.js";
+import { viewAuthHtml } from "./views/auth.template.js";
 import { authViewModel } from "./model/auth_view_model.js";
 import { viewAuthJs } from "./views/auth.js";
 import { view404Html } from "./views/404.template.js";
@@ -18,9 +19,9 @@ export default {
             // POST /test/bbs.cgi, /test/subbbs.cgi
             if (request.method === "POST" &&
                     (pathname === "/test/bbs.cgi" || pathname === "/test/subbbs.cgi")) {
-                await entryPost(request, env, ctx, bbsCgiViewModel);
+                await post(request, env, ctx, bbsCgiViewModel);
                 
-                return createHtmlResponse(viewBbsCgiViewModel, bbsCgiViewModel);
+                return createHtmlResponse(viewBbsCgiHtml, bbsCgiViewModel);
             }
 
             // GET /api/auth.js

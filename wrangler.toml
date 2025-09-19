@@ -1,13 +1,11 @@
-name = "3ch"
-main = "src/index.js"
-compatibility_date = "2025-04-18"
+name = "3ch-workers"
+main = "dist/index.ts"
+compatibility_date = "2025-09-09"
+
+[vars]
+ENVIRONMENT = "production"
 
 kv_namespaces = [  { binding = "TEST", id = "0b7e34627ddf4b6abd225faca9f10526", preview_id = "dc6cdf4c9f594bb09f7c0e956a20e469" },  { binding = "CAP", id = "dd7dbe03955d4c7da8797c8148739227", preview_id = "1a79d9a2fb91478c8db13e62495b69ba" }]
-
-[[r2_buckets]]
-#www.3chbbs.com
-binding = 'ch3www'
-bucket_name = '3ch'
 
 [[durable_objects.bindings]]
 name = "BBS"
