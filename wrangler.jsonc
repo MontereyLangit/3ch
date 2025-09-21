@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "3ch-workers",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "compatibility_date": "2025-09-19",
   "vars": {
     "ENVIRONMENT": "production",

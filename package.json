@@ -10,6 +10,7 @@
     "hono": "^4.9.8"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250921.0",
     "@types/encoding-japanese": "^2.2.1",
     "encoding-japanese": "^2.2.0",
     "unix-crypt-td-js": "^1.1.4",
