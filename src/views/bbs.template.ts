@@ -9,11 +9,6 @@ export const ViewBbs = (model: BbsViewModel): string => `<!DOCTYPE HTML>
 <meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Cache-Control" content="no-cache">
-<script>
-// Webブラウザはjsで /boards/<bbs>/ にリダイレクトすること
-// 専ブラはjsを解釈しないため、チェック不要
-location.href = "/boards/${model.bbs}/";
-</script>
 <script type="text/javascript" src="https://code.jquery.com/jquery-2.2.4.min.js"></script>
 <script>
 /*
@@ -111,6 +106,11 @@ body { word-break: break-word; overflow-wrap: break-word; overscroll-behavior-y:
 <a href="//3ch.shop/">３ちゃんねる</a> BBS.CGI ver 1.07.427 - 2022/04/27 22:56 JST<br>
 <a href="./SETTING.TXT">SETTING.TXT</a></p>
 <div align="right" id="kanri"><a href="./admin/admin.php?bbs=livegalileo"><input type="submit" value="管理画面へ"></a></div>
+<script>
+// Webブラウザはjsで /boards/<bbs>/ にリダイレクトすること
+// 専ブラはjsを解釈しないため問題ない
+location.href = "/boards/${model.bbs}/";
+</script>
 </body>
 </html>
 `;
