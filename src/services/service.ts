@@ -1,4 +1,5 @@
-import { encodeSJIS } from "../utils/common_utils.js";
+import { encodeSJIS } from "../utils/common_utils";
+import { ViewModel } from "../model/view_model";
 
 /**
  * ViewModelからHTMLレスポンスを生成します。
@@ -6,9 +7,9 @@ import { encodeSJIS } from "../utils/common_utils.js";
  * @param {object} model ViewModel
  * @returns {Response}
  */
-export function createHtmlResponse(view, model) {
+export function createHtmlResponse<T extends ViewModel>(view: (model: T) => string, model: T): Response {
     const headers = model.headers || {};
-    let body;
+    let body: string | Uint8Array;
 
     if (model.isSJIS) {
         headers["Content-Type"] = `text/html; charset=Shift_JIS`;
@@ -34,8 +35,15 @@ export function createHtmlResponse(view, model) {
  * @param {object} addHeader 
  * @returns {Response}
  */
-export function createTextResponse(text, encoding = "UTF-8", rangeHeader = "", lastModified = new Date(), ifModifiedSinceHeader = "", addHeader = {}) {
-    let response = null;
+export function createTextResponse(
+    text: string,
+    encoding: "UTF-8" | "Shift_JIS" = "UTF-8",
+    rangeHeader: string | null = "",
+    lastModified: Date = new Date(),
+    ifModifiedSinceHeader: string | null = "",
+    addHeader: Record<string, string> = {}
+): Response {
+    let response: Response;
 
     if (ifModifiedSinceHeader && lastModified <= new Date(ifModifiedSinceHeader)) {
         return new Response(null, {
@@ -46,8 +54,8 @@ export function createTextResponse(text, encoding = "UTF-8", rangeHeader = "", l
         });
     }
 
-    let bytes;
-    let contentType;
+    let bytes: Uint8Array;
+    let contentType: string;
 
     if (encoding === "Shift_JIS") {
         bytes = encodeSJIS(text);
@@ -66,7 +74,7 @@ export function createTextResponse(text, encoding = "UTF-8", rangeHeader = "", l
             return new Response("Bad Range Header", { status: 400 });
         }
 
-        let start = parseInt(match[1] || "0", 10);
+        const start = parseInt(match[1] || "0", 10);
         let end = match[2] ? parseInt(match[2], 10) : totalLength - 1;
 
         if (start >= totalLength || start > end) {

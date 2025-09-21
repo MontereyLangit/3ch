@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { convertSubjectTextTosubjectArray, convertSubjectArrayToSubjectText } from "../utils/common_utils.js";
+import { convertSubjectTextTosubjectArray, convertSubjectArrayToSubjectText, type Subject } from "../utils/common_utils";
 
 /* デフォルト板設定 */
 export const settingTxtDefault = `BBS_TITLE=<DIR_NAME>＠3ch掲示板
@@ -39,86 +39,85 @@ BBS_HEISA=
  * 板
  */
 export class Bbs extends DurableObject {
-  constructor(ctx, env) {
+  private isLoaded: boolean;
+  private settingText: string | undefined;
+  private headText: string | undefined;
+  private subjectText: string | undefined;
+  private lastModified: Date;
+  private timeCheck: Record<string, any>; // TODO: より具体的な型を定義
+  private tatesugiCheck: Record<string, any>; // TODO: より具体的な型を定義
+
+  constructor(ctx: DurableObjectState, env: CloudflareBindings) {
     super(ctx, env);
     this.isLoaded = false;
-
-    // インメモリのみの変数
-    this.ctx = ctx;
     this.lastModified = new Date();
-    this.timeCheck = {};  // 各投稿の連投規制用データ:unixtime<>IP<>FIP<>識別IDのraw
-    this.tatesugiCheck = {};  // 各投稿のスレ立て制限用データ:unixtime<>IP<>FIP<>識別IDのraw
+    this.timeCheck = {};
+    this.tatesugiCheck = {};
   }
 
-  /*
-   * Storageからデータを取得します
-   */
-  async load() {
+  private async load(): Promise<void> {
     if (this.isLoaded) {
       return;
     }
-
-    // ストレージと同期する変数
-    this.settingText = (await this.ctx.storage.get("SETTING.TXT")) || settingTxtDefault;
-    this.headText = (await this.ctx.storage.get("head.txt")) || "";
-    this.subjectText = (await this.ctx.storage.get("subject.txt")) || "";
-    // ロード済みフラグ
-    this.loaded = true;
+    this.settingText = (await this.ctx.storage.get<string>("SETTING.TXT")) || settingTxtDefault;
+    this.headText = (await this.ctx.storage.get<string>("head.txt")) || "";
+    this.subjectText = (await this.ctx.storage.get<string>("subject.txt")) || "";
+    this.isLoaded = true;
   }
 
-  async setSettingText(text) {
+  async setSettingText(text: string): Promise<void> {
     this.settingText = text;
     await this.ctx.storage.put("SETTING.TXT", text);
   }
 
-  async getSettingText() {
+  async getSettingText(): Promise<string> {
     await this.load();
-    return this.settingText;
+    return this.settingText!;
   }
 
-  async setHeadText(text) {
+  async setHeadText(text: string): Promise<void> {
     this.headText = text;
     await this.ctx.storage.put("head.txt", text);
   }
 
-  async getHeadText() {
+  async getHeadText(): Promise<string> {
     await this.load();
-    return this.headText;
+    return this.headText!;
   }
 
-  async setSubjectText(text) {
+  async setSubjectText(text: string): Promise<void> {
     this.subjectText = text;
     await this.ctx.storage.put("subject.txt", text);
     this.lastModified = new Date();
   }
 
-  async getSubjectText() {
+  async getSubjectText(): Promise<string> {
     await this.load();
-    return this.subjectText;
+    return this.subjectText!;
   }
 
-  /* 
+  async getLastModified(): Promise<Date> {
+    return this.lastModified;
+  }
+
+  /*
    * 入力されたスレ一覧配列をスレ一覧テキストに変換して保存
    * ストレージ書き込みは一定確率(書き込まないときはインメモリ変数のみ)
-   * @param {Array} subjectArray - スレッド一覧配列
+   * @param {any[]} subjectArray - スレッド一覧配列
    * @param {number} [writeFrequencyMSec=1000] - ストレージ最低書き込み頻度(ミリ秒)
    */
-  async saveSubject(subjectArray, writeFrequencyMSec = 1000) {
+  async saveSubject(subjectArray: Subject[], writeFrequencyMSec: number = 1000): Promise<void> {
     this.subjectText = convertSubjectArrayToSubjectText(subjectArray);
 
     const currentDate = new Date();
-    if (!this.loaded || this.lastModified.getTime() + writeFrequencyMSec < currentDate.getTime()) {
+    if (!this.isLoaded || this.lastModified.getTime() + writeFrequencyMSec < currentDate.getTime()) {
       await this.ctx.storage.put("subject.txt", this.subjectText);
       this.lastModified = currentDate;
     }
   }
 
-  async loadSubject() {
+  async loadSubject(): Promise<Subject[]> {
     await this.load();
-    return convertSubjectTextTosubjectArray(this.subjectText);
-  }
-  
-  async getLastModified() {
-    return this.lastModified;
+    return convertSubjectTextTosubjectArray(this.subjectText!);
   }
 }

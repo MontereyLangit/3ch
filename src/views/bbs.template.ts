@@ -1,4 +1,6 @@
-export const viewBbsHtml = model => `<!DOCTYPE HTML>
+import { BbsViewModel } from "../model/bbs_modes";
+
+export const ViewBbs = (model: BbsViewModel): string => `<!DOCTYPE HTML>
 <!--
 専ブラ用 旧仕様板top /<bbs>/
 -->
@@ -75,8 +77,9 @@ a{ word-break: break-all; }
 body { word-break: break-word; overflow-wrap: break-word; overscroll-behavior-y: contain; }
 .AA {font-family:"ヒラギノ角ゴ Pro W3","Hiragino Kaku Gothic Pro",Osaka,"ＭＳ Ｐゴシック","MS PGothic",sans-serif; font-size: 16px;}
 .rep-comment { background-color: lavender; border: 1px outset lavender; color: black; opacity: 0.95; position: absolute; text-decoration: none; left: 7em; padding-top: 5px; padding-left: 5px; padding-right: 5px; }
-display:inline-block;
---></style>
+/* --> */
+</style>
+
 <title>${model.bbsTitle}</title>
 <!--nobanner-->
 <!--<link href="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/css/lightbox.css" rel="stylesheet">

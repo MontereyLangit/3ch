@@ -1,10 +1,11 @@
 import { crypt as unixCrypt } from 'unix-crypt-td-js';
+
 /**
  * 16進文字列をバイナリ文字列に変換します。
- * @param {string} hex 
- * @returns {string}
+ * @param hex 
+ * @returns 
  */
-export function hexToBinary(hex) {
+export function hexToBinary(hex: string): string {
     return Array.from({ length: hex.length / 2 }, (_, i) =>
         String.fromCharCode(parseInt(hex.substr(i * 2, 2), 16))
     ).join('');
@@ -12,25 +13,27 @@ export function hexToBinary(hex) {
 
 /**
  * 文字列のSHA-1ハッシュを計算し、Base64エンコードして返します。
- * @param {string} str 
- * @returns {Promise<string>}
+ * @param str 
+ * @returns 
  */
-export async function sha1Base64(str) {
+export async function sha1Base64(str: string): Promise<string> {
     const encoder = new TextEncoder();
     const data = encoder.encode(str);
     const buffer = await crypto.subtle.digest('SHA-1', data);
     const bytes = new Uint8Array(buffer);
-    const result = btoa(String.fromCharCode(...bytes));
+    // btoaにUint8Arrayを直接渡すことはできないため、一度文字列に変換
+    const binaryString = String.fromCharCode(...bytes);
+    const result = btoa(binaryString);
     return result.slice(0, 27);
 }
 
 /**
  * 指定されたアルゴリズムで文字列のハッシュを計算します。
- * @param {string} algo 
- * @param {string} str 
- * @returns {Promise<string>}
+ * @param algo 
+ * @param str 
+ * @returns 
  */
-export async function hash(algo, str) {
+export async function hash(algo: string, str: string): Promise<string> {
     const encoder = new TextEncoder();
     const data = encoder.encode(str);
     const hashBuffer = await crypto.subtle.digest(algo, data);
@@ -41,32 +44,32 @@ export async function hash(algo, str) {
 
 /**
  * MD5ハッシュを計算します。
- * @param {string} str 
- * @returns {string}
+ * @param str 
+ * @returns 
  */
-export function md5(str) {
-  function cmn(q, a, b, x, s, t) {
+export function md5(str: string): string {
+  function cmn(q: number, a: number, b: number, x: number, s: number, t: number): number {
     a = (((a + q) | 0) + ((x + t) | 0)) | 0;
     return (((a << s) | (a >>> (32 - s))) + b) | 0;
   }
 
-  function ff(a, b, c, d, x, s, t) {
+  function ff(a: number, b: number, c: number, d: number, x: number, s: number, t: number): number {
     return cmn((b & c) | (~b & d), a, b, x, s, t);
   }
 
-  function gg(a, b, c, d, x, s, t) {
+  function gg(a: number, b: number, c: number, d: number, x: number, s: number, t: number): number {
     return cmn((b & d) | (c & ~d), a, b, x, s, t);
   }
 
-  function hh(a, b, c, d, x, s, t) {
+  function hh(a: number, b: number, c: number, d: number, x: number, s: number, t: number): number {
     return cmn(b ^ c ^ d, a, b, x, s, t);
   }
 
-  function ii(a, b, c, d, x, s, t) {
+  function ii(a: number, b: number, c: number, d: number, x: number, s: number, t: number): number {
     return cmn(c ^ (b | ~d), a, b, x, s, t);
   }
 
-  function md5cycle(x, k) {
+  function md5cycle(x: number[], k: number[]): void {
     let [a, b, c, d] = x;
 
     a = ff(a, b, c, d, k[0], 7, -680876936);
@@ -143,7 +146,7 @@ export function md5(str) {
     x[3] = (x[3] + d) | 0;
   }
 
-  function md51(s) {
+  function md51(s: string): number[] {
     const utf8 = new TextEncoder().encode(s); // UTF-8エンコードされたUint8Array
     const n = utf8.length;
     const state = [1732584193, -271733879, -1732584194, 271733878];
@@ -173,7 +176,7 @@ export function md5(str) {
     return state;
   }
 
-  function md5blk(arr) {
+  function md5blk(arr: Uint8Array): number[] {
     const blks = new Array(16);
     for (let i = 0; i < 64; i += 4) {
       blks[i >> 2] =
@@ -185,8 +188,8 @@ export function md5(str) {
     return blks;
   }
 
-  function rhex(n) {
-    const s = [];
+  function rhex(n: number): string {
+    const s: string[] = [];
     for (let j = 0; j < 4; j++) {
       s.push(((n >> (j * 8)) & 0xff).toString(16).padStart(2, "0"));
     }
@@ -198,13 +201,13 @@ export function md5(str) {
 
 /**
  * Unix crypt(3) を実装します。
- * @param {string} pw 
- * @param {string} salt 
- * @returns {string}
+ * @param pw 
+ * @param salt 
+ * @returns 
  */
-export const crypt = (pw, salt) => unixCrypt(pw, salt);
+export const crypt = (pw: string, salt: string): string => unixCrypt(pw, salt);
 
-export function translateSaltChar(c) {
+export function translateSaltChar(c: string): string {
     const code = c.charCodeAt(0);
     if ((code >= 0x3A && code <= 0x40) ||
         (code >= 0x5B && code <= 0x60) ||

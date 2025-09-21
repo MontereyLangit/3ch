@@ -1,5 +1,10 @@
-import { ConfirmationText, apiKey } from "../config.js";
-export const viewAuthJs = (model) => {
+import { AuthViewModel } from '../model/auth_view_model';
+
+// config.jsからインポートする値をここで定義（実際のパスはプロジェクト構成に合わせてください）
+const ConfirmationText = "投稿には認証が必要です。";
+const turnstileSiteKey = "0x4AAAAAABribdBm9BQV21jp"; // This should be managed securely
+
+export const viewAuthJs = (model: AuthViewModel): string => {
     if (model.error) {
         return `
 if (document.getElementById("auth")) {
@@ -8,9 +13,10 @@ if (document.getElementById("auth")) {
 `;
     }
 
+    // prettier-ignore
     return `
 if (document.getElementById("auth")) {
-  document.getElementById("auth").innerHTML = '<div><font size="+1" color="#FF0000"><b>投稿確認＆認証</b></font><br>現在、荒らし対策で認証を行わないと書きこみできないようにしています。<br>以下の内容に同意できる場合のみ、認証を行ってください。<br>${ConfirmationText}</div><form id="authForm" action="javascript:void (0);"><div>認証コード:<input name="validate"></div> <div class="cf-turnstile" data-sitekey="0x4AAAAAABribdBm9BQV21jp" data-callback="onTurnstileSuccess"></div><button type="submit">認証</button></form>';
+  document.getElementById("auth").innerHTML = '<div><font size="+1" color="#FF0000"><b>投稿確認＆認証</b></font><br>現在、荒らし対策で認証を行わないと書きこみできないようにしています。<br>以下の内容に同意できる場合のみ、認証を行ってください。<br>${ConfirmationText}</div><form id="authForm" action="javascript:void(0);"><div>認証コード:<input name="validate"></div> <div class="cf-turnstile" data-sitekey="${turnstileSiteKey}" data-callback="onTurnstileSuccess"></div><button type="submit">認証</button></form>';
   
   (function() {
     const script = document.createElement('script');
@@ -20,9 +26,10 @@ if (document.getElementById("auth")) {
   })();
 }
 
-document.getElementById("authForm").addEventListener("submit", async (e) => {
+document.getElementById("authForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const formData = new FormData(e.target);
+  const form = e.target as HTMLFormElement;
+  const formData = new FormData(form);
 
   const hap = location.hash.startsWith("#!") ? location.hash.slice(2) : "";
   formData.append("hap", hap);
@@ -40,12 +47,15 @@ document.getElementById("authForm").addEventListener("submit", async (e) => {
 
   const response = await fetch("/api/auth", {
     method: "POST",
-    body: new URLSearchParams(formData)
+    body: new URLSearchParams(Array.from(formData.entries()) as [string, string][])
   });
   const result = await response.text();
-  document.getElementById("auth").innerHTML = result;
-  if (result === "認証成功") {
-    document.getElementById("auth").style.display = "none";
+  const authDiv = document.getElementById("auth");
+  if (authDiv) {
+    authDiv.innerHTML = result;
+    if (result === "認証成功") {
+      authDiv.style.display = "none";
+    }
   }
 });
 

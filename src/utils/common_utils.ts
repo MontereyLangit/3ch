@@ -1,34 +1,35 @@
-import { encode, decode } from 'encoding-japanese';
+import Encoding from 'encoding-japanese';
 
 /**
  * 文字列をSJISのバイト配列にエンコードします。
- * @param {string} str UTF-8文字列
- * @returns {Uint8Array} SJISのバイト配列
+ * @param str UTF-8文字列
+ * @returns SJISのバイト配列
  */
-export function encodeSJIS(str) {
-  return new Uint8Array(encode(str, 'SJIS'));
+export function encodeSJIS(str: string): Uint8Array {
+  // encodeの戻り値は number[] なので Uint8Array に変換
+  return new Uint8Array(Encoding.convert(Encoding.stringToCode(str), { to: 'SJIS', from: 'UNICODE' }));
 }
 
 /**
  * SJISのバイト配列をUTF-8文字列にデコードします。
- * @param {Uint8Array | Array<number>} bytes SJISのバイト配列
- * @returns {string} UTF-8文字列
+ * @param bytes SJISのバイト配列
+ * @returns UTF-8文字列
  */
-export function decodeSJIS(bytes) {
-  return decode(bytes, 'SJIS');
+export function decodeSJIS(bytes: Uint8Array | number[]): string {
+  return Encoding.codeToString(Encoding.convert(bytes, { to: 'UNICODE', from: 'SJIS' }));
 }
 
 /**
  * 本文からURL部分(先頭のttps?除去済み)を取り出します
- * @param {string} text 本文
- * @return {string} URL
+ * @param text 本文
+ * @return URL
  */
-export const extractAndSanitizeUrls = function (text) {
+export const extractAndSanitizeUrls = function (text: string): string {
   // http:// または https:// で始まるURLを検索する正規表現
   const urlRegex = /(h?ttps?:\/\/[^\s]+)/g;
 
   // URLを抽出して格納する配列
-  let urls = [];
+  const urls: string[] = [];
   let match;
 
   // 正規表現にマッチするすべてのURLをループして抽出
@@ -44,14 +45,20 @@ export const extractAndSanitizeUrls = function (text) {
   return sanitizedUrls.join("");
 }
 
+export interface Subject {
+    key: string;
+    subject: string;
+    resnum: number;
+}
+
 /**
  * 入力したスレッド一覧テキスト(subject.txt)をスレッド一覧配列に変換します
- * @param {string} subjectText スレッド一覧テキスト(subject.txt)
- * @return {Array<Object>} スレッド一覧配列
+ * @param subjectText スレッド一覧テキスト(subject.txt)
+ * @return スレッド一覧配列
  */
-export const convertSubjectTextTosubjectArray = function (subjectText) {
+export const convertSubjectTextTosubjectArray = function (subjectText: string): Subject[] {
   if (!subjectText) return [];
-  let subjectArray = [];
+  const subjectArray: Subject[] = [];
 
   const array = subjectText.split("\n");
   for (let i = 0; i < array.length; i++) {
@@ -62,7 +69,7 @@ export const convertSubjectTextTosubjectArray = function (subjectText) {
 
     const match = thread[1].match(/(.*)\s\(([0-9]+)\)$/);
     if (match) {
-        const subjectObject = { key: thread[0].replace('.dat', ''), subject: match[1], resnum: parseInt(match[2], 10) };
+        const subjectObject: Subject = { key: thread[0].replace('.dat', ''), subject: match[1], resnum: parseInt(match[2], 10) };
         subjectArray.push(subjectObject);
     }
   }
@@ -72,10 +79,10 @@ export const convertSubjectTextTosubjectArray = function (subjectText) {
 
 /**
  * 入力したスレッド一覧配列をスレッド一覧テキスト(subject.txt)に変換します
- * @param {Array<Object>} subjectArray スレッド一覧配列
- * @return {string} スレッド一覧テキスト(subject.txt)
+ * @param subjectArray スレッド一覧配列
+ * @return スレッド一覧テキスト(subject.txt)
  */
-export const convertSubjectArrayToSubjectText = function (subjectArray) {
+export const convertSubjectArrayToSubjectText = function (subjectArray: Subject[]): string {
   if (!subjectArray || subjectArray.length === 0) return "";
   
   return subjectArray.map(thread => 
@@ -83,37 +90,41 @@ export const convertSubjectArrayToSubjectText = function (subjectArray) {
   ).join("\n") + "\n";
 }
 
+export interface ThreadRes {
+    name: string;
+    mail: string;
+    date: string;
+    message: string;
+    title: string;
+}
+
 /**
  * 入力したdatをスレッド配列に変換します
- * @param {string} dat
- * @return {Array<Object>} スレッド配列
+ * @param dat
+ * @return スレッド配列
  */
-export const convertDatToThreadArray = function (dat) {
+export const convertDatToThreadArray = function (dat: string): ThreadRes[] {
     if (!dat) return [];
     const lines = dat.trim().split('\n');
-    const threadArray = [];
 
-    for (const line of lines) {
+    return lines.map(line => {
         const parts = line.split('<>');
-        if (parts.length >= 6) { // name, mail, date, message, title
-            threadArray.push({
-                name: parts[0],
-                mail: parts[1],
-                date: parts[2],
-                message: parts[3],
-                title: parts[4]
-            });
-        }
-    }
-    return threadArray;
+        return {
+            name: parts[0] || '',
+            mail: parts[1] || '',
+            date: parts[2] || '',
+            message: parts[3] || '',
+            title: parts[4] || ''
+        };
+    }).filter(res => res.name || res.mail || res.date || res.message || res.title); // 空の行を除外
 }
 
 /**
  * 入力したスレッド配列をdat形式のテキストに変換します
- * @param {Array<Object>} threadArray スレッド配列
- * @return {string} dat
+ * @param threadArray スレッド配列
+ * @return dat
  */
-export const convertThreadArrayToDat = function (threadArray) {
+export const convertThreadArrayToDat = function (threadArray: ThreadRes[]): string {
   if (!threadArray || threadArray.length === 0) return "";
 
   return threadArray.map(res =>
