@@ -1,7 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { convertSubjectTextTosubjectArray, convertSubjectArrayToSubjectText, type Subject } from "../utils/common_utils";
 
-
 /* デフォルト板設定 */
 export const settingTxtDefault = `BBS_TITLE=<DIR_NAME>＠3ch掲示板
 BBS_NONAME_NAME=名無しさん＠３ちゃんねる
