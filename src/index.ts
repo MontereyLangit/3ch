@@ -1,15 +1,15 @@
 import { Hono } from 'hono';
 /// <reference types="@cloudflare/workers-types" />
-import { createHtmlResponse, createTextResponse } from './services/service.js';
-import { post as postBbsCgi } from './services/bbs_cgi_service.js';
-import { bbsCgiViewModel } from './model/bbs_cgi_view_model.js';
-import { viewBbsCgiHtml } from './views/bbs_cgi.template.js';
-import { prepareAuthJs, authenticateUser } from './services/auth_service.js';
-import { viewAuthHtml } from './views/auth.template.js';
-import { authViewModel } from './model/auth_view_model.js';
-import { viewAuthJs } from './views/auth.js';
-import { view404Html } from './views/404.template.js';
-import { viewErrorHtml } from './views/error.template.js';
+import { createHtmlResponse, createTextResponse } from './services/service.ts';
+import { post as postBbsCgi } from './services/bbs_cgi_service.ts';
+import { bbsCgiViewModel } from './model/bbs_cgi_view_model.ts';
+import { viewBbsCgiHtml } from './views/bbs_cgi.template.ts';
+import { prepareAuthJs, authenticateUser } from './services/auth_service.ts';
+import { viewAuthHtml } from './views/auth.template.ts';
+import { authViewModel } from './model/auth_view_model.ts';
+import { viewAuthJs } from './views/auth.ts';
+import { view404Html } from './views/404.template.ts';
+import { viewErrorHtml } from './views/error.template.ts';
 
 // Cloudflare Bindings の型定義
 type Bindings = {
@@ -96,7 +96,21 @@ app.get('/:bbsName/subject.txt', async (c) => {
     return createTextResponse(subjectText, "Shift-JIS");
 });
 
-// 他の .txt ファイルのルートも同様に追加...
-// GET /{bbs}/head.txt, GET /{bbs}/SETTING.TXT
+// GET /{bbs}/head.txt
+app.get('/:bbsName/head.txt', async (c) => {
+    const { bbsName } = c.req.param();
+    const bbs = c.env.BBS.getByName(bbsName);
+    const headText = await bbs.getHeadText();
+    return createTextResponse(headText, "Shift-JIS");
+});
+
+// GET /{bbs}/SETTING.TXT
+app.get('/:bbsName/SETTING.TXT', async (c) => {
+    const { bbsName } = c.req.param();
+    const bbs = c.env.BBS.getByName(bbsName);
+    const settingText = await bbs.getSettingText();
+    // <DIR_NAME> を置換
+    return createTextResponse(settingText.replace(/<DIR_NAME>/g, bbsName), "Shift-JIS");
+});
 
 export default app;
