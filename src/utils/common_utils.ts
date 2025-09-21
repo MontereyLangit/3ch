@@ -45,7 +45,7 @@ export const extractAndSanitizeUrls = function (text: string): string {
   return sanitizedUrls.join("");
 }
 
-interface Subject {
+export interface Subject {
     key: string;
     subject: string;
     resnum: number;
@@ -90,7 +90,7 @@ export const convertSubjectArrayToSubjectText = function (subjectArray: Subject[
   ).join("\n") + "\n";
 }
 
-interface ThreadRes {
+export interface ThreadRes {
     name: string;
     mail: string;
     date: string;
