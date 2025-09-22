@@ -50,9 +50,7 @@ app.get('/api/auth.js', async (c) => {
 // GET /auth 認証ページ
 app.get('/auth', (c) => {
     const model = new AuthViewModel();
-    // 認証ページのHTMLを返す処理をここに実装してください
     return c.html(<ViewAuth model={model} />);
-
 });
 
 
