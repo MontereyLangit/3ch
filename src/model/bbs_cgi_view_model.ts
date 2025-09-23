@@ -1,8 +1,5 @@
 import { Context } from 'hono';
 
-// Define CloudflareBindings type if not already defined or import it from your types
-type CloudflareBindings = Record<string, unknown>;
-
 export interface BbsCgiForm {
     FROM: string;
     mail: string;
@@ -16,8 +13,6 @@ export interface BbsCgiForm {
 }
 
 export class BbsCgiViewModel {
-    version: string = "2025/7/31";
-    error: string = "";
     status: "success" | "confirmation" | "error" = "success";
     time: string = "";
     unixtime: string = "";
@@ -46,20 +41,19 @@ export class BbsCgiViewModel {
     userInfo: string = "";
     shikibetsuId: string = "";
     id: string = "";
-    isIPv6: number = 0;
-    isPC: number = 0;
-    isMonazilla: number = 0;
+    isIPv6: boolean = false;
+    isMonazilla: boolean = false;
     isSJIS: boolean = false;
-    idnotane: string = "";
+    idSeed: string = "";
     md5Salt: string = "";
     tripKey: string = "";
     tripString: string = "";
-    cap: number = 0;
-    strongCap: number = 0;
-    sage: number = 0;
+    isCapUser: boolean = false;
+    isStrongCapUser: boolean = false;
+    isSage: boolean = false;
     path: string = "PATH";
     logPath: string = "LOGPATH";
-    subject: string = "";
+    threadTitle: string = "";
     number: number = 0;
     logFile: string = "LOGDAT";
     logData: string = "";
@@ -88,11 +82,12 @@ export class BbsCgiViewModel {
         this.userData.U = this.userAgent;
         this.userData.firstIp = this.ip;
         this.userData.created = this.unixtime;
-        this.md5Salt = c.env.SALT as string; // HonoのContextから環境変数を取得
+        this.md5Salt = c.env.salt as string; // HonoのContextから環境変数を取得
     }
 
+    // エラーまたは確認画面表示の場合、true
     hasErrors(): boolean {
-        return this.error !== "";
+        return this.status !== "success";
     }
 
     get charset(): "UTF-8" | "Shift_JIS" {

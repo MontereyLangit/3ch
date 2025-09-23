@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { extractAndSanitizeUrls } from "../utils/common_utils";
+import { extractAndSanitizeUrls } from "@/utils/common_utils";
 
 /* 
  * 忍法帖

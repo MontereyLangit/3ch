@@ -1,22 +1,22 @@
 import { Hono } from 'hono';
+import { getCookie } from 'hono/cookie';
 /// <reference types="@cloudflare/workers-types" />
-import { createHtmlResponse, createTextResponse } from './services/service';
-import { post as postBbsCgi } from './services/bbs_cgi_service';
-import { BbsCgiViewModel } from './model/bbs_cgi_view_model';
-import { ViewBbsCgi } from './views/bbs_cgi';
-import { prepareAuthJs } from './services/auth_service';
-import { AuthViewModel } from './model/auth_view_model';
-import { viewAuthJs } from './views/auth_js';
-import { View404 } from './views/404';
-import { ViewError } from './views/error';
-import { ViewBbs } from './views/bbs.template';
-import { ViewBoard } from './views/board';
-import { View3chiko } from './views/3chiko';
-import { getCookie } from 'hono/cookie'
-import { Bbs } from './durable_objects/bbs';
-import { Thread } from './durable_objects/thread';
-import { BbsViewModel } from './model/bbs_modes';
-import { ViewAuth } from './views/auth';
+import { createHtmlResponse, createTextResponse } from '@/services/service';
+import { post as postBbsCgi } from '@/services/bbs_cgi_service';
+import { BbsCgiViewModel } from '@/model/bbs_cgi_view_model';
+import { ViewBbsCgi } from '@/views/bbs_cgi';
+import { prepareAuthJs } from '@/services/auth_service';
+import { AuthViewModel } from '@/model/auth_view_model';
+import { viewAuthJs } from '@/views/auth_js';
+import { View404 } from '@/views/404';
+import { ViewError } from '@/views/error';
+import { ViewBbs } from '@/views/bbs.template';
+import { ViewBoard } from '@/views/board';
+import { View3chiko } from '@/views/3chiko.template';
+import { Bbs } from '@/durable_objects/bbs';
+import { Thread } from '@/durable_objects/thread';
+import { BbsViewModel } from '@/model/bbs_modes';
+import { ViewAuth } from '@/views/auth';
 
 const app = new Hono<{ Bindings: CloudflareBindings }>();
 

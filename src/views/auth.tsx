@@ -1,6 +1,5 @@
 import { FC } from 'hono/jsx';
-import { jsx } from 'hono/jsx/jsx-runtime';
-import { AuthViewModel } from '../model/auth_view_model';
+import { AuthViewModel } from '@/model/auth_view_model';
 
 export const ViewAuth: FC<{ model: AuthViewModel }> = ({ model }) => (
     <html>

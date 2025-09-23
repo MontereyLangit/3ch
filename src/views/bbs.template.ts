@@ -1,4 +1,4 @@
-import { BbsViewModel } from "../model/bbs_modes";
+import { BbsViewModel } from "@/model/bbs_modes";
 
 export const ViewBbs = (model: BbsViewModel): string => `<!DOCTYPE HTML>
 <!--

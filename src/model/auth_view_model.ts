@@ -1,7 +1,9 @@
+import { ViewModel } from "@/model/view_model";
+
 /**
  * 認証ビューモデル
  */
-export class AuthViewModel {
+export class AuthViewModel implements ViewModel {
     // Input
     hap: string = "";
     turnstileToken: string = "";
