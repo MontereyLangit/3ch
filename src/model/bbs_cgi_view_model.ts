@@ -61,12 +61,9 @@ export class BbsCgiViewModel {
     outdat: string = "";
     settings: Record<string, any> = {};
     boardSettings: Record<string, any> = {};
-    origSettings: Record<string, any> = {};
     headers: Record<string, string> = {};
     confirmationText: string = "";
     errMsg: string = "";
-    bbs: string = "";
-    key: string = "";
 
     init(c: Context<{ Bindings: CloudflareBindings }>) {
         this.time = new Date().getTime().toString();

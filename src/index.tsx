@@ -99,12 +99,13 @@ app.get('/boards/:bbsName/', async (c) => {
     const bbs = c.env.BBS.getByName(bbsName) as unknown as Bbs;
     const settingText = await bbs.getSettingText();
     const bbsTitle = settingText.match(/BBS_TITLE=(.*)/)?.[1] || bbsName;
-    const bbsDescription = settingText.match(/BBS_EXPLAIN=(.*)/)?.[1] || '';
+    // bbsDescriptionはheadTextから取得
+    const headText = await bbs.getHeadText();
 
     // モデルを作成
     const model = new BbsViewModel(bbsName);
     model.bbsTitle = bbsTitle;
-    model.bbsDescription = bbsDescription;
+    model.bbsDescription = headText;
     model.isSJIS = false; // Web版はUTF-8で表示
     // ToDO: スレッド一覧の取得
 

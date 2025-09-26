@@ -2,6 +2,7 @@ import { Context } from "hono";
 import Encoding from "encoding-japanese";
 import { BbsCgiViewModel } from "@/model/bbs_cgi_view_model";
 import { decodeSJIS } from "@/utils/common_utils";
+import { Bbs } from "@/durable_objects/bbs";
 
 /**
  * bbs.cgiサービス
@@ -20,12 +21,20 @@ export async function post(c: Context<{ Bindings: CloudflareBindings }>, model: 
     await readForm(c, model);
     if (model.hasErrors()) return;
 
-    // トリップ処理
-    // await processTrip(c, model);
-    // if (model.hasErrors()) return;
+    // 板設定読み込み
+    await loadBoardSettings(c, model);
+    if (model.hasErrors()) return;
 
     // フォームのバリデーション
     // validateForm(model);
+    // if (model.hasErrors()) return;
+
+    // キャップの処理
+    // await processCap(c, model);
+    // if (model.hasErrors()) return;
+
+    // トリップ処理
+    // await processTrip(c, model);
     // if (model.hasErrors()) return;
 }
 
@@ -250,6 +259,41 @@ async function readForm(c: Context<{ Bindings: CloudflareBindings }>, model: Bbs
     model.form.bbs = model.form.bbs.replace(/\W/g, "");
     model.form.key = model.form.key.replace(/\D/g, "");
     model.form.time = model.form.time.replace(/\D/g, "");
+
+    // 板名が空でないこと
+    if (!model.form.bbs) {
+        model.status = "error";
+        model.errMsg = "板名が指定されていません";
+        return;
+    }
+
+    // 本文が空でないこと
+    if (!model.form.MESSAGE) {
+        model.status = "error";
+        model.errMsg = "本文が空です";
+        return;
+    }
+
+    // keyとsubjectが両方空、または両方ある場合はエラー
+    // keyは10桁の数字であること
+    if ((model.form.key && model.form.subject) || (!model.form.key && !model.form.subject)
+            || (model.form.key && !/^\d{1,10}$/.test(model.form.key))) {
+        model.status = "error";
+        model.errMsg = "keyとsubjectの指定が不正です";
+        return;
+    }
+
+    // timeが空、または数字以外が含まれている場合はエラー
+    if (!model.form.time || !/^\d+$/.test(model.form.time)) {
+        model.status = "error";
+        model.errMsg = "timeの指定が不正です";
+        return;
+    }
+
+    // subjectがある場合、keyにmodel.unixtimeをセット
+    if (model.form.subject) {
+        model.form.key = model.unixtime;
+    }
 }
 
 /**
@@ -273,4 +317,42 @@ function decodeSjisURIComponent(encodedURIComponent: string): string {
         i++;
     }
     return decodeSJIS(new Uint8Array(bytes));
+}
+
+
+
+/**
+ * 板Durable_Objectsから板設定を取得し、model.boardSettingsにセットします
+ * @param {Context<{ Bindings: CloudflareBindings }>} c
+ * @param {BbsCgiViewModel} model
+ */
+async function loadBoardSettings(c: Context<{ Bindings: CloudflareBindings }>, model: BbsCgiViewModel) {
+    // スレ立て時以外はスルー
+    if (!model.form.subject) return;
+
+    const bbs = c.env.BBS.getByName(model.form.bbs) as unknown as Bbs;
+    const settingText = await bbs.getSettingText();
+    const lines = settingText.split("\n");
+
+    for (const line of lines) {
+        const [key, value] = line.split("=");
+        if (key) {
+            model.boardSettings[key.trim()] = value ? value.trim() : "";
+        }
+    }
+}
+
+/**
+ * Formのバリデーション
+ * @param {BbsCgiViewModel} model
+ */
+function validateForm(model: BbsCgiViewModel) {
+    const bbsNameCount = parseInt(model.settings.BBS_NAME_COUNT || "64");
+
+    // FROMが bbsNameCount 以上はエラー
+    if (model.form.FROM.length > bbsNameCount) {
+        model.status = "error";
+        model.errMsg = "名前が長すぎます";
+        return;
+    }
 }
