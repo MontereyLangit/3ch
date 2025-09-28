@@ -1,22 +1,24 @@
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
-/// <reference types="@cloudflare/workers-types" />
 import { createHtmlResponse, createTextResponse } from '@/services/service';
-import { post as postBbsCgi } from '@/services/bbs_cgi_service';
-import { BbsCgiViewModel } from '@/model/view/bbs_cgi_view_model';
-import { ViewBbsCgi } from '@/views/bbs_cgi';
-import { authenticateUser, prepareAuthJs } from '@/services/auth_service';
-import { AuthViewModel } from '@/model/view/auth_view_model';
+import { PostService } from '@/services/PostService';
+import { ViewPost } from '@/views/post';
+import { authenticateUser, prepareAuthJs } from '@/services/AuthService';
+import { AuthViewModel } from '@/model/view/AuthViewModel';
 import { viewAuthJs } from '@/views/auth_js';
 import { View404 } from '@/views/404';
 import { ViewError } from '@/views/error';
 import { ViewBbs } from '@/views/bbs.template';
 import { ViewBoard } from '@/views/board';
 import { View3chiko } from '@/views/3chiko.template';
-import { Bbs } from '@/durable_objects/bbs';
-import { Thread } from '@/durable_objects/thread';
-import { BbsViewModel } from '@/model/view/bbs_view_model';
+import { BbsViewModel } from '@/model/view/BbsViewModel';
 import { ViewAuth } from '@/views/auth';
+import { PostProcessModel } from '@/model/PostProcessModel';
+import { Poster } from './model/user/Poster';
+import { PostViewModel } from './model/view/PostViewModel';
+import { Bbs } from '@/durable_objects/Bbs';
+import { Thread } from '@/durable_objects/Thread';
+import { User } from '@/durable_objects/User';
 
 const app = new Hono<{ Bindings: CloudflareBindings }>();
 
@@ -30,11 +32,24 @@ app.notFound((c) => {
     return c.html(<View404 model={{ pathname: url.pathname }} />, 404);
 });
 
-// POST /test/subbbs.cgi, /test/subbbs.cgi 書き込みAPI
+// POST /test/subbbs.cgi, /test/subbbs.cgi 書き込み
 app.on('POST', ['/test/bbs.cgi', '/test/subbbs.cgi'], async (c) => {
-    const model = new BbsCgiViewModel();
-    await postBbsCgi(c, model);
-    return c.html(<ViewBbsCgi model={model} />);
+    const processModel = new PostProcessModel();
+    const poster = new Poster();
+    const viewModel = new PostViewModel();
+    const postService = new PostService(c, processModel, poster);
+
+    postService.preparePostProcessModel();
+    postService.preparePosterInfo();
+    await postService.preparePostForm();
+    
+    if (processModel.hasErrors()) {
+        postService.prepareViewModel(viewModel);
+        return c.html(<ViewPost model={viewModel} />);
+    }
+    
+    postService.prepareViewModel(viewModel);
+    return c.html(<ViewPost model={viewModel} />);
 });
 
 // GET /api/auth.js 認証用クライアントjs
@@ -47,11 +62,6 @@ app.get('/api/auth.js', async (c) => {
     });
 });
 
-// GET /auth 認証ページ
-app.get('/auth', (c) => {
-    const model = new AuthViewModel();
-    return c.html(<ViewAuth model={model} />);
-});
 
 // POST /api/auth 認証API
 app.post('/api/auth', async (c) => {
@@ -59,6 +69,9 @@ app.post('/api/auth', async (c) => {
     await authenticateUser(c, model);
     return c.text(model.body, model.status, model.headers);
 });
+
+// GET /auth/ 専ブラユーザー用認証ページ
+
 
 // GET /test/read.cgi/{bbs}/{key}/ スレッド
 app.get('/test/read.cgi/:bbsName/:keyName/', async (c) => {
@@ -157,3 +170,10 @@ app.get('/:bbsName/SETTING.TXT', async (c) => {
 });
 
 export default app;
+
+// =========================================================
+// !!! CRITICAL STEP: EXPORT THE DURABLE OBJECT CLASSES !!!
+// =========================================================
+export { Bbs };
+export { Thread };
+export { User };

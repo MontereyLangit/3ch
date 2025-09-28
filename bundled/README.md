@@ -1,0 +1,1 @@
+This folder contains the built output assets for the worker "3ch-workers" generated at 2025-09-28T19:53:27.578Z.

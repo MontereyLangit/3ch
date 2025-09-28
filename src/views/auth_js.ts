@@ -1,4 +1,4 @@
-import { AuthViewModel } from '@/model/auth_view_model';
+import { AuthViewModel } from '@/model/view/AuthViewModel';
 
 // config.jsからインポートする値をここで定義（実際のパスはプロジェクト構成に合わせてください）
 const ConfirmationText = "投稿には認証が必要です。";

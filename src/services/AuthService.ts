@@ -1,7 +1,7 @@
 import { Context } from "hono";
-import { AuthViewModel } from "@/model/view/auth_view_model";
-import { sha1Base64, md5 } from "@/utils/crypto_utils";
-import { User } from "@/durable_objects/user";
+import { AuthViewModel } from "@/model/view/AuthViewModel";
+import { sha1Base64, md5 } from "@/utils/cryptoUtils";
+import { User } from "@/durable_objects/User";
 
 export const apiKey = "6cde9d4cef741d82da3de7d179fe015bb0da538f334e3e98664f1277c23d8bd3";
 

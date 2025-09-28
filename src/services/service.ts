@@ -1,5 +1,5 @@
-import { encodeSJIS } from "@/utils/common_utils";
-import { ViewModel } from "@/model/view/view_model";
+import { encodeSJIS } from "@/utils/commonUtils";
+import { ViewModel } from "@/model/view/ViewModel";
 
 /**
  * ViewModelからHTMLレスポンスを生成します。

@@ -1,4 +1,4 @@
-import { ViewModel } from "@/model/view/view_model";
+import { ViewModel } from "@/model/view/ViewModel";
 
 /**
  * 板ビューモデル

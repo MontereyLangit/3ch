@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { convertDatToThreadArray, convertThreadArrayToDat, type ThreadRes } from "@/utils/common_utils";
+import { convertDatToThreadArray, convertThreadArrayToDat, type ThreadRes } from "@/utils/commonUtils";
 
 /* 
  * スレッド
