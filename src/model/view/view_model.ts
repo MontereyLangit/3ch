@@ -1,6 +1,8 @@
+import { ContentfulStatusCode } from "hono/utils/http-status";
+
 export interface ViewModel {
     headers?: Record<string, string>;
     isSJIS?: boolean;
-    status?: number;
+    status?: ContentfulStatusCode;
     [key: string]: any;
 }

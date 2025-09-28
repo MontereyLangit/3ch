@@ -1,6 +1,6 @@
 import { Context } from "hono";
 import Encoding from "encoding-japanese";
-import { BbsCgiViewModel } from "@/model/bbs_cgi_view_model";
+import { BbsCgiViewModel } from "@/model/view/bbs_cgi_view_model";
 import { decodeSJIS } from "@/utils/common_utils";
 import { Bbs } from "@/durable_objects/bbs";
 
@@ -319,8 +319,6 @@ function decodeSjisURIComponent(encodedURIComponent: string): string {
     return decodeSJIS(new Uint8Array(bytes));
 }
 
-
-
 /**
  * 板Durable_Objectsから板設定を取得し、model.boardSettingsにセットします
  * @param {Context<{ Bindings: CloudflareBindings }>} c
@@ -339,6 +337,20 @@ async function loadBoardSettings(c: Context<{ Bindings: CloudflareBindings }>, m
         if (key) {
             model.boardSettings[key.trim()] = value ? value.trim() : "";
         }
+    }
+}
+
+/**
+ * スレDurable_Objectsからスレ設定を取得し、model.settingsにセットします
+ * スレ立て時はmodel.boardSettingsを使用
+ * @param {Context<{ Bindings: CloudflareBindings }>} c
+ * @param {BbsCgiViewModel} model
+ */
+async function loadThreadSettings(c: Context<{ Bindings: CloudflareBindings }>, model: BbsCgiViewModel) {
+    // スレ立て時はmodel.boardSettingsを使用
+    if (model.form.subject) {
+        model.settings = { ...model.boardSettings };
+        return;
     }
 }
 

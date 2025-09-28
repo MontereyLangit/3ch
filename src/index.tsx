@@ -3,10 +3,10 @@ import { getCookie } from 'hono/cookie';
 /// <reference types="@cloudflare/workers-types" />
 import { createHtmlResponse, createTextResponse } from '@/services/service';
 import { post as postBbsCgi } from '@/services/bbs_cgi_service';
-import { BbsCgiViewModel } from '@/model/bbs_cgi_view_model';
+import { BbsCgiViewModel } from '@/model/view/bbs_cgi_view_model';
 import { ViewBbsCgi } from '@/views/bbs_cgi';
-import { prepareAuthJs } from '@/services/auth_service';
-import { AuthViewModel } from '@/model/auth_view_model';
+import { authenticateUser, prepareAuthJs } from '@/services/auth_service';
+import { AuthViewModel } from '@/model/view/auth_view_model';
 import { viewAuthJs } from '@/views/auth_js';
 import { View404 } from '@/views/404';
 import { ViewError } from '@/views/error';
@@ -15,7 +15,7 @@ import { ViewBoard } from '@/views/board';
 import { View3chiko } from '@/views/3chiko.template';
 import { Bbs } from '@/durable_objects/bbs';
 import { Thread } from '@/durable_objects/thread';
-import { BbsViewModel } from '@/model/bbs_modes';
+import { BbsViewModel } from '@/model/view/bbs_view_model';
 import { ViewAuth } from '@/views/auth';
 
 const app = new Hono<{ Bindings: CloudflareBindings }>();
@@ -53,6 +53,12 @@ app.get('/auth', (c) => {
     return c.html(<ViewAuth model={model} />);
 });
 
+// POST /api/auth 認証API
+app.post('/api/auth', async (c) => {
+    const model = new AuthViewModel();
+    await authenticateUser(c, model);
+    return c.text(model.body, model.status, model.headers);
+});
 
 // GET /test/read.cgi/{bbs}/{key}/ スレッド
 app.get('/test/read.cgi/:bbsName/:keyName/', async (c) => {

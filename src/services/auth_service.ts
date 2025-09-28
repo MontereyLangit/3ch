@@ -1,5 +1,5 @@
 import { Context } from "hono";
-import { AuthViewModel } from "@/model/auth_view_model";
+import { AuthViewModel } from "@/model/view/auth_view_model";
 import { sha1Base64, md5 } from "@/utils/crypto_utils";
 import { User } from "@/durable_objects/user";
 

@@ -1,4 +1,5 @@
-import { ViewModel } from "@/model/view_model";
+import { ViewModel } from "@/model/view/view_model";
+import { ContentfulStatusCode } from "hono/utils/http-status";
 
 /**
  * 認証ビューモデル
@@ -23,7 +24,7 @@ export class AuthViewModel implements ViewModel {
 
     // Output
     error: string = "";
-    status: number = 200;
+    status: ContentfulStatusCode = 200;
     headers: Record<string, string> = {};
     body: string = "";
 

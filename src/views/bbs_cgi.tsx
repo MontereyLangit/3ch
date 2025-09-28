@@ -1,6 +1,6 @@
 import { FC } from 'hono/jsx';
 import { jsx } from 'hono/jsx/jsx-runtime';
-import { BbsCgiViewModel } from '@/model/bbs_cgi_view_model';
+import { BbsCgiViewModel } from '@/model/view/bbs_cgi_view_model';
 
 const BbsCgiSuccessTemplate: FC<{ model: BbsCgiViewModel }> = ({ model }) => (
     <main>
