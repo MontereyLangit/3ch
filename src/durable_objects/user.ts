@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { extractAndSanitizeUrls } from "@/utils/commonUtils";
 
 /* 
- * 忍法帖
+ * ユーザー情報のDurable Objectクラス
  * ストレージから取得: fip, deviceInfo, userAgent, created, samba24Registered, tatesugiRegistered
  */
 export class User extends DurableObject {

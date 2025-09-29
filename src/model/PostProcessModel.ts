@@ -2,17 +2,6 @@
  * 書き込み処理モデル
  */
 export class PostProcessModel {
-    // Input from request
-    ip: string = "";
-    host: string = "";
-    userAgent: string = "";
-    isMonazilla: boolean = false;
-    isSJIS: boolean = false;
-    isIPv6: boolean = false;
-    idSeed: string = "";
-    browserInfo: string = "";
-    deviceInfo: string = "";
-
     // Processed Data
     unixtime: string = "";
     md5Salt: string = "";

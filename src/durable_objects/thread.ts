@@ -39,7 +39,7 @@ export class Thread extends DurableObject {
 
   async setSettingText(settingText: string): Promise<void> {
     this.settingText = settingText;
-    await this.ctx.storage.put("settingText", this.settingText);
+    await this.ctx.storage.put("SETTING.TXT", this.settingText);
   }
 
   async getSettingText(): Promise<string> {

@@ -16,9 +16,9 @@ export class PostService {
     processModel: PostProcessModel;
     postForm: PostForm;
     poster: Poster;
-    bbsObj?: Bbs;
+    bbs?: Bbs;
     threadObj?: Thread;
-    UserObj?: User;
+    userObj?: User;
 
     /**
      * コンストラクタ
@@ -47,11 +47,8 @@ export class PostService {
      */
     preparePostProcessModel() {
         this.processModel.unixtime = Math.floor(new Date().getTime() / 1000).toString();
-        this.processModel.md5Salt = this.c.env.salt as string;
-        this.processModel.ip = this.c.req.header("CF-Connecting-IP") || "";
-        this.processModel.host = this.processModel.ip;
+        this.processModel.md5Salt = this.c.env.salt;
 
-        // initialCheckのロジックをここに移動
         this.initialCheck();
     }
 
@@ -72,7 +69,7 @@ export class PostService {
         }
 
         const postForm = this.postForm;
-        this.bbsObj = this.c.env.BBS.getByName(postForm.bbs) as unknown as Bbs;
+        this.bbs = this.c.env.BBS.getByName(postForm.bbs) as unknown as Bbs;
     }
 
     /**
@@ -117,7 +114,7 @@ export class PostService {
             viewModel.key = this.postForm.key;
         }
 
-        viewModel.isSJIS = this.processModel.isSJIS;
+        viewModel.isSJIS = this.poster.isSJIS;
         viewModel.init(this.c);
     }
 
@@ -156,26 +153,26 @@ export class PostService {
 
         // User Agent Client Hintsのブラウザ情報部分をUAに追加 (sec-ch-ua-full-version-list、無いときはsec-ch-ua)
         const secChUa = this.c.req.header("sec-ch-ua-full-version-list") || this.c.req.header("sec-ch-ua") || "";
-        this.processModel.userAgent = userAgent + " " + secChUa;
+        this.poster.userAgent = userAgent + " " + secChUa;
 
         // acceptヘッダなどのブラウザ情報などをbrowserInfoに追加
         const accept = this.c.req.header("accept") || "";
         const acceptLanguage = this.c.req.header("accept-language") || "";
         const acceptEncoding = this.c.req.header("accept-encoding") || "";
-        this.processModel.browserInfo = `Accept:${accept}<>Accept-Language:${acceptLanguage}<>Accept-Encoding:${acceptEncoding}`;
+        this.poster.browserInfo = `Accept:${accept}<>Accept-Language:${acceptLanguage}<>Accept-Encoding:${acceptEncoding}`;
 
         // 機種・OS情報をdeviceInfoに追加(sec-ch-ua-platform、sec-ch-ua-modelが無いときはUserAgentから推測)
-        this.processModel.deviceInfo = (this.c.req.header('sec-ch-ua-platform') ?? getPlatformNameByUserAgent(this.processModel.userAgent)) + "_";
-        this.processModel.deviceInfo += (this.c.req.header('sec-ch-ua-model') ?? getAndroidModelNameByUserAgent(this.processModel.userAgent)) + "_";
+        this.poster.deviceInfo = (this.c.req.header('sec-ch-ua-platform') ?? getPlatformNameByUserAgent(this.poster.userAgent)) + "_";
+        this.poster.deviceInfo += (this.c.req.header('sec-ch-ua-model') ?? getAndroidModelNameByUserAgent(this.poster.userAgent)) + "_";
 
         // 2ch専用ブラウザ(Monazilla/1.00)かどうかを判定
-        this.processModel.isMonazilla = /^Monazilla\/1\.00/.test(this.processModel.userAgent);
+        this.poster.isMonazilla = /^Monazilla\/1\.00/.test(this.poster.userAgent);
 
         // IPをモデルにセット、IPv6接続チェック
-        this.processModel.isIPv6 = this.processModel.ip.includes(":");
+        this.poster.isIPv6 = this.poster.ip.includes(":");
 
         // ID生成用の種をセット(IPv6の場合は前4オクテット)
-        this.processModel.idSeed = this.processModel.isIPv6 ? this.processModel.ip.split(":").slice(0, 4).join(":") : this.processModel.ip;
+        this.poster.idSeed = this.poster.isIPv6 ? this.poster.ip.split(":").slice(0, 4).join(":") : this.poster.ip;
 
         // 簡易Proxyチェック
         const clientIp = this.c.req.header("client-ip") || "";
@@ -187,7 +184,7 @@ export class PostService {
 
         const xForwardedFor = this.c.req.header("x-forwarded-for") || "";
 
-        if (xForwardedFor && xForwardedFor.split(",")[0].trim() !== this.processModel.ip) {
+        if (xForwardedFor && xForwardedFor.split(",")[0].trim() !== this.poster.ip) {
             this.processModel.addError("Proxyからの書き込みは許可されていません");
             return;
         }
@@ -197,7 +194,7 @@ export class PostService {
         if (forwarded) {
             const fMatch = forwarded.match(/for=([^;]+)/);
 
-            if (fMatch && fMatch[1] && fMatch[1] !== this.processModel.ip) {
+            if (fMatch && fMatch[1] && fMatch[1] !== this.poster.ip) {
                 this.processModel.addError("Proxyからの書き込みは許可されていません");
                 return;
             }
@@ -205,7 +202,7 @@ export class PostService {
 
         const via = this.c.req.header("via") || "";
 
-        if (via && !via.includes(this.processModel.ip)) {
+        if (via && !via.includes(this.poster.ip)) {
             this.processModel.addError("Proxyからの書き込みは許可されていません");
             return;
         }
@@ -217,6 +214,9 @@ export class PostService {
     async preparePostForm() {
         // bodyTextを取得 -> Encoding.urlDecode -> UTF8以外ならEncoding.convert -> formにセット
         const bodyText = await this.c.req.text();
+
+        // SJISかどうかだけ先に判定してしまいposter.isSJISにセット
+        this.poster.isSJIS = Encoding.detect(bodyText) === "SJIS";
 
         // CONTENT_LENGTHが65535バイト以上はエラー
         if (bodyText.length > 65535) {
@@ -325,11 +325,11 @@ export class PostService {
         // スレ立て時以外はスルー
         if (!this.postForm.subject) return;
 
-        if (this.bbsObj === undefined) {
-            throw new Error("Exception: bbsObj is undefined");
+        if (this.bbs === undefined) {
+            throw new Error("Exception: bbs is undefined");
         }
 
-        const settingText = await this.bbsObj.getSettingText();
+        const settingText = await this.bbs.getSettingText();
         const lines = settingText.split("\n");
 
         for (const line of lines) {

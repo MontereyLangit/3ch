@@ -5,6 +5,8 @@ import { z } from 'zod';
  * FROM、mail、MESSAGE、subjectの最大長は板設定/スレ設定により指定可能
  */
 export const PostFormSchema = z.object({
+    // ToDo: FROM, mail, MESSAGE, subjectの最大長、FROMのデフォルト値を板・スレ設定で指定できるようにする
+    // ToDo: それぞれにバリデーションエラーメッセージを用意
     FROM: z.string().max(100).default(""),
     mail: z.string().max(100).default(""),
     MESSAGE: z.string().min(1).max(10000),

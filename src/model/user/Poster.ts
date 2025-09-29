@@ -1,5 +1,5 @@
 /**
- * 投稿者情報
+ * 投稿者モデル
  */
 export class Poster {
     id: string = "";
@@ -7,6 +7,7 @@ export class Poster {
     host: string = "";
     userAgent: string = "";
     isMonazilla: boolean = false;
+    isSJIS: boolean = false;
     isIPv6: boolean = false;
     idSeed: string = "";
     browserInfo: string = "";
