@@ -1,22 +1,23 @@
 import { DurableObject } from "cloudflare:workers";
 import { convertDatToThreadArray, convertThreadArrayToDat, type ThreadRes } from "@/utils/commonUtils";
+import { settingTxtDefault } from "./Bbs";
 
 /* 
  * スレッド
  */
 export class Thread extends DurableObject {
-  private lastModified: Date | number;
+  private lastModified: Date;
   private resNum: number;
   private isLoaded: boolean;
-  private settingText: string | undefined;
-  private dat: string | undefined;
-  private logText: string | undefined;
+  private settingText: string = settingTxtDefault;
+  private dat: string = "";
+  private logText: string = "";
 
   constructor(ctx: DurableObjectState, env: CloudflareBindings) {
     super(ctx, env);
 
     // インメモリのみ変数
-    this.lastModified = 0;
+    this.lastModified = new Date();
     this.resNum = 0;
     this.isLoaded = false;
   }
@@ -105,16 +106,16 @@ export class Thread extends DurableObject {
 
   async loadThreadLastModified(): Promise<Date> {
     await this.load();
-    const threadArray = convertDatToThreadArray(this.dat!);
+    const threadArray = convertDatToThreadArray(this.dat);
     if (!threadArray || threadArray.length === 0) return new Date();
     const lastRes = threadArray[threadArray.length - 1];
     this.lastModified = (lastRes && lastRes.date) ? new Date(lastRes.date) : new Date();
-    return this.lastModified as Date;
+    return this.lastModified;
   }
 
   async loadThreadResNum(): Promise<number> {
     await this.load();
-    const threadArray = convertDatToThreadArray(this.dat!);
+    const threadArray = convertDatToThreadArray(this.dat);
     this.resNum = threadArray ? threadArray.length : 0;
     return this.resNum;
   }

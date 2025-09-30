@@ -17,8 +17,8 @@ export class PostService {
     postForm: PostForm;
     poster: Poster;
     bbs?: Bbs;
-    threadObj?: Thread;
-    userObj?: User;
+    thread?: Thread;
+    user?: User;
 
     /**
      * コンストラクタ
@@ -57,13 +57,41 @@ export class PostService {
      * @param poster 投稿者モデル
      */
     preparePosterInfo() {
-        // ToDo: CookieやDurable Objectからユーザー情報を取得し、posterにセットする
+        // UserAgentは7byte~384byteの半角文字のみ可
+        const userAgent = this.c.req.header("user-agent") || "";
+        if (userAgent.length < 7 || userAgent.length > 384 || !userAgent.match(/^[\x20-\x7E]+$/)) {
+            this.processModel.addError("不正なUserAgentです");
+            return;
+        }
+
+        // User Agent Client Hintsのブラウザ情報部分をUAに追加 (sec-ch-ua-full-version-list、無いときはsec-ch-ua)
+        const secChUa = this.c.req.header("sec-ch-ua-full-version-list") || this.c.req.header("sec-ch-ua") || "";
+        this.poster.userAgent = userAgent + " " + secChUa;
+
+        // acceptヘッダなどのブラウザ情報などをbrowserInfoに追加
+        const accept = this.c.req.header("accept") || "";
+        const acceptLanguage = this.c.req.header("accept-language") || "";
+        const acceptEncoding = this.c.req.header("accept-encoding") || "";
+        this.poster.browserInfo = `Accept:${accept}<>Accept-Language:${acceptLanguage}<>Accept-Encoding:${acceptEncoding}`;
+
+        // 機種・OS情報をdeviceInfoに追加(sec-ch-ua-platform、sec-ch-ua-modelが無いときはUserAgentから推測)
+        this.poster.deviceInfo = (this.c.req.header('sec-ch-ua-platform') ?? getPlatformNameByUserAgent(this.poster.userAgent)) + "_";
+        this.poster.deviceInfo += (this.c.req.header('sec-ch-ua-model') ?? getAndroidModelNameByUserAgent(this.poster.userAgent)) + "_";
+
+        // 2ch専用ブラウザ(Monazilla/1.00)かどうかを判定
+        this.poster.isMonazilla = /^Monazilla\/1\.00/.test(this.poster.userAgent);
+
+        // IPをモデルにセット、IPv6接続チェック
+        this.poster.isIPv6 = this.poster.ip.includes(":");
+
+        // ID生成用の種をセット(IPv6の場合は前4オクテット)
+        this.poster.idSeed = this.poster.isIPv6 ? this.poster.ip.split(":").slice(0, 4).join(":") : this.poster.ip;
     }
 
     /**
      * 板Durable Objectを生成します
      */
-    async createBbsObject() {
+    private createBbsObject() {
         if (!this.postForm) {
             throw new Error("Exception: postForm is not created.");
         }
@@ -80,13 +108,18 @@ export class PostService {
             throw new Error("Exception: postForm is not created.");
         }
 
+        // Durable Objects生成
+        this.createBbsObject();
+        await this.createThreadObject();
         // 板設定読み込み
         await this.loadBoardSettings();
         // スレ設定読み込み
         await this.loadThreadSettings();
+        // 板・スレの処理
+        await this.processBoardAndThread();
 
         // フォームのバリデーション
-        // this.validateForm();
+        //this.validateForm();
 
         // ToDo: ここの処理
     }
@@ -123,7 +156,7 @@ export class PostService {
      * UserAgent、CH-UAはここで取得される
      * 歴史的事情や最近の動向がいろいろあるので、更新時には注意すること
      */
-    initialCheck() {
+    private initialCheck() {
         // POSTメソッド以外はエラー
         if (this.c.req.method !== "POST") {
             this.processModel.addError("POSTメソッド以外は許可されていません");
@@ -143,36 +176,6 @@ export class PostService {
             this.processModel.addError("不正なリファラです");
             return;
         }
-
-        // UserAgentは7byte~384byteの半角文字のみ可
-        const userAgent = this.c.req.header("user-agent") || "";
-        if (userAgent.length < 7 || userAgent.length > 384 || !userAgent.match(/^[\x20-\x7E]+$/)) {
-            this.processModel.addError("不正なUserAgentです");
-            return;
-        }
-
-        // User Agent Client Hintsのブラウザ情報部分をUAに追加 (sec-ch-ua-full-version-list、無いときはsec-ch-ua)
-        const secChUa = this.c.req.header("sec-ch-ua-full-version-list") || this.c.req.header("sec-ch-ua") || "";
-        this.poster.userAgent = userAgent + " " + secChUa;
-
-        // acceptヘッダなどのブラウザ情報などをbrowserInfoに追加
-        const accept = this.c.req.header("accept") || "";
-        const acceptLanguage = this.c.req.header("accept-language") || "";
-        const acceptEncoding = this.c.req.header("accept-encoding") || "";
-        this.poster.browserInfo = `Accept:${accept}<>Accept-Language:${acceptLanguage}<>Accept-Encoding:${acceptEncoding}`;
-
-        // 機種・OS情報をdeviceInfoに追加(sec-ch-ua-platform、sec-ch-ua-modelが無いときはUserAgentから推測)
-        this.poster.deviceInfo = (this.c.req.header('sec-ch-ua-platform') ?? getPlatformNameByUserAgent(this.poster.userAgent)) + "_";
-        this.poster.deviceInfo += (this.c.req.header('sec-ch-ua-model') ?? getAndroidModelNameByUserAgent(this.poster.userAgent)) + "_";
-
-        // 2ch専用ブラウザ(Monazilla/1.00)かどうかを判定
-        this.poster.isMonazilla = /^Monazilla\/1\.00/.test(this.poster.userAgent);
-
-        // IPをモデルにセット、IPv6接続チェック
-        this.poster.isIPv6 = this.poster.ip.includes(":");
-
-        // ID生成用の種をセット(IPv6の場合は前4オクテット)
-        this.poster.idSeed = this.poster.isIPv6 ? this.poster.ip.split(":").slice(0, 4).join(":") : this.poster.ip;
 
         // 簡易Proxyチェック
         const clientIp = this.c.req.header("client-ip") || "";
@@ -341,6 +344,30 @@ export class PostService {
     }
 
     /**
+     * スレッドDurable Objectを生成します
+     */
+    private async createThreadObject() {
+        if (!this.postForm) {
+            throw new Error("Exception: postForm is not created.");
+        }
+
+        const postForm = this.postForm;
+        this.thread = this.c.env.THREAD.getByName(postForm.bbs + postForm.key) as unknown as Thread;
+
+        // スレ立て時、レス数が1以上ならエラー
+        if (postForm.subject && (await this.thread.getResNum()) > 0) {
+            this.processModel.addError("別の人が同時刻にスレッドを立てようとしています。ごめんなさい。");
+            return;
+        }
+
+        // 非スレ立て時、レス数が0ならエラー
+        if (postForm.subject === "" && (await this.thread.getResNum()) === 0) {
+            this.processModel.addError("該当するスレッドがありません。" + postForm.bbs + postForm.key);
+            return;
+        }
+    }
+
+    /**
      * スレDurable_Objectsからスレ設定を取得し、model.settingsにセットします
      * スレ立て時はmodel.boardSettingsを使用
      */
@@ -351,6 +378,34 @@ export class PostService {
             this.processModel.settings = { ...this.processModel.boardSettings };
             return;
         }
+
+        // スレDurable_Objectsからスレ設定を取得
+        if (this.thread === undefined) {
+            throw new Error("Exception: thread is undefined");
+        }
+
+        const settingText = await this.thread.getSettingText();
+        const lines = settingText.split("\n");
+
+        for (const line of lines) {
+            const [key, value] = line.split("=");
+            if (key) {
+                this.processModel.boardSettings[key.trim()] = value ? value.trim() : "";
+            }
+        }
+    }
+
+    /**
+     * 板・スレの各処理を行います
+     */
+    private async processBoardAndThread() {
+        // bbs = madakana, adminはcapでないと書き込めないこと
+
+        // レス数が BBS_THREAD_LIMIT 件以上の場合書き込めないこと
+
+        // BBS_HEISA=checkedの場合書き込めないこと
+
+
     }
 
     /**
