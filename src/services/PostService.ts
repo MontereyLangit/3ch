@@ -126,19 +126,19 @@ export class PostService {
         //await this.processPoster();
         if (this.processModel.hasErrors()) return;
         // TODO: アクセス規制
-        //
+        //await this.regulatePosterByDenyList();
         if (this.processModel.hasErrors()) return;
         // TODO: スレ立てチェック
-        //
+        //this.checkStartingNewThread();
         if (this.processModel.hasErrors()) return;
         // TODO: ID、識別ID生成
-        //
+        //this.createPosterIdentifier();
         // TODO: コマンド処理
-        //
-        // TODO: Surable Objects（板、スレッド、ユーザー）データを更新
-        //
+        //await this.processCommands();
+        // TODO: Durable Objects（板、スレッド、ユーザー）データを更新
+        //await saveDurableObjectsData();
         // TODO: KVデータ（bbsmenu、subback）を更新
-        //
+        //await saveKVData();
     }
 
     /**
