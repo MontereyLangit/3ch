@@ -39,10 +39,15 @@ app.on('POST', ['/test/bbs.cgi', '/test/subbbs.cgi'], async (c) => {
     const viewModel = new PostViewModel();
     const postService = new PostService(c, processModel, poster);
 
+    // モデル準備
     postService.preparePostProcessModel();
     postService.preparePosterInfo();
     await postService.preparePostForm();
     
+    // 書き込み実行（エラー時は中断）
+    await postService.post();
+
+    // エラーがある又は書き込み確認画面の場合
     if (processModel.hasErrors()) {
         postService.prepareViewModel(viewModel);
         return c.html(<ViewPost model={viewModel} />);

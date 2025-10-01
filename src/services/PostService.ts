@@ -102,8 +102,9 @@ export class PostService {
 
     /**
      * 投稿処理を実行します
+     * 投稿規制で書き込み処理モデルにエラーがセットされた場合、その時点で処理を中断します
      */
-    async postToBoard() {
+    async post() {
         if (!this.postForm) {
             throw new Error("Exception: postForm is not created.");
         }
@@ -115,13 +116,29 @@ export class PostService {
         await this.loadBoardSettings();
         // スレ設定読み込み
         await this.loadThreadSettings();
-        // 板・スレの処理
-        await this.processBoardAndThread();
-
         // フォームのバリデーション
-        //this.validateForm();
-
-        // ToDo: ここの処理
+        this.validateForm();
+        if (this.processModel.hasErrors()) return;
+        // 板・スレの処理（規制等）
+        await this.processBoardAndThread();
+        if (this.processModel.hasErrors()) return;
+        // TODO: 投稿者処理（規制等）
+        //await this.processPoster();
+        if (this.processModel.hasErrors()) return;
+        // TODO: アクセス規制
+        //
+        if (this.processModel.hasErrors()) return;
+        // TODO: スレ立てチェック
+        //
+        if (this.processModel.hasErrors()) return;
+        // TODO: ID、識別ID生成
+        //
+        // TODO: コマンド処理
+        //
+        // TODO: Surable Objects（板、スレッド、ユーザー）データを更新
+        //
+        // TODO: KVデータ（bbsmenu、subback）を更新
+        //
     }
 
     /**
@@ -409,7 +426,7 @@ export class PostService {
     }
 
     /**
-     * Formのバリデーション
+     * TODO: Formのバリデーション
      */
     private validateForm() {
         if (!this.postForm) return;
