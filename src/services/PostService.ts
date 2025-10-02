@@ -436,6 +436,63 @@ export class PostService {
     }
 
     /**
+     * アクセス規制
+     * 設定を上書きするため他規制処理の前に実行すること
+     */
+    private async regulatePosterByDenyList() {
+        // KVからdenyListを取得
+        const denyListText = await this.c.env.TEST.get("denyList");
+        if (!denyListText) {
+            return;
+        }
+
+        // TODO: ユーザー情報ログデータを生成する処理を実装する
+        // ip<>host<>userAgent<>... の形式
+        const userDataStr = [
+            this.poster.ip,
+            this.poster.host,
+            this.poster.userAgent,
+            this.poster.id, // 識別ID
+            this.c.req.raw.cf?.country,
+            this.c.req.raw.cf?.region,
+            this.c.req.raw.cf?.city,
+        ].join('<>');
+
+        const lines = denyListText.split('\n');
+        const now = Date.now() / 1000;
+
+        const isDenied = lines
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('#')) // 空行とコメントを除外
+            .some(line => {
+                const [targetRegexStr, scopeRegexStr, type, expiresStr] = line.split('<>');
+
+                // 期限切れのルールはスキップ
+                if (expiresStr && parseInt(expiresStr) < now) {
+                    return false;
+                }
+
+                try {
+                    const targetRegex = new RegExp(targetRegexStr);
+                    const scopeRegex = new RegExp(scopeRegexStr || '.*');
+
+                    const currentScope = `${this.postForm.bbs}/${this.postForm.subject}`;
+
+                    // ユーザー、スコープがマッチし、denyPostが含まれているか
+                    if (targetRegex.test(userDataStr) && scopeRegex.test(currentScope) && type.includes('denyPost')) {
+                        this.processModel.addError('アクセスが規制されています。');
+                        return true; // someを終了させる
+                    }
+                } catch (e) {
+                    console.error(`Invalid regex in denyList: ${line}`, e);
+                }
+
+                return false;
+            });
+
+    }
+
+    /**
      * 規制など板・スレの各処理を行います
      */
     private async processBoardAndThread() {
@@ -503,24 +560,6 @@ export class PostService {
                 return;
             }
         }
-    }
-
-    /**
-     * アクセス規制
-     * 設定を上書きするため他規制処理の前に実行すること
-     */
-    private async regulatePosterByDenyList() {
-        // KV.TESTのdenyListを使用
-        const denyList = await this.c.env.TEST.get("denyList");
-        if (!denyList) {
-            return;
-        }
-
-        // denyList フォーマット
-        // 規制対象（正規表現）<>対象板・スレ（板名、スレ名、板名dir 正規表現）<>規制種別（denyPost | mark | denyCreateNewThread | overWriteSetting=* 複数可）<>期限（TimeStamp, 任意）<>備考（任意）\n
-
-        // TODO: Implement
-
     }
 
     /**
