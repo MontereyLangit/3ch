@@ -415,14 +415,14 @@ export class PostService {
         // アクセス規制
         await this.regulatePosterByDenyList();
         if (this.processModel.hasErrors()) return;
-        // 板・スレの処理（規制等）
-        await this.processBoardAndThread();
-        if (this.processModel.hasErrors()) return;
-        // 投稿者処理（規制等）
-        await this.processPoster();
-        if (this.processModel.hasErrors()) return;
-        // スレ立てチェック
+        // スレ立てチェック（広域スレ立て規制、tatesugi除く）
         this.checkStartingNewThread();
+        if (this.processModel.hasErrors()) return;
+        // 板・スレの処理（板ごとの制限、広域スレ立て規制、スレ内連投規制）
+        await this.checkBoardAndThread();
+        if (this.processModel.hasErrors()) return;
+        // 投稿者処理（BAN、Samba24、tatesugi）
+        await this.checkPoster();
         if (this.processModel.hasErrors()) return;
     }
 
@@ -484,9 +484,21 @@ export class PostService {
     }
 
     /**
-     * 規制など板・スレの各処理を行います
+     * スレ立てチェック
      */
-    private async processBoardAndThread() {
+    private checkStartingNewThread() {
+        // スレ立て時以外はスルー
+        if (this.postForm.subject === "") {
+            return;
+        }
+
+    }
+
+    /**
+     * 規制など板・スレの各チェックを行います
+     * 板ごとの制限、広域スレ立て規制、スレ内連投規制
+     */
+    private async checkBoardAndThread() {
         if (this.thread === undefined) {
             throw new Error("Exception: thread is undefined");
         }
@@ -554,9 +566,10 @@ export class PostService {
     }
 
     /**
-     * 投稿者処理（規制等）
+     * 投稿者規制処理
+     * BAN、Samba24、tatesugi
      */
-    private async processPoster() {
+    private async checkPoster() {
         if (this.user === undefined) {
             throw new Error("Exception: user is undefined");
         }
@@ -567,14 +580,29 @@ export class PostService {
             return;
         }
 
-        // ToDo: 連投規制
-    }
+        // Samba24連投規制
+        const samba24Setting = this.processModel.settings.BBS_SAMBA24 || "10/7";
+        if (samba24Setting) {
+            const [regSec, maxRegCount] = samba24Setting.split("/").map(Number);
+            const samba24Result = await this.user.checkSamba24Regulation(regSec, maxRegCount);
 
-    /**
-     * スレ立てチェック
-     */
-    private checkStartingNewThread() {
-        // TODO: Implement
+            if (samba24Result) {
+                this.processModel.addError(samba24Result);
+                return;
+            }
+        }
+
+        // スレッド立てすぎ
+        if (this.postForm.subject) {
+            const tatesugiSetting = this.processModel.settings.BBS_THREAD_TATESUGI || "3/86400";
+            const [maxRegCount, regSec] = tatesugiSetting.split("/").map(Number);
+            const tatesugiResult = await this.user.checkTatesugi(regSec, maxRegCount);
+
+            if (tatesugiResult) {
+                this.processModel.addError(tatesugiResult);
+                return;
+            }
+        }
     }
 
     /**

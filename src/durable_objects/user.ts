@@ -305,4 +305,45 @@ export class User extends DurableObject {
 
     return "";
   }
+
+  /* 
+   * Samba24連投規制
+   * @param regSec 規制秒数
+   * @param maxRegCount 規制回数
+   * @return エラーメッセージ
+   */
+  async checkSamba24Regulation(regSec: number, maxRegCount: number): Promise<string> {
+    await this.load();
+    const currentTime = new Date();
+    // 経過時間 (秒)
+    const keika = Math.floor(currentTime.getTime() / 1000) - Math.floor(this.lastPostedTime!.getTime() / 1000);
+    // 警告を出すカウント数
+    const cautionRegCount = maxRegCount > 4 ? maxRegCount - 2 : 3;
+
+    // 前回投稿から1時間経過していればリセットする
+    if (keika >= 3600) {
+      this.samba24Count = 0;
+      this.lastPostedTime = new Date(0);
+    }
+
+    // 規制秒数以内の投稿か
+    if (keika < regSec) {
+      this.samba24Count!++;  // 規制発動回数を数える
+      if (this.samba24Count! > maxRegCount) {
+        // 規制回数を超えたら24時間規制
+        this.samba24Registered = new Date(currentTime.getTime() + 24 * 60 * 60 * 1000);
+        this.badCount!++;
+        await this.save();
+        return "594 もうずっと書けませんよ。あなたは、規制リストに追加されました。";
+      } else if (this.samba24Count! > cautionRegCount) {
+        // 警告
+        return "599 連打しないでください。もうそろそろ規制リストに入れますよ。。(￣ー￣)ニヤリッ<br>";
+      } else {
+        // 通常の規制メッセージ
+        return `593 ${regSec} sec たたないと書けません。(${this.samba24Count}回目、${keika} sec しかたってない)<br>`;
+      }
+    }
+
+    return "";
+  }
 }
