@@ -1,7 +1,7 @@
 import { Context } from "hono";
 import { Bbs } from "@/durable_objects/Bbs";
 import { PostProcessModel } from "@/model/PostProcessModel";
-import { PostForm, PostFormSchema } from "@/model/form/PostForm";
+import { PostForm, createPostFormSchema } from "@/model/form/PostForm";
 import { Poster } from "@/model/user/Poster";
 import { PostViewModel } from "@/model/view/PostViewModel";
 import Encoding from "encoding-japanese";
@@ -106,19 +106,8 @@ export class PostService {
      */
     async post() {
         if (!this.postForm) {
-            throw new Error("Exception: postForm is not created.");
+            throw new Error("Exception: postForm is not prepared.");
         }
-
-        // Durable Objects生成
-        this.createBbsObject();
-        await this.createThreadObject();
-        // 板設定読み込み
-        await this.loadBoardSettings();
-        // スレ設定読み込み
-        await this.loadThreadSettings();
-        // フォームのバリデーション
-        this.validateForm();
-        if (this.processModel.hasErrors()) return;
         // 規制チェック
         await this.executeRegulationChecks();
         if (this.processModel.hasErrors()) return;
@@ -274,9 +263,19 @@ export class PostService {
             form[key] = value;
         }
 
-        const parsedForm = PostFormSchema.safeParse(form);
+        // 暫定的にフォームデータをpostFormにセット
+        this.postForm.bbs = form.bbs || "";
+        this.postForm.key = form.key || "";
+        this.postForm.subject = form.subject || "";
+
+        // 板・スレ設定を読み込んでからバリデーションスキーマを生成
+        await this.loadBoardSettings();
+        await this.loadThreadSettings();
+
+        const postFormSchema = createPostFormSchema(this.processModel.settings);
+        const parsedForm = postFormSchema.safeParse(form);
         if (!parsedForm.success) {
-            this.processModel.addError("フォームの入力内容が不正です。");
+            this.processModel.addError(parsedForm.error.errors[0].message);
             return;
         }
         Object.assign(this.postForm, parsedForm.data);
@@ -327,10 +326,14 @@ export class PostService {
     }
 
     /**
-     * 板Durable_Objectsから板設定を取得し、model.boardSettingsにセットします
+     * 板Durable_Objectsを生成し、板設定を取得してmodel.boardSettingsにセットします
      */
     private async loadBoardSettings() {
-        if (!this.postForm) return;
+        if (!this.postForm.bbs) return;
+
+        // createBbsObjectをここで呼び出す
+        this.createBbsObject();
+
         // スレ立て時以外はスルー
         if (!this.postForm.subject) return;
 
@@ -349,10 +352,7 @@ export class PostService {
         }
     }
 
-    /**
-     * スレッドDurable Objectを生成します
-     */
-    private async createThreadObject() {
+    private async checkThreadExists() {
         if (!this.postForm) {
             throw new Error("Exception: postForm is not created.");
         }
@@ -374,11 +374,16 @@ export class PostService {
     }
 
     /**
-     * スレDurable_Objectsからスレ設定を取得し、model.settingsにセットします
+     * スレDurable_Objectsを生成し、スレ設定を取得してmodel.settingsにセットします    
      * スレ立て時はmodel.boardSettingsを使用
      */
     private async loadThreadSettings() {
-        if (!this.postForm) return;
+        if (!this.postForm.bbs || !this.postForm.key) return;
+
+        // createThreadObjectをここで呼び出す
+        const postForm = this.postForm;
+        this.thread = this.c.env.THREAD.getByName(postForm.bbs + postForm.key) as unknown as Thread;
+
         // スレ立て時はmodel.boardSettingsを使用
         if (this.postForm.subject) {
             this.processModel.settings = { ...this.processModel.boardSettings };
@@ -401,26 +406,12 @@ export class PostService {
         }
     }
 
-
-
-    /**
-     * TODO: Formのバリデーション
-     */
-    private validateForm() {
-        if (!this.postForm) return;
-        const bbsNameCount = parseInt(this.processModel.settings.BBS_NAME_COUNT || "64");
-
-        // FROMが bbsNameCount 以上はエラー
-        if (this.postForm.FROM.length > bbsNameCount) {
-            this.processModel.addError("名前が長すぎます");
-            return;
-        }
-    }
-
     /**
      * 投稿に関する各種規制チェックを実行します
      */
     private async executeRegulationChecks() {
+        // スレッドの存在チェックなどをここで行う
+        await this.checkThreadExists();
         // アクセス規制
         await this.regulatePosterByDenyList();
         if (this.processModel.hasErrors()) return;
