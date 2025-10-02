@@ -3,7 +3,7 @@
  */
 export class PostProcessModel {
     // Processed Data
-    unixtime: string = "";
+    unixTime: string = "";
     md5Salt: string = "";
     settings: Record<string, any> = {};
     boardSettings: Record<string, any> = {};

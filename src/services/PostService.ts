@@ -46,7 +46,7 @@ export class PostService {
      * リクエスト情報をPostProcessModelにセットします
      */
     preparePostProcessModel() {
-        this.processModel.unixtime = Math.floor(new Date().getTime() / 1000).toString();
+        this.processModel.unixTime = Math.floor(new Date().getTime() / 1000).toString();
         this.processModel.md5Salt = this.c.env.salt;
 
         this.initialCheck();
@@ -119,26 +119,15 @@ export class PostService {
         // フォームのバリデーション
         this.validateForm();
         if (this.processModel.hasErrors()) return;
-        // 板・スレの処理（規制等）
-        await this.processBoardAndThread();
+        // 規制チェック
+        await this.executeRegulationChecks();
         if (this.processModel.hasErrors()) return;
-        // TODO: 投稿者処理（規制等）
-        //await this.processPoster();
-        if (this.processModel.hasErrors()) return;
-        // TODO: アクセス規制
-        //await this.regulatePosterByDenyList();
-        if (this.processModel.hasErrors()) return;
-        // TODO: スレ立てチェック
-        //this.checkStartingNewThread();
-        if (this.processModel.hasErrors()) return;
-        // TODO: ID、識別ID生成
-        //this.createPosterIdentifier();
-        // TODO: コマンド処理
-        //await this.processCommands();
-        // TODO: Durable Objects（板、スレッド、ユーザー）データを更新
-        //await saveDurableObjectsData();
-        // TODO: KVデータ（bbsmenu、subback）を更新
-        //await saveKVData();
+        // ID、識別ID生成
+        this.createPosterIdentifier();
+        // コマンド処理
+        await this.processCommands();
+        // データ更新
+        await this.saveData();
     }
 
     /**
@@ -331,9 +320,9 @@ export class PostService {
             return;
         }
 
-        // subjectがある場合、keyにmodel.unixtimeをセット
+        // subjectがある場合、keyにmodel.unixTimeをセット
         if (this.postForm.subject) {
-            this.postForm.key = this.processModel.unixtime;
+            this.postForm.key = this.processModel.unixTime;
         }
     }
 
@@ -416,9 +405,23 @@ export class PostService {
      * 板・スレの各処理を行います
      */
     private async processBoardAndThread() {
+        if (this.thread === undefined) {
+            throw new Error("Exception: thread is undefined");
+        }
+
         // bbs = madakana, adminはcapでないと書き込めないこと
+        if (this.postForm.bbs === "madakana" || this.postForm.bbs === "admin") {
+            if (!this.poster.isCapUser) {
+                this.processModel.addError("書き込み権限がありません");
+                return;
+            }
+        }
 
         // レス数が BBS_THREAD_LIMIT 件以上の場合書き込めないこと
+        if (await this.thread.getResNum() >= parseInt(this.processModel.settings.BBS_THREAD_LIMIT || "1000")) {
+            this.processModel.addError("レス数が上限を超えています");
+            return;
+        }
 
         // BBS_HEISA=checkedの場合書き込めないこと
 
@@ -437,6 +440,91 @@ export class PostService {
             this.processModel.addError("名前が長すぎます");
             return;
         }
+    }
+
+    /**
+     * 投稿に関する各種規制チェックを実行します
+     */
+    private async executeRegulationChecks() {
+        // 板・スレの処理（規制等）
+        await this.processBoardAndThread();
+        if (this.processModel.hasErrors()) return;
+        // 投稿者処理（規制等）
+        await this.processPoster();
+        if (this.processModel.hasErrors()) return;
+        // アクセス規制
+        await this.regulatePosterByDenyList();
+        if (this.processModel.hasErrors()) return;
+        // スレ立てチェック
+        this.checkStartingNewThread();
+        if (this.processModel.hasErrors()) return;
+    }
+
+    /**
+     * 投稿者処理（規制等）
+     */
+    private async processPoster() {
+        if (this.user === undefined) {
+            throw new Error("Exception: user is undefined");
+        }
+        
+        const resultCheckBanned = await this.user.checkBanned(this.poster.userAgent, this.c.req.raw.cf?.asn?.toString() || "unknown", this.postForm.subject !== "");
+        if (resultCheckBanned) {
+            this.processModel.addError(resultCheckBanned);
+            return;
+        }
+    }
+
+    /**
+     * アクセス規制
+     */
+    private async regulatePosterByDenyList() {
+        // TODO: Implement
+    }
+
+    /**
+     * スレ立てチェック
+     */
+    private checkStartingNewThread() {
+        // TODO: Implement
+    }
+
+    /**
+     * ID、識別ID生成
+     */
+    private createPosterIdentifier() {
+        // TODO: Implement
+    }
+
+    /**
+     * コマンド処理
+     */
+    private async processCommands() {
+        // TODO: Implement
+    }
+
+    /**
+     * 投稿データを永続化します
+     */
+    private async saveData() {
+        // Durable Objects（板、スレッド、ユーザー）データを更新
+        await this.saveDurableObjectsData();
+        // KVデータ（bbsmenu、subback）を更新
+        await this.saveKVData();
+    }
+
+    /**
+     * Durable Objects（板、スレッド、ユーザー）データを更新
+     */
+    private async saveDurableObjectsData() {
+        // TODO: Implement
+    }
+
+    /**
+     * KVデータ（bbsmenu、subback）を更新
+     */
+    private async saveKVData() {
+        // TODO: Implement
     }
 }
 

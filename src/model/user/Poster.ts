@@ -12,4 +12,6 @@ export class Poster {
     idSeed: string = "";
     browserInfo: string = "";
     deviceInfo: string = "";
+    isCapUser: boolean = false;
+    isStrongCapUser: boolean = false;
 }
