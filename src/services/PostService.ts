@@ -401,32 +401,7 @@ export class PostService {
         }
     }
 
-    /**
-     * 板・スレの各処理を行います
-     */
-    private async processBoardAndThread() {
-        if (this.thread === undefined) {
-            throw new Error("Exception: thread is undefined");
-        }
 
-        // bbs = madakana, adminはcapでないと書き込めないこと
-        if (this.postForm.bbs === "madakana" || this.postForm.bbs === "admin") {
-            if (!this.poster.isCapUser) {
-                this.processModel.addError("書き込み権限がありません");
-                return;
-            }
-        }
-
-        // レス数が BBS_THREAD_LIMIT 件以上の場合書き込めないこと
-        if (await this.thread.getResNum() >= parseInt(this.processModel.settings.BBS_THREAD_LIMIT || "1000")) {
-            this.processModel.addError("レス数が上限を超えています");
-            return;
-        }
-
-        // BBS_HEISA=checkedの場合書き込めないこと
-
-
-    }
 
     /**
      * TODO: Formのバリデーション
@@ -446,18 +421,106 @@ export class PostService {
      * 投稿に関する各種規制チェックを実行します
      */
     private async executeRegulationChecks() {
+        // アクセス規制
+        await this.regulatePosterByDenyList();
+        if (this.processModel.hasErrors()) return;
         // 板・スレの処理（規制等）
         await this.processBoardAndThread();
         if (this.processModel.hasErrors()) return;
         // 投稿者処理（規制等）
         await this.processPoster();
         if (this.processModel.hasErrors()) return;
-        // アクセス規制
-        await this.regulatePosterByDenyList();
-        if (this.processModel.hasErrors()) return;
         // スレ立てチェック
         this.checkStartingNewThread();
         if (this.processModel.hasErrors()) return;
+    }
+
+    /**
+     * 規制など板・スレの各処理を行います
+     */
+    private async processBoardAndThread() {
+        if (this.thread === undefined) {
+            throw new Error("Exception: thread is undefined");
+        }
+
+        // bbs = madakana, adminはcapUserでないと書き込めないこと
+        if (this.postForm.bbs === "madakana" || this.postForm.bbs === "admin") {
+            if (!this.poster.isCapUser) {
+                this.processModel.addError("書き込み権限がありません");
+                return;
+            }
+        }
+
+        // レス数が BBS_THREAD_LIMIT 件以上の場合書き込めないこと
+        if (await this.thread.getResNum() >= parseInt(this.processModel.settings.BBS_THREAD_LIMIT || "1000")) {
+            this.processModel.addError("レス数が上限を超えています");
+            return;
+        }
+
+        // BBS_HEISA=checkedの場合書き込めないこと(capUser除く)
+        if (this.processModel.settings.BBS_HEISA === "checked") {
+            if (!this.poster.isCapUser) {
+                this.processModel.addError("書き込み権限がありません");
+                return;
+            }
+        }
+
+        // 連投規制
+        // ThreadArrayの最新 settings.timecount 件中、 timeclose 回ID一致で規制
+        const threadArray = await this.thread.getThreadArray();
+        const timecount = parseInt(this.processModel.settings.timecount || "18");
+        const timeclose = parseInt(this.processModel.settings.timeclose || "10");
+        const timecover = parseInt(this.processModel.settings.timecover || "3600");
+
+        if (threadArray.length > 0) {
+            const recentPosts = threadArray.slice(-timecount);
+            
+            const { idMatchCount, shikibetsuIdMatchCount } = recentPosts.reduce(
+                (counts, post) => {
+                    // IDの一致をチェック (dateから " ID:xxxx" を抽出)
+                    const idMatch = post.date.match(/\sID:(\S+)/);
+                    if (idMatch && idMatch[1] === this.processModel.id) {
+                        counts.idMatchCount++;
+                    }
+
+                    // 識別IDの一致をチェック (nameから " </b>(xxxx)<b>" を抽出)
+                    const shikibetsuMatch = post.name.match(/\s<\/b>\(([^)]+)\)<b>/);
+                    if (shikibetsuMatch && shikibetsuMatch[1] === this.poster.id) {
+                        counts.shikibetsuIdMatchCount++;
+                    }
+                    return counts;
+                },
+                { idMatchCount: 0, shikibetsuIdMatchCount: 0 }
+            );
+
+            if (idMatchCount >= timeclose) {
+                this.processModel.addError("短期間に連続投稿しすぎです。(ID)");
+                return;
+            }
+            // 最新 timecount 件中、 timecover 回識別ID一致で規制
+            if (shikibetsuIdMatchCount >= timecover) {
+                this.processModel.addError("短期間に連続投稿しすぎです。(識別ID)");
+                return;
+            }
+        }
+    }
+
+    /**
+     * アクセス規制
+     * 設定を上書きするため他規制処理の前に実行すること
+     */
+    private async regulatePosterByDenyList() {
+        // KV.TESTのdenyListを使用
+        const denyList = await this.c.env.TEST.get("denyList");
+        if (!denyList) {
+            return;
+        }
+
+        // denyList フォーマット
+        // 規制対象（正規表現）<>対象板・スレ（板名、スレ名、板名dir 正規表現）<>規制種別（denyPost | mark | denyCreateNewThread | overWriteSetting=* 複数可）<>期限（TimeStamp, 任意）<>備考（任意）\n
+
+        // TODO: Implement
+
     }
 
     /**
@@ -473,13 +536,8 @@ export class PostService {
             this.processModel.addError(resultCheckBanned);
             return;
         }
-    }
 
-    /**
-     * アクセス規制
-     */
-    private async regulatePosterByDenyList() {
-        // TODO: Implement
+        // ToDo: 連投規制
     }
 
     /**
