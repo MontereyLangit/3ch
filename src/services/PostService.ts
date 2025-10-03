@@ -499,8 +499,8 @@ export class PostService {
      * 板ごとの制限、広域スレ立て規制、スレ内連投規制
      */
     private async checkBoardAndThread() {
-        if (this.thread === undefined) {
-            throw new Error("Exception: thread is undefined");
+        if (this.thread === undefined || this.bbs === undefined) {
+            throw new Error("Exception: thread or bbs is undefined");
         }
 
         // bbs = madakana, adminはcapUserでないと書き込めないこと
@@ -524,6 +524,9 @@ export class PostService {
                 return;
             }
         }
+
+        // 広域スレ立て規制
+        // 
 
         // 連投規制
         // ThreadArrayの最新 settings.timecount 件中、 timeclose 回ID一致で規制
