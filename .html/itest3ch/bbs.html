@@ -14,13 +14,13 @@ FiveServer: http://127.0.0.1:5500/3ch/.html/itest3ch/bbs.html
     <script src="http://127.0.0.1:5500/3ch/.html/pages/dist/htmx.min.js"></script>
   </head>
   <body>
+    <header>
+      <div>
+        itest3ch　　　　　　　　
+        ヘッダー
+      </div>
+    </header>
     <main>
-      <header>
-        <div>
-          itest3ch　　　　　　　　
-          ヘッダー
-        </div>
-      </header>
       <section class="board-details">
         <details open="">
           <summary class="board-name">xx板</summary>
@@ -46,51 +46,285 @@ FiveServer: http://127.0.0.1:5500/3ch/.html/itest3ch/bbs.html
         </details>
       </section>
       <section class="threads">
-        <div>
-          表示切替ボタン類
-          <!-- ソート方式（通常、勢い、新順、レス数）　表示条件（一覧内検索）　表示期間指定（過去ログ表示モード） -->
+        <div class="sort-options">
+          <a href="#" class="active">新着</a>
+          <a href="#">勢い</a>
+          <a href="#">レス数</a>
+          <input type="search" placeholder="スレッド内検索...">
         </div>
-        <div>
+        <div class="thread-list">
           <a href="#" class="thread">
-            <span class="name">スレッド1</span>
-            <span class="created"></span>
-            <span class="last-modified"></span>
-            <span class="res"></span>
-            <span class="speed"></span>
+            <div class="thread-content">
+              <div class="name">ここにスレッドのタイトルが入ります。少し長めのタイトルでも自動で改行されて表示されます。</div>
+              <div class="thread-meta">
+                <span class="res">101</span>
+                <span class="speed">12.3 res/h</span>
+                <span class="last-modified">5分前</span>
+                <span class="created">2024/05/21</span>
+              </div>
+            </div>
           </a>
-        </div>
-        <div>
           <a href="#" class="thread">
-            <span class="name">スレッド1</span>
-            <span class="created"></span>
-            <span class="last-modified"></span>
-            <span class="res"></span>
-            <span class="speed"></span>
+            <div class="thread-content">
+              <div class="name">XやRedditのようなUIを意識したデザイン</div>
+              <div class="thread-meta">
+                <span class="res">48</span>
+                <span class="speed">8.1 res/h</span>
+                <span class="last-modified">30分前</span>
+                <span class="created">2024/05/21</span>
+              </div>
+            </div>
           </a>
-        </div>
-        <div>
           <a href="#" class="thread">
-            <span class="name">スレッド1</span>
-            <span class="created"></span>
-            <span class="last-modified"></span>
-            <span class="res"></span>
-            <span class="speed"></span>
+            <div class="thread-content">
+              <div class="name">ダークテーマで目に優しく、モダンな印象を与えます。</div>
+              <div class="thread-meta">
+                <span class="res">256</span>
+                <span class="speed">25.6 res/h</span>
+                <span class="last-modified">1時間前</span>
+                <span class="created">2024/05/20</span>
+              </div>
+            </div>
           </a>
       </div>
     </section>
   </main>
-<style type="text/css">
-section.board-name{font-size: 1.5rem;font-weight: bold;}
-section {
-  margin-top: 1rem;
-}
-.threads > div {
-  margin-top: 1rem;
-}
+  <style type="text/css">
+    :root {
+      --bg-color: #15181c;
+      --card-bg-color: #192734;
+      --text-color: #e0e0e0;
+      --text-muted-color: #8899a6;
+      --primary-color: #1d9bf0;
+      --border-color: #38444d;
+      --input-bg-color: #202327;
+    }
 
-form>div {
-  margin: 1rem;
-}
-</style>
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+    }
+
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      width: 100%;
+      background-color: var(--card-bg-color);
+      border: 1px solid var(--border-color);
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      box-sizing: border-box;
+    }
+
+    header > div {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 1rem 1.5rem;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: var(--primary-color);
+    }
+
+    section {
+      /* sectionの背景色はスレッドリスト以外は透明にし、
+         PC表示時にmainの背景色が見えるように調整 */
+      background-color: transparent;
+      border-radius: 8px;
+      margin-bottom: 2rem;
+      border: 1px solid var(--border-color);
+      overflow: hidden; /* for border-radius */
+    }
+
+    details summary {
+      cursor: pointer;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: var(--primary-color);
+      padding: 1.5rem;
+    }
+    
+    details[open] summary {
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .board-details .head-text {
+      margin: 1.5rem;
+      padding-left: 1.2rem;
+      border-left: 3px solid var(--primary-color);
+      color: var(--text-muted-color);
+    }
+
+    .board-details .setting-text {
+      padding: 0 0.5rem 0.5rem;
+    }
+
+    .board-details .setting-text details {
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      background-color: var(--bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+    }
+
+    form {
+      padding: 1.5rem;
+    }
+
+    form div {
+      margin-bottom: 1rem;
+    }
+
+    form input[type="text"],
+    form textarea {
+      width: calc(100% - 1.6rem);
+      padding: 0.8rem;
+      border: 1px solid var(--border-color);
+      background-color: var(--input-bg-color);
+      color: var(--text-color);
+      border-radius: 8px;
+      box-sizing: border-box;
+      font-size: 1rem;
+    }
+
+    form textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    form input[type="submit"] {
+      background-color: var(--primary-color);
+      color: white;
+      padding: 0.7rem 1.5rem;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 1.1rem;
+      font-weight: bold;
+      transition: background-color 0.3s;
+      float: right;
+    }
+
+    form input[type="submit"]:hover {
+      background-color: #357abd;
+    }
+
+    .threads {
+      padding: 0;
+      background-color: transparent;
+      border: none;
+    }
+
+    .sort-options {
+      display: flex;
+      gap: 1rem;
+      padding: 0 1rem 1rem;
+      align-items: center;
+    }
+
+    .sort-options a {
+      color: var(--text-muted-color);
+      text-decoration: none;
+      font-weight: bold;
+      padding: 0.5rem 0;
+      border-bottom: 2px solid transparent;
+    }
+
+    .sort-options a.active,
+    .sort-options a:hover {
+      color: var(--primary-color);
+      border-bottom-color: var(--primary-color);
+    }
+
+    .sort-options input[type="search"] {
+      margin-left: auto;
+      background-color: var(--input-bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 0.5rem 1rem;
+      color: var(--text-color);
+    }
+
+    .thread-list {
+      background-color: var(--card-bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+    }
+
+    .threads .thread {
+      display: block;
+      text-decoration: none;
+      color: var(--text-color);
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      transition: background-color 0.2s;
+    }
+
+    .threads .thread:last-child {
+      border-bottom: none;
+    }
+
+    .threads .thread:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .threads .thread .name {
+      font-weight: bold;
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+
+    .thread-meta {
+      display: flex;
+      gap: 1.5rem;
+      color: var(--text-muted-color);
+      font-size: 0.9rem;
+    }
+
+    .thread-meta span::before {
+      font-family: "Segoe UI Symbol", sans-serif;
+      margin-right: 0.4rem;
+      opacity: 0.7;
+    }
+
+    .thread-meta .res::before {
+      content: '💬';
+    }
+    .thread-meta .speed::before {
+      content: '🔥';
+    }
+    .thread-meta .last-modified::before {
+      content: '🔄';
+    }
+    .thread-meta .created::before {
+      content: '📅';
+    }
+
+    /* PC (large screen) styles */
+    @media (min-width: 992px) {
+      main {
+        max-width: 960px;
+        margin: 0 2rem; /* 左寄せ */
+        padding-top: 2rem;
+      }
+
+      header > div {
+        max-width: 100%; /* ヘッダー内のコンテンツ幅を広げる */
+        margin: 0 2rem;
+      }
+    }
+  </style>
 </body>
 </html>
