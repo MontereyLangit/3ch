@@ -1,0 +1,96 @@
+<!--
+itest3ch サンプルHTML 板トップページ
+FiveServer: http://127.0.0.1:5500/3ch/.html/itest3ch/bbs.html
+-->
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>itest3ch</title>
+    <link rel="stylesheet" href="http://127.0.0.1:5500/3ch/.html/pages/css/itest3ch.css">
+    <script src="http://127.0.0.1:5500/3ch/.html/pages/js/itest3ch.js"></script>
+    <script src="http://127.0.0.1:5500/3ch/.html/pages/dist/htmx.min.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          itest3ch　　　　　　　　
+          ヘッダー
+        </div>
+      </header>
+      <section class="board-details">
+        <details open="">
+          <summary class="board-name">xx板</summary>
+          <div class="head-text">説明</div>
+          <div class="setting-text">
+            <details>
+              <summary>板設定</summary>
+              <div>settings</div>
+            </details>
+          </div>
+        </details>
+      </section>
+      <section>
+        <details>
+          <summary>新規スレッド作成</summary>
+          <form>
+            <div><input type="text" name="FROM" placeholder="名前（省略可）"></div>
+            <div><input type="text" name="mail" placeholder="E-mail（省略可）"></div>
+            <div><input type="text" name="subject" placeholder="スレッドタイトル" required=""></div>
+            <div><textarea name="MESSAGE" required="" placeholder="本文"></textarea></div><div>コマンド</div>
+            <div><input type="submit" value="スレ立てする"></div>
+          </form>
+        </details>
+      </section>
+      <section class="threads">
+        <div>
+          表示切替ボタン類
+          <!-- ソート方式（通常、勢い、新順、レス数）　表示条件（一覧内検索）　表示期間指定（過去ログ表示モード） -->
+        </div>
+        <div>
+          <a href="#" class="thread">
+            <span class="name">スレッド1</span>
+            <span class="created"></span>
+            <span class="last-modified"></span>
+            <span class="res"></span>
+            <span class="speed"></span>
+          </a>
+        </div>
+        <div>
+          <a href="#" class="thread">
+            <span class="name">スレッド1</span>
+            <span class="created"></span>
+            <span class="last-modified"></span>
+            <span class="res"></span>
+            <span class="speed"></span>
+          </a>
+        </div>
+        <div>
+          <a href="#" class="thread">
+            <span class="name">スレッド1</span>
+            <span class="created"></span>
+            <span class="last-modified"></span>
+            <span class="res"></span>
+            <span class="speed"></span>
+          </a>
+      </div>
+    </section>
+  </main>
+<style type="text/css">
+section.board-name{font-size: 1.5rem;font-weight: bold;}
+section {
+  margin-top: 1rem;
+}
+.threads > div {
+  margin-top: 1rem;
+}
+
+form>div {
+  margin: 1rem;
+}
+</style>
+</body>
+</html>
