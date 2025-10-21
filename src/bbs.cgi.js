@@ -338,8 +338,8 @@ async function readForm(gb, request) {
   if (gb.form.MESSAGE === "") return dispError(gb, "本文がありません！");
   if ((gb.form.key === "" || !/^[0-9]+$/.test(gb.form.key)) && gb.form.subject === "") return dispError(gb, "subjectが存在しないかキー情報が不正です。key=" + gb.form.key + "<br>\nThe subject is empty and key is wrong.");
   if (gb.form.time === "" || !/^[0-9]+$/.test(gb.form.time)) return dispError(gb, "ブラウザ変ですよん。(time)<br>\ntime is empty. time=" + gb.form.time);
-  if (gb.form.time > gb.unixtime) return dispError(gb, "投稿時刻がおかしいです。時計が狂っていませんか？<br>time値が未来の時刻です。端末の時刻を確認して、ブラウザを立ち上げなおしてみてください。");
-  if (gb.form.time < gb.unixtime - 3600) return dispError(gb, "投稿時刻が時間切れです。スレッドをリロード（再読み込み）してください。<br>現在時刻より1時間以上前のtime値は無効です。");
+  //if (gb.form.time > gb.unixtime) return dispError(gb, "投稿時刻がおかしいです。時計が狂っていませんか？<br>time値が未来の時刻です。端末の時刻を確認して、ブラウザを立ち上げなおしてみてください。");
+  //if (gb.form.time < gb.unixtime - 3600) return dispError(gb, "投稿時刻が時間切れです。スレッドをリロード（再読み込み）してください。<br>現在時刻より1時間以上前のtime値は無効です。");
 
   if (gb.form.key !== "") gb.form.subject = "";
 
@@ -728,48 +728,54 @@ function checkFieldSize(gb) {
  * 識別IDは gb.sikibetsuId に格納される。
  */
 async function makeIdAndShikibetuId(gb) {
-  /* IDを生成する */
   const idGroup = gb.settings.BBS_ID_GROUP ? gb.settings.BBS_ID_GROUP : gb.form.bbs;
   const BBS_ID = gb.settings.BBS_ID ? gb.settings.BBS_ID : "checked";
   const BBS_ID_RESET = gb.settings.BBS_ID_RESET ? gb.settings.BBS_ID_RESET : "86400";
   const BBS_ID_LV = gb.settings.BBS_ID_LV ? gb.settings.BBS_ID_LV : "";
-
-  // キャップはID:???
   if (gb.cap) {
     gb.id = "ID:???";
-  }
-  // IPからIDを生成
-  else if (BBS_ID === "ip") {
-    let idString = await getMd5IdString(gb.idnotane, idGroup, (parseInt(gb.unixtime) + 32400)/BBS_ID_RESET, gb.md5Salt);
+  } else if (BBS_ID === "ip") {
+    let idString = await getMd5IdString(gb.idnotane, idGroup, Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET), gb.md5Salt);
     gb.id = `ID:${idString}`;
     if (BBS_ID_LV === "checked") gb.id += gb.userData.lv >= 10 ? "10" : "L" + gb.userData.lv;
   }
   // 識別子からIDを生成
   else if (BBS_ID === "checked") {
-    let idString = await getMd5IdString(gb.idnotane, idGroup, (parseInt(gb.unixtime) + 32400)/BBS_ID_RESET, gb.md5Salt);
+    let idString = await getMd5IdString(gb.idnotane, idGroup, Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET), gb.md5Salt);
     gb.id = `ID:${idString}`;
     if (BBS_ID_LV === "checked") gb.id += gb.userData.lv >= 10 ? "10" : "L" + gb.userData.lv;
-  }
-  // siberiaは発信元IPアドレスを表示
-  else if (BBS_ID === "siberia") {
-    gb.id = `発信元:${gb.ip}`;
+  } else if (BBS_ID === "siberia") {
+    gb.id = `\u767A\u4FE1\u5143:${gb.ip}`;
     if (BBS_ID_LV === "checked") gb.id += " " + (gb.userData.lv >= 10 ? "10" : "L" + gb.userData.lv);
-  }
-  // IDなしの板
-  else {
+  } else {
     if (BBS_ID_LV === "checked") gb.id += gb.userData.lv >= 10 ? "10" : "L" + gb.userData.lv;
   }
-
-  /* 識別IDを生成する */
   const BBS_ID_SHIKIBETSU = gb.settings.BBS_ID_SHIKIBETSU ? gb.settings.BBS_ID_SHIKIBETSU : "checked";
-
-  // キャップは★
   if (gb.cap) {
-    gb.sikibetsuId = "★";
-  }
+    gb.shikibetsuId = "\u2605";
+  } 
   else if (BBS_ID_SHIKIBETSU === "checked") {
-    gb.sikibetsuId = `${gb.country},${gb.ken} ${gb.asn}-${gb.deviceId}`;
+    gb.shikibetsuId = `${gb.country}.${await getSha1Base64Id(gb.ken, idGroup, Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET), gb.md5Salt, 2)}.${await getSha1Base64Id(gb.city+"c", idGroup, Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET), gb.md5Salt, 2)} ${await getSha1Base64Id(gb.asn, idGroup, Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET), gb.md5Salt, 2)}-${md5(gb.userAgent+idGroup+Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET).toString()+gb.md5Salt).slice(0,16)}`; 
   }
+  else if (BBS_ID_SHIKIBETSU === "raw") {
+    gb.shikibetsuId = `${gb.country}.${gb.ken} ${gb.asn}`;
+  }
+  else if (BBS_ID_SHIKIBETSU === "ken") {
+    gb.shikibetsuId = `${gb.country}.${gb.ken}`;
+  }
+  else if (BBS_ID_SHIKIBETSU === "city") {
+    gb.shikibetsuId = `${gb.country}.${gb.ken}.${gb.city}`;
+  }
+  else if (BBS_ID_SHIKIBETSU === "as") {
+    gb.shikibetsuId = `${gb.asn}`;
+  }
+  else if (BBS_ID_SHIKIBETSU === "d") {
+    gb.shikibetsuId = ``;
+  }
+}async function getSha1Base64Id(tane, group, date, salt, length) {
+  const md5Id = md5(tane+group+date+salt);
+  const sha1Base64Id = await sha1Base64(md5Id);
+  return sha1Base64Id.slice(0, length);
 }
 
 async function getMd5IdString(tane, group, date, salt) {
