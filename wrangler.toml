@@ -1,5 +1,5 @@
 name = "3ch"
-main = "src/index.js"
+main = "src/main.js"
 compatibility_date = "2025-04-18"
 
 kv_namespaces = [
