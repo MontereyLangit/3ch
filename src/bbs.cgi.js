@@ -1,5 +1,6 @@
-//@ts-check
-import { sjis, respondPlainText, hexToBinary, sha1Base64, hash, md5, crypt, translateSaltChar } from "./common.js";
+import { respondPlainText, hexToBinary, sha1Base64, hash, md5, crypt, translateSaltChar } from "./common.js";
+import Encoding from "encoding-japanese";
+import { respondPlainText, hexToBinary, sha1Base64, hash, md5, crypt, translateSaltChar } from "./common.js";
 
 /* デフォルト板設定 */
 //古いので要修正
@@ -244,25 +245,16 @@ function checkRequest(gb, request) {
 
 /* 初期情報を取得（ＰＯＳＴ） */
 async function readForm(gb, request) {
-  const bodyBytes = new Uint8Array(await request.arrayBuffer());
+  const bodyText = await request.text();
 
-  /* Shift JIS -> UTF-8 -- for POST by Monazilla/1.00 */
-  const bodyText = new TextDecoder("utf-8").decode(bodyBytes);
-
-  if (/submit=([^&]+)/.test(bodyText)) {
-    // UTF-8 での「書」のバイト列 => %E6%9B%B8
-    if (bodyText.toLowerCase().includes("submit=%e6%9b%b8")) {
-      gb.isSJIS = 0;
-    }
-    else {
-      gb.isSJIS = 1;
-      // Shift_JISはMonazilla/1.00のみ
-      if (!gb.isMonazilla) {
-        return dispError(gb, "書き込みボタンを押忍べし<br>2ch専用ブラウザからの書き込みでこのエラーが出た場合、お使いの専用ブラウザはMonazilla/1.00で始まるUserAgentを使用していません。<br>認証時の問題などもありますので、2ch専用ブラウザではMonazilla/1.00で始まるUserAgentを使用してください。<br>(Monazilla/1.00以外のUserAgentでsubmit=%E6%9B%B8…でない場合にこのエラーが出ます。)<br>\n&apos;Submit&apos; must require &apos;書&apos; with Web browser&apos;s post.");
-      }
-    }
+  // encoding-japanese はパーセントエンコーディングされた文字列の文字コードを正しく判定できないため、
+  // デコード済みの `submit` の値で判定する
+  const submitMatch = bodyText.match(/submit=([^&]+)/);
+  if (submitMatch) {
+    const submitValue = Encoding.codeToString(Encoding.urlDecode(submitMatch[1]));
+    gb.isSJIS = !submitValue.includes("書");
   } else {
-    return dispError(gb, "書き込みボタンを押忍べし<br>\nNo submit");
+    return dispError(gb, "書き込みボタンを押忍べし");
   }
 
   const pairs = bodyText.split("&");
@@ -276,10 +268,22 @@ async function readForm(gb, request) {
 
     let value = v || "";
 
-    if (gb.isSJIS) {
-      value = decodeSjisURIComponent(value.replace(/\+/g, " "));
-    } else {
-      value = decodeURIComponent(value.replace(/\+/g, " "));
+    try {
+      const decodedBytes = Encoding.urlDecode(value);
+      if (gb.isSJIS) {
+        value = Encoding.convert(decodedBytes, {
+          to: 'UNICODE',
+          from: 'SJIS',
+          type: 'string',
+          fallback: 'html-entity'
+        });
+        value = value.replace(/\+/g, " ");
+      } else {
+        // UTF-8の場合は、標準のデコーダを使用する
+        value = decodeURIComponent(value.replace(/\+/g, " "));
+      }
+    } catch (e) {
+      return dispError(gb, `送信された内容が破損しています: ${e instanceof Error ? e.message : String(e)}`);
     }
 
     value = value
@@ -349,29 +353,6 @@ async function readForm(gb, request) {
   return 1;
 }
 
-/**
- * URLデコード関数（Shift_JIS用）
- * @param {string} encodedURIComponent
- * @return {string} デコード化された文字列
- */
-function decodeSjisURIComponent(encodedURIComponent) {
-  const bytes = [];
-  for (let i = 0; i < encodedURIComponent.length; ) {
-    if (encodedURIComponent[i] === '%') {
-      const hex = encodedURIComponent.slice(i + 1, i + 3);
-      if (/^[0-9a-fA-F]{2}$/.test(hex)) {
-        bytes.push(parseInt(hex, 16));
-        i += 3;
-        continue;
-      }
-    }
-    // %でなければASCII文字として1バイト追加
-    bytes.push(encodedURIComponent.charCodeAt(i));
-    i++;
-  }
-  return new sjis().decode(bytes);
-}
-
 /* キャップの処理 */
 async function processCap(gb, request, env) {
   if (!gb.form.mail) return;
@@ -413,9 +394,9 @@ async function processCap(gb, request, env) {
 async function processTrip(gb, request, env) {
   if (gb.tripKey === "") return;
 
-  const sjisEncoder = new sjis();
-  const sjisBytes = sjisEncoder.encode(gb.tripKey);
-  const handlePass = String.fromCharCode(...sjisBytes);
+  // ToDo トリップ関連
+  const sjisBytesArray = Encoding.convert(gb.tripKey, { to: "SJIS", from: "UNICODE" });
+  const handlePass = String.fromCharCode(...sjisBytesArray);
 
   if (handlePass.length >= 12) {
     const mark = handlePass.charAt(0);

@@ -1,27 +1,3 @@
-export const sjis = class {
-  constructor() {
-    this.e = {}; this.d = {};
-    ((td = new TextDecoder('sjis'), f = w =>
-      (_ => _.length == 1 &&
-        (this.e[_] = w).reduce((a, x, i, { length: l }) =>
-          (i == l - 1 ? a[x] = _ : a[x] ||= {}), this.d)
-      )(td.decode(new Uint8Array(w)))
-    ) => [...Array(238)].forEach((_, i) =>
-      i < 191
-        ? f([i + (i < 128 ? 0 : 0xa1 - 128)])
-        : [...Array(188)].forEach((_, j) =>
-          f([i - 191 + (i - 191 < 31 ? 0x81 : 0xe0 - 31),
-            j + 0x40 + (62 < j ? 1 : 0)]))
-    ))();
-  }
-  encode(w) { return [...w].flatMap(x => this.e[x]); }
-  decode(w) {
-    return w.reduce((a, x) =>
-      (x = a.x[x], x.length ? (a.a += x, a.x = this.d) : a.x = x, a),
-      { a: '', x: this.d }).a;
-  }
-};
-
 /* 
  * テキストデータの出力処理（UTF-8 or Shift_JIS）
  * text/${type}
@@ -40,8 +16,10 @@ export function respondPlainText(text, type, encoding = "UTF-8", rangeHeader = "
   /* Shift_JIS */
   else if(encoding === "Shift_JIS") {
     /* UTF-8 text から SJIS bytes に変換 */
-    const sjisEncoder = new sjis();
-    const sjisBytes = Uint8Array.from(sjisEncoder.encode(text));
+    const sjisBytesArray = Encoding.convert(text, {
+      to: 'SJIS', from: 'UTF-8', fallback: 'html-entity'
+    });
+    const sjisBytes = new Uint8Array(sjisBytesArray);
     const totalLength = sjisBytes.length;
 
     /* 差分取得の処理 */
