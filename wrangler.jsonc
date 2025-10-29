@@ -20,13 +20,12 @@
       "preview_id": "1a79d9a2fb91478c8db13e62495b69ba"
     }
   ],
-/*  
   // Durable Object bindings.
   "durable_objects": {
     "bindings": [
       { "name": "BBS", "class_name": "Bbs" },
       { "name": "THREAD", "class_name": "Thread" },
-      { "name": "USER", "class_name": "User" }
+      { "name": "NINJA_ACCOUNT", "class_name": "NinjaAccount" }
     ]
   },
   "migrations": [
@@ -35,11 +34,10 @@
       "new_classes": [
         "Bbs",
         "Thread",
-        "User"
+        "NinjaAccount"
       ]
     }
   ],
-*/
   // Limits for your Worker.
   "limits": {
     "cpu_ms": 300000
