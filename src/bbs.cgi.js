@@ -1,4 +1,3 @@
-//@ts-check
 import { sjis, respondPlainText, hexToBinary, sha1Base64, hash, md5, crypt, translateSaltChar } from "./common.js";
 
 /* デフォルト板設定 */
