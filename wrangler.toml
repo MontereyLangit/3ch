@@ -18,6 +18,13 @@ bucket_name = '3ch'
 binding = 'ch3img'
 bucket_name = 'img3ch'
 
+[[durable_objects.bindings]]
+name = "THREAD_DO"
+class_name = "Thread"
+[[durable_objects.bindings]]
+name = "BOARD_DO"
+class_name = "Board"
+
 [observability.logs]
 enabled = true
 

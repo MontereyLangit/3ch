@@ -23,18 +23,16 @@
   // Durable Object bindings.
   "durable_objects": {
     "bindings": [
-      { "name": "BBS", "class_name": "Bbs" },
-      { "name": "THREAD", "class_name": "Thread" },
-      { "name": "NINJA_ACCOUNT", "class_name": "NinjaAccount" }
+      { "name": "THREAD_DO", "class_name": "Thread" },
+      { "name": "BOARD_DO", "class_name": "Board" }
     ]
   },
   "migrations": [
     {
       "tag": "v1",
       "new_classes": [
-        "Bbs",
         "Thread",
-        "NinjaAccount"
+        "Board"
       ]
     }
   ],

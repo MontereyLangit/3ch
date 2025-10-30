@@ -4,7 +4,6 @@ import { bbs_entry, settingTxtDefault } from "./bbs.cgi.js";
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const apiVer = url.search.includes("v=2") ? "v2" : "v1";
     const version = "<a href=\"https://www.3chbbs.com/\">３ちゃんねる</a>(<a href=\"https://wiki.3chbbs.com/index.php/Project_edge\">edge</a>) "
 + "Ver.0.1.1 2025/07/05"
 + "(<a href=\"https://workers.cloudflare.com/\">Cloudflare Workers</a>)";
@@ -59,7 +58,7 @@ export default {
           /* スレの配列に最低2個要素がないとおかしい */
           if(headLineArray.length > 1) {
             /* 最終更新時刻を取得。ログの一行目に入っている。 */
-            lastModified = new Date(headLineArray.shift() * 1000);
+            lastModified = new Date(parseInt(headLineArray.shift()) * 1000);
             
             for(let i = 0; i < headLineArray.length; i++) {
               /* 0:dir_name<>1:板名<>2:最終更新時刻<>3:最終書き込みスレッド名<>4:最終書き込みレスの一部 */
@@ -128,7 +127,7 @@ export default {
           /* スレの配列に最低2個要素がないとおかしい */
           if(headLineArray.length > 1) {
             /* 最終更新時刻を取得。ログの一行目に入っている。 */
-            lastModified = new Date(headLineArray.shift() * 1000);
+            lastModified = new Date(parseInt(headLineArray.shift()) * 1000);
             
             for(let i = 0; i < headLineArray.length; i++) {
               /* 0:dir_name<>1:板名<>2:最終更新時刻<>3:最終書き込みスレッド名<>4:最終書き込みレスの一部 */
@@ -179,93 +178,83 @@ export default {
       /* 924スレッド・900スレッド */
       if(/^(924|900)[0-9]{7}$/.test(key)) bbs = "924";
 
-      const filename = `${bbs}/thread/${key.slice(0,4)}/${key}.cgi`;
       const DATETIMEFORMAT = new Intl.DateTimeFormat('ja-JP', {year: "numeric", month: "2-digit", day: "2-digit", weekday:"short", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Tokyo"});
-      const ENCODING = apiVer === "v2" ? "UTF-8" : "Shift_JIS";
+      const ENCODING = "Shift_JIS";
       let rangeHeader, ifModifiedSinceHeader = "";
       let lastModified;
       let dat = "";
       let error = "";
       let resnum = 0;
       let settings = {};
-
+ 
       try {
-        const object = await env.ch3www.get(filename);
-        if(object !== null) {
-          const log = await object.text();
-          const resArray = log.split("\n");
+        // Durable Objectからスレッドデータを取得
+        const threadId = env.THREAD_DO.idFromName(key);
+        const threadStub = env.THREAD_DO.get(threadId);
 
-          /* スレの配列に最低3個要素がないとおかしい */
-          if(resArray.length < 3) throw new Error("スレッドのログファイルが壊れています。運用情報板で修理してもらってください。");
+        const [log, settingText] = await Promise.all([
+          threadStub.getDat(),
+          threadStub.getSettings(),
+        ]);
+
+        if (log) {
+          const datLines = log.split("\n");
 
           /* スレッドタイトルを取得。ログの一行目に入っている。 */
-          const subject = resArray.shift();
+          const subject = datLines.shift() || "";
 
-          /* スレ設定を取得。ログの二行目に入っている。 */
-          const settingText = resArray.shift();
           /* NAME=VALUE<>NAME2=VALUE2 */
-          const settingsArray = settingText.trim().split("<>");
-          for(let i = 0; i < settingsArray.length; i++) {
-            const setting = settingsArray[i].split("=");
-            if(!setting[0]) continue;
-            setting[1] ??= "";
-            settings[setting[0]] = setting[1].trim();
+          if (settingText) {
+            const settingsArray = settingText.trim().split("<>");
+            for(const settingPair of settingsArray) {
+              const [s_key, s_value = ""] = settingPair.split("=");
+              if(s_key) settings[s_key] = s_value.trim();
+            }
           }
-
-          /* v2ではスレッドタイトル、スレ設定はそのまま出力 */
-          if(apiVer === "v2") dat += `${subject}\n${settingText}\n`;
 
           /* 名無し設定 */
           const name774 = settings.BBS_NONAME_NAME ?? "774@3ch";
 
           /* ログを一行ずつ読んでいく。。。 */
-          for(let i = 0; i < resArray.length; i++) {
-            /* 0:num<>1:name<>2:sikibetsuId<>3:time<>4:id<>5:MESSAGE<>6:HOST999 ただし6:HOST999はここでは使わない */
-            const res = resArray[i].trim().split("<>");
+          for(const line of datLines) {
+            if (!line) continue;
+            /* 0:num<>1:name<>2:sikibetsuId<>3:time<>4:id<>5:MESSAGE */
+            const res = line.trim().split("<>");
 
-            /* num無し、numが番号でない、num < 1、timeなし、本文部分まで<>がない、削除済み（num=delレス番） -> 表示しない */
-            if(!res[0] || !/^[0-9]+$/.test(res[0]) || res[0] < 1 || !res[3] || res[5] == null) continue;
-            /* 削除済みレスは表示しない。numの数値チェックのところで弾かれるが、一応。 */
-            if(res[0].slice(0,3) === "del") continue;
+            /* num無し、numが番号でない、num < 1、timeなし、本文部分まで<>がない -> 表示しない */
+            if(!res[0] || !/^[0-9]+$/.test(res[0]) || parseInt(res[0]) < 1 || !res[3] || res[5] == null) continue;
 
             /* 名無しをセット */
             let name = res[1] !== "" ? res[1] : name774;
 
-            /* v2(新仕様) */
-            if(apiVer === "v2") {
-              dat += `${res[0]}<>${name}<>${res[2]}<>${res[3]}<>${res[4]}<>${res[5]}<>\n`;
-            }
-            /* v1(2ch形式) */
-            else {
-              /* レス削除などによるレス番飛びを検出する。更新前のresnumが前のレスの番号でなければ、空いた分だけ行を挿入する。 */
-              if(resnum !== res[0] - 1) {
-                for(let j = resnum + 1; j < res[0]; j++) {
-                  dat += j + "<>あぼーん<>あぼーん<>あぼーん<>あぼーん\n";
-                }
+            /* レス削除などによるレス番飛びを検出する。更新前のresnumが前のレスの番号でなければ、空いた分だけ行を挿入する。 */
+            if(resnum !== parseInt(res[0]) - 1) {
+              for(let j = resnum + 1; j < parseInt(res[0]); j++) {
+                dat += j + "<>あぼーん<>あぼーん<>あぼーん<>あぼーん\n";
               }
-
-              resnum = parseInt(res[0]);
-              
-              /* 日付欄の処理 */
-              let date = "";
-              if(res[3]) {
-                const DATETIME = new Date(res[3].slice(0,10) * 1000);
-                date = DATETIMEFORMAT.format(DATETIME);
-                if(res[3].slice(10)) date += `.${res[3].slice(10)}`;
-              }
-
-              /* 識別ID欄を名前欄に追加 */
-              if(res[2]) name += ` </b>(${res[2]})<b>`;
-              /* ID欄を日付欄に追加 */
-              if(res[4]) date += ` ${res[4]}`;
-              /* <br>の前後にスペースを挿入。必要あるのかはわからないけど、一応。 */
-              const MESSAGE = res[5].replace(/<br>/g, " <br> ");
-
-              dat += `${name}<><>${date}<> ${MESSAGE} <>`;
-              dat += resnum === 1 ? `${subject}\n` : "\n";
             }
+
+            resnum = parseInt(res[0]);
+            
+            /* 日付欄の処理 */
+            let date = "";
+            if(res[3]) {
+              const DATETIME = new Date(parseInt(res[3].slice(0,10)) * 1000);
+              date = DATETIMEFORMAT.format(DATETIME);
+              if(res[3].slice(10)) date += `.${res[3].slice(10)}`;
+            }
+
+            /* 識別ID欄を名前欄に追加 */
+            if(res[2]) name += ` </b>(${res[2]})<b>`;
+            /* ID欄を日付欄に追加 */
+            if(res[4]) date += ` ${res[4]}`;
+            /* <br>の前後にスペースを挿入。必要あるのかはわからないけど、一応。 */
+            const MESSAGE = res[5].replace(/<br>/g, " <br> ");
+
+            dat += `${name}<><>${date}<> ${MESSAGE} <>`;
+            dat += resnum === 1 ? `${subject}\n` : "\n";
             /* 最終更新時刻を得る。最後のレスの時刻が入る。 */
-            if(res[3]) lastModified = new Date(res[3].slice(0,10) * 1000);
+            if(res[3]) lastModified = new Date(parseInt(res[3].slice(0,10)) * 1000);
           }
         }else error = "404";
       } catch (e) {
@@ -303,21 +292,21 @@ export default {
 
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/subject\.txt/);
       const bbs = match[1];
-      const filename = `${bbs}/subject.txt`;
-      const ENCODING = apiVer === "v2" ? "UTF-8" : "Shift_JIS";
+      const ENCODING = "Shift_JIS";
       let ifModifiedSinceHeader = "";
       let lastModified;
       let subject = "";
       let error = "";
       let subjectCount = 0;
-
+ 
       try {
         /* 924・900スレッド一覧 [ch3www]/924.txt */
+        // 924・900スレッド一覧はR2から取得（これは仕様通り）
         const object924 = await env.ch3www.get("924.txt");
-        if(object924 !== null) {
+        if (object924 !== null) {
           const subjectText = await object924.text();
           const subjectArray = subjectText.split("\n");
-
+ 
           for(let i = 0; i < subjectArray.length; i++) {
             /* 0:key<>1:title<>2:resnum<>3:id<>4:sikibetsuId<>5:備考欄<>6:最新書き込みunixtime<>7:最新書き込み本文の一部 */
             const thread = subjectArray[i].trim().split("<>");
@@ -325,57 +314,26 @@ export default {
             /* key無し、resnumなし、keyやresnumが10桁の数字でない、7まで<>がない -> 表示しない */
             if(!thread[0] || !/^[0-9]{10}$/.test(thread[0]) || !thread[2] || !/^[0-9]+$/.test(thread[2]) || thread[7] == null) continue;
               
-            /* v2(新仕様) */
-            if(apiVer === "v2") {
-              subject += `${thread[0]}<>${thread[1]}<>${thread[2]}<>${thread[3]}<>${thread[4]}<>${thread[5]}<>${thread[6]}<>${thread[7]}\n`;
-            }
-            /* v1(2ch形式) */
-            else {
-              if(thread[3]) thread[1] += ` [${thread[3]}★]`;
-              if(thread[5]) thread[1] = `[${thread[5]}] ${thread[1]}`;
-              subject += `${thread[0]}.dat<>${thread[1]} (${thread[2]})\n`;
-            }
+            if(thread[3]) thread[1] += ` [${thread[3]}★]`;
+            if(thread[5]) thread[1] = `[${thread[5]}] ${thread[1]}`;
+            subject += `${thread[0]}.dat<>${thread[1]} (${thread[2]})\n`;
           }
         }
-
-        const object = await env.ch3www.get(filename);
-        if(object !== null) {
-          const subjectText = await object.text();
+ 
+        // Board DOからsubject.txtを取得
+        const boardId = env.BOARD_DO.idFromName(bbs);
+        const boardStub = env.BOARD_DO.get(boardId);
+        const subjectText = await boardStub.getSubject();
+ 
+        if (subjectText) {
+          // 最終更新時刻はファイルヘッダからではなく、現在時刻をベースにする
+          lastModified = new Date();
           const subjectArray = subjectText.split("\n");
-
-          /* スレの配列に最低2個要素がないとおかしい */
-          if(subjectArray.length > 1) {
-            /* 最終更新時刻を取得。ログの一行目に入っている。 */
-            lastModified = new Date(subjectArray.shift() * 1000);
-            
-            for(let i = 0; i < subjectArray.length; i++) {
-              /* 最大3000件まで表示 */
-              if(subjectCount > 3000) break;
-
-              /* 0:key<>1:title<>2:resnum<>3:id<>4:sikibetsuId<>5:備考欄<>6:最新書き込みunixtime<>7:最新書き込み本文の一部 */
-              const thread = subjectArray[i].trim().split("<>");
-
-              /* key無し、resnumなし、keyやresnumが10桁の数字でない、7まで<>がない -> 表示しない */
-              if(!thread[0] || !/^[0-9]{10}$/.test(thread[0]) || !thread[2] || !/^[0-9]+$/.test(thread[2]) || thread[7] == null) continue;
-
-              /* レス数が300に到達したスレ、すでに停止しているスレは表示しない */
-              if(thread[2] >= 300 || (thread[5] && thread[5].includes("stop"))) continue;
-              
-              /* v2(新仕様) */
-              if(apiVer === "v2") {
-                subject += `${thread[0]}<>${thread[1]}<>${thread[2]}<>${thread[3]}<>${thread[4]}<>${thread[5]}<>${thread[6]}<>${thread[7]}\n`;
-              }
-              /* v1(2ch形式) */
-              else {
-                if(thread[3]) thread[1] += ` [${thread[3]}★]`;
-                if(thread[5]) thread[1] = `[${thread[5]}] ${thread[1]}`;
-                subject += `${thread[0]}.dat<>${thread[1]} (${thread[2]})\n`;
-              }
-              
-              subjectCount++;
-            }
-          }else {
-            lastModified = new Date();
+ 
+          for (const line of subjectArray) {
+            if (!line.trim()) continue;
+            subject += line.trim() + "\n";
+            subjectCount++;
           }
         }
       } catch (e) {
@@ -400,130 +358,14 @@ export default {
       else return respond500(error);
     }
 
-    /* 過去ログ倉庫 (v2のみ) */
-    if(/^\/[a-zA-Z0-9\-_]+\/kako\/[0-9]{4}\/subject\.txt/.test(url.pathname)) {
-      /* Cache API */
-      const cacheKey = new Request(url.toString(), request);
-      const cache = caches.default;
-      let response = await cache.match(cacheKey);
-      if (response) return response;
-
-      const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/kako\/([0-9]{4})\/subject\.txt/);
-      const bbs = match[1];
-      const kako = match[2];
-      const filename = `${bbs}/thread/${kako}/subject.txt`;
-      let ifModifiedSinceHeader = "";
-      let lastModified;
-      let subject = "";
-      let error = "";
-
-      try {
-        const object = await env.ch3www.get(filename);
-        if(object !== null) {
-          const subjectText = await object.text();
-          const subjectArray = subjectText.split("\n");
-
-          /* スレの配列に最低2個要素がないとおかしい */
-          if(subjectArray.length > 1) {
-            /* 最終更新時刻を取得。ログの一行目に入っている。 */
-            lastModified = new Date(subjectArray.shift() * 1000);
-            
-            for(let i = 0; i < subjectArray.length; i++) {
-              /* 0:key<>1:title<>2:名前<>3:sikibetsuId<>4:id<>5:>>1の本文 */
-              const thread = subjectArray[i].trim().split("<>");
-
-              /* key無し、keyが10桁の数字でない、5まで<>がない -> 表示しない */
-              if(!thread[0] || !/^[0-9]{10}$/.test(thread[0]) || thread[5] == null) continue;
-              
-              subject += `${thread[0]}<>${thread[1]}<>${thread[2]}<>${thread[3]}<>${thread[4]}<>${thread[5]}\n`;
-            }
-          }else {
-            lastModified = new Date();
-          }
-        }else error = "404";
-      }catch(e) {
-        error = `/${bbs}/kako/${kako}/subject.txt Error -> ${e}`;
-      }
-
-      if(!error) {
-        /* 最終更新時刻 */
-        if(request.headers.get('if-modified-since')) ifModifiedSinceHeader = request.headers.get('if-modified-since');
-
-        let headers = {};
-        headers["max-age"] = "60";
-        headers["s-maxage"] = "60";
-
-        response = respondPlainText(subject, "plain", "UTF-8", "", lastModified ?? new Date(), ifModifiedSinceHeader, headers);
-        
-        /* Cache API */
-        if (response.status === 200) ctx.waitUntil(cache.put(cacheKey, response.clone()));
-
-        return response;
-      }else if(error === "404") return respond404(`/${bbs}/kako/${kako}/subject.txt`);
-      else return respond500(error);
+    /* 過去ログ倉庫 (v2のみ) - v2 is deprecated */
+    if(url.search.includes("v=2") && /^\/[a-zA-Z0-9\-_]+\/kako\/[0-9]{4}\/subject\.txt/.test(url.pathname)) {
+      return respond404(url.pathname);
     }
 
-    /* 倉庫一覧 */
-    if(/^\/[a-zA-Z0-9\-_]+\/kako\/subject\.txt/.test(url.pathname)) {
-      /* Cache API */
-      const cacheKey = new Request(url.toString(), request);
-      const cache = caches.default;
-      let response = await cache.match(cacheKey);
-      if (response) return response;
-
-      const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/kako\/subject\.txt/);
-      const bbs = match[1];
-      const kako = match[2];
-      const filename = `${bbs}/thread/subject.txt`;
-      let ifModifiedSinceHeader = "";
-      let lastModified;
-      let subject = "";
-      let error = "";
-
-      try {
-        const object = await env.ch3www.get(filename);
-        if(object !== null) {
-          const subjectText = await object.text();
-          const subjectArray = subjectText.split("\n");
-
-          /* スレの配列に最低2個要素がないとおかしい */
-          if(subjectArray.length > 1) {
-            /* 最終更新時刻を取得。ログの一行目に入っている。 */
-            lastModified = new Date(subjectArray.shift() * 1000);
-            
-            for(let i = 0; i < subjectArray.length; i++) {
-              /* 0:key上位4桁<>1:作成時unixtime */
-              const thread = subjectArray[i].trim().split("<>");
-
-              /* 0無し、0が4桁の数字でない、1無し、1が10桁の数字でない -> 表示しない */
-              if(!thread[0] || !/^[0-9]{4}$/.test(thread[0]) || !thread[1] || !/^[0-9]{10}$/.test(thread[1])) continue;
-              
-              subject += `${thread[0]}<>${thread[1]}\n`;
-            }
-          }else {
-            lastModified = new Date();
-          }
-        }else error = "404";
-      }catch(e) {
-        error = `/${bbs}/kako/subject.txt Error -> ${e}`;
-      }
-
-      if(!error) {
-        /* 最終更新時刻 */
-        if(request.headers.get('if-modified-since')) ifModifiedSinceHeader = request.headers.get('if-modified-since');
-
-        let headers = {};
-        headers["max-age"] = "86400";
-        headers["s-maxage"] = "86400";
-
-        response = respondPlainText(subject, "plain", "UTF-8", "", lastModified ?? new Date(), ifModifiedSinceHeader, headers);
-
-        /* Cache API */
-        if (response.status === 200) ctx.waitUntil(cache.put(cacheKey, response.clone()));
-
-        return response;
-      }else if(error === "404") return respond404(`/${bbs}/kako/subject.txt`);
-      else return respond500(error);
+    /* 倉庫一覧 - v2 is deprecated */
+    if(url.search.includes("v=2") && /^\/[a-zA-Z0-9\-_]+\/kako\/subject\.txt/.test(url.pathname)) {
+      return respond404(url.pathname);
     }
 
     /* head.txt */
@@ -531,7 +373,7 @@ export default {
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/head\.txt/);
       const bbs = match[1];
       const filename = `${bbs}/head.txt`;
-      const ENCODING = apiVer === "v2" ? "UTF-8" : "Shift_JIS";
+      const ENCODING = "Shift_JIS";
       let headTxt = "";
       let error = "";
 
@@ -554,7 +396,7 @@ export default {
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/SETTING\.TXT/);
       const bbs = match[1];
       const filename = `${bbs}/SETTING.TXT`;
-      const ENCODING = apiVer === "v2" ? "UTF-8" : "Shift_JIS";
+      const ENCODING = "Shift_JIS";
       let settingTxt = settingTxtDefault;
       let error = "";
 

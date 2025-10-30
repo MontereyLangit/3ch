@@ -489,58 +489,70 @@ async function getBoardSettings(gb, request, env) {
  * 300超え時の処理なども
  */
 async function getThreadDataAndThreadSettings(gb, request, env) {
-  try {
-    const object = await env.ch3www.get(gb.logFile);
+  // スレッドキーからDurable Objectのスタブを取得
+  const threadId = env.THREAD_DO.idFromName(gb.form.key);
+  const threadStub = env.THREAD_DO.get(threadId);
 
+  try {
     if (gb.form.subject) {
       // スレ立て時の処理
+      const initialDat = await threadStub.getDat();
 
       /* スレ立て時、書き込み先ファイルがすでにあったらお断りする。 */
-      if (object !== null) return dispError(gb, "別の人が同時刻にスレッドを立てようとしています。ごめんなさい。");
+      if (initialDat) return dispError(gb, "別の人が同時刻にスレッドを立てようとしています。ごめんなさい。");
 
       gb.logData = `${gb.form.subject}\n`;
-      gb.logEtag = null;
       gb.number = 1;
       gb.subject = gb.form.subject;
 
       return 1;
     }
-    else if (object === null) return dispError(gb, "該当するスレッドがありません。" + gb.logFile);
 
     // スレッドデータ取得
-    gb.logData = await object.text();
-    gb.logEtag = object.etag;
+    // dat, log, settingsを並行で取得
+    const [dat, log, settingsText] = await Promise.all([
+      threadStub.getDat(),
+      threadStub.getLog(),
+      threadStub.getSettings(),
+    ]);
+
+    if (!dat) return dispError(gb, "該当するスレッドがありません。" + gb.logFile);
+
+    // 元の.cgi形式（datとlogが結合された形式）をメモリ上で再構築する
+    // これにより、後続の処理が古いデータ形式を前提としていても動作する
+    const datLines = dat.split('\n');
+    const logLines = log.split('\n');
+    const title = datLines.shift();
+    const reconstructedLines = datLines.map((line, index) => {
+      return line ? `${line}<>${logLines[index] || ''}` : '';
+    });
+    gb.logData = `${title}\n${reconstructedLines.join('\n')}`;
     const reses = gb.logData.split("\n");
-    gb.number = reses.length - 2;
+    // 最後の空行を除いてレス数をカウント
+    gb.number = reses.filter(line => line).length;
     if (gb.number < 1) return dispError(gb, "スレッドのログファイルが壊れています。運用情報板で修理してもらってください。");
 
     // スレッドタイトルを取得。ログの一行目に入っている。
     gb.subject = reses.shift()?.trim();
 
     // スレ設定を取得。ログの二行目に入っている。
-    const settingText = reses.shift();
-    // NAME=VALUE<>NAME2=VALUE2
-    const settingsArray = settingText.trim().split("<>");
-
-    for (let i = 0; i < settingsArray.length; i++) {
-      const setting = settingsArray[i].split("=");
-      if(!setting[0]) continue;
-      setting[1] ??= "";
-      gb.settings[setting[0]] = setting[1].trim();
+    if (settingsText) {
+      const settingsArray = settingsText.trim().split("<>");
+      for (const settingPair of settingsArray) {
+        const [key, value = ""] = settingPair.split("=");
+        if (key) gb.settings[key] = value.trim();
+      }
     }
 
     // 300超え時の処理
-    if (gb.number === 300) {
-      gb.form.MESSAGE += "<hr>このスレッドは300を超えました。次スレッドに移行してくださいです。。。";
-    }
-    else if (gb.number > 300) return dispError(gb, "このスレッドは300を超えたのでもう書けません。");
+    if (gb.number >= 300) return dispError(gb, "このスレッドは300を超えたのでもう書けません。");
 
     // 停止
     if (gb.settings.BBS_HEISA === "checked") return dispError(gb, "この板・スレッドは停止されています。");
 
     return 1;
   } catch(e) {
-    return dispError(gb, `getThreadDataAndThreadSettings error. 不明なエラーが発生しました。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:getThreadDataAndThreadSettings->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
+    return dispError(gb, `getThreadDataAndThreadSettings error. 不明なエラーが発生しました。(unixtime:${gb.time} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:getThreadDataAndThreadSettings->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
   }
 }
 
@@ -778,17 +790,13 @@ async function getMd5IdString(tane, group, date, salt) {
 }
 
 async function getSubject(gb, env) {
-  const filename = `${gb.path}subject.txt`;
+  const boardId = env.BOARD_DO.idFromName(gb.form.bbs);
+  const boardStub = env.BOARD_DO.get(boardId);
 
   try {
-    const object = await env.ch3www.get(filename);
-
-    if (object !== null) {
-      gb.subjectText = await object.text();
-      gb.subjectEtag = object.etag;
-    }else {
-      gb.subjectText = "";
-    }
+    // Board DOからsubject.txtの内容を取得
+    gb.subjectText = await boardStub.getSubject();
+    gb.subjectEtag = "dummy-etag"; // EtagチェックはDO側で行うため、ここではダミーを設定
 
     return 1;
   } catch (e) {
@@ -801,175 +809,65 @@ async function getSubject(gb, env) {
  * gb.subjectText を利用する
  */
 async function suretateTotalCheckAndUpdateSubject(gb, env) {
-  const BBS_MAX_MENU_THREAD = gb.boardSettings.BBS_MAX_MENU_THREAD ? gb.boardSettings.BBS_MAX_MENU_THREAD : "300";
-  const BBS_CREATETHREAD_INTERVAL = gb.boardSettings.BBS_CREATETHREAD_INTERVAL ? gb.boardSettings.BBS_CREATETHREAD_INTERVAL : "0";
-  const BBS_THREAD_TATESUGI = gb.boardSettings.BBS_THREAD_TATESUGI ? gb.boardSettings.BBS_THREAD_TATESUGI : "3/86400";
-  const TATESUGI_COUNT = BBS_THREAD_TATESUGI.split("/")[0] ? BBS_THREAD_TATESUGI.split("/")[0] : "0";
-  const TATESUGI_DURATION = BBS_THREAD_TATESUGI.split("/")[1] ? BBS_THREAD_TATESUGI.split("/")[1] : "86400";
   const BBS_FORCE_SAGE = parseInt(gb.settings.BBS_FORCE_SAGE ? gb.settings.BBS_FORCE_SAGE : "9999999999");
-  const filename = `${gb.path}subject.txt`;
 
   // sageの処理（スレ立て時はsage無効）
   if (gb.number >= 2) {
-    //if (gb.number < 10) sage = 1;//>>10未満は強制sage（age荒らし防止）
     if (gb.form.mail.includes("sage")) gb.sage = 1;
     if (parseInt(gb.form.key) + BBS_FORCE_SAGE < parseInt(gb.unixtime)) gb.sage = 1;
     if (gb.settings.BBS_LIVE && gb.settings.BBS_LIVE === "checked" && Math.random() * 10 >= 1) gb.sage = 1; // 実況板、実況スレでは10分の9の確率でsage
   }
 
-  // sageならsubject.txtを更新しない
+  // sageならsubject.txtを更新しないのでここで終了
   if (gb.sage) return 1;
 
-  const subjectArray = gb.subjectText.split("\n");
-  const msg = gb.form.MESSAGE.slice(0,30);
-  let createdBySameIdCount = 0;
-  let createdBySameShikibetsuIdCount = 0;
+  // Board DOに渡すスレッド情報を作成
+  const threadData = {
+    key: gb.form.key,
+    title: gb.subject,
+    resNum: gb.number,
+  };
 
-  // スレッド情報を得る
-  const resArray = gb.logData.split("\n");
-  const lastModified = gb.number === 1 ? gb.form.key : resArray[0];
-  const threadId = gb.number === 1 ? gb.id : resArray?.[2].split("<>")?.[4];
-  const threadShikibetsuId = gb.number === 1 ? gb.shikibetsuId : resArray?.[2].split("<>")?.[2];
+  // Board DOのスタブを取得
+  const boardId = env.BOARD_DO.idFromName(gb.form.bbs);
+  const boardStub = env.BOARD_DO.get(boardId);
 
-  // スレッドステータスをセット
-  let threadStatusMark = "";
-
-  if (gb.boardSettings.BBS_HEISA !== "checked" && gb.settings.BBS_HEISA === "checked") threadStatusMark += threadStatusMark ? ",stop" : "stop";
-  if (gb.boardSettings.BBS_ID !== "off" && gb.settings.BBS_ID === "off") threadStatusMark += threadStatusMark ? ",noid" : "noid";
-  if (gb.boardSettings.BBS_ID_SHIKIBETSU !== "off" && gb.settings.BBS_ID_SHIKIBETSU === "off") threadStatusMark += threadStatusMark ? ",nosid" : "nosid";
-
-  // 最終更新時刻\n次スレsubject(key<>…<>…\n)0:key<>1:title<>2:resnum<>3:id<>4:sikibetsuId<>5:備考欄<>6:最新書き込みunixtime<>7:最新書き込み本文の一部
-  const newLine = `${gb.form.key}<>${gb.subject}<>${gb.number}<>${threadId}<>${threadShikibetsuId}<>${threadStatusMark}<>${lastModified}<>${msg}`.replace(/\n/g, "");
-  gb.subjectText = `${gb.unixtime}\n${gb.addedSubjectText}${newLine}\n`;
-
-  if (subjectArray.length > 1) {
-    for (let i = 0; i < subjectArray.length; i++) {
-      // BBS_MAX_MENU_THREAD行目まで
-      if (i >= BBS_MAX_MENU_THREAD) break;
-
-      const lineStr = subjectArray[i];
-      const lineSubj = lineStr.split("<>");
-
-      // 正常な行は<>が7個ある
-      if (lineSubj.length !== 8) continue;
-
-      // スレ立て時の規制
-      if (gb.number === 1) {
-        // 新しいスレッドキーがすでに使われていたら、お断りする
-        if (gb.form.key === lineSubj[0]) return dispError(gb, "別の人が同時刻にスレッドを立てようとしています。ごめんなさい。key:" + lineSubj[0] + "<br>\nSorry another person is trying to start a thread at the same time.");
-
-        // スレッドが過密すぎる場合、スレ立てをお断りする
-        if (lineSubj[0] > gb.form.key - BBS_CREATETHREAD_INTERVAL) return dispError(gb, `この板は今スレッド立ちすぎです。ごめんなさい。key:${gb.form.key - BBS_CREATETHREAD_INTERVAL}-${gb.form.key}<br>\nSorry this board has too many threads.`);
-
-        // スレッド立て過ぎ
-        if (BBS_THREAD_TATESUGI === "cap" && !gb.cap) return dispError(gb, "この板ではキャップを使わないとスレ立てできません。<br>\nNo-cap Users cannot make a thread in this board.");
-
-        else if (lineSubj[0] + TATESUGI_DURATION > gb.unixtime && !gb.cap) {
-          // 旧スレ立て規制
-          if (lineSubj[3] === gb.id) {
-            createdBySameIdCount++;
-            if (createdBySameIdCount > TATESUGI_COUNT) return dispError(gb, `スレッド立てすぎです。。。->${gb.id} (${createdBySameIdCount}/${TATESUGI_COUNT} sec)<br>\nYou are disallowed to create a new thread for a while...  -> ${gb.id} (${createdBySameIdCount}/${TATESUGI_COUNT} sec)`);
-          }
-          // 新スレ立て規制
-          if (lineSubj[4] === gb.shikibetsuId) {
-            createdBySameShikibetsuIdCount++;
-            if (createdBySameShikibetsuIdCount > TATESUGI_COUNT * 2) return dispError(gb, `新このホスト/地域/端末では、しばらくスレッドが立てられません。->${gb.shikibetsuId} (${createdBySameShikibetsuIdCount}/${TATESUGI_COUNT} sec)<br>またの機会にどうぞ。。。<br>\nYour ISP, region, and device are disallowed to create a new thread for a while... -> ${gb.shikibetsuId} (${createdBySameIdCount}/${TATESUGI_COUNT} sec)`);
-          }
-        }
-
-        // 同名スレッドは作成禁止
-        if (lineSubj[1] === gb.form.subject && !gb.cap) return dispError(gb, "すでに同じタイトルのスレッドが存在しています。<br>\nYou must not create the same title thread.");
-      }
-
-      // 今書いたスレ
-      if (gb.form.key === lineSubj[0]) continue;
-
-      // レス数300以上のスレは表示しない
-      if (lineSubj[2] >= 300) continue;
-
-      // スレッドストッパーの掛かったスレは表示しない
-      if (lineSubj[5].includes("stop")) continue;
-
-      // 強制sageのスレは表示しない
-      if (parseInt(lineSubj[0]) + BBS_FORCE_SAGE < parseInt(gb.unixtime)) continue;
-
-      gb.subjectText += lineStr + "\n";
-    }
-  }
-  
   try {
-    // subject.txtが存在しないときは、競合チェックなしで作成
-    if (!gb.subjectEtag) {
-      await env.ch3www.put(filename, gb.subjectText);
-      return 1;
-    }
-
-    // 競合していたら、subjectを更新しない（sage扱い）
-    const result = await env.ch3www.put(filename, gb.subjectText, {
-        onlyIf: { etagMatches: gb.subjectEtag },
-    });
-
-    if (result?.uploaded) return 1;
+    // Board DOにスレッド一覧の更新を依頼
+    await boardStub.updateThread(threadData, gb.sage, gb.boardSettings.BBS_MAX_MENU_THREAD);
+    return 1;
   } catch (e) {
-    return dispError(gb, `updateSubject error. スレ一覧を更新できませんでした。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateSubject->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
-  }
-
-  // スレ立て時、subject.txtを更新できなかったら、エラー（ここまで来ていたら、書き込めていない）
-  if (gb.number === 1) {
-    return dispError(gb, "板飛びそうなので、またの機会にどうぞ。。。");
+    return dispError(gb, `suretateTotalCheckAndUpdateSubject error. スレ一覧を更新できませんでした。(unixtime:${gb.time} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:suretateTotalCheckAndUpdateSubject->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
   }
 }
 
 // あんま問題なさそう、だが重い問題（特に専ブラ？）の解消が必要。subjectなど他r2系の書き込み処理も含めいろいろ積み重なってこうなってる可能性も
 async function updateThreadFile(gb, env) {
-  try {
-    // スレ立て時は、新しく作成（すでにあればエラー）
-    if (!gb.logEtag) {
-      let threadSettingsText = "";
+  const threadId = env.THREAD_DO.idFromName(gb.form.key);
+  const threadStub = env.THREAD_DO.get(threadId);
 
+  try {
+    // スレ立て時
+    if (gb.number === 1) {
+      let threadSettingsText = "";
       Object.keys(gb.settings).forEach(function (key) {
         threadSettingsText += `${key}=${gb.settings[key]}<>`;
       });
-
-      gb.logData += `${threadSettingsText}\n${gb.number}<>${gb.form.FROM}<>${gb.shikibetsuId}<>${gb.time}<>${gb.id}<>${gb.form.MESSAGE}<>${gb.userInfo}\n`;
-
-      const result = await env.ch3www.put(gb.logFile, gb.logData, {
-        onlyIf: { doesNotExist: true },
-      });
-
-      if (!result?.uploaded) return dispError(gb, `updateThreadFile error. 板飛びそうなので、またの機会にどうぞ。。。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateThreadFile->Thread-LogFile_create_conflicted!)`);
-
-      return 1;
+      // スレ設定を書き込む
+      await threadStub.setSettings(threadSettingsText);
     }
 
-    // 最大リトライ数
-    const maxAttempts = 2;
+    // 新しいレスのデータを作成
+    const datLine = `${gb.number}<>${gb.form.FROM}<>${gb.shikibetsuId}<>${gb.time}<>${gb.id}<>${gb.form.MESSAGE}`;
+    const logLine = `${gb.userInfo}`; // ログファイル用のデータ
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      // 0:num<>1:name<>2:sikibetsuId<>3:time<>4:id<>5:MESSAGE<>6:HOST999
-      gb.logData += `${gb.number}<>${gb.form.FROM}<>${gb.shikibetsuId}<>${gb.time}<>${gb.id}<>${gb.form.MESSAGE}<>${gb.userInfo}\n`;
+    // Thread DOにレスの追加を依頼
+    await threadStub.addRes(datLine, logLine);
 
-      // 取得したEtagと書き込み先のEtagが同じなら，書き込まれて終了
-      const result = await env.ch3www.put(gb.logFile, gb.logData, {
-        onlyIf: { etagMatches: gb.logEtag },
-      });
-
-      if (result?.uploaded) return 1;
-
-      // 競合していたら、0.1～0.3秒待ってからもう一度試みる
-      await new Promise(r => setTimeout(r, 100 + Math.random() * 200));
-      const object = await env.ch3www.get(gb.logFile);
-      // スレ立て時でないのにスレファイルがないのはおかしい
-      if (object === null) break;
-      gb.logData = await object.text();
-      gb.logEtag = object.etag;
-    }
+    return 1;
   } catch (e) {
-    return dispError(gb, `updateThreadFile error. ログファイルに書けませんでした。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateThreadFile->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
+    return dispError(gb, `updateThreadFile error. ログファイルに書けませんでした。(unixtime:${gb.time} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateThreadFile->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
   }
-
-  // ここまで来ていたら、書き込めていないのでエラーを出す
-  return dispError(gb, `updateThreadFile error. 板飛びそうなので、またの機会にどうぞ。。。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateThreadFile->Thread-LogFile_update_conflicted!)`);
 }
 
 // ？
