@@ -358,14 +358,130 @@ export default {
       else return respond500(error);
     }
 
-    /* 過去ログ倉庫 (v2のみ) - v2 is deprecated */
-    if(url.search.includes("v=2") && /^\/[a-zA-Z0-9\-_]+\/kako\/[0-9]{4}\/subject\.txt/.test(url.pathname)) {
-      return respond404(url.pathname);
+    /* 過去ログ倉庫 (v2のみ) */
+    if(/^\/[a-zA-Z0-9\-_]+\/kako\/[0-9]{4}\/subject\.txt/.test(url.pathname)) {
+      /* Cache API */
+      const cacheKey = new Request(url.toString(), request);
+      const cache = caches.default;
+      let response = await cache.match(cacheKey);
+      if (response) return response;
+
+      const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/kako\/([0-9]{4})\/subject\.txt/);
+      const bbs = match[1];
+      const kako = match[2];
+      const filename = `${bbs}/thread/${kako}/subject.txt`;
+      let ifModifiedSinceHeader = "";
+      let lastModified;
+      let subject = "";
+      let error = "";
+
+      try {
+        const object = await env.ch3www.get(filename);
+        if(object !== null) {
+          const subjectText = await object.text();
+          const subjectArray = subjectText.split("\n");
+
+          /* スレの配列に最低2個要素がないとおかしい */
+          if(subjectArray.length > 1) {
+            /* 最終更新時刻を取得。ログの一行目に入っている。 */
+            lastModified = new Date(subjectArray.shift() * 1000);
+            
+            for(let i = 0; i < subjectArray.length; i++) {
+              /* 0:key<>1:title<>2:名前<>3:sikibetsuId<>4:id<>5:>>1の本文 */
+              const thread = subjectArray[i].trim().split("<>");
+
+              /* key無し、keyが10桁の数字でない、5まで<>がない -> 表示しない */
+              if(!thread[0] || !/^[0-9]{10}$/.test(thread[0]) || thread[5] == null) continue;
+              
+              subject += `${thread[0]}<>${thread[1]}<>${thread[2]}<>${thread[3]}<>${thread[4]}<>${thread[5]}\n`;
+            }
+          }else {
+            lastModified = new Date();
+          }
+        }else error = "404";
+      }catch(e) {
+        error = `/${bbs}/kako/${kako}/subject.txt Error -> ${e}`;
+      }
+
+      if(!error) {
+        /* 最終更新時刻 */
+        if(request.headers.get('if-modified-since')) ifModifiedSinceHeader = request.headers.get('if-modified-since');
+
+        let headers = {};
+        headers["max-age"] = "60";
+        headers["s-maxage"] = "60";
+
+        response = respondPlainText(subject, "plain", "UTF-8", "", lastModified ?? new Date(), ifModifiedSinceHeader, headers);
+        
+        /* Cache API */
+        if (response.status === 200) ctx.waitUntil(cache.put(cacheKey, response.clone()));
+
+        return response;
+      }else if(error === "404") return respond404(`/${bbs}/kako/${kako}/subject.txt`);
+      else return respond500(error);
     }
 
-    /* 倉庫一覧 - v2 is deprecated */
-    if(url.search.includes("v=2") && /^\/[a-zA-Z0-9\-_]+\/kako\/subject\.txt/.test(url.pathname)) {
-      return respond404(url.pathname);
+    /* 倉庫一覧 */
+    if(/^\/[a-zA-Z0-9\-_]+\/kako\/subject\.txt/.test(url.pathname)) {
+      /* Cache API */
+      const cacheKey = new Request(url.toString(), request);
+      const cache = caches.default;
+      let response = await cache.match(cacheKey);
+      if (response) return response;
+
+      const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/kako\/subject\.txt/);
+      const bbs = match[1];
+      const kako = match[2];
+      const filename = `${bbs}/thread/subject.txt`;
+      let ifModifiedSinceHeader = "";
+      let lastModified;
+      let subject = "";
+      let error = "";
+
+      try {
+        const object = await env.ch3www.get(filename);
+        if(object !== null) {
+          const subjectText = await object.text();
+          const subjectArray = subjectText.split("\n");
+
+          /* スレの配列に最低2個要素がないとおかしい */
+          if(subjectArray.length > 1) {
+            /* 最終更新時刻を取得。ログの一行目に入っている。 */
+            lastModified = new Date(subjectArray.shift() * 1000);
+            
+            for(let i = 0; i < subjectArray.length; i++) {
+              /* 0:key上位4桁<>1:作成時unixtime */
+              const thread = subjectArray[i].trim().split("<>");
+
+              /* 0無し、0が4桁の数字でない、1無し、1が10桁の数字でない -> 表示しない */
+              if(!thread[0] || !/^[0-9]{4}$/.test(thread[0]) || !thread[1] || !/^[0-9]{10}$/.test(thread[1])) continue;
+              
+              subject += `${thread[0]}<>${thread[1]}\n`;
+            }
+          }else {
+            lastModified = new Date();
+          }
+        }else error = "404";
+      }catch(e) {
+        error = `/${bbs}/kako/subject.txt Error -> ${e}`;
+      }
+
+      if(!error) {
+        /* 最終更新時刻 */
+        if(request.headers.get('if-modified-since')) ifModifiedSinceHeader = request.headers.get('if-modified-since');
+
+        let headers = {};
+        headers["max-age"] = "86400";
+        headers["s-maxage"] = "86400";
+
+        response = respondPlainText(subject, "plain", "UTF-8", "", lastModified ?? new Date(), ifModifiedSinceHeader, headers);
+
+        /* Cache API */
+        if (response.status === 200) ctx.waitUntil(cache.put(cacheKey, response.clone()));
+
+        return response;
+      }else if(error === "404") return respond404(`/${bbs}/kako/subject.txt`);
+      else return respond500(error);
     }
 
     /* head.txt */
