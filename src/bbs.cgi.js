@@ -113,7 +113,7 @@ export async function bbs_entry(request, env, ctx) {
   gb.headers = {};
 
     /* 最初のチェック */
-    if (!checkRequest(gb, request)) return respondError(gb);
+    if (!checkRequest(gb, request, env)) return respondError(gb);
     /* Formの読み込み */
     if (!await readForm(gb, request)) return respondError(gb);
 
@@ -181,7 +181,7 @@ export async function bbs_entry(request, env, ctx) {
  * UserAgent、CH-UAはここで取得される
  * 歴史的事情や最近の動向がいろいろあるので、更新時には注意すること
  */
-function checkRequest(gb, request) {
+function checkRequest(gb, request, env) {
   /* Cloudflare Rewirte Rulesで入ってこないようにしているけど、一応 */
   if (request.method !== 'POST') return dispError(gb, "POST メソッドを使ってください。<br>\nRecieve GET METHOD");
 
@@ -189,7 +189,7 @@ function checkRequest(gb, request) {
   if (!contentType.includes("application/x-www-form-urlencoded")) return dispError(gb, "送信された内容が破損しています。->" + contentType + "<br>\nBroken request body. ");
 
   const referer = request.headers.get('referer') || '';
-  if (!/^https?:\/\/www\.3chbbs\.com/.test(referer)) return dispError(gb, "ERROR: あなた騙されてますよ？->" + referer + "<br>\nReferer is invalid.");
+  if (!/^https?:\/\/www\.3chbbs\.com/.test(referer) && !/^http:\/\/127\.0\.0\.1:8787/.test(referer)) return dispError(gb, "ERROR: あなた騙されてますよ？->" + referer + "<br>\nReferer is invalid.");
 
   /* UserAgentは7byte~384byteの半角文字のみ可 */
   if (gb.userAgent.length < 7 || gb.userAgent.length > 384 || /[^ -~]/.test(gb.userAgent)) return dispError(gb, "ERROR: ブラウザ変ですよん。(ua)<br>UserAgent: " + gb.userAgent + "<br>\nUserAgent is invalid.");
