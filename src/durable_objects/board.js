@@ -5,16 +5,21 @@
  * @property {number} resNum
  */
 
+import { DurableObject } from "cloudflare:workers";
+
 /**
  * 板のスレッド一覧を管理するDurable Object (Board)
  * 1つの掲示板に対して1つのインスタンスが対応します。
  */
-export class Board {
+export class Board extends DurableObject {
   /**
    * @param {DurableObjectState} state
+   * @param {object} env
    */
-  constructor(state) {
+  constructor(state, env) {
+    super(state, env);
     this.state = state;
+    this.env = env;
   }
 
   /**

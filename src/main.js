@@ -1,5 +1,7 @@
 import { respondPlainText, respond404, respond500 } from "./common.js";
 import { bbs_entry, settingTxtDefault } from "./bbs.cgi.js";
+import { Board } from "./durable_objects/board.js";
+import { Thread } from "./durable_objects/thread.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -300,26 +302,6 @@ export default {
       let subjectCount = 0;
  
       try {
-        /* 924・900スレッド一覧 [ch3www]/924.txt */
-        // 924・900スレッド一覧はR2から取得（これは仕様通り）
-        const object924 = await env.ch3www.get("924.txt");
-        if (object924 !== null) {
-          const subjectText = await object924.text();
-          const subjectArray = subjectText.split("\n");
- 
-          for(let i = 0; i < subjectArray.length; i++) {
-            /* 0:key<>1:title<>2:resnum<>3:id<>4:sikibetsuId<>5:備考欄<>6:最新書き込みunixtime<>7:最新書き込み本文の一部 */
-            const thread = subjectArray[i].trim().split("<>");
-
-            /* key無し、resnumなし、keyやresnumが10桁の数字でない、7まで<>がない -> 表示しない */
-            if(!thread[0] || !/^[0-9]{10}$/.test(thread[0]) || !thread[2] || !/^[0-9]+$/.test(thread[2]) || thread[7] == null) continue;
-              
-            if(thread[3]) thread[1] += ` [${thread[3]}★]`;
-            if(thread[5]) thread[1] = `[${thread[5]}] ${thread[1]}`;
-            subject += `${thread[0]}.dat<>${thread[1]} (${thread[2]})\n`;
-          }
-        }
- 
         // Board DOからsubject.txtを取得
         const boardId = env.BOARD_DO.idFromName(bbs);
         const boardStub = env.BOARD_DO.get(boardId);
@@ -681,3 +663,6 @@ display:inline-block;
     return respond404(url.pathname);
   },
 }
+
+export { Board };
+export { Thread };

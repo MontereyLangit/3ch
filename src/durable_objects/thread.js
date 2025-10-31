@@ -1,13 +1,18 @@
+import { DurableObject } from "cloudflare:workers";
+
 /**
  * スレッドデータを管理するDurable Object (Thread)
  * 1つのスレッドに対して1つのインスタンスが対応します。
  */
-export class Thread {
+export class Thread extends DurableObject {
   /**
    * @param {DurableObjectState} state
+   * @param {object} env
    */
-  constructor(state) {
+  constructor(state, env) {
+    super(state, env);
     this.state = state;
+    this.env = env;
   }
 
   /**
