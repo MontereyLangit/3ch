@@ -167,27 +167,15 @@ export default {
 
     /* dat */
     if(/^\/[a-zA-Z0-9\-_]+\/dat\/[0-9]{10}\.dat/.test(url.pathname)) {
-      /* Cache API */
-      const cacheKey = new Request(url.toString(), request);
-      const cache = caches.default;
-      let response = await cache.match(cacheKey);
-      if (response) return response;
-
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/dat\/([0-9]{10})\.dat/);
       let bbs = match[1];
       const key = match[2];
 
-      /* 924スレッド・900スレッド */
-      if(/^(924|900)[0-9]{7}$/.test(key)) bbs = "924";
-
-      const DATETIMEFORMAT = new Intl.DateTimeFormat('ja-JP', {year: "numeric", month: "2-digit", day: "2-digit", weekday:"short", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Tokyo"});
       const ENCODING = "Shift_JIS";
       let rangeHeader, ifModifiedSinceHeader = "";
       let lastModified;
       let dat = "";
       let error = "";
-      let resnum = 0;
-      let settings = {};
 
       try {
         // Durable Objectからスレッドデータを取得
@@ -224,11 +212,8 @@ export default {
         headers["max-age"] = "5";
         headers["s-maxage"] = "1";
 
-        response = respondPlainText(dat, "plain", ENCODING, rangeHeader, lastModified ?? new Date(), ifModifiedSinceHeader, headers);
+        const response = respondPlainText(dat, "plain", ENCODING, rangeHeader, lastModified ?? new Date(), ifModifiedSinceHeader, headers);
         
-        /* Cache API */
-        if (response.status === 200) ctx.waitUntil(cache.put(cacheKey, response.clone()));
-
         return response;
       }else if(error === "404") return respond404(`/${bbs}/dat/${key}.dat`);
       else return respond500(error);
@@ -236,12 +221,6 @@ export default {
 
     /* subject.txt */
     if(/^\/[a-zA-Z0-9\-_]+\/subject\.txt/.test(url.pathname)) {
-      /* Cache API */
-      const cacheKey = new Request(url.toString(), request);
-      const cache = caches.default;
-      let response = await cache.match(cacheKey);
-      if (response) return response;
-
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/subject\.txt/);
       const bbs = match[1];
       const ENCODING = "Shift_JIS";
@@ -281,10 +260,7 @@ export default {
         headers["max-age"] = "5";
         headers["s-maxage"] = "1";
 
-        response = respondPlainText(subject, "plain", ENCODING, "", lastModified ?? new Date(), ifModifiedSinceHeader, headers);
-        /* Cache API */
-        if (response.status === 200) ctx.waitUntil(cache.put(cacheKey, response.clone()));
-
+        const response = respondPlainText(subject, "plain", ENCODING, "", lastModified ?? new Date(), ifModifiedSinceHeader, headers);
         return response;
       }else if(error === "404") return respond404(`/${bbs}/subject.txt`);
       else return respond500(error);
