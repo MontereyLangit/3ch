@@ -475,7 +475,7 @@ async function getBoardSettings(gb, request, env) {
 
 /* 
  * スレッドデータ＆スレ設定取得
- * 300超え時の処理なども
+ * 1000超え時の処理なども
  */
 async function getThreadDataAndThreadSettings(gb, request, env) {
   // スレッドキーからDurable Objectのスタブを取得
@@ -530,8 +530,8 @@ async function getThreadDataAndThreadSettings(gb, request, env) {
       }
     }
 
-    // 300超え時の処理
-    if (gb.number >= 300) return dispError(gb, "このスレッドは300を超えたのでもう書けません。");
+    // 1000超え時の処理
+    if (gb.number >= 1000) return dispError(gb, "このスレッドは1000を超えたのでもう書けません。");
 
     // 停止
     if (gb.settings.BBS_HEISA === "checked") return dispError(gb, "この板・スレッドは停止されています。");
@@ -725,48 +725,57 @@ function checkFieldSize(gb) {
  * 識別IDは gb.sikibetsuId に格納される。
  */
 async function makeIdAndShikibetuId(gb) {
-  /* IDを生成する */
   const idGroup = gb.settings.BBS_ID_GROUP ? gb.settings.BBS_ID_GROUP : gb.form.bbs;
   const BBS_ID = gb.settings.BBS_ID ? gb.settings.BBS_ID : "checked";
   const BBS_ID_RESET = gb.settings.BBS_ID_RESET ? gb.settings.BBS_ID_RESET : "86400";
   const BBS_ID_LV = gb.settings.BBS_ID_LV ? gb.settings.BBS_ID_LV : "";
-
-  // キャップはID:???
+  
   if (gb.cap) {
     gb.id = "ID:???";
-  }
-  // IPからIDを生成
-  else if (BBS_ID === "ip") {
-    let idString = await getMd5IdString(gb.idnotane, idGroup, (parseInt(gb.unixtime) + 32400)/BBS_ID_RESET, gb.md5Salt);
+  } else if (BBS_ID === "ip") {
+    let idString = await getMd5IdString(gb.idnotane, idGroup, Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET), gb.md5Salt);
     gb.id = `ID:${idString}`;
     if (BBS_ID_LV === "checked") gb.id += gb.userData.lv >= 10 ? "10" : "L" + gb.userData.lv;
   }
   // 識別子からIDを生成
   else if (BBS_ID === "checked") {
-    let idString = await getMd5IdString(gb.idnotane, idGroup, (parseInt(gb.unixtime) + 32400)/BBS_ID_RESET, gb.md5Salt);
+    let idString = await getMd5IdString(gb.idnotane, idGroup, Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET), gb.md5Salt);
     gb.id = `ID:${idString}`;
     if (BBS_ID_LV === "checked") gb.id += gb.userData.lv >= 10 ? "10" : "L" + gb.userData.lv;
-  }
-  // siberiaは発信元IPアドレスを表示
-  else if (BBS_ID === "siberia") {
+  } else if (BBS_ID === "siberia") {
     gb.id = `発信元:${gb.ip}`;
     if (BBS_ID_LV === "checked") gb.id += " " + (gb.userData.lv >= 10 ? "10" : "L" + gb.userData.lv);
-  }
-  // IDなしの板
-  else {
+  } else {
     if (BBS_ID_LV === "checked") gb.id += gb.userData.lv >= 10 ? "10" : "L" + gb.userData.lv;
   }
-
-  /* 識別IDを生成する */
   const BBS_ID_SHIKIBETSU = gb.settings.BBS_ID_SHIKIBETSU ? gb.settings.BBS_ID_SHIKIBETSU : "checked";
-
-  // キャップは★
   if (gb.cap) {
-    gb.sikibetsuId = "★";
-  }
+    gb.shikibetsuId = "★";
+  } 
   else if (BBS_ID_SHIKIBETSU === "checked") {
-    gb.sikibetsuId = `${gb.country},${gb.ken} ${gb.asn}-${gb.deviceId}`;
+    gb.shikibetsuId = `${gb.country}.${await getSha1Base64Id(gb.ken, idGroup, Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET), gb.md5Salt, 2)}.${await getSha1Base64Id(gb.city+"c", idGroup, Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET), gb.md5Salt, 2)} ${await getSha1Base64Id(gb.asn, idGroup, Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET), gb.md5Salt, 2)}-${md5(gb.userAgent+idGroup+Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET).toString()+gb.md5Salt).slice(0,16)}`; 
   }
+  else if (BBS_ID_SHIKIBETSU === "raw") {
+    gb.shikibetsuId = `${gb.country}.${gb.ken} ${gb.asn}`;
+  }
+  else if (BBS_ID_SHIKIBETSU === "ken") {
+    gb.shikibetsuId = `${gb.country}.${gb.ken}`;
+  }
+  else if (BBS_ID_SHIKIBETSU === "city") {
+    gb.shikibetsuId = `${gb.country}.${gb.ken}.${gb.city}`;
+  }
+  else if (BBS_ID_SHIKIBETSU === "as") {
+    gb.shikibetsuId = `${gb.asn}`;
+  }
+  else if (BBS_ID_SHIKIBETSU === "d") {
+    gb.shikibetsuId = ``;
+  }
+}
+
+async function getSha1Base64Id(tane, group, date, salt, length) {
+  const md5Id = md5(tane+group+date+salt);
+  const sha1Base64Id = await sha1Base64(md5Id);
+  return sha1Base64Id.slice(0, length);
 }
 
 async function getMd5IdString(tane, group, date, salt) {
