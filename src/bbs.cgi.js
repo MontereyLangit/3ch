@@ -1,4 +1,4 @@
-import { sjis, respondPlainText, hexToBinary, sha1Base64, hash, md5, crypt, translateSaltChar } from "./common.js";
+import { sjis, respondPlainText, hexToBinary, sha1Base64, hash, md5, crypt, translateSaltChar,respond500 } from "./common.js";
 
 /* デフォルト板設定 */
 //古いので要修正
@@ -112,69 +112,60 @@ export async function bbs_entry(request, env, ctx) {
   gb.boardSettings = {};/* 板設定スデータ */
   gb.headers = {};
 
-  try {
     /* 最初のチェック */
-    if (!checkRequest(gb, request)) return;
-
+    if (!checkRequest(gb, request)) return respondError(gb);
     /* Formの読み込み */
-    if (!await readForm(gb, request)) return;
+    if (!await readForm(gb, request)) return respondError(gb);
 
     /* キャップ処理 */
     await processCap(gb, request, env);
-    
+
     /* トリップ処理 */
-    await processTrip(gb, request, env);
+    if (!await processTrip(gb, request, env)) return respondError(gb);
 
     /* R2用のpathをセット */
     SetPath(gb);
 
     /* SETTING.TXT（板設定）読み込み */
-    if (!await getBoardSettings(gb, request, env)) return;
-    
+    if (!await getBoardSettings(gb, request, env)) return respondError(gb);
+
     /* 書き込み先スレッドのデータ取得＆スレ設定読み込み */
-    if (!await getThreadDataAndThreadSettings(gb, request, env)) return;
+    if (!await getThreadDataAndThreadSettings(gb, request, env)) return respondError(gb);
 
     /*
      * ユーザー識別処理（識別子システム）
      * Cookieと端末固有情報（デバイスフィンガープリント）の取得、認証、Cookie処理、Googleアカウント登録、識別子由来のBAN規制や各種制限判定処理
      */
-    if (!await processIdentification(gb, request)) return;
-    
+    if (!await processIdentification(gb, request)) return respondError(gb);
+
     // ログに格納されるユーザ情報(規制にも使用)
     gb.userInfo = "UID:" + gb.uid + " IP:" + gb.host + " AS" + gb.asn + '-' + gb.country + ',' + gb.ken + ',' + gb.city + "Device:" + gb.deviceInfo + " UA:" + gb.userAgent;
 
     /* まだかな（アクセス規制） */
-    if (!await checkDenyList(gb, env)) return;
+    if (!await checkDenyList(gb, env)) return respondError(gb);
 
     /* フィールドサイズチェック */
-    if (!checkFieldSize(gb)) return;
+    if (!checkFieldSize(gb)) return respondError(gb);
 
     /* ID＆識別ID生成 */
     await makeIdAndShikibetuId(gb);
-
-    /* subject取得 */
-    if (!await getSubject(gb, env)) return;
 
     /* コマンド類（ユーザーコマンド、管理コマンド）と>20以降のスレ内連投規制（バイバイさるさん）の処理 */
     //if (!await processCommandsAndByBySaru(gb, request, env)) return;
 
     /* 各種スレ立て規制 と subject更新 */
-    if (!await suretateTotalCheckAndUpdateSubject(gb, env)) return;
+    if (!await suretateTotalCheckAndUpdateSubject(gb, env)) return respondError(gb);
 
     /* スレッドファイル更新 */
-    if (!await updateThreadFile(gb, env)) return;
+    if (!await updateThreadFile(gb, env)) return respondError(gb);
 
     /* スレ立て時のthread/..../subject.txtへの追加＆thread/subject.txt更新 */
-    if (!await updateSubback(gb, env)) return;
+    if (!await updateSubback(gb, env)) return respondError(gb);
 
     /* 全体headline更新 */
-    if (!await updateHeadline(gb, env)) return;
+    if (!await updateHeadline(gb, env)) return respondError(gb);
 
     /* メインルーチン終わり。 */
-    return;
-  }
-  catch(e) {gb.error = `bbs.cgi System Error:${e}`;}
-  finally {
     /*
      * 書き込みました。 / 書き込み確認 / ＥＲＲＯＲ！
      * UTF-8(read.cgi経由など)かShift_JIS(大半の2ch専ブラ)かを各関数内で判定し(gb.isSJIS)、適切なHTMLを出力する
@@ -183,7 +174,6 @@ export async function bbs_entry(request, env, ctx) {
     if (gb.error === "") return respondEndHtml(gb);
     if (gb.error === "ConfirmationPhase") return respondConfirmationPhase(gb);
     else return respondError(gb);
-  }
 }
 
 /*  
@@ -216,7 +206,7 @@ function checkRequest(gb, request) {
   if (/^Monazilla\/1.00/.test(gb.userAgent)) gb.isMonazilla = 1;
 
   /* IPv6接続かどうかをチェックする */
-  if (gb.ip.includes(":")) {
+  if (gb.ip?.includes(":")) {
     gb.isIPv6 = 1;
     const octet = gb.ip.split(":");
     gb.idnotane = `${octet[0]}:${octet[1]}:${octet[2]}:${octet[3]}`;
@@ -337,8 +327,6 @@ async function readForm(gb, request) {
   if (gb.form.MESSAGE === "") return dispError(gb, "本文がありません！");
   if ((gb.form.key === "" || !/^[0-9]+$/.test(gb.form.key)) && gb.form.subject === "") return dispError(gb, "subjectが存在しないかキー情報が不正です。key=" + gb.form.key + "<br>\nThe subject is empty and key is wrong.");
   if (gb.form.time === "" || !/^[0-9]+$/.test(gb.form.time)) return dispError(gb, "ブラウザ変ですよん。(time)<br>\ntime is empty. time=" + gb.form.time);
-  if (gb.form.time > gb.unixtime) return dispError(gb, "投稿時刻がおかしいです。時計が狂っていませんか？<br>time値が未来の時刻です。端末の時刻を確認して、ブラウザを立ち上げなおしてみてください。");
-  if (gb.form.time < gb.unixtime - 3600) return dispError(gb, "投稿時刻が時間切れです。スレッドをリロード（再読み込み）してください。<br>現在時刻より1時間以上前のtime値は無効です。");
 
   if (gb.form.key !== "") gb.form.subject = "";
 
@@ -410,7 +398,7 @@ async function processCap(gb, request, env) {
  * Shift_JIS-10桁&12桁対応暫定版 by 忍
  */
 async function processTrip(gb, request, env) {
-  if (gb.tripKey === "") return;
+  if (gb.tripKey === "") return 1;
 
   const sjisEncoder = new sjis();
   const sjisBytes = sjisEncoder.encode(gb.tripKey);
@@ -445,6 +433,7 @@ async function processTrip(gb, request, env) {
     gb.tripString = crypt(handlePass, salt).slice(-10);
   }
   gb.form.FROM += ` </b>◆${gb.tripString}</b>`;
+  return 1;
 }
 
 function SetPath(gb) {
@@ -510,9 +499,8 @@ async function getThreadDataAndThreadSettings(gb, request, env) {
 
     // スレッドデータ取得
     // dat, log, settingsを並行で取得
-    const [dat, log, settingsText] = await Promise.all([
+    const [dat, settingsText] = await Promise.all([
       threadStub.getDat(),
-      threadStub.getLog(),
       threadStub.getSettings(),
     ]);
 
@@ -521,20 +509,18 @@ async function getThreadDataAndThreadSettings(gb, request, env) {
     // 元の.cgi形式（datとlogが結合された形式）をメモリ上で再構築する
     // これにより、後続の処理が古いデータ形式を前提としていても動作する
     const datLines = dat.split('\n');
-    const logLines = log.split('\n');
-    const title = datLines.shift();
-    const reconstructedLines = datLines.map((line, index) => {
-      return line ? `${line}<>${logLines[index] || ''}` : '';
-    });
-    gb.logData = `${title}\n${reconstructedLines.join('\n')}`;
-    const reses = gb.logData.split("\n");
-    // 最後の空行を除いてレス数をカウント
-    gb.number = reses.filter(line => line).length;
-    if (gb.number < 1) return dispError(gb, "スレッドのログファイルが壊れています。運用情報板で修理してもらってください。");
 
-    // スレッドタイトルを取得。ログの一行目に入っている。
-    gb.subject = reses.shift()?.trim();
+    // datの1行目(1レス目)の末尾からスレッドタイトルを取得
+    const firstLine = datLines[0];
+    if (!firstLine) return dispError(gb, "スレッドのログファイルが壊れています。(空です)");
+    const firstLineFields = firstLine.split('<>');
+    // 最後のフィールドがスレッドタイトル
+    gb.subject = firstLineFields.pop() || '';
+    if (!gb.subject) return dispError(gb, "スレッドのログファイルが壊れています。(タイトル取得失敗)");
 
+    // レス数
+    gb.number = datLines ? datLines.length : 0;
+    console.log(datLines);
     // スレ設定を取得。ログの二行目に入っている。
     if (settingsText) {
       const settingsArray = settingsText.trim().split("<>");
@@ -588,7 +574,7 @@ async function processIdentification(gb, request) {
   if (gb.settings.BBS_SHIKIBETSU === "off") {
     gb.headers["Set-Cookie"] = `PON=${PON}; Max-Age=63072000; path=/; Domain=.3chbbs.com; ${secure} HttpOnly`;
     
-    if(!gb.cookies.PON) return dispError(gb, "ConfirmationPhase");
+    //if(!gb.cookies.PON) return dispError(gb, "ConfirmationPhase");
 
     return 1;
   }
@@ -680,7 +666,7 @@ async function checkDenyList(gb, env)
               gb.form.MESSAGE += `<hr><var style="color:blue;">Madakana:${target}</var>`; 
             }
 
-            return "";
+            return 1;
           }
           // 上記のもの以外はエラー
           else
@@ -695,7 +681,7 @@ async function checkDenyList(gb, env)
               ErrMsg = `NGワード禁止！(${target})<br><a href=\"https://www.3chbbs.com/madakana/\">ここで告知されています。</a><br>Your post contains forbidden words. -> ${target}`;//"
             }
 
-            return "ERROR: Madakana:" + ErrMsg;
+            return dispError(gb, "Madakana:" + ErrMsg);
           }
         }
       }
@@ -818,16 +804,13 @@ async function suretateTotalCheckAndUpdateSubject(gb, env) {
     if (gb.settings.BBS_LIVE && gb.settings.BBS_LIVE === "checked" && Math.random() * 10 >= 1) gb.sage = 1; // 実況板、実況スレでは10分の9の確率でsage
   }
 
-  // sageならsubject.txtを更新しないのでここで終了
-  if (gb.sage) return 1;
-
   // Board DOに渡すスレッド情報を作成
   const threadData = {
     key: gb.form.key,
     title: gb.subject,
     resNum: gb.number,
   };
-
+console.log(threadData)
   // Board DOのスタブを取得
   const boardId = env.BOARD_DO.idFromName(gb.form.bbs);
   const boardStub = env.BOARD_DO.get(boardId);
@@ -841,7 +824,7 @@ async function suretateTotalCheckAndUpdateSubject(gb, env) {
   }
 }
 
-// あんま問題なさそう、だが重い問題（特に専ブラ？）の解消が必要。subjectなど他r2系の書き込み処理も含めいろいろ積み重なってこうなってる可能性も
+// 
 async function updateThreadFile(gb, env) {
   const threadId = env.THREAD_DO.idFromName(gb.form.key);
   const threadStub = env.THREAD_DO.get(threadId);
@@ -858,9 +841,12 @@ async function updateThreadFile(gb, env) {
     }
 
     // 新しいレスのデータを作成
-    const datLine = `${gb.number}<>${gb.form.FROM}<>${gb.shikibetsuId}<>${gb.time}<>${gb.id}<>${gb.form.MESSAGE}`;
-    const logLine = `${gb.userInfo}`; // ログファイル用のデータ
+    const DATETIMEFORMAT = new Intl.DateTimeFormat('ja-JP', {year: "numeric", month: "2-digit", day: "2-digit", weekday:"short", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Tokyo"});
+    const date = DATETIMEFORMAT.format(new Date(parseInt(gb.unixtime) * 1000));
 
+    const datLine = `${gb.form.FROM}<>${gb.form.mail}<>${date} ${gb.id}<>${gb.form.MESSAGE}<>${gb.number === 1 ? gb.subject : ''}`;
+    const logLine = `${gb.userInfo}`;
+console.log(`subj:${gb.subject}`)
     // Thread DOにレスの追加を依頼
     await threadStub.addRes(datLine, logLine);
 

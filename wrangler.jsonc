@@ -27,6 +27,13 @@
       { "name": "BOARD_DO", "class_name": "Board" }
     ]
   },
+  // R2 Bucket bindings.
+  "r2_buckets": [
+    {
+      "binding": "ch3www",
+      "bucket_name": "3ch"
+    }
+  ],
   "migrations": [
     {
       "tag": "v1",

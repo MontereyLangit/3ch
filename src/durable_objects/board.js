@@ -48,11 +48,17 @@ export class Board extends DurableObject {
     }
 
     const threadKey = threadData.key;
-    const newThreadLine = `${threadKey}.dat<>${threadData.title} (${threadData.resNum})`;
     const threadIndex = lines.findIndex((line) => line.startsWith(`${threadKey}.dat<>`));
+    let newThreadLine;
 
     if (threadIndex !== -1) {
       // 既存スレッドの更新
+      const existingLine = lines[threadIndex];
+      // titleがnullの場合は既存の行からタイトルを抽出して使用する
+      const title = threadData.title ?? existingLine.substring(existingLine.indexOf('<>') + 2, existingLine.lastIndexOf(' ('));
+      console.log(!threadData.title);
+      newThreadLine = `${threadKey}.dat<>${title} (${threadData.resNum})`;
+console.log(threadKey);console.log(title);console.log(threadData.resNum);
       if (isSage) {
         // sage: レス数のみ更新
         lines[threadIndex] = newThreadLine;
@@ -63,6 +69,7 @@ export class Board extends DurableObject {
       }
     } else {
       // 新規スレッド作成: 先頭に追加
+      newThreadLine = `${threadKey}.dat<>${threadData.title} (${threadData.resNum})`;
       lines.unshift(newThreadLine);
     }
 

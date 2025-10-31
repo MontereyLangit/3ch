@@ -188,77 +188,27 @@ export default {
       let error = "";
       let resnum = 0;
       let settings = {};
- 
+
       try {
         // Durable Objectからスレッドデータを取得
         const threadId = env.THREAD_DO.idFromName(key);
         const threadStub = env.THREAD_DO.get(threadId);
+        dat = await threadStub.getDat();
 
-        const [log, settingText] = await Promise.all([
-          threadStub.getDat(),
-          threadStub.getSettings(),
-        ]);
-
-        if (log) {
-          const datLines = log.split("\n");
-
-          /* スレッドタイトルを取得。ログの一行目に入っている。 */
-          const subject = datLines.shift() || "";
-
-          /* NAME=VALUE<>NAME2=VALUE2 */
-          if (settingText) {
-            const settingsArray = settingText.trim().split("<>");
-            for(const settingPair of settingsArray) {
-              const [s_key, s_value = ""] = settingPair.split("=");
-              if(s_key) settings[s_key] = s_value.trim();
-            }
+        if (dat) {
+          // 最終更新時刻を取得
+          const lines = dat.trim().split('\n');
+          const lastLine = lines[lines.length - 1];
+          const fields = lastLine.split('<>');
+          // 2番目のフィールド(日付)からunixtimeを抽出
+          const dateStr = fields[2];
+          if (dateStr) {
+            const dateMatch = dateStr.match(/(\d{4}\/\d{2}\/\d{2}\([日月火水木金土]\) \d{2}:\d{2}:\d{2})/);
+            if (dateMatch) lastModified = new Date(dateMatch[1]);
           }
-
-          /* 名無し設定 */
-          const name774 = settings.BBS_NONAME_NAME ?? "774@3ch";
-
-          /* ログを一行ずつ読んでいく。。。 */
-          for(const line of datLines) {
-            if (!line) continue;
-            /* 0:num<>1:name<>2:sikibetsuId<>3:time<>4:id<>5:MESSAGE */
-            const res = line.trim().split("<>");
-
-            /* num無し、numが番号でない、num < 1、timeなし、本文部分まで<>がない -> 表示しない */
-            if(!res[0] || !/^[0-9]+$/.test(res[0]) || parseInt(res[0]) < 1 || !res[3] || res[5] == null) continue;
-
-            /* 名無しをセット */
-            let name = res[1] !== "" ? res[1] : name774;
-
-            /* レス削除などによるレス番飛びを検出する。更新前のresnumが前のレスの番号でなければ、空いた分だけ行を挿入する。 */
-            if(resnum !== parseInt(res[0]) - 1) {
-              for(let j = resnum + 1; j < parseInt(res[0]); j++) {
-                dat += j + "<>あぼーん<>あぼーん<>あぼーん<>あぼーん\n";
-              }
-            }
-
-            resnum = parseInt(res[0]);
-            
-            /* 日付欄の処理 */
-            let date = "";
-            if(res[3]) {
-              const DATETIME = new Date(parseInt(res[3].slice(0,10)) * 1000);
-              date = DATETIMEFORMAT.format(DATETIME);
-              if(res[3].slice(10)) date += `.${res[3].slice(10)}`;
-            }
-
-            /* 識別ID欄を名前欄に追加 */
-            if(res[2]) name += ` </b>(${res[2]})<b>`;
-            /* ID欄を日付欄に追加 */
-            if(res[4]) date += ` ${res[4]}`;
-            /* <br>の前後にスペースを挿入。必要あるのかはわからないけど、一応。 */
-            const MESSAGE = res[5].replace(/<br>/g, " <br> ");
-
-            dat += `${name}<><>${date}<> ${MESSAGE} <>`;
-            dat += resnum === 1 ? `${subject}\n` : "\n";
-            /* 最終更新時刻を得る。最後のレスの時刻が入る。 */
-            if(res[3]) lastModified = new Date(parseInt(res[3].slice(0,10)) * 1000);
-          }
-        }else error = "404";
+        } else {
+          error = "404";
+        }
       } catch (e) {
         error = `/${bbs}/dat/${key}.dat Error -> ${e}`;
       }
