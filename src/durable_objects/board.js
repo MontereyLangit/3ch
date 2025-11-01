@@ -56,9 +56,7 @@ export class Board extends DurableObject {
       const existingLine = lines[threadIndex];
       // titleがnullの場合は既存の行からタイトルを抽出して使用する
       const title = threadData.title ?? existingLine.substring(existingLine.indexOf('<>') + 2, existingLine.lastIndexOf(' ('));
-      console.log(!threadData.title);
       newThreadLine = `${threadKey}.dat<>${title} (${threadData.resNum})`;
-console.log(threadKey);console.log(title);console.log(threadData.resNum);
       if (isSage) {
         // sage: レス数のみ更新
         lines[threadIndex] = newThreadLine;

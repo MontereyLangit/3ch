@@ -520,7 +520,6 @@ async function getThreadDataAndThreadSettings(gb, request, env) {
 
     // レス数
     gb.number = datLines ? datLines.length : 0;
-    console.log(datLines);
     // スレ設定を取得。ログの二行目に入っている。
     if (settingsText) {
       const settingsArray = settingsText.trim().split("<>");
@@ -777,6 +776,8 @@ async function makeIdAndShikibetuId(gb) {
   }
   // 名前欄に加える
   gb.form.FROM += ` </b>(${gb.shikibetsuId})<b>`;
+  // タイトルにIDを加える
+  if (gb.number === 1) gb.subject += ` [${gb.id}★]`;
 }
 
 async function getSha1Base64Id(tane, group, date, salt, length) {
@@ -826,7 +827,6 @@ async function suretateTotalCheckAndUpdateSubject(gb, env) {
     title: gb.subject,
     resNum: gb.number,
   };
-console.log(threadData)
   // Board DOのスタブを取得
   const boardId = env.BOARD_DO.idFromName(gb.form.bbs);
   const boardStub = env.BOARD_DO.get(boardId);
@@ -862,7 +862,6 @@ async function updateThreadFile(gb, env) {
 
     const datLine = `${gb.form.FROM}<><>${date} ${gb.id}<>${gb.form.MESSAGE}<>${gb.number === 1 ? gb.subject : ''}`;
     const logLine = `${gb.userInfo}`;
-console.log(`subj:${gb.subject}`)
     // Thread DOにレスの追加を依頼
     await threadStub.addRes(datLine, logLine);
 

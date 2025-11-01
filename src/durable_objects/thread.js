@@ -50,10 +50,9 @@ export class Thread extends DurableObject {
    * @param {string} logLine - log形式の新しい行データ
    */
   async addRes(datLine, logLine) {
-    const newDat = await this.getDat() + datLine + "\n";console.log(datLine)
+    const newDat = await this.getDat() + datLine + "\n";
     const newLog = await this.getLog() + logLine + "\n";
     await this.state.storage.put({ dat: newDat, log: newLog });
-    console.log({ dat: newDat, log: newLog });
   }
 
   /**
