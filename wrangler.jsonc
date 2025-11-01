@@ -36,8 +36,8 @@
   ],
   "migrations": [
     {
-      "tag": "<v1>",
-      "new_sqlite_classes": [
+      "tag": "v1",
+      "new_classes": [
         "Thread",
         "Board"
       ]
