@@ -833,7 +833,7 @@ console.log(threadData)
 
   try {
     // Board DOにスレッド一覧の更新を依頼
-    await boardStub.updateThread(threadData, gb.sage, gb.boardSettings.BBS_MAX_MENU_THREAD);
+    await boardStub.updateThread(threadData, gb.sage, parseInt(gb.boardSettings.BBS_MAX_MENU_THREAD || "700"));
     return 1;
   } catch (e) {
     return dispError(gb, `suretateTotalCheckAndUpdateSubject error. スレ一覧を更新できませんでした。(unixtime:${gb.time} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:suretateTotalCheckAndUpdateSubject->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
