@@ -774,7 +774,7 @@ async function makeIdAndShikibetuId(gb) {
     gb.shikibetsuId = ``;
   }
   // 名前欄に加える
-  gb.form.FROM += gb.shikibetsuId;
+  gb.form.FROM += ` </b>(${gb.shikibetsuId})<b>`;
 }
 
 async function getSha1Base64Id(tane, group, date, salt, length) {
