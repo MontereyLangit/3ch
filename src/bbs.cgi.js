@@ -773,6 +773,8 @@ async function makeIdAndShikibetuId(gb) {
   else if (BBS_ID_SHIKIBETSU === "d") {
     gb.shikibetsuId = ``;
   }
+  // 名前欄に加える
+  gb.form.FROM += gb.shikibetsuId;
 }
 
 async function getSha1Base64Id(tane, group, date, salt, length) {
