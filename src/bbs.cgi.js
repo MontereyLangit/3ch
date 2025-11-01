@@ -707,6 +707,8 @@ function checkFieldSize(gb) {
   // ここから先は管理コマンド使用時はスルー
   if (/^!ADMIN:/.test(gb.form.MESSAGE)) return 1;
 
+  //!ADMIN:DELETE=(レス番号)で該当レス削除
+
   // >>1は65,536文字(4096文字×16レス分)までOK
   if (gb.number === 1 && BBS_MESSAGE_COUNT < 65536) BBS_MESSAGE_COUNT = 65536;
 
@@ -858,7 +860,7 @@ async function updateThreadFile(gb, env) {
     const DATETIMEFORMAT = new Intl.DateTimeFormat('ja-JP', {year: "numeric", month: "2-digit", day: "2-digit", weekday:"short", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Tokyo"});
     const date = DATETIMEFORMAT.format(new Date(parseInt(gb.unixtime) * 1000));
 
-    const datLine = `${gb.form.FROM}<>${gb.form.mail}<>${date} ${gb.id}<>${gb.form.MESSAGE}<>${gb.number === 1 ? gb.subject : ''}`;
+    const datLine = `${gb.form.FROM}<><>${date} ${gb.id}<>${gb.form.MESSAGE}<>${gb.number === 1 ? gb.subject : ''}`;
     const logLine = `${gb.userInfo}`;
 console.log(`subj:${gb.subject}`)
     // Thread DOにレスの追加を依頼
