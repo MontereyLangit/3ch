@@ -716,6 +716,9 @@ function checkFieldSize(gb) {
   // 行数制限(>>2以降)
   if (gb.number >= 2 && gb.form.MESSAGE.split("<br>").length > BBS_LINE_NUMBER * 2) return dispError(gb, `改行が多すぎます！(${gb.form.MESSAGE.split("<br>").length}/${BBS_LINE_NUMBER * 2})`);
 
+  // 名無しをセット
+  if (!gb.form.name) gb.form.name = gb.settings.BBS_NONAME_NAME || "名無しさん＠３ちゃんねる";
+
   return 1;
 }
 
