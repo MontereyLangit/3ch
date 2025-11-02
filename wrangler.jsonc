@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "3ch-workers",
+  "name": "3ch",
   "main": "src/main.js",
   "compatibility_date": "2025-09-19",
   "vars": {
