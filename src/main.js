@@ -184,7 +184,7 @@ export default {
         dat = await threadStub.getDat(bbs, key);
         // 1762009199以降1762087165以前のkeyの場合でdatが空の場合、keyのみの旧DOから取得を試みる
         // 取得できたら、現行スレdoの方に移す
-        if (!dat && parseInt(key) > 1762009199 && parseInt(key) < 1762087165) {
+        if (!dat && parseInt(key) > 1761992253 && parseInt(key) < 1762087165) {
           const oldThreadId = env.THREAD_DO.idFromName(key);
           const oldThreadStub = env.THREAD_DO.get(oldThreadId);
           dat = await oldThreadStub.getDat();
