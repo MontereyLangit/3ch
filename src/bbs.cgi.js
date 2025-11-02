@@ -479,7 +479,7 @@ async function getBoardSettings(gb, request, env) {
  */
 async function getThreadDataAndThreadSettings(gb, request, env) {
   // スレッドキーからDurable Objectのスタブを取得
-  const threadId = env.THREAD_DO.idFromName(gb.form.key);
+  const threadId = env.THREAD_DO.idFromName(gb.form.bbs + "/" + gb.form.key);
   const threadStub = env.THREAD_DO.get(threadId);
 
   try {
@@ -842,7 +842,7 @@ async function suretateTotalCheckAndUpdateSubject(gb, env) {
 
 // 
 async function updateThreadFile(gb, env) {
-  const threadId = env.THREAD_DO.idFromName(gb.form.key);
+  const threadId = env.THREAD_DO.idFromName(gb.form.bbs + "/" + gb.form.key);
   const threadStub = env.THREAD_DO.get(threadId);
 
   try {
@@ -860,8 +860,11 @@ async function updateThreadFile(gb, env) {
     const DATETIMEFORMAT = new Intl.DateTimeFormat('ja-JP', {year: "numeric", month: "2-digit", day: "2-digit", weekday:"short", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Tokyo"});
     const date = DATETIMEFORMAT.format(new Date(parseInt(gb.unixtime) * 1000));
 
-    const datLine = `${gb.form.FROM}<><>${date} ${gb.id}<>${gb.form.MESSAGE}<>${gb.number === 1 ? gb.subject : ''}`;
-    const logLine = `${gb.userInfo}`;
+    // <br>の前後にスペースを挿入。
+    gb.form.MESSAGE = gb.form.MESSAGE.replace("<br>", " <br> ");
+
+    const datLine = `${gb.form.FROM}<><>${date} ${gb.id}<> ${gb.form.MESSAGE} <>${gb.number === 1 ? gb.subject : ''}`;
+    const logLine = `${gb.number}<>${gb.userInfo}`;
     // Thread DOにレスの追加を依頼
     await threadStub.addRes(datLine, logLine);
 

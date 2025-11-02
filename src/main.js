@@ -168,7 +168,7 @@ export default {
     /* dat */
     if(/^\/[a-zA-Z0-9\-_]+\/dat\/[0-9]{10}\.dat/.test(url.pathname)) {
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/dat\/([0-9]{10})\.dat/);
-      let bbs = match[1];
+      const bbs = match[1];
       const key = match[2];
 
       const ENCODING = "Shift_JIS";
@@ -179,9 +179,17 @@ export default {
 
       try {
         // Durable Objectからスレッドデータを取得
-        const threadId = env.THREAD_DO.idFromName(key);
+        const threadId = env.THREAD_DO.idFromName(bbs + "/" + key);
         const threadStub = env.THREAD_DO.get(threadId);
-        dat = await threadStub.getDat();
+        dat = await threadStub.getDat(bbs, key);
+        // 1762009199以降1762087165以前のkeyの場合でdatが空の場合、keyのみの旧DOから取得を試みる
+        // 取得できたら、現行スレdoの方に移す
+        if (!dat && parseInt(key) > 1762009199 && parseInt(key) < 1762087165) {
+          const oldThreadId = env.THREAD_DO.idFromName(key);
+          const oldThreadStub = env.THREAD_DO.get(oldThreadId);
+          dat = await oldThreadStub.getDat();
+          if (dat) await threadStub.setDat(dat);
+        }
 
         if (dat) {
           // 最終更新時刻を取得
