@@ -20,26 +20,29 @@
       "preview_id": "1a79d9a2fb91478c8db13e62495b69ba"
     }
   ],
-/*  
   // Durable Object bindings.
   "durable_objects": {
     "bindings": [
-      { "name": "BBS", "class_name": "Bbs" },
-      { "name": "THREAD", "class_name": "Thread" },
-      { "name": "USER", "class_name": "User" }
+      { "name": "THREAD_DO", "class_name": "Thread" },
+      { "name": "BOARD_DO", "class_name": "Board" }
     ]
   },
+  // R2 Bucket bindings.
+  "r2_buckets": [
+    {
+      "binding": "ch3www",
+      "bucket_name": "3ch"
+    }
+  ],
   "migrations": [
     {
       "tag": "v1",
       "new_classes": [
-        "Bbs",
         "Thread",
-        "User"
+        "Board"
       ]
     }
   ],
-*/
   // Limits for your Worker.
   "limits": {
     "cpu_ms": 300000

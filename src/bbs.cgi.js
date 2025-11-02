@@ -114,69 +114,60 @@ export async function bbs_entry(request, env, ctx) {
   gb.boardSettings = {};/* 板設定スデータ */
   gb.headers = {};
 
-  try {
     /* 最初のチェック */
-    if (!checkRequest(gb, request)) return;
-
+    if (!checkRequest(gb, request, env)) return respondError(gb);
     /* Formの読み込み */
-    if (!await readForm(gb, request)) return;
+    if (!await readForm(gb, request)) return respondError(gb);
 
     /* キャップ処理 */
     await processCap(gb, request, env);
-    
+
     /* トリップ処理 */
-    await processTrip(gb, request, env);
+    if (!await processTrip(gb, request, env)) return respondError(gb);
 
     /* R2用のpathをセット */
     SetPath(gb);
 
     /* SETTING.TXT（板設定）読み込み */
-    if (!await getBoardSettings(gb, request, env)) return;
-    
+    if (!await getBoardSettings(gb, request, env)) return respondError(gb);
+
     /* 書き込み先スレッドのデータ取得＆スレ設定読み込み */
-    if (!await getThreadDataAndThreadSettings(gb, request, env)) return;
+    if (!await getThreadDataAndThreadSettings(gb, request, env)) return respondError(gb);
 
     /*
      * ユーザー識別処理（識別子システム）
      * Cookieと端末固有情報（デバイスフィンガープリント）の取得、認証、Cookie処理、Googleアカウント登録、識別子由来のBAN規制や各種制限判定処理
      */
-    if (!await processIdentification(gb, request)) return;
-    
+    if (!await processIdentification(gb, request)) return respondError(gb);
+
     // ログに格納されるユーザ情報(規制にも使用)
     gb.userInfo = "UID:" + gb.uid + " IP:" + gb.host + " AS" + gb.asn + '-' + gb.country + ',' + gb.ken + ',' + gb.city + "Device:" + gb.deviceInfo + " UA:" + gb.userAgent;
 
     /* まだかな（アクセス規制） */
-    if (!await checkDenyList(gb, env)) return;
+    if (!await checkDenyList(gb, env)) return respondError(gb);
 
     /* フィールドサイズチェック */
-    if (!checkFieldSize(gb)) return;
+    if (!checkFieldSize(gb)) return respondError(gb);
 
     /* ID＆識別ID生成 */
     await makeIdAndShikibetuId(gb);
-
-    /* subject取得 */
-    if (!await getSubject(gb, env)) return;
 
     /* コマンド類（ユーザーコマンド、管理コマンド）と>20以降のスレ内連投規制（バイバイさるさん）の処理 */
     //if (!await processCommandsAndByBySaru(gb, request, env)) return;
 
     /* 各種スレ立て規制 と subject更新 */
-    if (!await suretateTotalCheckAndUpdateSubject(gb, env)) return;
+    if (!await suretateTotalCheckAndUpdateSubject(gb, env)) return respondError(gb);
 
     /* スレッドファイル更新 */
-    if (!await updateThreadFile(gb, env)) return;
+    if (!await updateThreadFile(gb, env)) return respondError(gb);
 
     /* スレ立て時のthread/..../subject.txtへの追加＆thread/subject.txt更新 */
-    if (!await updateSubback(gb, env)) return;
+    if (!await updateSubback(gb, env)) return respondError(gb);
 
     /* 全体headline更新 */
-    if (!await updateHeadline(gb, env)) return;
+    if (!await updateHeadline(gb, env)) return respondError(gb);
 
     /* メインルーチン終わり。 */
-    return;
-  }
-  catch(e) {gb.error = `bbs.cgi System Error:${e}`;}
-  finally {
     /*
      * 書き込みました。 / 書き込み確認 / ＥＲＲＯＲ！
      * UTF-8(read.cgi経由など)かShift_JIS(大半の2ch専ブラ)かを各関数内で判定し(gb.isSJIS)、適切なHTMLを出力する
@@ -185,7 +176,6 @@ export async function bbs_entry(request, env, ctx) {
     if (gb.error === "") return respondEndHtml(gb);
     if (gb.error === "ConfirmationPhase") return respondConfirmationPhase(gb);
     else return respondError(gb);
-  }
 }
 
 /*  
@@ -193,7 +183,7 @@ export async function bbs_entry(request, env, ctx) {
  * UserAgent、CH-UAはここで取得される
  * 歴史的事情や最近の動向がいろいろあるので、更新時には注意すること
  */
-function checkRequest(gb, request) {
+function checkRequest(gb, request, env) {
   /* Cloudflare Rewirte Rulesで入ってこないようにしているけど、一応 */
   if (request.method !== 'POST') return dispError(gb, "POST メソッドを使ってください。<br>\nRecieve GET METHOD");
 
@@ -201,7 +191,7 @@ function checkRequest(gb, request) {
   if (!contentType.includes("application/x-www-form-urlencoded")) return dispError(gb, "送信された内容が破損しています。->" + contentType + "<br>\nBroken request body. ");
 
   const referer = request.headers.get('referer') || '';
-  if (!/^https?:\/\/www\.3chbbs\.com/.test(referer)) return dispError(gb, "ERROR: あなた騙されてますよ？->" + referer + "<br>\nReferer is invalid.");
+  if (!/^https?:\/\/www\.3chbbs\.com/.test(referer) && !/^http:\/\/127\.0\.0\.1:8787/.test(referer)) return dispError(gb, "ERROR: あなた騙されてますよ？->" + referer + "<br>\nReferer is invalid.");
 
   /* UserAgentは7byte~384byteの半角文字のみ可 */
   if (gb.userAgent.length < 7 || gb.userAgent.length > 384 || /[^ -~]/.test(gb.userAgent)) return dispError(gb, "ERROR: ブラウザ変ですよん。(ua)<br>UserAgent: " + gb.userAgent + "<br>\nUserAgent is invalid.");
@@ -218,7 +208,7 @@ function checkRequest(gb, request) {
   if (/^Monazilla\/1.00/.test(gb.userAgent)) gb.isMonazilla = 1;
 
   /* IPv6接続かどうかをチェックする */
-  if (gb.ip.includes(":")) {
+  if (gb.ip?.includes(":")) {
     gb.isIPv6 = 1;
     const octet = gb.ip.split(":");
     gb.idnotane = `${octet[0]}:${octet[1]}:${octet[2]}:${octet[3]}`;
@@ -342,8 +332,6 @@ async function readForm(gb, request) {
   if (gb.form.MESSAGE === "") return dispError(gb, "本文がありません！");
   if ((gb.form.key === "" || !/^[0-9]+$/.test(gb.form.key)) && gb.form.subject === "") return dispError(gb, "subjectが存在しないかキー情報が不正です。key=" + gb.form.key + "<br>\nThe subject is empty and key is wrong.");
   if (gb.form.time === "" || !/^[0-9]+$/.test(gb.form.time)) return dispError(gb, "ブラウザ変ですよん。(time)<br>\ntime is empty. time=" + gb.form.time);
-  //if (gb.form.time > gb.unixtime) return dispError(gb, "投稿時刻がおかしいです。時計が狂っていませんか？<br>time値が未来の時刻です。端末の時刻を確認して、ブラウザを立ち上げなおしてみてください。");
-  //if (gb.form.time < gb.unixtime - 3600) return dispError(gb, "投稿時刻が時間切れです。スレッドをリロード（再読み込み）してください。<br>現在時刻より1時間以上前のtime値は無効です。");
 
   if (gb.form.key !== "") gb.form.subject = "";
 
@@ -392,7 +380,7 @@ async function processCap(gb, request, env) {
  * Shift_JIS-10桁&12桁対応暫定版 by 忍
  */
 async function processTrip(gb, request, env) {
-  if (gb.tripKey === "") return;
+  if (gb.tripKey === "") return 1;
 
   // ToDo トリップ関連
   const sjisBytesArray = Encoding.convert(gb.tripKey, { to: "SJIS", from: "UNICODE" });
@@ -427,6 +415,7 @@ async function processTrip(gb, request, env) {
     gb.tripString = crypt(handlePass, salt).slice(-10);
   }
   gb.form.FROM += ` </b>◆${gb.tripString}</b>`;
+  return 1;
 }
 
 function SetPath(gb) {
@@ -468,61 +457,69 @@ async function getBoardSettings(gb, request, env) {
 
 /* 
  * スレッドデータ＆スレ設定取得
- * 300超え時の処理なども
+ * 1000超え時の処理なども
  */
 async function getThreadDataAndThreadSettings(gb, request, env) {
-  try {
-    const object = await env.ch3www.get(gb.logFile);
+  // スレッドキーからDurable Objectのスタブを取得
+  const threadId = env.THREAD_DO.idFromName(gb.form.bbs + "/" + gb.form.key);
+  const threadStub = env.THREAD_DO.get(threadId);
 
+  try {
     if (gb.form.subject) {
       // スレ立て時の処理
+      const initialDat = await threadStub.getDat();
 
       /* スレ立て時、書き込み先ファイルがすでにあったらお断りする。 */
-      if (object !== null) return dispError(gb, "別の人が同時刻にスレッドを立てようとしています。ごめんなさい。");
+      if (initialDat) return dispError(gb, "別の人が同時刻にスレッドを立てようとしています。ごめんなさい。");
 
       gb.logData = `${gb.form.subject}\n`;
-      gb.logEtag = null;
       gb.number = 1;
       gb.subject = gb.form.subject;
 
       return 1;
     }
-    else if (object === null) return dispError(gb, "該当するスレッドがありません。" + gb.logFile);
 
     // スレッドデータ取得
-    gb.logData = await object.text();
-    gb.logEtag = object.etag;
-    const reses = gb.logData.split("\n");
-    gb.number = reses.length - 2;
-    if (gb.number < 1) return dispError(gb, "スレッドのログファイルが壊れています。運用情報板で修理してもらってください。");
+    // dat, log, settingsを並行で取得
+    const [dat, settingsText] = await Promise.all([
+      threadStub.getDat(),
+      threadStub.getSettings(),
+    ]);
 
-    // スレッドタイトルを取得。ログの一行目に入っている。
-    gb.subject = reses.shift()?.trim();
+    if (!dat) return dispError(gb, "該当するスレッドがありません。" + gb.logFile);
 
+    // 元の.cgi形式（datとlogが結合された形式）をメモリ上で再構築する
+    // これにより、後続の処理が古いデータ形式を前提としていても動作する
+    const datLines = dat.split('\n');
+
+    // datの1行目(1レス目)の末尾からスレッドタイトルを取得
+    const firstLine = datLines[0];
+    if (!firstLine) return dispError(gb, "スレッドのログファイルが壊れています。(空です)");
+    const firstLineFields = firstLine.split('<>');
+    // 最後のフィールドがスレッドタイトル
+    gb.subject = firstLineFields.pop() || '';
+    if (!gb.subject) return dispError(gb, "スレッドのログファイルが壊れています。(タイトル取得失敗)");
+
+    // レス数
+    gb.number = datLines ? datLines.length : 0;
     // スレ設定を取得。ログの二行目に入っている。
-    const settingText = reses.shift();
-    // NAME=VALUE<>NAME2=VALUE2
-    const settingsArray = settingText.trim().split("<>");
-
-    for (let i = 0; i < settingsArray.length; i++) {
-      const setting = settingsArray[i].split("=");
-      if(!setting[0]) continue;
-      setting[1] ??= "";
-      gb.settings[setting[0]] = setting[1].trim();
+    if (settingsText) {
+      const settingsArray = settingsText.trim().split("<>");
+      for (const settingPair of settingsArray) {
+        const [key, value = ""] = settingPair.split("=");
+        if (key) gb.settings[key] = value.trim();
+      }
     }
 
-    // 300超え時の処理
-    if (gb.number === 300) {
-      gb.form.MESSAGE += "<hr>このスレッドは300を超えました。次スレッドに移行してくださいです。。。";
-    }
-    else if (gb.number > 300) return dispError(gb, "このスレッドは300を超えたのでもう書けません。");
+    // 1000超え時の処理
+    if (gb.number >= 1000) return dispError(gb, "このスレッドは1000を超えたのでもう書けません。");
 
     // 停止
     if (gb.settings.BBS_HEISA === "checked") return dispError(gb, "この板・スレッドは停止されています。");
 
     return 1;
   } catch(e) {
-    return dispError(gb, `getThreadDataAndThreadSettings error. 不明なエラーが発生しました。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:getThreadDataAndThreadSettings->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
+    return dispError(gb, `getThreadDataAndThreadSettings error. 不明なエラーが発生しました。(unixtime:${gb.time} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:getThreadDataAndThreadSettings->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
   }
 }
 
@@ -558,7 +555,7 @@ async function processIdentification(gb, request) {
   if (gb.settings.BBS_SHIKIBETSU === "off") {
     gb.headers["Set-Cookie"] = `PON=${PON}; Max-Age=63072000; path=/; Domain=.3chbbs.com; ${secure} HttpOnly`;
     
-    if(!gb.cookies.PON) return dispError(gb, "ConfirmationPhase");
+    //if(!gb.cookies.PON) return dispError(gb, "ConfirmationPhase");
 
     return 1;
   }
@@ -650,7 +647,7 @@ async function checkDenyList(gb, env)
               gb.form.MESSAGE += `<hr><var style="color:blue;">Madakana:${target}</var>`; 
             }
 
-            return "";
+            return 1;
           }
           // 上記のもの以外はエラー
           else
@@ -665,7 +662,7 @@ async function checkDenyList(gb, env)
               ErrMsg = `NGワード禁止！(${target})<br><a href=\"https://www.3chbbs.com/madakana/\">ここで告知されています。</a><br>Your post contains forbidden words. -> ${target}`;//"
             }
 
-            return "ERROR: Madakana:" + ErrMsg;
+            return dispError(gb, "Madakana:" + ErrMsg);
           }
         }
       }
@@ -691,6 +688,8 @@ function checkFieldSize(gb) {
   // ここから先は管理コマンド使用時はスルー
   if (/^!ADMIN:/.test(gb.form.MESSAGE)) return 1;
 
+  //!ADMIN:DELETE=(レス番号)で該当レス削除
+
   // >>1は65,536文字(4096文字×16レス分)までOK
   if (gb.number === 1 && BBS_MESSAGE_COUNT < 65536) BBS_MESSAGE_COUNT = 65536;
 
@@ -699,6 +698,9 @@ function checkFieldSize(gb) {
 
   // 行数制限(>>2以降)
   if (gb.number >= 2 && gb.form.MESSAGE.split("<br>").length > BBS_LINE_NUMBER * 2) return dispError(gb, `改行が多すぎます！(${gb.form.MESSAGE.split("<br>").length}/${BBS_LINE_NUMBER * 2})`);
+
+  // 名無しをセット
+  if (!gb.form.FROM) gb.form.FROM = gb.settings.BBS_NONAME_NAME || "名無しさん＠３ちゃんねる";
 
   return 1;
 }
@@ -713,6 +715,7 @@ async function makeIdAndShikibetuId(gb) {
   const BBS_ID = gb.settings.BBS_ID ? gb.settings.BBS_ID : "checked";
   const BBS_ID_RESET = gb.settings.BBS_ID_RESET ? gb.settings.BBS_ID_RESET : "86400";
   const BBS_ID_LV = gb.settings.BBS_ID_LV ? gb.settings.BBS_ID_LV : "";
+  
   if (gb.cap) {
     gb.id = "ID:???";
   } else if (BBS_ID === "ip") {
@@ -726,14 +729,14 @@ async function makeIdAndShikibetuId(gb) {
     gb.id = `ID:${idString}`;
     if (BBS_ID_LV === "checked") gb.id += gb.userData.lv >= 10 ? "10" : "L" + gb.userData.lv;
   } else if (BBS_ID === "siberia") {
-    gb.id = `\u767A\u4FE1\u5143:${gb.ip}`;
+    gb.id = `発信元:${gb.ip}`;
     if (BBS_ID_LV === "checked") gb.id += " " + (gb.userData.lv >= 10 ? "10" : "L" + gb.userData.lv);
   } else {
     if (BBS_ID_LV === "checked") gb.id += gb.userData.lv >= 10 ? "10" : "L" + gb.userData.lv;
   }
   const BBS_ID_SHIKIBETSU = gb.settings.BBS_ID_SHIKIBETSU ? gb.settings.BBS_ID_SHIKIBETSU : "checked";
   if (gb.cap) {
-    gb.shikibetsuId = "\u2605";
+    gb.shikibetsuId = "★";
   } 
   else if (BBS_ID_SHIKIBETSU === "checked") {
     gb.shikibetsuId = `${gb.country}.${await getSha1Base64Id(gb.ken, idGroup, Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET), gb.md5Salt, 2)}.${await getSha1Base64Id(gb.city+"c", idGroup, Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET), gb.md5Salt, 2)} ${await getSha1Base64Id(gb.asn, idGroup, Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET), gb.md5Salt, 2)}-${md5(gb.userAgent+idGroup+Math.floor((parseInt(gb.unixtime) + 32400)/BBS_ID_RESET).toString()+gb.md5Salt).slice(0,16)}`; 
@@ -753,7 +756,13 @@ async function makeIdAndShikibetuId(gb) {
   else if (BBS_ID_SHIKIBETSU === "d") {
     gb.shikibetsuId = ``;
   }
-}async function getSha1Base64Id(tane, group, date, salt, length) {
+  // 名前欄に加える
+  gb.form.FROM += ` </b>(${gb.shikibetsuId})<b>`;
+  // タイトルにIDを加える
+  if (gb.number === 1 && gb.id) gb.subject += ` [${gb.id}★]`;
+}
+
+async function getSha1Base64Id(tane, group, date, salt, length) {
   const md5Id = md5(tane+group+date+salt);
   const sha1Base64Id = await sha1Base64(md5Id);
   return sha1Base64Id.slice(0, length);
@@ -766,17 +775,13 @@ async function getMd5IdString(tane, group, date, salt) {
 }
 
 async function getSubject(gb, env) {
-  const filename = `${gb.path}subject.txt`;
+  const boardId = env.BOARD_DO.idFromName(gb.form.bbs);
+  const boardStub = env.BOARD_DO.get(boardId);
 
   try {
-    const object = await env.ch3www.get(filename);
-
-    if (object !== null) {
-      gb.subjectText = await object.text();
-      gb.subjectEtag = object.etag;
-    }else {
-      gb.subjectText = "";
-    }
+    // Board DOからsubject.txtの内容を取得
+    gb.subjectText = await boardStub.getSubject();
+    gb.subjectEtag = "dummy-etag"; // EtagチェックはDO側で行うため、ここではダミーを設定
 
     return 1;
   } catch (e) {
@@ -789,175 +794,66 @@ async function getSubject(gb, env) {
  * gb.subjectText を利用する
  */
 async function suretateTotalCheckAndUpdateSubject(gb, env) {
-  const BBS_MAX_MENU_THREAD = gb.boardSettings.BBS_MAX_MENU_THREAD ? gb.boardSettings.BBS_MAX_MENU_THREAD : "300";
-  const BBS_CREATETHREAD_INTERVAL = gb.boardSettings.BBS_CREATETHREAD_INTERVAL ? gb.boardSettings.BBS_CREATETHREAD_INTERVAL : "0";
-  const BBS_THREAD_TATESUGI = gb.boardSettings.BBS_THREAD_TATESUGI ? gb.boardSettings.BBS_THREAD_TATESUGI : "3/86400";
-  const TATESUGI_COUNT = BBS_THREAD_TATESUGI.split("/")[0] ? BBS_THREAD_TATESUGI.split("/")[0] : "0";
-  const TATESUGI_DURATION = BBS_THREAD_TATESUGI.split("/")[1] ? BBS_THREAD_TATESUGI.split("/")[1] : "86400";
   const BBS_FORCE_SAGE = parseInt(gb.settings.BBS_FORCE_SAGE ? gb.settings.BBS_FORCE_SAGE : "9999999999");
-  const filename = `${gb.path}subject.txt`;
 
   // sageの処理（スレ立て時はsage無効）
   if (gb.number >= 2) {
-    //if (gb.number < 10) sage = 1;//>>10未満は強制sage（age荒らし防止）
     if (gb.form.mail.includes("sage")) gb.sage = 1;
     if (parseInt(gb.form.key) + BBS_FORCE_SAGE < parseInt(gb.unixtime)) gb.sage = 1;
     if (gb.settings.BBS_LIVE && gb.settings.BBS_LIVE === "checked" && Math.random() * 10 >= 1) gb.sage = 1; // 実況板、実況スレでは10分の9の確率でsage
   }
 
-  // sageならsubject.txtを更新しない
-  if (gb.sage) return 1;
+  // Board DOに渡すスレッド情報を作成
+  const threadData = {
+    key: gb.form.key,
+    title: gb.subject,
+    resNum: gb.number,
+  };
+  // Board DOのスタブを取得
+  const boardId = env.BOARD_DO.idFromName(gb.form.bbs);
+  const boardStub = env.BOARD_DO.get(boardId);
 
-  const subjectArray = gb.subjectText.split("\n");
-  const msg = gb.form.MESSAGE.slice(0,30);
-  let createdBySameIdCount = 0;
-  let createdBySameShikibetsuIdCount = 0;
-
-  // スレッド情報を得る
-  const resArray = gb.logData.split("\n");
-  const lastModified = gb.number === 1 ? gb.form.key : resArray[0];
-  const threadId = gb.number === 1 ? gb.id : resArray?.[2].split("<>")?.[4];
-  const threadShikibetsuId = gb.number === 1 ? gb.shikibetsuId : resArray?.[2].split("<>")?.[2];
-
-  // スレッドステータスをセット
-  let threadStatusMark = "";
-
-  if (gb.boardSettings.BBS_HEISA !== "checked" && gb.settings.BBS_HEISA === "checked") threadStatusMark += threadStatusMark ? ",stop" : "stop";
-  if (gb.boardSettings.BBS_ID !== "off" && gb.settings.BBS_ID === "off") threadStatusMark += threadStatusMark ? ",noid" : "noid";
-  if (gb.boardSettings.BBS_ID_SHIKIBETSU !== "off" && gb.settings.BBS_ID_SHIKIBETSU === "off") threadStatusMark += threadStatusMark ? ",nosid" : "nosid";
-
-  // 最終更新時刻\n次スレsubject(key<>…<>…\n)0:key<>1:title<>2:resnum<>3:id<>4:sikibetsuId<>5:備考欄<>6:最新書き込みunixtime<>7:最新書き込み本文の一部
-  const newLine = `${gb.form.key}<>${gb.subject}<>${gb.number}<>${threadId}<>${threadShikibetsuId}<>${threadStatusMark}<>${lastModified}<>${msg}`.replace(/\n/g, "");
-  gb.subjectText = `${gb.unixtime}\n${gb.addedSubjectText}${newLine}\n`;
-
-  if (subjectArray.length > 1) {
-    for (let i = 0; i < subjectArray.length; i++) {
-      // BBS_MAX_MENU_THREAD行目まで
-      if (i >= BBS_MAX_MENU_THREAD) break;
-
-      const lineStr = subjectArray[i];
-      const lineSubj = lineStr.split("<>");
-
-      // 正常な行は<>が7個ある
-      if (lineSubj.length !== 8) continue;
-
-      // スレ立て時の規制
-      if (gb.number === 1) {
-        // 新しいスレッドキーがすでに使われていたら、お断りする
-        if (gb.form.key === lineSubj[0]) return dispError(gb, "別の人が同時刻にスレッドを立てようとしています。ごめんなさい。key:" + lineSubj[0] + "<br>\nSorry another person is trying to start a thread at the same time.");
-
-        // スレッドが過密すぎる場合、スレ立てをお断りする
-        if (lineSubj[0] > gb.form.key - BBS_CREATETHREAD_INTERVAL) return dispError(gb, `この板は今スレッド立ちすぎです。ごめんなさい。key:${gb.form.key - BBS_CREATETHREAD_INTERVAL}-${gb.form.key}<br>\nSorry this board has too many threads.`);
-
-        // スレッド立て過ぎ
-        if (BBS_THREAD_TATESUGI === "cap" && !gb.cap) return dispError(gb, "この板ではキャップを使わないとスレ立てできません。<br>\nNo-cap Users cannot make a thread in this board.");
-
-        else if (lineSubj[0] + TATESUGI_DURATION > gb.unixtime && !gb.cap) {
-          // 旧スレ立て規制
-          if (lineSubj[3] === gb.id) {
-            createdBySameIdCount++;
-            if (createdBySameIdCount > TATESUGI_COUNT) return dispError(gb, `スレッド立てすぎです。。。->${gb.id} (${createdBySameIdCount}/${TATESUGI_COUNT} sec)<br>\nYou are disallowed to create a new thread for a while...  -> ${gb.id} (${createdBySameIdCount}/${TATESUGI_COUNT} sec)`);
-          }
-          // 新スレ立て規制
-          if (lineSubj[4] === gb.shikibetsuId) {
-            createdBySameShikibetsuIdCount++;
-            if (createdBySameShikibetsuIdCount > TATESUGI_COUNT * 2) return dispError(gb, `新このホスト/地域/端末では、しばらくスレッドが立てられません。->${gb.shikibetsuId} (${createdBySameShikibetsuIdCount}/${TATESUGI_COUNT} sec)<br>またの機会にどうぞ。。。<br>\nYour ISP, region, and device are disallowed to create a new thread for a while... -> ${gb.shikibetsuId} (${createdBySameIdCount}/${TATESUGI_COUNT} sec)`);
-          }
-        }
-
-        // 同名スレッドは作成禁止
-        if (lineSubj[1] === gb.form.subject && !gb.cap) return dispError(gb, "すでに同じタイトルのスレッドが存在しています。<br>\nYou must not create the same title thread.");
-      }
-
-      // 今書いたスレ
-      if (gb.form.key === lineSubj[0]) continue;
-
-      // レス数300以上のスレは表示しない
-      if (lineSubj[2] >= 300) continue;
-
-      // スレッドストッパーの掛かったスレは表示しない
-      if (lineSubj[5].includes("stop")) continue;
-
-      // 強制sageのスレは表示しない
-      if (parseInt(lineSubj[0]) + BBS_FORCE_SAGE < parseInt(gb.unixtime)) continue;
-
-      gb.subjectText += lineStr + "\n";
-    }
-  }
-  
   try {
-    // subject.txtが存在しないときは、競合チェックなしで作成
-    if (!gb.subjectEtag) {
-      await env.ch3www.put(filename, gb.subjectText);
-      return 1;
-    }
-
-    // 競合していたら、subjectを更新しない（sage扱い）
-    const result = await env.ch3www.put(filename, gb.subjectText, {
-        onlyIf: { etagMatches: gb.subjectEtag },
-    });
-
-    if (result?.uploaded) return 1;
+    // Board DOにスレッド一覧の更新を依頼
+    await boardStub.updateThread(threadData, gb.sage, parseInt(gb.boardSettings.BBS_MAX_MENU_THREAD || "700"));
+    return 1;
   } catch (e) {
-    return dispError(gb, `updateSubject error. スレ一覧を更新できませんでした。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateSubject->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
-  }
-
-  // スレ立て時、subject.txtを更新できなかったら、エラー（ここまで来ていたら、書き込めていない）
-  if (gb.number === 1) {
-    return dispError(gb, "板飛びそうなので、またの機会にどうぞ。。。");
+    return dispError(gb, `suretateTotalCheckAndUpdateSubject error. スレ一覧を更新できませんでした。(unixtime:${gb.time} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:suretateTotalCheckAndUpdateSubject->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
   }
 }
 
-// あんま問題なさそう、だが重い問題（特に専ブラ？）の解消が必要。subjectなど他r2系の書き込み処理も含めいろいろ積み重なってこうなってる可能性も
+// 
 async function updateThreadFile(gb, env) {
-  try {
-    // スレ立て時は、新しく作成（すでにあればエラー）
-    if (!gb.logEtag) {
-      let threadSettingsText = "";
+  const threadId = env.THREAD_DO.idFromName(gb.form.bbs + "/" + gb.form.key);
+  const threadStub = env.THREAD_DO.get(threadId);
 
+  try {
+    // スレ立て時
+    if (gb.number === 1) {
+      let threadSettingsText = "";
       Object.keys(gb.settings).forEach(function (key) {
         threadSettingsText += `${key}=${gb.settings[key]}<>`;
       });
-
-      gb.logData += `${threadSettingsText}\n${gb.number}<>${gb.form.FROM}<>${gb.shikibetsuId}<>${gb.time}<>${gb.id}<>${gb.form.MESSAGE}<>${gb.userInfo}\n`;
-
-      const result = await env.ch3www.put(gb.logFile, gb.logData, {
-        onlyIf: { doesNotExist: true },
-      });
-
-      if (!result?.uploaded) return dispError(gb, `updateThreadFile error. 板飛びそうなので、またの機会にどうぞ。。。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateThreadFile->Thread-LogFile_create_conflicted!)`);
-
-      return 1;
+      // スレ設定を書き込む
+      await threadStub.setSettings(threadSettingsText);
     }
 
-    // 最大リトライ数
-    const maxAttempts = 2;
+    // 新しいレスのデータを作成
+    const DATETIMEFORMAT = new Intl.DateTimeFormat('ja-JP', {year: "numeric", month: "2-digit", day: "2-digit", weekday:"short", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Tokyo"});
+    const date = DATETIMEFORMAT.format(new Date(parseInt(gb.unixtime) * 1000));
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      // 0:num<>1:name<>2:sikibetsuId<>3:time<>4:id<>5:MESSAGE<>6:HOST999
-      gb.logData += `${gb.number}<>${gb.form.FROM}<>${gb.shikibetsuId}<>${gb.time}<>${gb.id}<>${gb.form.MESSAGE}<>${gb.userInfo}\n`;
+    // <br>の前後にスペースを挿入。
+    gb.form.MESSAGE = gb.form.MESSAGE.replace("<br>", " <br> ");
 
-      // 取得したEtagと書き込み先のEtagが同じなら，書き込まれて終了
-      const result = await env.ch3www.put(gb.logFile, gb.logData, {
-        onlyIf: { etagMatches: gb.logEtag },
-      });
+    const datLine = `${gb.form.FROM}<><>${date} ${gb.id}<> ${gb.form.MESSAGE} <>${gb.number === 1 ? gb.subject : ''}`;
+    const logLine = `${gb.number}<>${gb.userInfo}`;
+    // Thread DOにレスの追加を依頼
+    await threadStub.addRes(datLine, logLine);
 
-      if (result?.uploaded) return 1;
-
-      // 競合していたら、0.1～0.3秒待ってからもう一度試みる
-      await new Promise(r => setTimeout(r, 100 + Math.random() * 200));
-      const object = await env.ch3www.get(gb.logFile);
-      // スレ立て時でないのにスレファイルがないのはおかしい
-      if (object === null) break;
-      gb.logData = await object.text();
-      gb.logEtag = object.etag;
-    }
+    return 1;
   } catch (e) {
-    return dispError(gb, `updateThreadFile error. ログファイルに書けませんでした。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateThreadFile->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
+    return dispError(gb, `updateThreadFile error. ログファイルに書けませんでした。(unixtime:${gb.time} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateThreadFile->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
   }
-
-  // ここまで来ていたら、書き込めていないのでエラーを出す
-  return dispError(gb, `updateThreadFile error. 板飛びそうなので、またの機会にどうぞ。。。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateThreadFile->Thread-LogFile_update_conflicted!)`);
 }
 
 // ？
