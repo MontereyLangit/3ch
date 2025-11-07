@@ -1,4 +1,6 @@
 import { sjis, respondPlainText, hexToBinary, sha1Base64, hash, md5, crypt, translateSaltChar,respond500 } from "./common.js";
+import { Headline } from "./durable_objects/headline.js";
+import { ArchiveList } from "./durable_objects/archive_list.js";
 
 /* デフォルト板設定 */
 //古いので要修正
@@ -159,11 +161,24 @@ export async function bbs_entry(request, env, ctx) {
     /* スレッドファイル更新 */
     if (!await updateThreadFile(gb, env)) return respondError(gb);
 
-    /* スレ立て時のthread/..../subject.txtへの追加＆thread/subject.txt更新 */
-    if (!await updateSubback(gb, env)) return respondError(gb);
+    // スレ立て時のみ実行
+    if (gb.number === 1) {
+        const keyPrefix = gb.form.key.slice(0, 4);
+
+        // 1. Board DOにキープレフィックスをインデックスとして追加
+        const boardId = env.BOARD_DO.idFromName(gb.form.bbs);
+        const boardStub = env.BOARD_DO.get(boardId);
+        ctx.waitUntil(boardStub.addArchivePrefix(keyPrefix));
+
+        // 2. ArchiveList DOにスレッド情報を追加
+        const archiveListId = env.ARCHIVE_LIST_DO.idFromName(`${gb.form.bbs}/${keyPrefix}`);
+        const archiveListStub = env.ARCHIVE_LIST_DO.get(archiveListId);
+        const threadLine = `${gb.form.key}<>${gb.form.subject}<>${gb.form.FROM}<>${gb.shikibetsuId}<>${gb.id}<>${gb.form.MESSAGE}`;
+        ctx.waitUntil(archiveListStub.add(threadLine));
+    }
 
     /* 全体headline更新 */
-    if (!await updateHeadline(gb, env)) return respondError(gb);
+    if (!await updateHeadline(gb, env, ctx)) return respondError(gb);
 
     /* メインルーチン終わり。 */
     /*
@@ -444,14 +459,14 @@ function SetPath(gb) {
 
 /* 板設定取得 */
 async function getBoardSettings(gb, request, env) {
-  const filename = `${gb.form.bbs}/SETTING.TXT`;
+  const filename = `setting:${gb.form.bbs}`;
   let settingTxt = settingTxtDefault;
 
   try {
-    const object = await env.ch3www.get(filename);
+    const text = await env.ch3kv.get(filename);
 
-    if (object !== null) {
-      settingTxt = await object.text();
+    if (text !== null) {
+      settingTxt = text;
     }
 
     settingTxt = settingTxt.replace(/<DIR_NAME>/g, gb.form.bbs);
@@ -605,10 +620,8 @@ async function checkDenyList(gb, env)
   // アクセス規制リストで判定
   // アクセス規制リストはR2じゃなくてKVでも良いのではないかと思ったりする。更新頻度低めかつ反映も遅くていいし、読み取りが早い方が良いので
   // というかSETTING.TXTやhead.txtもKVでよくね？
-  const object = await env.ch3www.get("deny.cgi");
-  if(object !== null)
-  {
-    const DENYLIST = await object.text();
+  const DENYLIST = await env.ch3kv.get("deny_list");
+  if(DENYLIST !== null)
     // 書式->板dir名正規表現<>規制対象正規表現<>NGワード正規表現<>規制内容(mark -> Marked, TateDame -> スレ立て禁止, それ以外・省略 -> 規制, md5 -> 規制(非公開))
     // アクセス規制 -> ^(livegalileo|livejupiter|liveuranus|news4?vip)$<>(^UID:nuoiyUX6m+irC5rvB4QUSycfHGc|IP:192\..+AS1234-JP,Shizuoka,Hamamatsu|AS1234-JP,Shizuoka,\S+\sDevice:2160,1440,1.5,24,0,Android,Nexus\s7)<>^[ゆ|う]めめ&#[a-zA-Z0-9]{5};?$<>
     // NGワード -> ^poverty$<><>(アフィサイトの宣伝です！|h?ttps?:\/\/afi-ks\.com)<>mark
@@ -875,118 +888,26 @@ async function updateThreadFile(gb, env) {
 }
 
 // ？
-async function updateSubback(gb, env) {
-  // スレ立てでない時は実行しない
-  if (gb.number > 1) return 1;
 
-  const subbackFIle = `${gb.logPath}subject.txt`;
-  const kakologFile = `${gb.path}thread/subject.txt`;
 
-  try {
-    const subbackObj = await env.ch3www.get(subbackFIle);
-    let subbackFileEtag = subbackObj ? subbackObj.etag : undefined;
-    let subbackText;
-
-    if (subbackObj !== null) {
-      const subbackArray = (await subbackObj.text()).split("\n");
-      subbackArray.shift(); // 先頭のLastModified行を取り除く
-      subbackText = subbackArray.join("\n");
-    } else {
-      subbackText = "";
-    }
-
-    // 0:key<>1:title<>2:名前<>3:sikibetsuId<>4:id<>5:>>1の本文
-    subbackText = `${gb.unixtime}\n${gb.form.key}<>${gb.form.subject}<>${gb.form.FROM}<>${gb.shikibetsuId}<>${gb.id}<>${gb.form.MESSAGE}\n${subbackText}`;
-
-    if (subbackObj === null) {
-      const kakologFileObj = await env.ch3www.get(kakologFile);
-      let kakologList = "";
-      let kakologFileEtag = undefined;
-
-      if (kakologFileObj) {
-        kakologFileEtag = kakologFileObj.etag;
-        const kakologArray = (await kakologFileObj.text()).split("\n");
-        kakologArray.shift(); // 先頭のLastModified行を取り除く
-        kakologList = kakologArray.join("\n");
-      }
-
-      kakologList = `${gb.unixtime}\n${gb.form.key.slice(0,4)}<>${gb.form.key}\n${kakologList}`;
-
-      let resultUpdateKakologFile;
-
-      if (kakologFileEtag) {
-        resultUpdateKakologFile = await env.ch3www.put(kakologFile, kakologList, {
-          onlyIf: { etagMatches: kakologFileEtag },
-        });
-      } else {
-        resultUpdateKakologFile = await env.ch3www.put(kakologFile, kakologList, {
-          onlyIf: { doesNotExist: true },
-        });
-      }
-
-      if (!resultUpdateKakologFile?.uploaded) return dispError(gb, `updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateSubback->kakologList_update_conflicted!)`);
-
-      const result = await env.ch3www.put(subbackFIle, subbackText, {
-        onlyIf: { doesNotExist: true },
-      });
-
-      if (!result?.uploaded) return dispError(gb, `updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateSubback->SubbackFIle_update_conflicted!)`);
-    } else {
-      const result = await env.ch3www.put(subbackFIle, subbackText, {
-        onlyIf: { etagMatches: subbackFileEtag },
-      });
-
-      if (!result?.uploaded) return dispError(gb, `updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateSubback->SubbackFIle_update_conflicted!)`);
-    }
-
-    return 1;
-  } catch (e) {
-    return dispError(gb, `updateSubback error. 不明なエラーが発生しました。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateSubback->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
-  }
-}
-
-async function updateHeadline(gb, env) {
-  const filename = `headline.txt`;
-
-  // sageならsubject.txtを更新しない
+async function updateHeadline(gb, env, ctx) {
+  // sageなら更新しない
   if (gb.sage) return 1;
 
-  try {
-    const object = await env.ch3www.get(filename);
-    let headlineEtag = object ? object.etag : undefined;
-    const msg = gb.form.MESSAGE.slice(0,30);
-    let headlineText = `${gb.unixtime}\n${gb.form.bbs}<>${gb.boardSettings.BBS_TITLE}<>${gb.unixtime}<>${gb.form.key}<>${msg}\n`;
+  const category = "default"; // 将来的には板設定などから取得
+  const headlineId = env.HEADLINE_DO.idFromName(category);
+  const headlineStub = env.HEADLINE_DO.get(headlineId);
 
-    if (object !== null) {
-      const headLineArray = (await object.text()).split("\n");
-      headLineArray.shift(); // 先頭のLastModified行を取り除く
-      
-      for (let i = 0; i < headLineArray.length; i++) {
-        // 300板まで表示
-        if (i >= 300) break;
+  const boardInfo = {
+      bbs: gb.form.bbs,
+      title: gb.boardSettings.BBS_TITLE,
+      time: gb.unixtime,
+      key: gb.form.key,
+      message: gb.form.MESSAGE.slice(0, 30)
+  };
 
-        // 0:dir_name<>1:板名<>2:最終更新時刻<>3:最終書き込みスレッド名<>4:最終書き込みレスの一部
-        const headLine = headLineArray[i].trim().split("<>");
-
-        // 0無し、0が^[a-zA-Z0-9\-_]+$でない、1無し、4まで<>がない -> 表示しない
-        if (!headLine[0] || !/^[a-zA-Z0-9\-_]+$/.test(headLine[0]) || !headLine[1] || headLine[4] == null) continue;
-
-        // 現在の板は載せない
-        if (headLine[0] === gb.form.bbs) continue;
-
-        headlineText += `${headLine[0]}<>${headLine[1]}<>${headLine[2]}<>${headLine[3]}<>${headLine[4]}\n`;
-      }
-    }
-
-    // 競合していたら書き込まない（sage扱い）
-    await env.ch3www.put(filename, headlineText, {
-      onlyIf: { etagMatches: headlineEtag },
-    });
-
-    return 1;
-  } catch (e) {
-    return dispError(gb, `updateHeadline error. 不明なエラーが発生しました。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:updateHeadline->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
-  }
+  ctx.waitUntil(headlineStub.update(boardInfo)); // DOのupdateメソッドを呼び出す
+  return 1;
 }
 
 function dispError(gb, errMsg) {

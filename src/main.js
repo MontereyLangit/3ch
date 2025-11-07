@@ -1,6 +1,8 @@
 import { respondPlainText, respond404, respond500 } from "./common.js";
 import { bbs_entry, settingTxtDefault } from "./bbs.cgi.js";
 import { Board } from "./durable_objects/board.js";
+import { Headline } from "./durable_objects/headline.js";
+import { ArchiveList } from "./durable_objects/archive_list.js";
 import { Thread } from "./durable_objects/thread.js";
 
 export default {
@@ -34,7 +36,8 @@ export default {
       let response = await cache.match(cacheKey);
       if (response) return response;
 
-      const filename = "headline.txt";
+      const category = "default";
+      let headLineText = "";
       let ifModifiedSinceHeader = "";
       let lastModified = new Date();
       let error = "";
@@ -52,15 +55,17 @@ export default {
 `;
 
       try {
-        const object = await env.ch3www.get(filename);
-        if(object !== null) {
-          const headLineText = await object.text();
+        const headlineId = env.HEADLINE_DO.idFromName(category);
+        const headlineStub = env.HEADLINE_DO.get(headlineId);
+        headLineText = await headlineStub.get(); // Headline DOから取得
+
+        if(headLineText) { // headLineTextが空でないことを確認
           const headLineArray = headLineText.split("\n");
 
           /* スレの配列に最低2個要素がないとおかしい */
-          if(headLineArray.length > 1) {
+          if(headLineArray.length > 0) { // 0件でも問題ないように修正
             /* 最終更新時刻を取得。ログの一行目に入っている。 */
-            lastModified = new Date(parseInt(headLineArray.shift()) * 1000);
+            lastModified = new Date(); // Headline DOはunixtimeを先頭行に持たないため、現在時刻をlastModifiedとする
             
             for(let i = 0; i < headLineArray.length; i++) {
               /* 0:dir_name<>1:板名<>2:最終更新時刻<>3:最終書き込みスレッド名<>4:最終書き込みレスの一部 */
@@ -114,33 +119,20 @@ export default {
       let response = await cache.match(cacheKey);
       if (response) return response;
 
-      const filename = "headline.txt";
+      const category = "default";
       let ifModifiedSinceHeader = "";
       let lastModified;
       let headLineTxt = "";
       let error = "";
 
       try {
-        const object = await env.ch3www.get(filename);
-        if(object !== null) {
-          const headLineText = await object.text();
-          const headLineArray = headLineText.split("\n");
+        const headlineId = env.HEADLINE_DO.idFromName(category);
+        const headlineStub = env.HEADLINE_DO.get(headlineId);
+        headLineTxt = await headlineStub.get(); // Headline DOから取得
 
-          /* スレの配列に最低2個要素がないとおかしい */
-          if(headLineArray.length > 1) {
-            /* 最終更新時刻を取得。ログの一行目に入っている。 */
-            lastModified = new Date(parseInt(headLineArray.shift()) * 1000);
-            
-            for(let i = 0; i < headLineArray.length; i++) {
-              /* 0:dir_name<>1:板名<>2:最終更新時刻<>3:最終書き込みスレッド名<>4:最終書き込みレスの一部 */
-              const headLine = headLineArray[i].trim().split("<>");
-
-              /* 0無し、0が^[a-zA-Z0-9\-_]+$でない、1無し、4まで<>がない -> 表示しない */
-              if(!headLine[0] || !/^[a-zA-Z0-9\-_]+$/.test(headLine[0]) || !headLine[1] || headLine[4] == null) continue;
-              
-              headLineTxt += `${headLine[0]}<>${headLine[1]}<>${headLine[2]}<>${headLine[3]}<>${headLine[4]}\n`;
-            }
-          }
+        if(headLineTxt) { // headLineTxtが空でないことを確認
+          // Headline DOはunixtimeを先頭行に持たないため、現在時刻をlastModifiedとする
+          lastModified = new Date();
         }else error = "404";
       }catch(e) {
         error = `headline.txt Error -> ${e}`;
@@ -284,39 +276,25 @@ export default {
 
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/kako\/([0-9]{4})\/subject\.txt/);
       const bbs = match[1];
-      const kako = match[2];
-      const filename = `${bbs}/thread/${kako}/subject.txt`;
+      const keyPrefix = match[2]; // kakoをkeyPrefixにリネーム
       let ifModifiedSinceHeader = "";
       let lastModified;
       let subject = "";
       let error = "";
 
       try {
-        const object = await env.ch3www.get(filename);
-        if(object !== null) {
-          const subjectText = await object.text();
-          const subjectArray = subjectText.split("\n");
+        const archiveListId = env.ARCHIVE_LIST_DO.idFromName(`${bbs}/${keyPrefix}`);
+        const archiveListStub = env.ARCHIVE_LIST_DO.get(archiveListId);
+        const subjectText = await archiveListStub.get(); // ArchiveList DOから取得
 
-          /* スレの配列に最低2個要素がないとおかしい */
-          if(subjectArray.length > 1) {
-            /* 最終更新時刻を取得。ログの一行目に入っている。 */
-            lastModified = new Date(subjectArray.shift() * 1000);
-            
-            for(let i = 0; i < subjectArray.length; i++) {
-              /* 0:key<>1:title<>2:名前<>3:sikibetsuId<>4:id<>5:>>1の本文 */
-              const thread = subjectArray[i].trim().split("<>");
-
-              /* key無し、keyが10桁の数字でない、5まで<>がない -> 表示しない */
-              if(!thread[0] || !/^[0-9]{10}$/.test(thread[0]) || thread[5] == null) continue;
-              
-              subject += `${thread[0]}<>${thread[1]}<>${thread[2]}<>${thread[3]}<>${thread[4]}<>${thread[5]}\n`;
-            }
-          }else {
-            lastModified = new Date();
-          }
-        }else error = "404";
+        if(subjectText) {
+          lastModified = new Date(); // 現在時刻をlastModifiedとする
+          subject = subjectText; // ArchiveList DOから取得したテキストをそのまま使用
+        } else {
+          error = "404";
+        }
       }catch(e) {
-        error = `/${bbs}/kako/${kako}/subject.txt Error -> ${e}`;
+        error = `/${bbs}/kako/${keyPrefix}/subject.txt Error -> ${e}`;
       }
 
       if(!error) {
@@ -347,37 +325,22 @@ export default {
 
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/kako\/subject\.txt/);
       const bbs = match[1];
-      const kako = match[2];
-      const filename = `${bbs}/thread/subject.txt`;
       let ifModifiedSinceHeader = "";
       let lastModified;
       let subject = "";
       let error = "";
 
       try {
-        const object = await env.ch3www.get(filename);
-        if(object !== null) {
-          const subjectText = await object.text();
-          const subjectArray = subjectText.split("\n");
+        const boardId = env.BOARD_DO.idFromName(bbs);
+        const boardStub = env.BOARD_DO.get(boardId);
+        const prefixList = await boardStub.getArchivePrefixes(); // Board DOから取得
 
-          /* スレの配列に最低2個要素がないとおかしい */
-          if(subjectArray.length > 1) {
-            /* 最終更新時刻を取得。ログの一行目に入っている。 */
-            lastModified = new Date(subjectArray.shift() * 1000);
-            
-            for(let i = 0; i < subjectArray.length; i++) {
-              /* 0:key上位4桁<>1:作成時unixtime */
-              const thread = subjectArray[i].trim().split("<>");
-
-              /* 0無し、0が4桁の数字でない、1無し、1が10桁の数字でない -> 表示しない */
-              if(!thread[0] || !/^[0-9]{4}$/.test(thread[0]) || !thread[1] || !/^[0-9]{10}$/.test(thread[1])) continue;
-              
-              subject += `${thread[0]}<>${thread[1]}\n`;
-            }
-          }else {
-            lastModified = new Date();
-          }
-        }else error = "404";
+        if(prefixList.length > 0) {
+          lastModified = new Date(); // 現在時刻をlastModifiedとする
+          subject = prefixList.map(prefix => `${prefix}<>0000000000`).join("\n"); // ダミーunixtimeを付加
+        }else {
+          lastModified = new Date();
+        }
       }catch(e) {
         error = `/${bbs}/kako/subject.txt Error -> ${e}`;
       }
@@ -404,15 +367,15 @@ export default {
     if(/^\/[a-zA-Z0-9\-_]+\/head\.txt/.test(url.pathname)) {
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/head\.txt/);
       const bbs = match[1];
-      const filename = `${bbs}/head.txt`;
+      const filename = `head:${bbs}`; // KVキーに変更
       const ENCODING = "Shift_JIS";
       let headTxt = "";
       let error = "";
 
       try {
-        const object = await env.ch3www.get(filename);
-        if(object !== null) {
-          headTxt = await object.text();
+        const text = await env.ch3kv.get(filename); // KVから直接テキスト取得
+        if(text !== null) {
+          headTxt = text;
         }
       }catch(e) {
         error = `/${bbs}/head.txt Error -> ${e}`;
@@ -427,15 +390,15 @@ export default {
     if(/^\/[a-zA-Z0-9\-_]+\/SETTING\.TXT/.test(url.pathname)) {
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/SETTING\.TXT/);
       const bbs = match[1];
-      const filename = `${bbs}/SETTING.TXT`;
+      const filename = `setting:${bbs}`; // KVキーに変更
       const ENCODING = "Shift_JIS";
       let settingTxt = settingTxtDefault;
       let error = "";
 
       try {
-        const object = await env.ch3www.get(filename);
-        if(object !== null) {
-          settingTxt = await object.text();
+        const text = await env.ch3kv.get(filename); // KVから直接テキスト取得
+        if(text !== null) {
+          settingTxt = text;
         }
         
         settingTxt = settingTxt.replace(/<DIR_NAME>/g, bbs); 
@@ -453,16 +416,16 @@ export default {
     if (/^\/[a-zA-Z0-9\-_]+\/(index\.html)?$/.test(url.pathname)) {
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/(index\.html)?$/);
       const bbs = match[1];
-      const filename = `${bbs}/SETTING.TXT`;
+      const filename = `setting:${bbs}`; // KVキーに変更
       const ENCODING = "Shift_JIS";
       let settingTxt = settingTxtDefault;
       let error = "";
       let bbsTitle = bbs + "＠3ch掲示板";
 
       try {
-        const object = await env.ch3www.get(filename);
-        if(object !== null) {
-          settingTxt = await object.text();
+        const text = await env.ch3kv.get(filename); // KVから直接テキスト取得
+        if(text !== null) {
+          settingTxt = text;
         }
         
         settingTxt = settingTxt.replace(/<DIR_NAME>/g, bbs);
@@ -598,5 +561,4 @@ display:inline-block;
   },
 }
 
-export { Board };
-export { Thread };
+

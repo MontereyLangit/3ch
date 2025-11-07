@@ -18,13 +18,20 @@
       "binding": "CAP",
       "id": "dd7dbe03955d4c7da8797c8148739227",
       "preview_id": "1a79d9a2fb91478c8db13e62495b69ba"
+    },
+    {
+      "binding": "ch3kv",
+      "id": "(please assign a new id for ch3kv)",
+      "preview_id": "(please assign a new preview_id for ch3kv)"
     }
   ],
   // Durable Object bindings.
   "durable_objects": {
     "bindings": [
       { "name": "THREAD_DO", "class_name": "Thread" },
-      { "name": "BOARD_DO", "class_name": "Board" }
+      { "name": "BOARD_DO", "class_name": "Board" },
+      { "name": "HEADLINE_DO", "class_name": "Headline" },
+      { "name": "ARCHIVE_LIST_DO", "class_name": "ArchiveList" }
     ]
   },
   // R2 Bucket bindings.
@@ -39,7 +46,9 @@
       "tag": "v1",
       "new_classes": [
         "Thread",
-        "Board"
+        "Board",
+        "Headline",
+        "ArchiveList"
       ]
     }
   ],
