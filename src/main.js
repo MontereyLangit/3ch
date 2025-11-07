@@ -77,8 +77,7 @@ export default {
         error = `/bbsmenu.html Error -> ${e}`;
       }
 
-      html += `<A HREF=https://delightly.3chbbs.com/operate3/>運用情報@3ch掲示板</A>
-
+      html += `
 <BR><BR><B>他のサイト</B><BR>
 <A HREF=https://bbs.2ch2.net/kisikenn/>3ch避難所@bbs.2ch2.net</A><br>
 
