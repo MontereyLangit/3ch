@@ -519,7 +519,7 @@ async function getThreadDataAndThreadSettings(gb, request, env) {
       threadStub.getSettings(),
     ]);
 
-    if (!dat) return dispError(gb, "該当するスレッドがありません。" + gb.logFile);
+    if (!dat) return dispError(gb, "該当するスレッドがありません。" + gb.form.bbs + "/" + gb.form.key);
 
     // 元の.cgi形式（datとlogが結合された形式）をメモリ上で再構築する
     // これにより、後続の処理が古いデータ形式を前提としていても動作する

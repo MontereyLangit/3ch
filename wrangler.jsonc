@@ -10,19 +10,14 @@
   // KV Namespace bindings.
   "kv_namespaces": [
     {
-      "binding": "TEST",
-      "id": "0b7e34627ddf4b6abd225faca9f10526",
-      "preview_id": "dc6cdf4c9f594bb09f7c0e956a20e469"
-    },
-    {
       "binding": "CAP",
       "id": "dd7dbe03955d4c7da8797c8148739227",
       "preview_id": "1a79d9a2fb91478c8db13e62495b69ba"
     },
     {
       "binding": "ch3kv",
-      "id": "(please assign a new id for ch3kv)",
-      "preview_id": "(please assign a new preview_id for ch3kv)"
+      "id": "0b7e34627ddf4b6abd225faca9f10526",
+      "preview_id": "dc6cdf4c9f594bb09f7c0e956a20e469"
     }
   ],
   // Durable Object bindings.

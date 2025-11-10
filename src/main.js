@@ -561,4 +561,8 @@ display:inline-block;
   },
 }
 
-
+// Durable Object 読み込み用のexport
+export { Board };
+export { Thread };
+export { Headline };
+export { ArchiveList };

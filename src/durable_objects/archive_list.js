@@ -1,4 +1,6 @@
-export class ArchiveList {
+import { DurableObject } from "cloudflare:workers";
+
+export class ArchiveList extends DurableObject {
     constructor(state, env) {
         this.state = state;
         this.env = env;

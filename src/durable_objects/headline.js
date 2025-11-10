@@ -1,4 +1,6 @@
-export class Headline {
+import { DurableObject } from "cloudflare:workers";
+
+export class Headline extends DurableObject {
     constructor(state, env) {
         this.state = state;
         this.env = env;
