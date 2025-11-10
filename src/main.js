@@ -59,7 +59,7 @@ export default {
         const headlineStub = env.HEADLINE_DO.get(headlineId);
         headLineText = await headlineStub.get(); // Headline DOから取得
 
-        if(headLineText) { // headLineTextが空でないことを確認
+        if(headLineText) {
           const headLineArray = headLineText.split("\n");
 
           /* スレの配列に最低2個要素がないとおかしい */
@@ -130,7 +130,7 @@ export default {
         const headlineStub = env.HEADLINE_DO.get(headlineId);
         headLineTxt = await headlineStub.get(); // Headline DOから取得
 
-        if(headLineTxt) { // headLineTxtが空でないことを確認
+        if(headLineTxt) {
           // Headline DOはunixtimeを先頭行に持たないため、現在時刻をlastModifiedとする
           lastModified = new Date();
         }else error = "404";
@@ -337,7 +337,7 @@ export default {
 
         if(prefixList.length > 0) {
           lastModified = new Date(); // 現在時刻をlastModifiedとする
-          subject = prefixList.map(prefix => `${prefix}<>0000000000`).join("\n"); // ダミーunixtimeを付加
+          subject = prefixList.join("\n");
         }else {
           lastModified = new Date();
         }
@@ -367,7 +367,7 @@ export default {
     if(/^\/[a-zA-Z0-9\-_]+\/head\.txt/.test(url.pathname)) {
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/head\.txt/);
       const bbs = match[1];
-      const filename = `head:${bbs}`; // KVキーに変更
+      const filename = `head:${bbs}`;
       const ENCODING = "Shift_JIS";
       let headTxt = "";
       let error = "";
@@ -390,7 +390,7 @@ export default {
     if(/^\/[a-zA-Z0-9\-_]+\/SETTING\.TXT/.test(url.pathname)) {
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/SETTING\.TXT/);
       const bbs = match[1];
-      const filename = `setting:${bbs}`; // KVキーに変更
+      const filename = `setting:${bbs}`;
       const ENCODING = "Shift_JIS";
       let settingTxt = settingTxtDefault;
       let error = "";
@@ -416,7 +416,7 @@ export default {
     if (/^\/[a-zA-Z0-9\-_]+\/(index\.html)?$/.test(url.pathname)) {
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/(index\.html)?$/);
       const bbs = match[1];
-      const filename = `setting:${bbs}`; // KVキーに変更
+      const filename = `setting:${bbs}`;
       const ENCODING = "Shift_JIS";
       let settingTxt = settingTxtDefault;
       let error = "";

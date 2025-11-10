@@ -2,7 +2,6 @@ export class ArchiveList {
     constructor(state, env) {
         this.state = state;
         this.env = env;
-        this.threads = undefined; // 遅延読み込みのためundefinedで初期化
     }
 
     async get() {
@@ -21,7 +20,6 @@ export class ArchiveList {
         // 先頭に追加
         this.threads.unshift(threadLine);
         
-        // ストレージに永続化
         await this.state.storage.put("threads", this.threads);
     }
 }

@@ -621,7 +621,7 @@ async function checkDenyList(gb, env)
   // アクセス規制リストはR2じゃなくてKVでも良いのではないかと思ったりする。更新頻度低めかつ反映も遅くていいし、読み取りが早い方が良いので
   // というかSETTING.TXTやhead.txtもKVでよくね？
   const DENYLIST = await env.ch3kv.get("deny_list");
-  if(DENYLIST !== null)
+  if(DENYLIST !== null) {
     // 書式->板dir名正規表現<>規制対象正規表現<>NGワード正規表現<>規制内容(mark -> Marked, TateDame -> スレ立て禁止, それ以外・省略 -> 規制, md5 -> 規制(非公開))
     // アクセス規制 -> ^(livegalileo|livejupiter|liveuranus|news4?vip)$<>(^UID:nuoiyUX6m+irC5rvB4QUSycfHGc|IP:192\..+AS1234-JP,Shizuoka,Hamamatsu|AS1234-JP,Shizuoka,\S+\sDevice:2160,1440,1.5,24,0,Android,Nexus\s7)<>^[ゆ|う]めめ&#[a-zA-Z0-9]{5};?$<>
     // NGワード -> ^poverty$<><>(アフィサイトの宣伝です！|h?ttps?:\/\/afi-ks\.com)<>mark
@@ -644,7 +644,7 @@ async function checkDenyList(gb, env)
         const KISEI = new RegExp(MATCH[2] || ".+");
         const NGWORD = new RegExp(MATCH[3] || ".+");
         const EXEC = MATCH[4];
-        const NGTARGET = `FROM=${gb.form.FROM} mail=${gb.form.mail} MESSAGE=${gb.form.MESSAGE} subjeect={gb.form.subject}`;
+        const NGTARGET = `FROM=${gb.form.FROM} mail=${gb.form.mail} MESSAGE=${gb.form.MESSAGE} subject=${gb.form.subject}`;
         
         if(BBS.test(gb.form.bbs) && KISEI.test(gb.userInfo) && NGWORD.test(NGTARGET))
         {
@@ -887,7 +887,7 @@ async function updateThreadFile(gb, env) {
   }
 }
 
-// ？
+
 
 
 async function updateHeadline(gb, env, ctx) {
