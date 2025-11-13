@@ -1,37 +1,63 @@
 import { DurableObject } from "cloudflare:workers";
 
+/**
+ * ヘッドラインDurable Objectクラス
+ */
 export class Headline extends DurableObject {
     constructor(state, env) {
+        super(state, env);
         this.state = state;
         this.env = env;
     }
 
+    /**
+     * ヘッドラインを取得します。
+     * @return {string} ヘッドライン生テキスト
+     */
     async get() {
-        if (this.bbsMenu === undefined) {
-            const data = await this.state.storage.get("bbsMenu");
-            this.bbsMenu = data ? data.split("\n") : [];
+        let data = await this.state.storage.get("bbsMenu");
+
+        if (!data) {
+            const R2_HEADLINE_FILENAME = "headline.txt";
+
+            try {
+                const object = await this.env.ch3www.get(R2_HEADLINE_FILENAME);
+                if (object !== null) {
+                    const fullText = await object.text();
+                    const lines = fullText.split("\n");
+
+                    if (lines.length > 1) {
+                        lines.shift(); // 1行目はタイムスタンプ
+                        data = lines.join("\n");
+                        await this.state.storage.put("bbsMenu", data);
+                    }
+                }
+            } catch (e) {
+                // エラーが発生した場合、dataはnullのままにする
+            }
         }
-        // headline.txt形式の文字列に変換して返す
-        return this.bbsMenu.join("\n");
+
+        // 最終的に取得したデータ、または空文字列を返す
+        return data || '';
     }
 
+    /**
+     * ヘッドラインを更新します。
+     * @param {object} boardInfo 板情報(bbs, title, time, key, message)
+     */
     async update(boardInfo) {
-        // データを変更する前に、まず現在の状態を確実にメモリにロードする
-        await this.get(); // get()を呼ぶことでbbsMenuがロードされる
+        let currentBbsMenuText = await this.state.storage.get("bbsMenu");
+        let lines = currentBbsMenuText ? currentBbsMenuText.split("\n") : [];
 
         // 同じ板のエントリを削除
-        this.bbsMenu = this.bbsMenu.filter(line => line.split('<>')[0] !== boardInfo.bbs);
-        
-        // boardInfoオブジェクトを<>区切りの文字列に変換
+        lines = lines.filter(line => line.split('<>')[0] !== boardInfo.bbs);
         const boardInfoString = `${boardInfo.bbs}<>${boardInfo.title}<>${boardInfo.time}<>${boardInfo.key}<>${boardInfo.message}`;
-        
-        // 先頭に追加
-        this.bbsMenu.unshift(boardInfoString);
-        // 20件に切り詰める
-        if (this.bbsMenu.length > 20) {
-            this.bbsMenu.length = 20;
+        lines.unshift(boardInfoString);
+
+        if (lines.length > 20) {
+            lines.length = 20;
         }
-        // ストレージに永続化
-        await this.state.storage.put("bbsMenu", this.bbsMenu.join("\n"));
+
+        await this.state.storage.put("bbsMenu", lines.join("\n"));
     }
 }

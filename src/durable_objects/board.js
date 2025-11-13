@@ -25,8 +25,25 @@ export class Board extends DurableObject {
   /**
    * subject.txt形式の文字列を返します。
    */
-  async getSubject() {
-    return (await this.state.storage.get('subjectList')) || '';
+  async getSubject(bbs = '', pastlog = '0') {
+    let subjectList = await this.state.storage.get('subjectList');
+
+    // DOにデータがなく、bbsとpastlog引数があって、かつpastlog<1764の場合にのみR2から取得
+    if (!subjectList && bbs && pastlog && parseInt(pastlog) > 0 && parseInt(pastlog) < 1764) {
+        const filename = `${bbs}/thread/${pastlog}/subject.txt`;
+        try {
+            const object = await this.env.ch3www.get(filename);
+            if (object !== null) {
+                subjectList = await object.text();
+                // 取得したデータをDOに書き込む
+                await this.state.storage.put('subjectList', subjectList);
+            }
+        } catch (e) {
+            // エラーが発生した場合、subjectListはnullのままにする
+        }
+    }
+
+    return subjectList || '';
   }
 
   /**
