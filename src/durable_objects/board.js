@@ -24,18 +24,17 @@ export class Board extends DurableObject {
 
   /**
    * subject.txt形式の文字列を返します。
+   * @return {Promise<string>} subject.txt形式の文字列
    */
   async getSubject(bbs = '', pastlog = '0') {
     let subjectList = await this.state.storage.get('subjectList');
 
-    // DOにデータがなく、bbsとpastlog引数があって、かつpastlog<1764の場合にのみR2から取得
     if (!subjectList && bbs && pastlog && parseInt(pastlog) > 0 && parseInt(pastlog) < 1764) {
         const filename = `${bbs}/thread/${pastlog}/subject.txt`;
         try {
             const object = await this.env.ch3www.get(filename);
             if (object !== null) {
                 subjectList = await object.text();
-                // 取得したデータをDOに書き込む
                 await this.state.storage.put('subjectList', subjectList);
             }
         } catch (e) {
@@ -53,13 +52,11 @@ export class Board extends DurableObject {
    * @param {number} maxThreads - 板の最大スレッド数
    */
   async updateThread(threadData, isSage, maxThreads) {
-    // 最大スレッド数のデフォルト値を適用
     maxThreads = maxThreads ?? 700;
 
     const subjectList = await this.getSubject();
     let lines = subjectList.length > 0 ? subjectList.split('\n') : [];
 
-    // 最後の空行を除外
     if (lines.length > 0 && lines[lines.length - 1] === '') {
       lines.pop();
     }
@@ -69,26 +66,21 @@ export class Board extends DurableObject {
     let newThreadLine;
 
     if (threadIndex !== -1) {
-      // 既存スレッドの更新
       const existingLine = lines[threadIndex];
       // titleがnullの場合は既存の行からタイトルを抽出して使用する
       const title = threadData.title ?? existingLine.substring(existingLine.indexOf('<>') + 2, existingLine.lastIndexOf(' ('));
       newThreadLine = `${threadKey}.dat<>${title} (${threadData.resNum})`;
       if (isSage) {
-        // sage: レス数のみ更新
         lines[threadIndex] = newThreadLine;
       } else {
-        // age: 一覧の先頭に移動
         lines.splice(threadIndex, 1);
         lines.unshift(newThreadLine);
       }
     } else {
-      // 新規スレッド作成: 先頭に追加
       newThreadLine = `${threadKey}.dat<>${threadData.title} (${threadData.resNum})`;
       lines.unshift(newThreadLine);
     }
 
-    // 最大スレッド数を超えた分を削除
     if (lines.length > maxThreads) {
       lines = lines.slice(0, maxThreads);
     }
@@ -97,7 +89,7 @@ export class Board extends DurableObject {
     const encoder = new TextEncoder();
     let encodedList = encoder.encode(newSubjectList);
 
-    const MAX_SUBJECT_LIST_BYTES = 512 * 1024; // 512KB
+    const MAX_SUBJECT_LIST_BYTES = 512 * 1024;
 
     // subjectListが512KBを超えた場合、末尾から行を削除
     while (encodedList.byteLength > MAX_SUBJECT_LIST_BYTES && lines.length > 0) {

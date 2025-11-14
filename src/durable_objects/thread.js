@@ -17,6 +17,9 @@ export class Thread extends DurableObject {
 
   /**
    * dat形式の全スレッドデータを文字列として返します。
+   * @param {string} bbs 対象板
+   * @param {string} key 対象スレッドキー
+   * @return {Promise<string>} dat形式の全スレッドデータ
    */
   async getDat(bbs = '', key = '0') {
     let dat = await this.state.storage.get('dat');
@@ -111,13 +114,15 @@ export class Thread extends DurableObject {
 
   /**
    * log形式の全投稿者ログを文字列として返します。
+   * @return {Promise<string>} ログ文字列
    */
   async getLog() {
     return (await this.state.storage.get('log')) || '';
   }
 
   /**
-   * スレ設定文字列を返します。
+   * スレ設定文字列を取得します。
+   * @return {Promise<string>} スレ設定文字列
    */
   async getSettings() {
     return (await this.state.storage.get('settings')) || '';
@@ -143,8 +148,8 @@ export class Thread extends DurableObject {
   }
 
   /**
-   * 指定されたレス番号をあぼーん化します。
-   * @param {number} resNum - あぼーん化するレス番号 (1-based)
+   * 指定されたレス番号を削除（あぼーん化）します。
+   * @param {number} resNum - 削除するレス番号 (1-based)
    */
   async deleteRes(resNum) {
     const dat = await this.getDat();
@@ -156,7 +161,7 @@ export class Thread extends DurableObject {
   }
 
   /**
-   * datを上書きします。
+   * datを設定します。
    * @param {string} dat - 上書き内容
    */
   async setDat(dat) {

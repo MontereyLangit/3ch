@@ -1,6 +1,4 @@
-import { sjis, respondPlainText, hexToBinary, sha1Base64, hash, md5, crypt, translateSaltChar,respond500 } from "./common.js";
-import { Headline } from "./durable_objects/headline.js";
-import { ArchiveList } from "./durable_objects/archive_list.js";
+import { sjis, respondPlainText, hexToBinary, sha1Base64, hash, md5, crypt } from "./common.js";
 
 /* デフォルト板設定 */
 //古いので要修正
@@ -161,7 +159,7 @@ export async function bbs_entry(request, env, ctx) {
     /* スレッドファイル更新 */
     if (!await updateThreadFile(gb, env)) return respondError(gb);
 
-    // スレ立て時のみ実行
+    /* 過去ログ倉庫更新 */
     if (gb.number === 1) {
         const keyPrefix = gb.form.key.slice(0, 4);
 
@@ -513,7 +511,7 @@ async function getThreadDataAndThreadSettings(gb, request, env) {
     }
 
     // スレッドデータ取得
-    // dat, log, settingsを並行で取得
+    // dat, settingsを並行で取得
     const [dat, settingsText] = await Promise.all([
       threadStub.getDat(),
       threadStub.getSettings(),
@@ -521,8 +519,6 @@ async function getThreadDataAndThreadSettings(gb, request, env) {
 
     if (!dat) return dispError(gb, "該当するスレッドがありません。" + gb.form.bbs + "/" + gb.form.key);
 
-    // 元の.cgi形式（datとlogが結合された形式）をメモリ上で再構築する
-    // これにより、後続の処理が古いデータ形式を前提としていても動作する
     const datLines = dat.split('\n');
 
     // datの1行目(1レス目)の末尾からスレッドタイトルを取得
@@ -547,7 +543,7 @@ async function getThreadDataAndThreadSettings(gb, request, env) {
     // 1000超え時の処理
     if (gb.number >= 1000) return dispError(gb, "このスレッドは1000を超えたのでもう書けません。");
 
-    // 停止
+    // 板・スレ停止
     if (gb.settings.BBS_HEISA === "checked") return dispError(gb, "この板・スレッドは停止されています。");
 
     return 1;
@@ -805,21 +801,6 @@ async function getMd5IdString(tane, group, date, salt) {
   return sha1Base64Id.slice(0,8);
 }
 
-async function getSubject(gb, env) {
-  const boardId = env.BOARD_DO.idFromName(gb.form.bbs);
-  const boardStub = env.BOARD_DO.get(boardId);
-
-  try {
-    // Board DOからsubject.txtの内容を取得
-    gb.subjectText = await boardStub.getSubject();
-    gb.subjectEtag = "dummy-etag"; // EtagチェックはDO側で行うため、ここではダミーを設定
-
-    return 1;
-  } catch (e) {
-    return dispError(gb, `getSubject error. 不明なエラーが発生しました。(unixtime:${gb.nowTime} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:getSubject->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
-  }
-}
-
 /* 
  * 各種スレ立て規制 と subjectText更新 
  * gb.subjectText を利用する
@@ -853,7 +834,12 @@ async function suretateTotalCheckAndUpdateSubject(gb, env) {
   }
 }
 
-// 
+/**
+ * スレッドファイルを更新します。
+ * @param {*} gb 
+ * @param {*} env 環境変数
+ * @returns {Promise<1 | 0>} 成功=1 | エラー=0
+ */
 async function updateThreadFile(gb, env) {
   const threadId = env.THREAD_DO.idFromName(gb.form.bbs + "/" + gb.form.key);
   const threadStub = env.THREAD_DO.get(threadId);
@@ -869,16 +855,13 @@ async function updateThreadFile(gb, env) {
       await threadStub.setSettings(threadSettingsText);
     }
 
-    // 新しいレスのデータを作成
     const DATETIMEFORMAT = new Intl.DateTimeFormat('ja-JP', {year: "numeric", month: "2-digit", day: "2-digit", weekday:"short", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Tokyo"});
     const date = DATETIMEFORMAT.format(new Date(parseInt(gb.unixtime) * 1000));
 
-    // <br>の前後にスペースを挿入。
     gb.form.MESSAGE = gb.form.MESSAGE.replace("<br>", " <br> ");
 
     const datLine = `${gb.form.FROM}<><>${date} ${gb.id}<> ${gb.form.MESSAGE} <>${gb.number === 1 ? gb.subject : ''}`;
     const logLine = `${gb.number}<>${gb.userInfo}`;
-    // Thread DOにレスの追加を依頼
     await threadStub.addRes(datLine, logLine);
 
     return 1;
@@ -887,9 +870,13 @@ async function updateThreadFile(gb, env) {
   }
 }
 
-
-
-
+/**
+ * ヘッドラインを更新します。
+ * @param {*} gb 
+ * @param {*} env 環境変数
+ * @param {*} ctx context
+ * @returns {Promise<1 | 0>} 成功=1 | エラー=0
+ */
 async function updateHeadline(gb, env, ctx) {
   // sageなら更新しない
   if (gb.sage) return 1;
@@ -910,6 +897,12 @@ async function updateHeadline(gb, env, ctx) {
   return 1;
 }
 
+/**
+ * gb.errorにエラーメッセージを格納し、0を返します。
+ * @param {*} gb 
+ * @param {string} errMsg エラーメッセージ
+ * @returns {0} 0
+ */
 function dispError(gb, errMsg) {
   gb.error = errMsg;
   return 0;

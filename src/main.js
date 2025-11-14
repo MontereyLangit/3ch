@@ -8,9 +8,6 @@ import { Thread } from "./durable_objects/thread.js";
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const version = "<a href=\"https://www.3chbbs.com/\">３ちゃんねる</a>(<a href=\"https://wiki.3chbbs.com/index.php/Project_edge\">edge</a>) "
-+ "Ver.0.1.1 2025/07/05"
-+ "(<a href=\"https://workers.cloudflare.com/\">Cloudflare Workers</a>)";
     
     /* bbs.cgi (subbbs.cgiも) */
     if(/^\/test\/(sub)?bbs.cgi/.test(url.pathname)) {
@@ -170,7 +167,6 @@ export default {
       let error = "";
 
       try {
-        // Durable Objectからスレッドデータを取得
         const threadId = env.THREAD_DO.idFromName(bbs + "/" + key);
         const threadStub = env.THREAD_DO.get(threadId);
         dat = await threadStub.getDat(bbs, key);
@@ -276,7 +272,7 @@ export default {
 
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/kako\/([0-9]{4})\/subject\.txt/);
       const bbs = match[1];
-      const keyPrefix = match[2]; // kakoをkeyPrefixにリネーム
+      const keyPrefix = match[2];
       let ifModifiedSinceHeader = "";
       let lastModified;
       let subject = "";
@@ -285,11 +281,11 @@ export default {
       try {
         const archiveListId = env.ARCHIVE_LIST_DO.idFromName(`${bbs}/${keyPrefix}`);
         const archiveListStub = env.ARCHIVE_LIST_DO.get(archiveListId);
-        const subjectText = await archiveListStub.get(); // ArchiveList DOから取得
+        const subjectText = await archiveListStub.get();
 
         if(subjectText) {
-          lastModified = new Date(); // 現在時刻をlastModifiedとする
-          subject = subjectText; // ArchiveList DOから取得したテキストをそのまま使用
+          lastModified = new Date();
+          subject = subjectText;
         } else {
           error = "404";
         }
@@ -333,10 +329,10 @@ export default {
       try {
         const boardId = env.BOARD_DO.idFromName(bbs);
         const boardStub = env.BOARD_DO.get(boardId);
-        const prefixList = await boardStub.getArchivePrefixes(); // Board DOから取得
+        const prefixList = await boardStub.getArchivePrefixes();
 
         if(prefixList.length > 0) {
-          lastModified = new Date(); // 現在時刻をlastModifiedとする
+          lastModified = new Date();
           subject = prefixList.join("\n");
         }else {
           lastModified = new Date();
@@ -373,7 +369,7 @@ export default {
       let error = "";
 
       try {
-        const text = await env.ch3kv.get(filename); // KVから直接テキスト取得
+        const text = await env.ch3kv.get(filename);
         if(text !== null) {
           headTxt = text;
         }
@@ -396,11 +392,11 @@ export default {
       let error = "";
 
       try {
-        const text = await env.ch3kv.get(filename); // KVから直接テキスト取得
+        const text = await env.ch3kv.get(filename);
         if(text !== null) {
           settingTxt = text;
         }
-        
+
         settingTxt = settingTxt.replace(/<DIR_NAME>/g, bbs); 
       }catch(e) {
         error = `/${bbs}/SETTING.TXT Error -> ${e}`;
@@ -423,11 +419,11 @@ export default {
       let bbsTitle = bbs + "＠3ch掲示板";
 
       try {
-        const text = await env.ch3kv.get(filename); // KVから直接テキスト取得
+        const text = await env.ch3kv.get(filename);
         if(text !== null) {
           settingTxt = text;
         }
-        
+
         settingTxt = settingTxt.replace(/<DIR_NAME>/g, bbs);
 
         const settingsArray = settingTxt.trim().split("\n");

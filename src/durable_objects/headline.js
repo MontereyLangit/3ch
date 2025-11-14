@@ -12,7 +12,7 @@ export class Headline extends DurableObject {
 
     /**
      * ヘッドラインを取得します。
-     * @return {string} ヘッドライン生テキスト
+     * @return {Promise<string>} ヘッドライン生テキスト
      */
     async get() {
         let data = await this.state.storage.get("bbsMenu");
@@ -37,7 +37,6 @@ export class Headline extends DurableObject {
             }
         }
 
-        // 最終的に取得したデータ、または空文字列を返す
         return data || '';
     }
 
@@ -49,7 +48,6 @@ export class Headline extends DurableObject {
         let currentBbsMenuText = await this.state.storage.get("bbsMenu");
         let lines = currentBbsMenuText ? currentBbsMenuText.split("\n") : [];
 
-        // 同じ板のエントリを削除
         lines = lines.filter(line => line.split('<>')[0] !== boardInfo.bbs);
         const boardInfoString = `${boardInfo.bbs}<>${boardInfo.title}<>${boardInfo.time}<>${boardInfo.key}<>${boardInfo.message}`;
         lines.unshift(boardInfoString);
