@@ -149,8 +149,9 @@ export class Thread extends DurableObject {
   async deleteRes(resNum) {
     const dat = await this.getDat();
     const lines = dat.split('\n');
-    if (resNum > 0 && resNum < lines.length) { // 最後の空行を考慮
-      lines[resNum] = 'あぼーん<>あぼーん<>あぼーん<>あぼーん<>あぼーん';
+    if (resNum > 0 && resNum < lines.length) {
+      const lineNum = resNum - 1; // 配列なので先頭ズレるはず
+      lines[lineNum] = 'あぼーん<>あぼーん<>あぼーん<>あぼーん<>あぼーん';
       await this.state.storage.put('dat', lines.join('\n'));
     }
   }
