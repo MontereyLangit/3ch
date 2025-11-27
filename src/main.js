@@ -9,7 +9,21 @@ export default {
     const version = "<a href=\"https://www.3chbbs.com/\">３ちゃんねる</a>(<a href=\"https://wiki.3chbbs.com/index.php/Project_edge\">edge</a>) "
 + "Ver.0.1.1 2025/07/05"
 + "(<a href=\"https://workers.cloudflare.com/\">Cloudflare Workers</a>)";
-    
+
+    /** 保守対応用管理操作 */
+    if (url.pathname === "/admin/operate/25") {
+      /** 2025/11/27(木) 23:19:43 削除依頼による対応
+       * https://www.3chbbs.com/test/read.cgi/saku/1754563630/
+       * livegalileo/1764237269/1 が削除されること
+       */
+      const threadId = env.THREAD_DO.idFromName("livegalileo/1764237269");
+      const threadStub = env.THREAD_DO.get(threadId);
+      await threadStub.deleteRes(1);
+
+
+      return respondPlainText("compleated.", "plain", "UTF-8");
+    }
+
     /* bbs.cgi (subbbs.cgiも) */
     if(/^\/test\/(sub)?bbs.cgi/.test(url.pathname)) {
       return await bbs_entry(request, env, ctx);
