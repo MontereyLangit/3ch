@@ -11,7 +11,7 @@ export default {
 + "(<a href=\"https://workers.cloudflare.com/\">Cloudflare Workers</a>)";
 
     /** 保守対応用管理操作 */
-    if (url.pathname === "/admin/operate/25") {
+    if (url.pathname === "/test/sakubbs.cgi/25") {
       /** 2025/11/27(木) 23:19:43 削除依頼による対応
        * https://www.3chbbs.com/test/read.cgi/saku/1754563630/
        * livegalileo/1764237269/1 が削除されること
