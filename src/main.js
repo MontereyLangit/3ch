@@ -21,7 +21,7 @@ export default {
       await threadStub.deleteRes(1);
 
 
-      return respondPlainText("compleated.", "plain", "UTF-8");
+      return respondPlainText("sakubbs.cgi v25", "plain", "UTF-8");
     }
 
     /* bbs.cgi (subbbs.cgiも) */
