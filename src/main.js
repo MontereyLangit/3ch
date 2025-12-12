@@ -14,11 +14,7 @@ export default {
     if (url.pathname === "/test/sakubbs.cgi/25") {
       /** 2025/12/12
        */
-      const threadId = env.THREAD_DO.idFromName("operate/1754583120");
-      const threadStub = env.THREAD_DO.get(threadId);
-      await threadStub.setDat("<><><><>\n");
-      await env.THREAD_DO.get(env.THREAD_DO.idFromName("operate/1754928248")).setDat("<><><><>\n");
-      await env.THREAD_DO.get(env.THREAD_DO.idFromName("operate/1754928322")).setDat("<><><><>\n");
+
       return respondPlainText("sakubbs.cgi v25", "plain", "UTF-8");
     }
 
