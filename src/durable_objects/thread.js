@@ -163,4 +163,12 @@ export class Thread extends DurableObject {
   async setDat(dat) {
     await this.state.storage.put('dat', dat);
   }
+
+  /**
+   * 全データを取得します（デバッグ用）
+   */
+  async dump() {
+    const all = await this.state.storage.list();
+    return Object.fromEntries(all);
+  }
 }

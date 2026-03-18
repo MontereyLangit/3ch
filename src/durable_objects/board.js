@@ -91,4 +91,12 @@ export class Board extends DurableObject {
 
     await this.state.storage.put('subjectList', newSubjectList);
   }
+
+  /**
+   * 全データを取得します（デバッグ用）
+   */
+  async dump() {
+    const all = await this.state.storage.list();
+    return Object.fromEntries(all);
+  }
 }

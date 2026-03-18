@@ -18,6 +18,39 @@ export default {
       return respondPlainText("sakubbs.cgi v25", "plain", "UTF-8");
     }
 
+    /* API: Durable Object Dump */
+    if (url.pathname.startsWith("/api/durable_object/")) {
+      const parts = url.pathname.split("/");
+      // /api/durable_object/{name}/{instanceId}
+      // parts: ["", "api", "durable_object", "{name}", "{instanceId}..."]
+      const type = parts[3];
+      const instanceId = parts.slice(4).join("/");
+
+      if (!type || !instanceId) {
+        return new Response("Invalid parameters", { status: 400 });
+      }
+
+      let stub;
+      if (type === "thread") {
+        const id = env.THREAD_DO.idFromName(instanceId);
+        stub = env.THREAD_DO.get(id);
+      } else if (type === "board") {
+        const id = env.BOARD_DO.idFromName(instanceId);
+        stub = env.BOARD_DO.get(id);
+      } else {
+        return new Response("Unknown type: " + type, { status: 400 });
+      }
+
+      try {
+        const data = await stub.dump();
+        return new Response(JSON.stringify(data), {
+          headers: { "content-type": "application/json;charset=UTF-8" }
+        });
+      } catch (e) {
+        return new Response("Error: " + e.message, { status: 500 });
+      }
+    }
+
     /* bbs.cgi (subbbs.cgiも) */
     if(/^\/test\/(sub)?bbs.cgi/.test(url.pathname)) {
       return await bbs_entry(request, env, ctx);
