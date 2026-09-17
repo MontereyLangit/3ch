@@ -1,3 +1,4 @@
+import { admin } from "./admin.js";
 import { respondPlainText, respond404, respond500 } from "./common.js";
 import { bbs_entry, settingTxtDefault } from "./bbs.cgi.js";
 import { Board } from "./durable_objects/board.js";
@@ -6,6 +7,7 @@ import { Thread } from "./durable_objects/thread.js";
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) return admin(request, env);
     const version = "<a href=\"https://www.3chbbs.com/\">３ちゃんねる</a>(<a href=\"https://wiki.3chbbs.com/index.php/Project_edge\">edge</a>) "
 + "Ver.0.1.1 2025/07/05"
 + "(<a href=\"https://workers.cloudflare.com/\">Cloudflare Workers</a>)";
@@ -36,6 +38,8 @@ export default {
 
     /* bbsmenu.html */
     if(url.pathname === "/bbsmenu.html") {
+      const customMenu = await env.ch3www.get("bbsmenu.html");
+      if (customMenu) return respondPlainText(await customMenu.text(), "html", "Shift_JIS", "", new Date(), "", { "cache-control": "no-store" });
       /* Cache API */
       const cacheKey = new Request(url.toString(), request);
       const cache = caches.default;
@@ -115,11 +119,7 @@ export default {
 
     /* 全体のheadline */
     if(url.pathname === "/headline/subject.txt") {
-      /* Cache API */
-      const cacheKey = new Request(url.toString(), request);
-      const cache = caches.default;
-      let response = await cache.match(cacheKey);
-      if (response) return response;
+      let response;
 
       const filename = "headline.txt";
       let ifModifiedSinceHeader = "";
@@ -145,6 +145,7 @@ export default {
               /* 0無し、0が^[a-zA-Z0-9\-_]+$でない、1無し、4まで<>がない -> 表示しない */
               if(!headLine[0] || !/^[a-zA-Z0-9\-_]+$/.test(headLine[0]) || !headLine[1] || headLine[4] == null) continue;
               
+              if ((await env.BOARD_DO.get(env.BOARD_DO.idFromName(headLine[0])).getRemoved()).includes(headLine[3])) continue;
               headLineTxt += `${headLine[0]}<>${headLine[1]}<>${headLine[2]}<>${headLine[3]}<>${headLine[4]}\n`;
             }
           }
@@ -159,13 +160,9 @@ export default {
 
         /* max-age=5, s-maxage=1 */
         let headers = {};
-        headers["max-age"] = "60";
-        headers["s-maxage"] = "60";
+        headers["cache-control"] = "no-store";
 
-        response = respondPlainText(headLineTxt, "plain", "UTF-8", "", lastModified ?? new Date(), ifModifiedSinceHeader, headers);
-
-        /* Cache API */
-        if (response.status === 200) ctx.waitUntil(cache.put(cacheKey, response.clone()));
+        response = respondPlainText(headLineTxt, "plain", "UTF-8", "", lastModified ?? new Date(), "", headers);
 
         return response;
       }else if(error === "404") return respond404("headline.txt");
@@ -182,21 +179,19 @@ export default {
       let rangeHeader, ifModifiedSinceHeader = "";
       let lastModified;
       let dat = "";
+      let edited = false;
       let error = "";
 
       try {
         // Durable Objectからスレッドデータを取得
         const threadId = env.THREAD_DO.idFromName(bbs + "/" + key);
         const threadStub = env.THREAD_DO.get(threadId);
-        dat = await threadStub.getDat(bbs, key);
+        const publicData = await threadStub.getPublicData(bbs, key);
+        dat = publicData.dat;
+        edited = publicData.edited;
+        if (publicData.modifiedAt) lastModified = new Date(publicData.modifiedAt);
         // 1762009199以降1762087165以前のkeyの場合でdatが空の場合、keyのみの旧DOから取得を試みる
         // 取得できたら、現行スレdoの方に移す
-        if (!dat && parseInt(key) > 1761990000 && parseInt(key) < 1762087165) {
-          const oldThreadId = env.THREAD_DO.idFromName(key);
-          const oldThreadStub = env.THREAD_DO.get(oldThreadId);
-          dat = await oldThreadStub.getDat();
-          if (dat) await threadStub.setDat(dat);
-        }
 
         if (dat) {
           // 最終更新時刻を取得
@@ -207,7 +202,7 @@ export default {
           const dateStr = fields[2];
           if (dateStr) {
             const dateMatch = dateStr.match(/(\d{4}\/\d{2}\/\d{2}\([日月火水木金土]\) \d{2}:\d{2}:\d{2})/);
-            if (dateMatch) lastModified = new Date(dateMatch[1]);
+            if (dateMatch && !lastModified) lastModified = new Date(dateMatch[1]);
           }
         } else {
           error = "404";
@@ -218,16 +213,16 @@ export default {
 
       if(!error) {
         /* 差分取得 */
-        if(request.headers.get('range')) rangeHeader = request.headers.get('range');
+        if(!edited && request.headers.get('range')) rangeHeader = request.headers.get('range');
         /* 最終更新時刻 */
         if(request.headers.get('if-modified-since')) ifModifiedSinceHeader = request.headers.get('if-modified-since');
 
         /* max-age=5, s-maxage=1 */
         let headers = {};
-        headers["max-age"] = "5";
+        headers["cache-control"] = "no-store";
         headers["s-maxage"] = "1";
 
-        const response = respondPlainText(dat, "plain", ENCODING, rangeHeader, lastModified ?? new Date(), ifModifiedSinceHeader, headers);
+        const response = respondPlainText(dat, "plain", ENCODING, rangeHeader, lastModified ?? new Date(), (edited ? "" : ifModifiedSinceHeader), headers);
         
         return response;
       }else if(error === "404") return respond404(`/${bbs}/dat/${key}.dat`);
@@ -283,11 +278,7 @@ export default {
 
     /* 過去ログ倉庫 (v2のみ) */
     if(/^\/[a-zA-Z0-9\-_]+\/kako\/[0-9]{4}\/subject\.txt/.test(url.pathname)) {
-      /* Cache API */
-      const cacheKey = new Request(url.toString(), request);
-      const cache = caches.default;
-      let response = await cache.match(cacheKey);
-      if (response) return response;
+      let response;
 
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/kako\/([0-9]{4})\/subject\.txt/);
       const bbs = match[1];
@@ -299,6 +290,7 @@ export default {
       let error = "";
 
       try {
+        const removedKeys = new Set(await env.BOARD_DO.get(env.BOARD_DO.idFromName(bbs)).getRemoved());
         const object = await env.ch3www.get(filename);
         if(object !== null) {
           const subjectText = await object.text();
@@ -316,6 +308,7 @@ export default {
               /* key無し、keyが10桁の数字でない、5まで<>がない -> 表示しない */
               if(!thread[0] || !/^[0-9]{10}$/.test(thread[0]) || thread[5] == null) continue;
               
+              if (removedKeys.has(thread[0])) continue;
               subject += `${thread[0]}<>${thread[1]}<>${thread[2]}<>${thread[3]}<>${thread[4]}<>${thread[5]}\n`;
             }
           }else {
@@ -331,13 +324,9 @@ export default {
         if(request.headers.get('if-modified-since')) ifModifiedSinceHeader = request.headers.get('if-modified-since');
 
         let headers = {};
-        headers["max-age"] = "60";
-        headers["s-maxage"] = "60";
+        headers["cache-control"] = "no-store";
 
-        response = respondPlainText(subject, "plain", "UTF-8", "", lastModified ?? new Date(), ifModifiedSinceHeader, headers);
-        
-        /* Cache API */
-        if (response.status === 200) ctx.waitUntil(cache.put(cacheKey, response.clone()));
+        response = respondPlainText(subject, "plain", "UTF-8", "", lastModified ?? new Date(), "", headers);
 
         return response;
       }else if(error === "404") return respond404(`/${bbs}/kako/${kako}/subject.txt`);
@@ -592,7 +581,7 @@ display:inline-block;
 <p style="margin: 0; padding: 0.25em 0; text-align: center; color: #333;">
 <a href="//3ch.shop/">３ちゃんねる</a> BBS.CGI ver 1.07.427 - 2022/04/27 22:56 JST<br>
 <a href="./SETTING.TXT">SETTING.TXT</a></p>
-<div align="right" id="kanri"><a href="./admin/admin.php?bbs=livegalileo"><input type="submit" value="管理画面へ"></a></div>
+<div align="right" id="kanri"><a href="/admin/board?bbs=${bbs}"><input type="submit" value="管理画面へ"></a></div>
 </body>
 </html>
 `;

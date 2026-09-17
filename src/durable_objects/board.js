@@ -29,6 +29,16 @@ export class Board extends DurableObject {
     return (await this.state.storage.get('subjectList')) || '';
   }
 
+  async removeThread(key) {
+    return this.state.blockConcurrencyWhile(async () => {
+      const lines = (await this.getSubject()).split('\n').filter(line => line && !line.startsWith(`${key}.dat<>`));
+      const removed = await this.state.storage.get('removed') || [];
+      await this.state.storage.put({ subjectList: lines.length ? lines.join('\n') + '\n' : '', removed: removed.includes(key) ? removed : [...removed, key] });
+    });
+  }
+
+  async getRemoved() { return await this.state.storage.get('removed') || []; }
+
   /**
    * スレッド一覧を更新します。
    * @param {ThreadData} threadData - 更新対象のスレッド情報
@@ -36,6 +46,10 @@ export class Board extends DurableObject {
    * @param {number} maxThreads - 板の最大スレッド数
    */
   async updateThread(threadData, isSage, maxThreads) {
+    return this.state.blockConcurrencyWhile(() => this.updateThreadUnlocked(threadData, isSage, maxThreads));
+  }
+
+  async updateThreadUnlocked(threadData, isSage, maxThreads) {
     // 最大スレッド数のデフォルト値を適用
     maxThreads = maxThreads ?? 700;
 

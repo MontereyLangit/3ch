@@ -15,11 +15,27 @@ export class Thread extends DurableObject {
     this.env = env;
   }
 
+  // Validation failures must not reset the DO (blockConcurrencyWhile rejects reset it).
+  async exclusive(callback) {
+    const result = await this.state.blockConcurrencyWhile(async () => {
+      try { return { value: await callback() }; }
+      catch (error) { return { error: error.message }; }
+    });
+    if (result.error) throw new Error(result.error);
+    return result.value;
+  }
+
   /**
    * dat形式の全スレッドデータを文字列として返します。
    */
   async getDat(bbs = '', key = '0') {
+    if (await this.state.storage.get('hidden')) return '';
     let dat = await this.state.storage.get('dat');
+    if (!dat && bbs && Number(key) > 1761990000 && Number(key) < 1762087165) {
+      const legacy = this.env.THREAD_DO.get(this.env.THREAD_DO.idFromName(key));
+      dat = await legacy.getDat();
+      if (dat) await this.state.storage.put({ dat, log: await legacy.getLog(), settings: await legacy.getSettings() });
+    }
 
     // datが存在しない場合で keyが1以上1762009199未満の場合、R2から旧形式スレッドログを取得しdatに変換、記録
     if (!dat && bbs && parseInt(key) > 0 && parseInt(key) < 1762009199) {
@@ -33,6 +49,7 @@ export class Thread extends DurableObject {
         const object = await this.env.ch3www.get(filename);
         if (object !== null) {
           const log = await object.text();
+          await this.state.storage.put('legacyLog', log);
           const resArray = log.split("\n");
 
           /* スレの配列に最低3個要素がないとおかしい */
@@ -43,6 +60,7 @@ export class Thread extends DurableObject {
 
           /* スレ設定を取得。ログの二行目に入っている。 */
           const settingText = resArray.shift();
+          await this.state.storage.put('settings', settingText);
           /* NAME=VALUE<>NAME2=VALUE2 */
           const settingsArray = settingText.trim().split("<>");
           for (let i = 0; i < settingsArray.length; i++) {
@@ -112,6 +130,11 @@ export class Thread extends DurableObject {
   /**
    * log形式の全投稿者ログを文字列として返します。
    */
+  async getPublicData(bbs, key) {
+    const dat = await this.getDat(bbs, key);
+    return { dat, modifiedAt: await this.state.storage.get('modifiedAt'), edited: !!await this.state.storage.get('edited') };
+  }
+
   async getLog() {
     return (await this.state.storage.get('log')) || '';
   }
@@ -136,10 +159,109 @@ export class Thread extends DurableObject {
    * @param {string} datLine - dat形式の新しい行データ
    * @param {string} logLine - log形式の新しい行データ
    */
-  async addRes(datLine, logLine) {
-    const newDat = await this.getDat() + datLine + "\n";
-    const newLog = await this.getLog() + logLine + "\n";
-    await this.state.storage.put({ dat: newDat, log: newLog });
+  async addRes(datLine, logLine, posting) {
+    return this.exclusive(async () => {
+      if (await this.state.storage.get('hidden') || await this.state.storage.get('stopped') || await this.state.storage.get('movingTo')) throw new Error('このスレッドは停止・移動または削除されています。');
+      const dat = await this.getDat(posting?.bbs, posting?.key);
+      if (/(?:^|<>)BBS_HEISA=checked(?:<>|$)/.test(await this.getSettings())) throw new Error('このスレッドは停止されています。');
+      if (posting?.create && dat) throw new Error('同じkeyのスレッドが存在します。');
+      if (posting && !posting.create && !dat) throw new Error('スレッドがありません。');
+      const count = dat.trimEnd().split('\n').filter(Boolean).length + 1;
+      if (count >= 1000) throw new Error('このスレッドは1000を超えたのでもう書けません。');
+      const newLog = await this.getLog() + logLine.replace(/^\d+<>/, `${count}<>`) + '\n';
+      const update = { dat: dat + datLine + '\n', log: newLog, modifiedAt: Date.now() };
+      if (posting?.create) update.settings = posting.initialSettings || '';
+      await this.state.storage.put(update);
+      if (posting) await this.env.BOARD_DO.get(this.env.BOARD_DO.idFromName(posting.bbs)).updateThread({ key: posting.key, title: posting.title, resNum: count }, posting.sage, posting.maxThreads);
+      return count;
+    });
+  }
+
+  async inspect(bbs, key) {
+    await this.getDat(bbs, key);
+    const data = await this.state.storage.get(['dat', 'log', 'legacyLog', 'settings', 'hidden', 'stopped', 'movedTo', 'movingTo', 'importedFrom']);
+    if (!data.has('legacyLog') && bbs && key) {
+      const legacy = await this.env.ch3www.get(`${bbs}/thread/${key.slice(0,4)}/${key}.cgi`);
+      if (legacy) {
+        data.set('legacyLog', await legacy.text());
+        await this.state.storage.put('legacyLog', data.get('legacyLog'));
+      }
+    }
+    return Object.fromEntries(data);
+  }
+
+  async moderate(action, input) {
+    if (action === 'move') {
+      const target = `${input.targetBoard}/${input.targetKey}`;
+      if (target === `${input.bbs}/${input.key}`) throw new Error('移動元と移動先が同じです。');
+      const destination = await this.env.THREAD_DO.get(this.env.THREAD_DO.idFromName(target)).inspect(input.targetBoard, input.targetKey);
+      if ((destination.dat || destination.hidden) && destination.importedFrom !== `${input.bbs}/${input.key}`) throw new Error('移動先のkeyは使用済みです。');
+    }
+    return this.exclusive(async () => {
+      const dat = await this.state.storage.get('dat');
+      if (!dat) throw new Error('スレッドがありません。');
+      const board = this.env.BOARD_DO.get(this.env.BOARD_DO.idFromName(input.bbs));
+      if (await this.state.storage.get('pendingMove')) throw new Error('移動先の準備中です。移動元から同じ移動を再実行してください。');
+      if (action !== 'move' && await this.state.storage.get('movingTo')) throw new Error('移動処理中です。同じ移動先で再実行してください。');
+      if (action === 'delete') {
+        await this.state.storage.put('hidden', true);
+        await board.removeThread(input.key);
+      } else if (action === 'stop' || action === 'resume') {
+        await this.state.storage.put('stopped', action === 'stop');
+        const settings = (await this.getSettings()).split('<>').filter(x => x && !x.startsWith('BBS_HEISA='));
+        settings.push(`BBS_HEISA=${action === 'stop' ? 'checked' : ''}`);
+        await this.state.storage.put('settings', settings.join('<>'));
+      } else if (action === 'editRes' || action === 'deleteRes') {
+        const lines = dat.trimEnd().split('\n');
+        const n = Number(input.number);
+        if (!Number.isInteger(n) || n < 1 || n > lines.length) throw new Error('レス番号が不正です。');
+        const fields = lines[n - 1].split('<>');
+        if (action === 'deleteRes') fields.splice(0, 4, 'あぼーん', 'あぼーん', 'あぼーん', 'あぼーん');
+        else {
+          const escape = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replace(/\r?\n/g, ' <br> ');
+          fields[0] = escape(input.name); fields[1] = escape(input.mail); fields[3] = escape(input.message);
+        }
+        lines[n - 1] = fields.join('<>');
+        await this.state.storage.put({ dat: lines.join('\n') + '\n', modifiedAt: Date.now(), edited: true });
+      } else if (action === 'move') {
+        const target = `${input.targetBoard}/${input.targetKey}`;
+        const movingTo = await this.state.storage.get('movingTo');
+        if (movingTo && movingTo !== target) throw new Error('処理中の移動先と異なります。');
+        if (await this.state.storage.get('hidden') && !movingTo) throw new Error('削除・移動済みスレッドは移動できません。');
+        if (target === `${input.bbs}/${input.key}`) throw new Error('移動元と移動先が同じです。');
+        const stub = this.env.THREAD_DO.get(this.env.THREAD_DO.idFromName(target));
+        const source = `${input.bbs}/${input.key}`;
+        await this.state.storage.put('movingTo', target);
+        try {
+          await stub.receiveMove({ dat, log: await this.getLog(), legacyLog: await this.state.storage.get('legacyLog') || '', settings: await this.getSettings(), stopped: !!await this.state.storage.get('stopped'), edited: !!await this.state.storage.get('edited'), modifiedAt: Date.now() }, source);
+        } catch (error) {
+          if (error.message.includes('移動先のkeyは使用済み')) await this.state.storage.delete('movingTo');
+          throw error;
+        }
+        await this.state.storage.put({ hidden: true, movedTo: target });
+        await board.removeThread(input.key);
+        await stub.publishMove(source, input.targetBoard, input.targetKey);
+        await this.state.storage.delete('movingTo');
+      } else throw new Error('操作が不正です。');
+    });
+  }
+
+  async receiveMove(data, source) {
+    return this.exclusive(async () => {
+      if (await this.state.storage.get('importedFrom') === source) return;
+      if (await this.state.storage.get('dat') || await this.state.storage.get('hidden')) throw new Error('移動先のkeyは使用済みです。');
+      await this.state.storage.put({ ...data, importedFrom: source, hidden: true, pendingMove: true });
+    });
+  }
+
+  async publishMove(source, bbs, key) {
+    return this.exclusive(async () => {
+      if (await this.state.storage.get('importedFrom') !== source) throw new Error('移動元が一致しません。');
+      if (!await this.state.storage.get('pendingMove')) return;
+      const dat = await this.state.storage.get('dat');
+      await this.env.BOARD_DO.get(this.env.BOARD_DO.idFromName(bbs)).updateThread({ key, title: dat.split('\n')[0].split('<>')[4], resNum: dat.trimEnd().split('\n').length }, false);
+      await this.state.storage.put({ hidden: false, pendingMove: false });
+    });
   }
 
   /**
@@ -161,6 +283,7 @@ export class Thread extends DurableObject {
    * @param {string} dat - 上書き内容
    */
   async setDat(dat) {
+    if (await this.state.storage.get('hidden')) return;
     await this.state.storage.put('dat', dat);
   }
 }

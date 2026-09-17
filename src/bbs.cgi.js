@@ -1,3 +1,4 @@
+import { checkModeration } from "./moderation.js";
 import { sjis, respondPlainText, hexToBinary, sha1Base64, hash, md5, crypt, translateSaltChar,respond500 } from "./common.js";
 
 /* デフォルト板設定 */
@@ -77,10 +78,10 @@ export async function bbs_entry(request, env, ctx) {
   gb.userAgent = request.headers.get("user-agent") ?? "";
   gb.browserInfo = "";
   gb.deviceInfo = request.headers.get("x-ch3-device-information") ?? ""; /* 端末固有情報->412,915,2,24,2,Android,Pixel 7 */
-  gb.asn = request.cf.asn ?? "0000";
-  gb.country = request.cf.country ?? "unknown";
-  gb.ken = request.cf.region ?? "catv?";
-  gb.city = request.cf.city ?? "";
+  gb.asn = request.cf?.asn ?? "0000";
+  gb.country = request.cf?.country ?? "unknown";
+  gb.ken = request.cf?.region ?? "catv?";
+  gb.city = request.cf?.city ?? "";
   gb.deviceId = ""; /* 端末ID->16桁の端末固有情報ハッシュ値 */
   gb.uid = ""; /* 識別子 */
   gb.userInfo = "";/* ログに格納されるユーザ情報(規制にも使用)->識別子,IP,AS番号,地域,端末固有情報,UA,Sec-Ch-UA */
@@ -142,7 +143,7 @@ export async function bbs_entry(request, env, ctx) {
     gb.userInfo = "UID:" + gb.uid + " IP:" + gb.host + " AS" + gb.asn + '-' + gb.country + ',' + gb.ken + ',' + gb.city + "Device:" + gb.deviceInfo + " UA:" + gb.userAgent;
 
     /* まだかな（アクセス規制） */
-    if (!await checkDenyList(gb, env)) return respondError(gb);
+    if (!await checkModeration(gb, env)) return respondError(gb);
 
     /* フィールドサイズチェック */
     if (!checkFieldSize(gb)) return respondError(gb);
@@ -154,7 +155,7 @@ export async function bbs_entry(request, env, ctx) {
     //if (!await processCommandsAndByBySaru(gb, request, env)) return;
 
     /* 各種スレ立て規制 と subject更新 */
-    if (!await suretateTotalCheckAndUpdateSubject(gb, env)) return respondError(gb);
+    preparePosting(gb);
 
     /* スレッドファイル更新 */
     if (!await updateThreadFile(gb, env)) return respondError(gb);
@@ -313,7 +314,7 @@ async function readForm(gb, request) {
   gb.form.FROM = gb.form.FROM.replace(/ ?<br> ?/g, "");
   gb.form.mail = gb.form.mail.replace(/ ?<br> ?/g, "");
 
-  gb.form.bbs = gb.form.bbs.replace(/\W/g, "");
+  gb.form.bbs = gb.form.bbs.replace(/[^a-zA-Z0-9_-]/g, "");
   gb.form.key = gb.form.key.replace(/\D/g, "");
   gb.form.time = gb.form.time.replace(/\D/g, "");
 
@@ -483,6 +484,7 @@ async function getThreadDataAndThreadSettings(gb, request, env) {
   const threadStub = env.THREAD_DO.get(threadId);
 
   try {
+    if (gb.settings.BBS_HEISA === "checked") return dispError(gb, "この板・スレッドは停止されています。");
     if (gb.form.subject) {
       // スレ立て時の処理
       const initialDat = await threadStub.getDat();
@@ -500,7 +502,7 @@ async function getThreadDataAndThreadSettings(gb, request, env) {
     // スレッドデータ取得
     // dat, log, settingsを並行で取得
     const [dat, settingsText] = await Promise.all([
-      threadStub.getDat(),
+      threadStub.getDat(gb.form.bbs, gb.form.key),
       threadStub.getSettings(),
     ]);
 
@@ -591,103 +593,6 @@ async function processIdentification(gb, request) {
 /**
  * アクセス規制・NGワード（まだかな）
  */
-async function checkDenyList(gb, env)
-{
-  // ★はスルー
-  if(gb.cap) return 1;
-  
-  // 削除系の板はスルー
-  if(gb.form.bbs === "saku") return 1;
-  
-  // torはダメ
-  if(gb.country === "T1") return "ERROR: 変なホスト規制中！！ 変なホストです。<br>Tor is not allowed.";
-
-  // アクセス規制リストで判定
-  // アクセス規制リストはR2じゃなくてKVでも良いのではないかと思ったりする。更新頻度低めかつ反映も遅くていいし、読み取りが早い方が良いので
-  // というかSETTING.TXTやhead.txtもKVでよくね？
-  const object = await env.ch3www.get("deny.cgi");
-  if(object !== null)
-  {
-    const DENYLIST = await object.text();
-    // 書式->板dir名正規表現<>規制対象正規表現<>NGワード正規表現<>規制内容(mark -> Marked, TateDame -> スレ立て禁止, それ以外・省略 -> 規制, md5 -> 規制(非公開))
-    // アクセス規制 -> ^(livegalileo|livejupiter|liveuranus|news4?vip)$<>(^UID:nuoiyUX6m+irC5rvB4QUSycfHGc|IP:192\..+AS1234-JP,Shizuoka,Hamamatsu|AS1234-JP,Shizuoka,\S+\sDevice:2160,1440,1.5,24,0,Android,Nexus\s7)<>^[ゆ|う]めめ&#[a-zA-Z0-9]{5};?$<>
-    // NGワード -> ^poverty$<><>(アフィサイトの宣伝です！|h?ttps?:\/\/afi-ks\.com)<>mark
-    // 規制対象となるユーザ情報(ログに格納されているものと同じ)
-    // UID:nuoiyUX6m+irC5rvB4QUSycfHGc IP:192.168.2.1<192.168.2.0> AS1234-JP,Shizuoka,Hamamatsu Device:2160,1440,1.5,24,0,Android,Nexus 7 UA:Mozilla/5.0 (iPhone; CPU iPhone OS 18_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Mobile/15E148 Safari/604.1" Not A;Brand";v="99.0.0.0", "Chromium";v="98.0.4750.0", "Google Chrome";v="98.0.4750.0"
-    
-    const RIP = DENYLIST.split("\n");
-
-    for(let i = 0; i < RIP.length; i++)
-    {
-      const tmp = RIP[i].trim();
-      
-      if(tmp === '') continue;
-      if(/^#/.test(tmp)) continue;
-      
-      const MATCH = tmp.match(/^(\S*)<>(\S*)<>(\S*)<>(\S*)$/);
-      if(MATCH !== null)
-      {
-        const BBS = new RegExp(MATCH[1] || ".+");
-        const KISEI = new RegExp(MATCH[2] || ".+");
-        const NGWORD = new RegExp(MATCH[3] || ".+");
-        const EXEC = MATCH[4];
-        const NGTARGET = `FROM=${gb.form.FROM} mail=${gb.form.mail} MESSAGE=${gb.form.MESSAGE} subjeect={gb.form.subject}`;
-        
-        if(BBS.test(gb.form.bbs) && KISEI.test(gb.userInfo) && NGWORD.test(NGTARGET))
-        {
-          // リストにあった
-
-          // TateDame(スレ立て禁止)
-          if(EXEC === "TateDame")
-          {
-            if (gb.number === 1) {
-              return "ERROR: Madakana:このホスト/地域/端末では、スレッドが立てられません。。。（" + tmp + "）<br><a href=\"https://www.3chbbs.com/madakana/\">ここで告知されています。</a><br><br>Sorry Your ISP, region, and device are disallowed from starting a new thread due to repeated abuse. ->" + tmp;
-            }else continue;
-          }
-
-          // 拒否られマークをつけるフラグ
-          let deniedmark = 0;
-        
-          // mark指定の規制や、BBS_NO_MADAKANA=checkedの板・スレでは、拒否られマーク+規制情報をつけたうえで書き込みを許可する
-          if(EXEC === "mark" || gb.settings.BBS_NO_MADAKANA === "checked") deniedmark = 1;
-
-          const target = (EXEC !== "md5" && !deniedmark) ? tmp : md5(tmp);
-
-          if (deniedmark) {
-            if (NGWORD.source !== ".+")
-            // NGワード系の場合
-            {
-              gb.form.MESSAGE += ` <small style="color: #999;">👀<br>Madakana(NGWord): Caution(${target})</small>`; 
-            }
-            else
-            {
-              gb.form.FROM = "</b>[´・ω・｀]<b> " + gb.form.FROM;
-              gb.form.MESSAGE += `<hr><var style="color:blue;">Madakana:${target}</var>`; 
-            }
-
-            return 1;
-          }
-          // 上記のもの以外はエラー
-          else
-          {
-            // エラー種別
-            let ErrMsg = "アクセス規制中です！！（" + target + "）<br><a href=\"https://www.3chbbs.com/madakana/\">ここで告知されています。</a><br>Sorry Your ISP, region, and device are disallowed from posting due to repeated abuse. ->" + target;
-            if(NGWORD.source !== ".+")
-            // NGワード系の場合
-            {
-              // NGワード規制はBBS_NGWORD_PASS=checkedでスルー
-              if(gb.settings.BBS_NGWORD_PASS === "checked") continue;
-              ErrMsg = `NGワード禁止！(${target})<br><a href=\"https://www.3chbbs.com/madakana/\">ここで告知されています。</a><br>Your post contains forbidden words. -> ${target}`;//"
-            }
-
-            return dispError(gb, "Madakana:" + ErrMsg);
-          }
-        }
-      }
-    }
-  }
-  return 1;
-}
 
 function checkFieldSize(gb) {
   // 強い★はスルー
@@ -811,7 +716,7 @@ async function getSubject(gb, env) {
  * 各種スレ立て規制 と subjectText更新 
  * gb.subjectText を利用する
  */
-async function suretateTotalCheckAndUpdateSubject(gb, env) {
+function preparePosting(gb) {
   const BBS_FORCE_SAGE = parseInt(gb.settings.BBS_FORCE_SAGE ? gb.settings.BBS_FORCE_SAGE : "9999999999");
 
   // sageの処理（スレ立て時はsage無効）
@@ -821,23 +726,6 @@ async function suretateTotalCheckAndUpdateSubject(gb, env) {
     if (gb.settings.BBS_LIVE && gb.settings.BBS_LIVE === "checked" && Math.random() * 10 >= 1) gb.sage = 1; // 実況板、実況スレでは10分の9の確率でsage
   }
 
-  // Board DOに渡すスレッド情報を作成
-  const threadData = {
-    key: gb.form.key,
-    title: gb.subject,
-    resNum: gb.number,
-  };
-  // Board DOのスタブを取得
-  const boardId = env.BOARD_DO.idFromName(gb.form.bbs);
-  const boardStub = env.BOARD_DO.get(boardId);
-
-  try {
-    // Board DOにスレッド一覧の更新を依頼
-    await boardStub.updateThread(threadData, gb.sage, parseInt(gb.boardSettings.BBS_MAX_MENU_THREAD || "700"));
-    return 1;
-  } catch (e) {
-    return dispError(gb, `suretateTotalCheckAndUpdateSubject error. スレ一覧を更新できませんでした。(unixtime:${gb.time} bbs:${gb.form.bbs} key:${gb.form.key} number:${gb.number} errmsg:suretateTotalCheckAndUpdateSubject->${e})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。`);
-  }
 }
 
 // 
@@ -847,13 +735,14 @@ async function updateThreadFile(gb, env) {
 
   try {
     // スレ立て時
+    let threadSettingsText;
     if (gb.number === 1) {
-      let threadSettingsText = "";
+      threadSettingsText = "";
       Object.keys(gb.settings).forEach(function (key) {
         threadSettingsText += `${key}=${gb.settings[key]}<>`;
       });
       // スレ設定を書き込む
-      await threadStub.setSettings(threadSettingsText);
+
     }
 
     // 新しいレスのデータを作成
@@ -866,7 +755,7 @@ async function updateThreadFile(gb, env) {
     const datLine = `${gb.form.FROM}<><>${date} ${gb.id}<> ${gb.form.MESSAGE} <>${gb.number === 1 ? gb.subject : ''}`;
     const logLine = `${gb.number}<>${gb.userInfo}`;
     // Thread DOにレスの追加を依頼
-    await threadStub.addRes(datLine, logLine);
+    gb.number = await threadStub.addRes(datLine, logLine, { bbs: gb.form.bbs, key: gb.form.key, title: gb.subject, sage: !!gb.sage, maxThreads: parseInt(gb.boardSettings.BBS_MAX_MENU_THREAD || "700"), create: gb.number === 1, initialSettings: threadSettingsText });
 
     return 1;
   } catch (e) {
