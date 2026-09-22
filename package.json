@@ -4,10 +4,23 @@
   "scripts": {
     "dev": "wrangler dev --config wrangler.jsonc",
     "deploy": "wrangler deploy --config wrangler.jsonc --minify",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "v6:generate": "sbt codegen/run",
+    "v6:build:client": "vite build --mode client",
+    "v6:build:server": "vite build --mode workers",
+    "v6:build": "npm run v6:generate && npm run v6:build:client && npm run v6:build:server",
+    "v6:dev:workers": "wrangler dev --config wrangler.v6.jsonc"
   },
   "devDependencies": {
-    "wrangler": "^4.44.0"
+    "wrangler": "^4.44.0",
+    "@hono/vite-build": "1.11.1",
+    "@scala-js/vite-plugin-scalajs": "1.1.0",
+    "@types/node": "^22",
+    "typescript": "^5",
+    "vite": "7.3.6"
   },
-  "dependencies": {}
+  "dependencies": {
+    "hono": "4.13.7",
+    "honox": "0.1.61"
+  }
 }

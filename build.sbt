@@ -1,0 +1,87 @@
+// v6s: Scala 3 / Scala.js x HonoX ビルド骨格（docs/移植方針_step3_ScalaJS.md）。
+// 参照実装 C:/project/3ch/ch3s-migration の build.sbt をそのまま踏襲する
+// （common: crossProject 純粋 / bbs: JS-only Workers本体 / bbs-client: JS-only islands /
+//   codegen: JVM-only ファイルI/O）。今回はインフラのみで BBS ロジックは移植しない。
+// bg（バックグラウンドサービス、http4s/tapir）は step 5 のスコープなのでこの骨格には含めない。
+
+import org.scalajs.linker.interface.ModuleSplitStyle
+
+val scala3Version = "3.3.8" // Scala 3 LTS（参照実装から据え置き）
+val munitVersion  = "1.0.0" // JVM/JS両対応のテストフレームワーク
+
+ThisBuild / scalaVersion := scala3Version
+ThisBuild / organization := "ch3s"
+ThisBuild / version      := "0.1.0-SNAPSHOT"
+
+lazy val commonSettings = Seq(
+  scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked"),
+  libraryDependencies += "org.scalameta" %%% "munit" % munitVersion % Test,
+  testFrameworks += new TestFramework("munit.Framework")
+)
+
+// --- common: cross project (JVM + Scala.js) ---
+// 純粋関数のみ（I/O禁止）。RouteTable（ルーティング表の唯一の真実）をここに置く。
+lazy val common = crossProject(JSPlatform, JVMPlatform)
+  .crossType(CrossType.Pure)
+  .in(file("common"))
+  .settings(commonSettings)
+  .jsSettings(
+    scalaJSUseMainModuleInitializer := false,
+    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) }
+  )
+
+lazy val commonJVM = common.jvm
+lazy val commonJS  = common.js
+
+// --- bbs: Scala.js — Durable Object と、HonoXから呼ばれるサーバ側ロジック（Workersバンドル専用） ---
+lazy val bbs = project
+  .in(file("bbs"))
+  .enablePlugins(ScalaJSPlugin)
+  .dependsOn(commonJS)
+  .settings(commonSettings)
+  .settings(
+    scalaJSUseMainModuleInitializer := false,
+    // 参照実装の「単一sbtプロジェクト」パターン: bbs-client のソースをこのプロジェクトに取り込み、
+    // client.js / server.js の振り分けは @JSExportTopLevel(name, moduleID) だけで行う。
+    // こうすることで @scala-js/vite-plugin-scalajs のインスタンスが1つで済み、
+    // sbtの二重起動（ServerAlreadyBootingException）を避けられる（参照実装で実測済み）。
+    Compile / unmanagedSourceDirectories += baseDirectory.value / ".." / "bbs-client" / "src" / "main" / "scala",
+    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
+    // 参照実装からの既知の地雷: `@JSImport("cloudflare:workers", "DurableObject")` を extends した
+    // クラスが常にexportされるため、Testのリンク成果物にも巻き込まれる。素の NodeJSEnv では
+    // cloudflare: スキームを解決できず Test 全体が起動できないため、Node の Module customization
+    // hooks（--experimental-loader）で cloudflare:workers の解決だけをスタブへ差し替える。
+    Test / jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv(
+      org.scalajs.jsenv.nodejs.NodeJSEnv.Config()
+        .withArgs(
+          List(
+            "--experimental-loader",
+            (baseDirectory.value / "test-stubs" / "cloudflare-workers-loader.mjs").toURI.toString
+          )
+        )
+    )
+  )
+
+// --- bbs-client: Scala.js — ブラウザへ配る island コンポーネント（今回は配線のみの空実装） ---
+lazy val bbsClient = project
+  .in(file("bbs-client"))
+  .enablePlugins(ScalaJSPlugin)
+  .dependsOn(commonJS)
+  .settings(commonSettings)
+  .settings(
+    scalaJSUseMainModuleInitializer := false,
+    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) }
+  )
+
+// --- codegen: JVM — RouteTable(common) から app/routes/** を機械生成するsbtタスク ---
+lazy val codegen = project
+  .in(file("codegen"))
+  .dependsOn(commonJVM)
+  .settings(commonSettings)
+
+lazy val root = project
+  .in(file("."))
+  .aggregate(commonJVM, commonJS, bbs, bbsClient, codegen)
+  .settings(
+    publish / skip := true
+  )

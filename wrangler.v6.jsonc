@@ -1,0 +1,51 @@
+{
+  // v6s ビルド骨格用の Wrangler 設定（docs/移植方針_step3_ScalaJS.md）。
+  // 既存 wrangler.jsonc（v5・本番稼働中）は変更しない。v6用に別ファイルとして用意した
+  // （タスクの制約: 「既存の wrangler.jsonc を編集せず、別ファイルを追加する」）。
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ch3s-v6s",
+  "main": "dist/index.js",
+  "compatibility_date": "2025-09-19",
+  // honox/hono のバンドルが内部で `node:async_hooks`（AsyncLocalStorage）をimportするため必須
+  // （react-renderer 等は使っていないが、Hono core 自体がこれに依存している。実機の
+  // `wrangler dev` で "No such module \"node:async_hooks\"" を実測して判明した）。
+  "compatibility_flags": ["nodejs_compat"],
+  "dev": {
+    // v5 の `npm run dev`（既定の8787）と衝突しないポートに固定する。
+    "port": 8801
+  },
+  // クライアント側hydrationバンドル（`npm run v6:build:client` の成果物）を静的配信する。
+  "assets": {
+    "directory": "dist"
+  },
+  "durable_objects": {
+    "bindings": [
+      // v6s骨格の動作確認専用DO。次タスクでBBSロジックを移植する際に THREAD_DO / BOARD_DO
+      // （既存 wrangler.jsonc 参照）へ置き換える。
+      { "name": "V6_PLACEHOLDER_DO", "class_name": "V6PlaceholderDurableObject" }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["V6PlaceholderDurableObject"]
+    }
+  ],
+  // R2 / KV バインディング（docs/移植方針_step3_ScalaJS.md 「2.」— 参照実装には無く今回追加したもの）。
+  // バインディング名（"ch3www" / "CAP"）は既存 wrangler.jsonc（v5）の実バインディング名と揃えたが、
+  // bucket_name / id はあえて v5 の本番リソースとは別物にしている。`wrangler dev`（--remote無し）は
+  // ローカルエミュレーションのみで本番へは触れないが、将来 --remote 等で誤って本番R2/KVに繋がる
+  // 事故を避けるため。実際のR2/KV読み書きはまだ実装していない（facadeのみ、docs参照）。
+  "r2_buckets": [
+    {
+      "binding": "ch3www",
+      "bucket_name": "ch3s-v6s-local-only"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "CAP",
+      "id": "00000000000000000000000000000v6"
+    }
+  ]
+}
