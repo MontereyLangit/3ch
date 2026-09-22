@@ -1,0 +1,103 @@
+[
+ {
+  "input": [],
+  "output": "",
+  "throws": null
+ },
+ {
+  "input": [
+   65
+  ],
+  "output": "A",
+  "throws": null
+ },
+ {
+  "input": [
+   130,
+   160
+  ],
+  "output": "あ",
+  "throws": null
+ },
+ {
+  "input": [
+   177,
+   178,
+   179
+  ],
+  "output": "ｱｲｳ",
+  "throws": null
+ },
+ {
+  "input": [
+   135,
+   64
+  ],
+  "output": "①",
+  "throws": null
+ },
+ {
+  "input": [
+   135,
+   86
+  ],
+  "output": "Ⅲ",
+  "throws": null
+ },
+ {
+  "input": [
+   237,
+   64
+  ],
+  "output": "纊",
+  "throws": null
+ },
+ {
+  "input": [
+   130
+  ],
+  "output": "",
+  "throws": null
+ },
+ {
+  "input": [
+   65,
+   130,
+   160,
+   130
+  ],
+  "output": "Aあ",
+  "throws": null
+ },
+ {
+  "input": [
+   250,
+   64
+  ],
+  "output": null,
+  "throws": "TypeError"
+ },
+ {
+  "input": [
+   252,
+   75
+  ],
+  "output": null,
+  "throws": "TypeError"
+ },
+ {
+  "input": [
+   130,
+   255
+  ],
+  "output": null,
+  "throws": "TypeError"
+ },
+ {
+  "input": [
+   250
+  ],
+  "output": null,
+  "throws": "TypeError"
+ }
+]

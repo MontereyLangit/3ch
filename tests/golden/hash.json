@@ -1,0 +1,72 @@
+[
+ {
+  "algo": "SHA-1",
+  "input": "",
+  "output": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+ },
+ {
+  "algo": "SHA-1",
+  "input": "abc",
+  "output": "a9993e364706816aba3e25717850c26c9cd0d89d"
+ },
+ {
+  "algo": "SHA-1",
+  "input": "hello world",
+  "output": "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed"
+ },
+ {
+  "algo": "SHA-1",
+  "input": "こんにちは",
+  "output": "20427a708c3f6f07cf12ab23557982d9e6d23b61"
+ },
+ {
+  "algo": "SHA-1",
+  "input": "3ch",
+  "output": "25167b968ac5d94b49e602334283c0b9c18e0af6"
+ },
+ {
+  "algo": "SHA-1",
+  "input": "password",
+  "output": "5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8"
+ },
+ {
+  "algo": "SHA-1",
+  "input": "😀",
+  "output": "9c533688a979a858cbd6a43c9f91aba624651f18"
+ },
+ {
+  "algo": "SHA-256",
+  "input": "",
+  "output": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+ },
+ {
+  "algo": "SHA-256",
+  "input": "abc",
+  "output": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+ },
+ {
+  "algo": "SHA-256",
+  "input": "hello world",
+  "output": "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+ },
+ {
+  "algo": "SHA-256",
+  "input": "こんにちは",
+  "output": "125aeadf27b0459b8760c13a3d80912dfa8a81a68261906f60d87f4a0268646c"
+ },
+ {
+  "algo": "SHA-256",
+  "input": "3ch",
+  "output": "9e37496109e266d9f9fb2e1fc1a46b7e5eef3317325815724a42392baa178ac1"
+ },
+ {
+  "algo": "SHA-256",
+  "input": "password",
+  "output": "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"
+ },
+ {
+  "algo": "SHA-256",
+  "input": "😀",
+  "output": "f0443a342c5ef54783a111b51ba56c938e474c32324d90c3a60c9c8e3a37e2d9"
+ }
+]

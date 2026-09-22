@@ -1,0 +1,63 @@
+[
+ {
+  "input": "",
+  "outputCharCodes": []
+ },
+ {
+  "input": "41",
+  "outputCharCodes": [
+   65
+  ]
+ },
+ {
+  "input": "4142",
+  "outputCharCodes": [
+   65,
+   66
+  ]
+ },
+ {
+  "input": "ff",
+  "outputCharCodes": [
+   255
+  ]
+ },
+ {
+  "input": "e29c93",
+  "outputCharCodes": [
+   226,
+   156,
+   147
+  ]
+ },
+ {
+  "input": "414",
+  "outputCharCodes": [
+   65
+  ]
+ },
+ {
+  "input": "414243",
+  "outputCharCodes": [
+   65,
+   66,
+   67
+  ]
+ },
+ {
+  "input": "FF",
+  "outputCharCodes": [
+   255
+  ]
+ },
+ {
+  "input": "Ff",
+  "outputCharCodes": [
+   255
+  ]
+ },
+ {
+  "input": "0",
+  "outputCharCodes": []
+ }
+]

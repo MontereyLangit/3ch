@@ -1,0 +1,82 @@
+[
+ {
+  "password": "password",
+  "salt": "ab",
+  "output": "abJnggxhB/yWI"
+ },
+ {
+  "password": "",
+  "salt": "..",
+  "output": "..X8NBuQ4l6uQ"
+ },
+ {
+  "password": "test",
+  "salt": "AB",
+  "output": "ABwOg1D2JDxIQ"
+ },
+ {
+  "password": "longpasswordmorethan8chars",
+  "salt": "xy",
+  "output": "xy7XrDVdSINMQ"
+ },
+ {
+  "password": "12345678",
+  "salt": "ab",
+  "output": "ab1iBa.N.U2C6"
+ },
+ {
+  "password": "12345678extra-tail-ignored",
+  "salt": "ab",
+  "output": "ab1iBa.N.U2C6"
+ },
+ {
+  "password": "1234567",
+  "salt": "ab",
+  "output": "ablk9HoaAwzxk"
+ },
+ {
+  "password": "",
+  "salt": "ab",
+  "output": "abmF1QH4PEr.E"
+ },
+ {
+  "password": "abc",
+  "salt": "{|",
+  "output": "{|GMstYGoUC76"
+ },
+ {
+  "password": "abc",
+  "salt": "zz",
+  "output": "zzsT4g5y.2SNE"
+ },
+ {
+  "password": "abc",
+  "salt": "99",
+  "output": "99UFcjBffOlTw"
+ },
+ {
+  "password": "abc",
+  "salt": "..",
+  "output": "..4WjmMO32dBQ"
+ },
+ {
+  "password": "abc",
+  "salt": "AZ",
+  "output": "AZlz3g8QUCdpU"
+ },
+ {
+  "password": "こんにちは",
+  "salt": "ab",
+  "output": "abeKzkX1locWc"
+ },
+ {
+  "password": "abc",
+  "salt": "",
+  "output": "\u0000\u00004WjmMO32dBQ"
+ },
+ {
+  "password": "abc",
+  "salt": "a",
+  "output": "a\u0000uoC5noeqDXE"
+ }
+]

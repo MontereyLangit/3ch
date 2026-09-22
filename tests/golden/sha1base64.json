@@ -1,0 +1,30 @@
+[
+ {
+  "input": "",
+  "output": "2jmj7l5rSw0yVb/vlWAYkK/YBwk"
+ },
+ {
+  "input": "abc",
+  "output": "qZk+NkcGgWq6PiVxeFDCbJzQ2J0"
+ },
+ {
+  "input": "hello world",
+  "output": "Kq5sNclPz7QV2+lfQIuc6R7oRu0"
+ },
+ {
+  "input": "こんにちは",
+  "output": "IEJ6cIw/bwfPEqsjVXmC2ebSO2E"
+ },
+ {
+  "input": "3ch",
+  "output": "JRZ7lorF2UtJ5gIzQoPAucGOCvY"
+ },
+ {
+  "input": "password",
+  "output": "W6ph5Mm5Pz8GgiULbPgzG37mj9g"
+ },
+ {
+  "input": "😀",
+  "output": "nFM2iKl5qFjL1qQ8n5GrpiRlHxg"
+ }
+]

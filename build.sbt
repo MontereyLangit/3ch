@@ -25,9 +25,19 @@ lazy val common = crossProject(JSPlatform, JVMPlatform)
   .crossType(CrossType.Pure)
   .in(file("common"))
   .settings(commonSettings)
+  .jvmSettings(
+    // golden入出力表 (tests/golden/*.json) を読むテスト専用のJVM実装 (java.io を使う。
+    // 本番コードはcommon/src/main配下だけなので「pure/no I/O」方針には反しない)。
+    // CrossType.Pure は src/{main,test}/scala を共有するため、プラットフォーム別の
+    // 追加ソースディレクトリはここで明示的に足す。
+    Test / unmanagedSourceDirectories += baseDirectory.value / ".." / "src" / "test" / "scala-jvm"
+  )
   .jsSettings(
     scalaJSUseMainModuleInitializer := false,
-    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) }
+    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
+    // golden入出力表を読むテスト専用のJS実装 (Node の fs を使う。sbt-scalajsのテストは
+    // 既定でNodeJSEnv上で実行されるため利用できる)。
+    Test / unmanagedSourceDirectories += baseDirectory.value / ".." / "src" / "test" / "scala-js"
   )
 
 lazy val commonJVM = common.jvm
@@ -37,7 +47,10 @@ lazy val commonJS  = common.js
 lazy val bbs = project
   .in(file("bbs"))
   .enablePlugins(ScalaJSPlugin)
-  .dependsOn(commonJS)
+  // "test->test" も繋いでおく: bbs の golden テスト（WebHashSuite 等）が、common 側で
+  // 自己完結して用意した golden JSON パーサ/ローダ (ch3s.common.golden.{Json, GoldenFile})
+  // をテストだけ再利用できるようにする（実装コードには依存しない、テスト基盤の共有）。
+  .dependsOn(commonJS % "compile->compile;test->test")
   .settings(commonSettings)
   .settings(
     scalaJSUseMainModuleInitializer := false,
