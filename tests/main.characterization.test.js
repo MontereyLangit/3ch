@@ -75,6 +75,30 @@ const sjisBytes = text => Uint8Array.from(new sjis().encode(text));
 const utf8Bytes = text => new TextEncoder().encode(text);
 const bytesOf = async res => new Uint8Array(await res.arrayBuffer());
 
+// 'name<><>2026/09/22(火) 12:00:00<>hello<>title\n' のShift_JISバイト列。
+// sjisBytes()ヘルパー(=検証対象のsjis.encode自身)で期待値を作ると、エンコーダにバグが
+// 入っても両辺が一緒にずれて常に一致してしまうため、ここでは実測して得た値をハードコードする。
+const DAT_BOARD1_1800000000_SJIS_BYTES = new Uint8Array([
+  110, 97, 109, 101, 60, 62, 60, 62, 50, 48, 50, 54, 47, 48, 57, 47, 50, 50,
+  40, 137, 206, 41, 32, 49, 50, 58, 48, 48, 58, 48, 48, 60, 62, 104, 101, 108,
+  108, 111, 60, 62, 116, 105, 116, 108, 101, 10,
+]);
+
+// subject.txtルートのlastModifiedは常に`new Date()`(現在時刻)なので、ミリ秒成分をテストから
+// 制御するために一時的にグローバルDateを固定する。明示的な引数付きnew Date(x)は素通しする。
+function withFixedTime(ms, fn) {
+  const RealDate = Date;
+  class FixedDate extends RealDate {
+    constructor(...args) {
+      if (args.length === 0) return new RealDate(ms);
+      return new RealDate(...args);
+    }
+    static now() { return ms; }
+  }
+  globalThis.Date = FixedDate;
+  return Promise.resolve().then(fn).finally(() => { globalThis.Date = RealDate; });
+}
+
 async function createThread(thread, bbs, key, { title = 'title', message = 'hello', date = '2026/09/22(火) 12:00:00' } = {}) {
   const t = thread(`${bbs}/${key}`);
   await t.addRes(`name<><>${date}<>${message}<>${title}`, '1<>log', { bbs, key, title, resNum: 1, sage: false, maxThreads: 700, create: true });
@@ -92,9 +116,8 @@ test('dat: 通常取得は200・Shift_JISバイト列・cache-control/s-maxage�
   assert.equal(res.headers.get('cache-control'), 'no-store');
   assert.equal(res.headers.get('s-maxage'), '1');
   assert.equal(res.headers.get('accept-ranges'), 'bytes');
-  const expected = sjisBytes('name<><>2026/09/22(火) 12:00:00<>hello<>title\n');
-  assert.deepEqual(await bytesOf(res), expected);
-  assert.equal(res.headers.get('content-length'), String(expected.length));
+  assert.deepEqual(await bytesOf(res), DAT_BOARD1_1800000000_SJIS_BYTES);
+  assert.equal(res.headers.get('content-length'), String(DAT_BOARD1_1800000000_SJIS_BYTES.length));
 });
 
 test('dat: 削除済み(hidden)スレは404', async () => {
@@ -113,24 +136,28 @@ test('dat: 存在しないスレも404', async () => {
   assert.equal(res.status, 404);
 });
 
-test('dat: Range bytes=N- は206でContent-Range/Content-Length/Accept-Ranges付き', async () => {
+test('dat: Range bytes=N- は206でContent-Range/Content-Length/Accept-Ranges付き、本文バイトも指定範囲通り', async () => {
   const { env, ctx, thread } = setup();
   await createThread(thread, 'board1', '1800000002');
-  const total = sjisBytes('name<><>2026/09/22(火) 12:00:00<>hello<>title\n').length;
+  const total = DAT_BOARD1_1800000000_SJIS_BYTES.length;
   const res = await fetchHandler(new Request('http://x/board1/dat/1800000002.dat', { headers: { range: 'bytes=5-' } }), env, ctx);
   assert.equal(res.status, 206);
   assert.equal(res.headers.get('content-range'), `bytes 5-${total - 1}/${total}`);
   assert.equal(res.headers.get('content-length'), String(total - 5));
   assert.equal(res.headers.get('accept-ranges'), 'bytes');
+  // ヘッダだけでなく本文バイト自体も正しい範囲であることを検証する(ヘッダは合っていて
+  // 本文の切り出しが間違っている移植ミスを検知するため)。
+  assert.deepEqual(await bytesOf(res), DAT_BOARD1_1800000000_SJIS_BYTES.slice(5));
 });
 
-test('dat: Range bytes=N-M は範囲だけの206', async () => {
+test('dat: Range bytes=N-M は範囲だけの206、本文バイトも指定範囲通り', async () => {
   const { env, ctx, thread } = setup();
   await createThread(thread, 'board1', '1800000003');
   const res = await fetchHandler(new Request('http://x/board1/dat/1800000003.dat', { headers: { range: 'bytes=2-5' } }), env, ctx);
   assert.equal(res.status, 206);
   assert.equal(res.headers.get('content-range'), 'bytes 2-5/46');
   assert.equal(res.headers.get('content-length'), '4');
+  assert.deepEqual(await bytesOf(res), DAT_BOARD1_1800000000_SJIS_BYTES.slice(2, 6));
 });
 
 test('dat: 範囲外のRangeは416でContent-Range: bytes */total', async () => {
@@ -151,16 +178,23 @@ test('dat: 書式不正なRangeは400・本文"Bad Range Header"', async () => {
   assert.equal(res.headers.get('content-type'), 'text/plain;charset=UTF-8');
 });
 
-test('dat: If-Modified-Sinceが最終更新以降なら304、同一値ではミリ秒切り捨てにより200になる', async () => {
+test('KB-23: dat: If-Modified-Sinceに同一値を送るとミリ秒切り捨てにより200になる（modifiedAtのミリ秒が0でない場合）', async () => {
+  // modifiedAtはDate.now()由来で通常ミリ秒が0でないため、Last-Modified(秒精度)をそのまま
+  // If-Modified-Sinceに送り返すと、内部比較用のDate(ミリ秒付き)の方が僅かに後ろになり
+  // <=を満たさず200になる。元のテストはDate.now()の実際のミリ秒に依存しており、
+  // 1000回に1回程度の確率でミリ秒がちょうど0になった場合に304を返してテストが落ちる
+  // フレーキーさがあったため、ここではmodifiedAtのミリ秒を明示的に0でない値に固定する。
   const { env, ctx, thread } = setup();
-  await createThread(thread, 'board1', '1800000007');
+  const t = await createThread(thread, 'board1', '1800000007');
+  const fixedMs = Date.UTC(2024, 0, 1, 0, 0, 30, 500); // ミリ秒=500(≠0)に固定
+  await t.state.storage.put('modifiedAt', fixedMs);
+
   const res1 = await fetchHandler(new Request('http://x/board1/dat/1800000007.dat'), env, ctx);
   const lm = res1.headers.get('last-modified');
+  assert.equal(lm, 'Mon, 01 Jan 2024 00:00:30 GMT'); // toUTCStringはミリ秒を切り捨てる
 
-  // Last-Modifiedは秒精度(toUTCString)なので、そのまま同じ文字列をIf-Modified-Sinceに
-  // 返しても実際のlastModified(ミリ秒付き)の方が僅かに後ろになり、<=を満たさず200になる。
   const resSame = await fetchHandler(new Request('http://x/board1/dat/1800000007.dat', { headers: { 'if-modified-since': lm } }), env, ctx);
-  assert.equal(resSame.status, 200, '秒精度の往復により同一値でも304にならない（実挙動として保存）');
+  assert.equal(resSame.status, 200, 'ミリ秒切り捨てにより同一値でも304にならない（実挙動として保存）');
 
   const oneSecondLater = new Date(new Date(lm).getTime() + 1000).toUTCString();
   const res2 = await fetchHandler(new Request('http://x/board1/dat/1800000007.dat', { headers: { 'if-modified-since': oneSecondLater } }), env, ctx);
@@ -169,13 +203,45 @@ test('dat: If-Modified-Sinceが最終更新以降なら304、同一値ではミ�
   assert.equal(res2.headers.get('content-type'), null);
 });
 
-test('dat: Last-Modifiedはdat中の最終レスのタイムスタンプ由来で、現在時刻ではない', async () => {
+test('KB-23: dat: modifiedAtのミリ秒がちょうど0の場合は、同一値を送り返すと切り捨てによる誤差が無く304になる', async () => {
+  // KB-23の原因(秒精度の往復で誤差が生じる)が成立しない特殊ケース。modifiedAtのミリ秒が
+  // ちょうど0であれば、toUTCString()の往復で情報が失われないため、同一値の送り返しでも
+  // <=判定が成立し304になる。これも実際に起こりうる挙動として固定する。
+  const { env, ctx, thread } = setup();
+  const t = await createThread(thread, 'board1', '1800000107');
+  const fixedMs = Date.UTC(2024, 0, 1, 0, 0, 30, 0); // ミリ秒=0に固定
+  await t.state.storage.put('modifiedAt', fixedMs);
+
+  const res1 = await fetchHandler(new Request('http://x/board1/dat/1800000107.dat'), env, ctx);
+  const lm = res1.headers.get('last-modified');
+  assert.equal(lm, 'Mon, 01 Jan 2024 00:00:30 GMT');
+
+  const resSame = await fetchHandler(new Request('http://x/board1/dat/1800000107.dat', { headers: { 'if-modified-since': lm } }), env, ctx);
+  assert.equal(resSame.status, 304, 'ミリ秒がちょうど0の場合は誤差が無いため同一値でも304になる');
+});
+
+test('dat: Last-Modifiedは保存されているmodifiedAt由来で、現在時刻ではない（コメント訂正: dat中の最終レスの日付ではない）', async () => {
+  // 訂正: このテストの元のタイトル/コメントは「Last-Modifiedはdatのタイムスタンプ由来」としていたが、
+  // main.js:189-206を実際に読むと、Thread DOに保存された`modifiedAt`(Date.now()起源)が最優先で
+  // 使われ、datの最終行の日付文字列をパースする経路は`publicData.modifiedAt`が存在しない場合の
+  // フォールバックに過ぎない。このテストが検証しているのはまさに前者(modifiedAt優先)であり、
+  // 「dat中の最終レスのタイムスタンプ由来」という説明は実装と矛盾していたため訂正する。
   const { env, ctx, thread } = setup();
   const t = await createThread(thread, 'board1', '1800000008');
   const fixedPast = new Date('2020-01-01T00:00:00Z').getTime();
   await t.state.storage.put('modifiedAt', fixedPast); // addRes直後のmodifiedAtを過去日時に差し替える
   const res = await fetchHandler(new Request('http://x/board1/dat/1800000008.dat'), env, ctx);
   assert.equal(res.headers.get('last-modified'), new Date(fixedPast).toUTCString());
+});
+
+test('dat: modifiedAtが未設定の場合のみ、datの最終行の日付文字列がLast-Modifiedのフォールバックとして使われる', async () => {
+  // main.js:196-206: publicData.modifiedAtが無い(falsy)場合に限り、dat最終行の日付欄をパースして
+  // lastModifiedに使う。この経路が実際に機能することを固定する。
+  const { env, ctx, thread } = setup();
+  const t = await createThread(thread, 'board1', '1800000108', { date: '2021/03/04(木) 09:08:07' });
+  await t.state.storage.delete('modifiedAt');
+  const res = await fetchHandler(new Request('http://x/board1/dat/1800000108.dat'), env, ctx);
+  assert.equal(res.headers.get('last-modified'), new Date('2021/03/04(木) 09:08:07').toUTCString());
 });
 
 test('dat: editRes後はRange/If-Modified-Sinceを無視して全文200を返す', async () => {
@@ -213,12 +279,34 @@ test('subject.txt: 板にスレが無ければ200・空文字列', async () => {
 
 test('KB-06: subject.txt: 既知の不具合 — lastModifiedが常にnew Date()のため、前回のLast-Modifiedを' +
   'If-Modified-Sinceに送っても304にならず200が返る（専ブラの定期巡回が軽減されない）', async () => {
-  const { env, ctx, board } = setup();
-  await board('board1').updateThread({ key: '1800000011', title: 'BBB', resNum: 1 }, false, 700);
-  const res1 = await fetchHandler(new Request('http://x/board1/subject.txt'), env, ctx);
-  const lm = res1.headers.get('last-modified');
-  const res2 = await fetchHandler(new Request('http://x/board1/subject.txt', { headers: { 'if-modified-since': lm } }), env, ctx);
-  assert.equal(res2.status, 200, '実際の巡回シナリオ（前回のLast-Modifiedをそのまま送る）では常に200');
+  // lastModified = new Date()(現在時刻)はミリ秒成分が実行タイミングに依存するため、元のテストは
+  // 1000回に1回程度の確率でミリ秒がちょうど0になり304が返ってテストが落ちるフレーキーさが
+  // あった（下の「ミリ秒がちょうど0」テストで再現している通り）。ここではグローバルDateを
+  // ミリ秒≠0に固定して決定論的にする。
+  await withFixedTime(Date.UTC(2024, 0, 1, 0, 0, 30, 500), async () => {
+    const { env, ctx, board } = setup();
+    await board('board1').updateThread({ key: '1800000011', title: 'BBB', resNum: 1 }, false, 700);
+    const res1 = await fetchHandler(new Request('http://x/board1/subject.txt'), env, ctx);
+    const lm = res1.headers.get('last-modified');
+    assert.equal(lm, 'Mon, 01 Jan 2024 00:00:30 GMT');
+    const res2 = await fetchHandler(new Request('http://x/board1/subject.txt', { headers: { 'if-modified-since': lm } }), env, ctx);
+    assert.equal(res2.status, 200, '実際の巡回シナリオ（前回のLast-Modifiedをそのまま送る）では常に200');
+  });
+});
+
+test('KB-06: subject.txt: new Date()のミリ秒がちょうど0の瞬間にリクエストが来た場合は、切り捨て誤差が無いため304になる', async () => {
+  // KB-06は「lastModifiedが常に現在時刻」であることそのものが原因ではなく、toUTCString()に
+  // よる秒精度への切り捨てが往復比較に誤差を生むことが原因。ミリ秒がちょうど0であれば
+  // 誤差が生じないため、この特殊ケースでは304になる。これも実際に起こりうる挙動として固定する。
+  await withFixedTime(Date.UTC(2024, 0, 1, 0, 0, 30, 0), async () => {
+    const { env, ctx, board } = setup();
+    await board('board1').updateThread({ key: '1800000111', title: 'BBB', resNum: 1 }, false, 700);
+    const res1 = await fetchHandler(new Request('http://x/board1/subject.txt'), env, ctx);
+    const lm = res1.headers.get('last-modified');
+    assert.equal(lm, 'Mon, 01 Jan 2024 00:00:30 GMT');
+    const res2 = await fetchHandler(new Request('http://x/board1/subject.txt', { headers: { 'if-modified-since': lm } }), env, ctx);
+    assert.equal(res2.status, 304, 'ミリ秒がちょうど0の場合は誤差が無いため304になる');
+  });
 });
 
 test('subject.txt: タスク指示文の想定に反し、意図的に遠い未来のIf-Modified-Sinceを送ると実際には304になる', async () => {

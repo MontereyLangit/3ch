@@ -200,11 +200,12 @@ test('respondPlainText: UTF-8プレーンテキスト（type=plain）はcharset=
 });
 
 test('respondPlainText: Shift_JISプレーンテキスト（type=plain）はcharset=Shift_JISで生バイトを返す', async () => {
-  const s = new sjis();
   const res = respondPlainText('あいう', 'plain', 'Shift_JIS');
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('content-type'), 'text/plain;charset=Shift_JIS');
-  assert.deepEqual(await bytes(res), Uint8Array.from(s.encode('あいう')));
+  // 期待値をs.encode()(=検証対象のエンコーダ自身)で作ると、エンコーダにバグが入っても
+  // 両辺が一緒にずれて常に一致してしまう。'あいう'の実測SJISバイト列をハードコードする。
+  assert.deepEqual(await bytes(res), Uint8Array.from([0x82, 0xa0, 0x82, 0xa2, 0x82, 0xa4]));
 });
 
 test('respondPlainText: type!=="plain"の場合はLast-Modified/Accept-Rangesを付与しない（UTF-8/Shift_JIS双方）', async () => {
