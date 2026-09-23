@@ -98,6 +98,7 @@ function dumpSjisBehavior(s) {
     '😀', '👍', // KB-17: テーブル未収録 -> undefined混入
     'A😀あ', // 混在時、該当位置だけundefined
     '�', // 実装上、複数バイト列がこの文字に collide する（this.eは最後に代入された方が勝つ）
+    '\uD800', '\uDBFF', '\uDC00', '\uDFFF', 'A\uD800あ', '\uD800\uD800',
   ];
   const encode = encodeCases.map(input => ({
     input: toJsonSafe(input),
@@ -153,7 +154,9 @@ function dumpMd5() {
 // 4. sha1Base64 / hash（Web Crypto依存。async）
 // ============================================================
 async function dumpShaAndHash() {
-  const inputs = ['', 'abc', 'hello world', 'こんにちは', '3ch', 'password', '😀'];
+  const inputs = ['', 'abc', 'hello world', 'こんにちは', '3ch', 'password', '😀',
+    '\x80\xff', String.fromCharCode(...Array.from({ length: 128 }, (_, i) => i + 128)),
+    String.fromCharCode(...new sjis().encode('日本語トリップ'))];
   const sha1base64 = [];
   for (const input of inputs) {
     sha1base64.push({ input, output: await sha1Base64(input) });
@@ -231,6 +234,9 @@ function dumpCrypt() {
     output: crypt(pw, salt),
   }));
   writeJson('crypt.json', out);
+  writeJson('crypt-bytes.json', cases.map(({ pw, salt }) => ({
+    password: pw, salt, output: toJsonSafe(crypt(pw, salt, true)),
+  })));
 }
 
 // ============================================================

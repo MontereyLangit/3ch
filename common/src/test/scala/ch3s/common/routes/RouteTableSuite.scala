@@ -4,8 +4,8 @@ import munit.FunSuite
 
 class RouteTableSuite extends FunSuite:
 
-  test("routes は health エンドポイント1件のみを持つ（インフラのみのスコープ）") {
-    assertEquals(RouteTable.routes.map(_.filePath), List("_v6/health.ts"))
+  test("routes include the health route and the all-method legacy dispatcher") {
+    assertEquals(RouteTable.routes.map(_.filePath), List("_v6/health.ts", "index.ts"))
   }
 
   test("renderRouteFile は PassThrough(GET) を export default createRoute(...) として生成する") {

@@ -125,5 +125,59 @@
    239,
    252
   ]
+ },
+ {
+  "input": "\ud800",
+  "output": [
+   {
+    "$type": "undefined"
+   }
+  ]
+ },
+ {
+  "input": "\udbff",
+  "output": [
+   {
+    "$type": "undefined"
+   }
+  ]
+ },
+ {
+  "input": "\udc00",
+  "output": [
+   {
+    "$type": "undefined"
+   }
+  ]
+ },
+ {
+  "input": "\udfff",
+  "output": [
+   {
+    "$type": "undefined"
+   }
+  ]
+ },
+ {
+  "input": "A\ud800あ",
+  "output": [
+   65,
+   {
+    "$type": "undefined"
+   },
+   130,
+   160
+  ]
+ },
+ {
+  "input": "\ud800\ud800",
+  "output": [
+   {
+    "$type": "undefined"
+   },
+   {
+    "$type": "undefined"
+   }
+  ]
  }
 ]

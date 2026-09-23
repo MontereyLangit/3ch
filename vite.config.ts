@@ -51,7 +51,7 @@ export default defineConfig(({ mode }) => {
   // externalに指定してRollupにバンドルさせない。
   const entryContentAfterHooks = [
     ...(cloudflareWorkersDefaultOptions.entryContentAfterHooks ?? []),
-    () => `export { V6PlaceholderDurableObject } from '/app/server.ts'`,
+    () => `export { V6PlaceholderDurableObject, Board, Thread } from '/app/server.ts'`,
   ];
 
   return {

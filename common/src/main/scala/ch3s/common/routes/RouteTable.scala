@@ -13,6 +13,16 @@ package ch3s.common.routes
  * BBS ロジック（dat / subject.txt / bbs.cgi 等）のルートは次タスク以降で追加する。
  */
 object RouteTable {
+  // Preserve v5 prefix matches (including trailing path characters) and evaluation order.
+  val publicPatterns: List[(String, String)] = List(
+    "dat" -> "^/([a-zA-Z0-9\\-_]+)/dat/([0-9]{10})\\.dat",
+    "subject" -> "^/([a-zA-Z0-9\\-_]+)/subject\\.txt",
+    "archive" -> "^/([a-zA-Z0-9\\-_]+)/kako/([0-9]{4})/subject\\.txt",
+    "archives" -> "^/([a-zA-Z0-9\\-_]+)/kako/subject\\.txt",
+    "head" -> "^/([a-zA-Z0-9\\-_]+)/head\\.txt",
+    "settings" -> "^/([a-zA-Z0-9\\-_]+)/SETTING\\.TXT",
+    "board" -> "^/([a-zA-Z0-9\\-_]+)/(index\\.html)?$"
+  )
 
   /** 生成する route ファイルの「中身の形」（参照実装の `RouteKind` から今回使う分だけを残した）。 */
   enum RouteKind {
@@ -23,6 +33,7 @@ object RouteTable {
      * という named export になる（HonoXの規約: `export default` = GETのみ登録）。
      */
     case PassThrough(exportName: String, method: String = "GET")
+    case LegacyDispatch
   }
 
   /**
@@ -41,7 +52,8 @@ object RouteTable {
         "// GET /_v6/health -- v6s ビルド骨格の動作確認用エンドポイント（固定文字列を返すだけ）。",
         "// BBSロジックの移植はこの骨格の後続タスクで行う（docs/移植方針_step3_ScalaJS.md）。"
       )
-    )
+    ),
+    RouteEntry("index.ts", RouteKind.LegacyDispatch, Nil)
   )
 
   private val generatedBanner: List[String] = List(
@@ -63,6 +75,13 @@ object RouteTable {
     lines += "import { createRoute } from \"honox/factory\";"
 
     entry.kind match {
+      case RouteTable.RouteKind.LegacyDispatch =>
+        lines += "import { createHono } from \"honox/factory\";"
+        lines += "// @ts-expect-error scalajs:server.js is resolved by the Scala.js Vite plugin."
+        lines += "import { publicHandler, healthHandler } from \"scalajs:server.js\";"
+        lines += "const app = createHono();"
+        lines += "app.all('*', (c) => c.req.path === '/_v6/health' ? healthHandler(c) : publicHandler(c));"
+        lines += "export default app;"
       case RouteTable.RouteKind.PassThrough(exportName, method) =>
         lines += "// @ts-expect-error scalajs:server.js は仮想モジュール（vite.config.ts参照）。"
         lines += s"""import { $exportName } from "scalajs:server.js";"""

@@ -16,8 +16,8 @@ import scala.collection.mutable
  *
  * 孤立サロゲート（ペアになっていない High/Low サロゲート）は、`TextEncoder` と同じく
  * 1つの `U+FFFD`（3バイト `EF BF BD`）に置き換える（実測: Node の `TextEncoder` で確認済み）。
- * これは `sjis.encode` が使う `[...str]` の走査（孤立サロゲートを代替しない）とは
- * 意図的に異なる実装なので、[[ch3s.common.sjis.Sjis]] 側のコードポイント走査とは共有しない。
+ * これは Shift_JIS 側（`ch3s.bbs.util.SjisEncoding`、`[...str]` 相当のサロゲートペア走査を行うが
+ * 孤立サロゲートを代替しない）とは意図的に異なる実装なので、コードポイント走査ロジックは共有しない。
  */
 object Utf8 {
 

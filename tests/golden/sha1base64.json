@@ -26,5 +26,17 @@
  {
   "input": "😀",
   "output": "nFM2iKl5qFjL1qQ8n5GrpiRlHxg"
+ },
+ {
+  "input": "ÿ",
+  "output": "NNrddQnOdXx9FdWE/vHQvvpfrpg"
+ },
+ {
+  "input": " ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ",
+  "output": "7pjglnQbr9wbCbIEAcIN55Y52Q8"
+ },
+ {
+  "input": "ú{êgbv",
+  "output": "j3R6ZV8OXpQOL6BUrM/gvKtzI9c"
  }
 ]

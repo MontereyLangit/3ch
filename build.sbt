@@ -1,7 +1,7 @@
-// v6s: Scala 3 / Scala.js x HonoX ビルド骨格（docs/移植方針_step3_ScalaJS.md）。
+// v6s: Scala 3 / Scala.js x HonoX バックエンド（docs/移植方針_step3_ScalaJS.md）。
 // 参照実装 C:/project/3ch/ch3s-migration の build.sbt をそのまま踏襲する
 // （common: crossProject 純粋 / bbs: JS-only Workers本体 / bbs-client: JS-only islands /
-//   codegen: JVM-only ファイルI/O）。今回はインフラのみで BBS ロジックは移植しない。
+//   codegen: JVM-only ファイルI/O）。BBSロジックはbbs、純粋な暗号・文字コード処理はcommon。
 // bg（バックグラウンドサービス、http4s/tapir）は step 5 のスコープなのでこの骨格には含めない。
 
 import org.scalajs.linker.interface.ModuleSplitStyle
@@ -68,8 +68,8 @@ lazy val bbs = project
       org.scalajs.jsenv.nodejs.NodeJSEnv.Config()
         .withArgs(
           List(
-            "--experimental-loader",
-            (baseDirectory.value / "test-stubs" / "cloudflare-workers-loader.mjs").toURI.toString
+            "--import",
+            (baseDirectory.value / "test-stubs" / "register.mjs").toURI.toString
           )
         )
     )

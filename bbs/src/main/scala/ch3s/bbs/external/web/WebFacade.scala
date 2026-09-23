@@ -16,4 +16,18 @@ trait ResponseInit extends js.Object:
 
 @js.native
 @JSGlobal("Response")
-class Response(body: js.UndefOr[js.Any] = js.native, init: js.UndefOr[ResponseInit] = js.native) extends js.Object
+class Response(body: js.UndefOr[js.Any] = js.native, init: js.UndefOr[ResponseInit] = js.native) extends js.Object:
+  val headers: Headers = js.native
+
+@js.native
+trait Headers extends js.Object:
+  def get(name: String): String = js.native
+  def set(name: String, value: String): Unit = js.native
+
+@js.native
+trait Request extends js.Object:
+  val method: String = js.native
+  val url: String = js.native
+  val headers: Headers = js.native
+  val cf: js.UndefOr[js.Dynamic] = js.native
+  def arrayBuffer(): js.Promise[js.typedarray.ArrayBuffer] = js.native

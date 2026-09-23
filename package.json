@@ -9,17 +9,21 @@
     "v6:build:client": "vite build --mode client",
     "v6:build:server": "vite build --mode workers",
     "v6:build": "npm run v6:generate && npm run v6:build:client && npm run v6:build:server",
-    "v6:dev:workers": "wrangler dev --config wrangler.v6.jsonc"
+    "v6:dev:workers": "wrangler dev --config wrangler.v6.jsonc",
+    "v6:test:characterization": "sbt bbs/fastLinkJS && node --import ./tests/golden/register-scala.mjs --test tests/thread.test.js tests/moderation.test.js tests/admin.test.js tests/bbscgi.characterization.test.js tests/main.characterization.test.js tests/golden/do-differential.test.mjs",
+    "v6:test:http": "node --test tests/golden/http-differential.test.mjs",
+    "v6:typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "wrangler": "^4.44.0",
     "@hono/vite-build": "1.11.1",
     "@scala-js/vite-plugin-scalajs": "1.1.0",
     "@types/node": "^22",
     "typescript": "^5",
-    "vite": "7.3.6"
+    "vite": "7.3.6",
+    "wrangler": "^4.44.0"
   },
   "dependencies": {
+    "encoding-japanese": "2.2.0",
     "hono": "4.13.7",
     "honox": "0.1.61"
   }

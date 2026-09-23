@@ -342,7 +342,7 @@ object UnixCrypt {
         // 注意: ここを単純に iobuf(i)=0 とすると、後段の `if(iobuf[1]==0) iobuf[1]=iobuf[0]`
         // 判定が「JSではundefined==0はfalseだから発動しない」のに対し「Scalaでは0==0で
         // trueになり発動してしまう」という食い違いが起きる（実測: salt="a" で確認済み。
-        // JSは "a ..." を返すが、0で埋めると "aa..." になってしまう）。
+        // JSは "a\x00..." を返すが、0で埋めると "aa..." になってしまう）。
         // そのため JS の undefined を表す専用の負の番兵 UndefinedSalt を使い分ける。
         iobuf(i) = UndefinedSalt
       }

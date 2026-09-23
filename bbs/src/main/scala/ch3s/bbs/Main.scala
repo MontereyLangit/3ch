@@ -18,6 +18,27 @@ import scala.scalajs.js.annotation.JSExportTopLevel
  */
 object Main:
 
+  @JSExportTopLevel("admin", "server")
+  def admin(request: external.web.Request, env: external.cloudflare.WorkerEnv): js.Promise[Response] = handler.Admin.handle(request, env)
+
+  @JSExportTopLevel("publicFetch", "server")
+  def publicFetch(request: external.web.Request, env: external.cloudflare.WorkerEnv, ctx: js.Dynamic): js.Promise[Response] = handler.PublicRoutes.fetch(request, env, ctx)
+
+  @JSExportTopLevel("publicHandler", "server")
+  def publicHandler(c: js.Dynamic): js.Promise[Response] = publicFetch(c.req.raw.asInstanceOf[external.web.Request], c.env.asInstanceOf[external.cloudflare.WorkerEnv], c.executionCtx)
+
+  @JSExportTopLevel("bbs_entry", "server")
+  def bbsEntry(request: external.web.Request, env: external.cloudflare.WorkerEnv): js.Promise[Response] = handler.Posting.entry(request, env)
+
+  @JSExportTopLevel("settingTxtDefault", "server")
+  val settingTxtDefault: String = handler.PostingText.settingTxtDefault
+
+  @JSExportTopLevel("parseRules", "server")
+  def parseRules(text: String): js.Array[js.Dynamic] = handler.Moderation.parseRules(text)
+
+  @JSExportTopLevel("checkModeration", "server")
+  def checkModeration(gb: js.Dynamic, env: external.cloudflare.WorkerEnv): js.Promise[Int] = handler.Moderation.check(gb, env)
+
   @JSExportTopLevel("healthHandler", "server")
   def healthHandler(c: js.Any): js.Promise[Response] =
     HealthHandler.health(c.asInstanceOf[HonoContextFacade])
