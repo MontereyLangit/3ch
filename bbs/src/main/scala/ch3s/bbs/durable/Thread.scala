@@ -115,7 +115,14 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
   def setSettings(settings: String): js.Promise[Unit] = put("settings" -> settings).toJSPromise
 
   def addRes(datLine: String, logLine: String, posting: js.UndefOr[js.Dynamic] = js.undefined): js.Promise[Int] = locked {
-    val p = posting.getOrElse(js.Dynamic.literal())
+    // v5 uses `posting?.x` / `if (posting) ...` — plain JS truthiness, so a literal `null` argument
+    // (indistinguishable from omission to any untyped caller across the DO RPC boundary) behaves
+    // exactly like an omitted one. `js.UndefOr#isDefined` only means "not undefined": a `null` here
+    // would pass it, then `p.bbs` etc. would throw on a null receiver instead of degrading gracefully.
+    // `hasPosting` mirrors the JS truthiness check for both nullish cases.
+    val rawPosting = posting.asInstanceOf[js.Any]
+    val hasPosting = rawPosting != null && !js.isUndefined(rawPosting)
+    val p = if hasPosting then posting.get else js.Dynamic.literal()
     for
       hidden <- read("hidden")
       stopped <- if truth(hidden) then Future.successful[js.Any](true) else read("stopped")
@@ -125,14 +132,14 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
       settings <- text("settings")
       _ = if new js.RegExp("(?:^|<>)BBS_HEISA=checked(?:<>|$)").test(settings) then fail("このスレッドは停止されています。")
       _ = if truth(p.create) && dat.nonEmpty then fail("同じkeyのスレッドが存在します。")
-      _ = if posting.isDefined && !truth(p.create) && dat.isEmpty then fail("スレッドがありません。")
+      _ = if hasPosting && !truth(p.create) && dat.isEmpty then fail("スレッドがありません。")
       count = trimEnd(dat).split("\n", -1).count(_.nonEmpty) + 1
       _ = if count >= 1000 then fail("このスレッドは1000を超えたのでもう書けません。")
       log <- text("log")
       update = js.Dictionary[js.Any]("dat" -> (dat + datLine + "\n"), "log" -> (log + logLine.replaceFirst("^\\d+<>", s"$count<>") + "\n"), "modifiedAt" -> js.Date.now())
       _ = if truth(p.create) then update("settings") = (if truth(p.initialSettings) then p.initialSettings else "")
       _ <- state.storage.put(update).toFuture
-      _ <- if posting.isDefined then board(str(p.bbs)).updateThread(js.Dynamic.literal(key = p.key, title = p.title, resNum = count), p.sage.asInstanceOf[js.UndefOr[Boolean]], p.maxThreads.asInstanceOf[js.UndefOr[Double]]).toFuture else Future.unit
+      _ <- if hasPosting then board(str(p.bbs)).updateThread(js.Dynamic.literal(key = p.key, title = p.title, resNum = count), p.sage.asInstanceOf[js.UndefOr[Boolean]], p.maxThreads.asInstanceOf[js.UndefOr[Double]]).toFuture else Future.unit
     yield count
   }.toJSPromise
 

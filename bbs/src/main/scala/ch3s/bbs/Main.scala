@@ -3,9 +3,11 @@ package ch3s.bbs
 import ch3s.bbs.external.hono.HonoContextFacade
 import ch3s.bbs.external.web.Response
 import ch3s.bbs.handler.HealthHandler
+import ch3s.bbs.util.SjisEncoding
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSExportTopLevel
+import scala.scalajs.js.typedarray.Uint8Array
 
 /**
  * HonoXのルート（TypeScript、`app/routes` 配下、codegen生成）から `scalajs:server.js` 経由で
@@ -42,3 +44,12 @@ object Main:
   @JSExportTopLevel("healthHandler", "server")
   def healthHandler(c: js.Any): js.Promise[Response] =
     HealthHandler.health(c.asInstanceOf[HonoContextFacade])
+
+  // 差分テスト（tests/golden/http-differential.test.mjs）が実機 workerd 上で
+  // SjisEncoding（R-01案A）の実装そのものを exhaustive に検証するための診断用export。
+  // HTTPルーティングからは呼ばれない（RouteTable.scala に対応ルートを追加していない）。
+  @JSExportTopLevel("sjisEncode", "server")
+  def sjisEncode(text: String): Uint8Array = SjisEncoding.encode(text)
+
+  @JSExportTopLevel("sjisDecode", "server")
+  def sjisDecode(bytes: Uint8Array): String = SjisEncoding.decode(bytes)
