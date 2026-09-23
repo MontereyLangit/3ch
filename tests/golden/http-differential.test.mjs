@@ -106,13 +106,16 @@ test('v5 / Scala.js+HonoX on real `wrangler dev` (workerd): HTTP status, headers
 
   // --- 1b. v5-on-real-workerd vs v6-on-real-workerd, exhaustively: per docs/移植方針_step3_ScalaJS.md
   // R-01, every input v5 correctly converts must match v6 byte-for-byte / char-for-char; divergence is
-  // only allowed where v5 itself failed to convert (KB-04/KB-17/KB-18: NUL-byte encode fallback, thrown
-  // TypeError decode, empty-string "swallowed" incomplete lead byte, or the Node-table-only U+FFFD
-  // "hole" artifact at positions other than the one deliberate override at [0xEF,0xFC]).
+  // only allowed where v5 itself failed to convert (KB-17: NUL-byte encode fallback / KB-18: thrown
+  // TypeError decode, empty-string "swallowed" incomplete lead byte).
+  //
+  // 注: 案A（encoding-japanese）時代にはここに「v5 が U+FFFD を返した位置は差異を許容する
+  // （ただし [0xEF,0xFC] の上書き位置を除く）」という緩和があった。案A破棄により v5 と v6 は
+  // 同じ `TextDecoder('sjis')` から同じ手順でテーブルを作るため、U+FFFD になる位置も
+  // 完全に一致するはずで、この緩和はもはや不要。残すと本物の差異を隠すので外した。
   const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const v5EncodeFailed = bytes => bytes.length === 1 && bytes[0] === 0;
-  const v5DecodeFailed = (entry, lead, second) => !!entry.error || entry.value === '' ||
-    (entry.value === '�' && !(lead === 0xef && second === 0xfc));
+  const v5DecodeFailed = entry => !!entry.error || entry.value === '';
   const unexpectedEncode = [];
   for (let cp = 0; cp < 65536; cp++) {
     const a = sjisV5.encodeBmp[cp], b = sjisV6.encodeBmp[cp];
@@ -121,7 +124,7 @@ test('v5 / Scala.js+HonoX on real `wrangler dev` (workerd): HTTP status, headers
   const unexpectedDecodeSingle = [];
   for (let byte = 0; byte < 256; byte++) {
     const a = sjisV5.decodeSingle[byte], b = sjisV6.decodeSingle[byte];
-    if (!v5DecodeFailed(a, byte, -1) && !eq(a.value, b.value)) unexpectedDecodeSingle.push({ byte, v5: a, v6: b });
+    if (!v5DecodeFailed(a) && !eq(a.value, b.value)) unexpectedDecodeSingle.push({ byte, v5: a, v6: b });
   }
   // Only forced pairs whose first byte is a genuine 2-byte lead (0x81-0x9F / 0xE0-0xFC) exercise the
   // real 2-byte decode path; other "pairs" are an artifact of sweeping the full 65536-value domain and
@@ -134,7 +137,7 @@ test('v5 / Scala.js+HonoX on real `wrangler dev` (workerd): HTTP status, headers
     const lead = i >> 8, second = i & 255;
     if (!isLead(lead)) continue;
     const a = sjisV5.decodePairs[i], b = sjisV6.decodePairs[i];
-    if (!v5DecodeFailed(a, lead, second) && !eq(a.value, b.value)) unexpectedDecodePairs.push({ lead, second, v5: a, v6: b });
+    if (!v5DecodeFailed(a) && !eq(a.value, b.value)) unexpectedDecodePairs.push({ lead, second, v5: a, v6: b });
   }
   await writeFile(resolve(stateRoot, 'sjis-real-workerd-diagnostics.json'), JSON.stringify({
     note: 'Real-workerd v5-vs-v6 Shift_JIS sweep (this test run). unexpected* must be empty for R-01 acceptance.',
@@ -293,7 +296,7 @@ test('v5 / Scala.js+HonoX on real `wrangler dev` (workerd): HTTP status, headers
   await post('alpha', LAST_KEY); // reply, using each origin's own real key
 
   // --- KB-17 (documented, expected divergence): v5 cannot encode an emoji or a PUA char and falls
-  // back to a NUL byte; v6 (encoding-japanese + R-01 overrides) falls back to a numeric character
+  // back to a NUL byte; v6 (SjisEncoding.scala, R-01) falls back to a numeric character
   // reference. Verified directly against each side's own real dat content (not cross-origin byte
   // equality, since a difference here is the intended, already-documented KB-17 behavior). Posted as
   // a new thread on its own board ('gamma', otherwise unused): a reply to the shared 'alpha' thread

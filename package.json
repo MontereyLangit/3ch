@@ -24,7 +24,6 @@
     "wrangler": "^4.44.0"
   },
   "dependencies": {
-    "encoding-japanese": "2.2.0",
     "hono": "4.13.7",
     "honox": "0.1.61"
   }
