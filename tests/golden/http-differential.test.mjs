@@ -182,10 +182,19 @@ test('v5 / Scala.js+HonoX on real `wrangler dev` (workerd): HTTP status, headers
     text = text.replace(DATETIME_RE, '@@DATETIME@@');
     // RFC 1123 HTTP-date, as used in Last-Modified / If-Modified-Since round-trips.
     text = text.replace(/[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT/g, '@@HTTPDATE@@');
+    // bbsmenu.html が埋め込む「更新日 YYYY/M/D H:MM:SS」。生成時刻そのものなので、v5 と v6 を順に
+    // 叩く都合上そこで秒境界を跨ぐと必ず1秒ずれる（実測で6回に1回程度発生）。
+    // 本質的に可変な値のみを対象にするため、この形式に限定して正規化する。
+    text = text.replace(/\d{4}\/\d{1,2}\/\d{1,2} \d{1,2}:\d{2}:\d{2}/g, '@@GENERATEDAT@@');
     return text;
   }
   function rememberThreadKey(originIndex, key) {
-    if (key && /^\d{10}$/.test(key) && !threadKeysByOrigin[originIndex].includes(key)) threadKeysByOrigin[originIndex].push(key);
+    // 値による重複除去はしない。キーは10桁の秒なので、両 wrangler プロセスが同じ秒に別板のスレを
+    // 作ると片側だけが「既出」と判定されて1件に潰れ、左右の列長がずれる（実測で4回に1回程度発生し、
+    // 存在しないキーと停止済みスレを突き合わせる偽の差分になっていた）。
+    // 常に push すれば、キーが衝突しても両側が同じ回数記録するので対称性が保たれる。
+    // 以降の参照は [0]（alpha の最初のスレ）固定なので、重複が混ざっても意味は変わらない。
+    if (key && /^\d{10}$/.test(key)) threadKeysByOrigin[originIndex].push(key);
   }
 
   async function pair(path, { form, headers = {}, admin = false, method = form ? 'POST' : 'GET', expected, body } = {}) {
