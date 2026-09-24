@@ -8,16 +8,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 import scala.collection.mutable
 
-/**
- * `tests/thread.test.js` の `state()` / `setup()` をScala側に移植したテストダブル。
- * 狙いは同じ: 本番の [[Thread]] / [[Board]] のコードは一切変えず、
- * `DurableObjectState.storage` / `blockConcurrencyWhile` / `THREAD_DO` / `BOARD_DO` / `ch3www`(R2)
- * の最小実装だけを与えて実際のDOメソッドを動かす。
- *
- * `structuredClone` で値を複製するのもJS版の`state()`と同じ理由:
- * 呼び出し側が受け取ったオブジェクトを書き換えても、ストレージ内部の値が汚染されないようにするため
- * （`inspect()` が返す `Map` はテストから直接読むことがある）。
- */
+/** `tests/thread.test.js` の `state()` / `setup()` の移植。DO 環境の最小テストダブル（docs/v6s実装メモ.md 4.1）。 */
 object DurableTestKit {
 
   private def clone(v: js.Any): js.Any =

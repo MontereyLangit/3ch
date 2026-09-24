@@ -6,15 +6,7 @@ import scala.scalajs.js
 import scala.scalajs.js.Thenable.Implicits.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
-/**
- * `Board.updateThread` の並び順（sage=その場で更新, age=先頭へ移動, 新規スレは常に先頭）と
- * 打ち切りロジック（`maxThreads`件数、`Array.slice(0, negative)`の巻き戻り挙動、512KBバイト上限）を
- * 完全一致のsubjectListで固定する。
- *
- * `tests/main.characterization.test.js` はupdateThreadを使ってはいるが、いずれも新規スレ1件を
- * 追加するだけの経路（KB-05/KB-06のHTTPヘッダ検証が主目的）で、既存スレへのsage/age更新・
- * タイトル省略時の抽出・件数打ち切り・負のmaxThreads・バイト上限のいずれも踏んでいない。
- */
+/** `Board.updateThread` の並び順と打ち切りを subjectList の完全一致で固定する（docs/v6s実装メモ.md 4.3）。 */
 class BoardSuite extends FunSuite {
 
   private def data(key: String, title: js.UndefOr[String], resNum: Int): js.Dynamic =
