@@ -16,7 +16,7 @@ package ch3s.common.crypt
  * ほとんどは `table` の添字範囲(0-7)を超えて `undefined` を返す。0x00-0x07（制御コード）
  * だけが偶然範囲内に収まり、対応する文字を返す。
  *
- * 「正しい変換表」に修正してはいけない（CLAUDE.md §3.3 / 既知不具合台帳 KB-19）。
+ * 「正しい変換表」に修正してはいけない（AGENTS.md §3.3 / 既知不具合台帳 KB-19）。
  * JS の `undefined` は `None` として表現する。
  */
 object SaltChar {

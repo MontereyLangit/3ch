@@ -1,7 +1,7 @@
 // tests/golden/generate-common.mjs
 //
 // 言語中立な golden 入出力表を src/common.js から生成するスクリプト（Scala.js 移植の検証用）。
-// docs/移植方針_step3_ScalaJS.md / CLAUDE.md §3.3 の方針に従い、src/ には一切手を入れず、
+// docs/移植方針_step3_ScalaJS.md / AGENTS.md §3.3 の方針に従い、src/ には一切手を入れず、
 // 実際の v5 実装 (src/common.js) を import して実行結果を記録するだけに徹する。
 //
 // JS の `undefined` は JSON にそのまま出力できないため、他の値と区別できるよう

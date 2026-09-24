@@ -1,12 +1,15 @@
-# AGENTS.md — 3ch 掲示板システム (ch3s) 開発ガイド
+# 3ch 掲示板システム (ch3s) 開発ガイド
 
 AI アシスタント（Claude Code / Gemini CLI / Codex CLI）および開発者向けの、本リポジトリにおける
 プロジェクト概要・移植計画・作業規約。
 
-> **原本は `CLAUDE.md`。** `GEMINI.md`（Gemini CLI 用）と `AGENTS.md`（Codex CLI 用）は
-> 1行目のファイル名を除き**同一内容を保つこと**。片方だけ直すと方針が食い違う
-> （実際に Shift_JIS の方針が別ファイルで逆向きに書き換わる事故が起きた）。
-> 内容を変えたら必ず3ファイルすべてに反映する。
+> **本ファイル `AGENTS.md` が唯一の原本。** 各エージェントは次の経路でこれを読む。
+> - Codex CLI: `AGENTS.md` を直接読む。
+> - Claude Code: v2.1.277 以降は、`CLAUDE.md` がなければ `AGENTS.md` を読む（Bedrock / Vertex / Foundry 経由は未対応）。
+> - Gemini CLI: `.gemini/settings.json` の `context.fileName` で `AGENTS.md` を指定。
+>
+> `CLAUDE.md` や `GEMINI.md` を作らないこと（`CLAUDE.md` があると Claude Code は `AGENTS.md` を読まなくなる）。以前は3ファイルに同じ内容を
+> 持たせていたが、片方だけ直した結果、Shift_JIS の方針が別ファイルで逆向きに書き換わる事故が起きた。
 
 ---
 
@@ -181,6 +184,17 @@ step 2 のキャラクタリゼーションテストは `src/*.js` を直接 imp
 ### 3.5 コーディング規約
 - 既存コードのスタイルに合わせる。不要なコメント・過剰な抽象化を入れない。
 - TypeScript の `any`、Scala の未型付け構造型を避ける。コンパイル / Lint 警告は抑制せず解消する。
+- **Scala の Optional Braces（インデント構文）は原則使わない**（2026-09-08 ユーザー指示）: Scala 3 の
+  brace省略（`if ... then` の後ろをインデントだけで書く、`class Foo:` / `def f() =` の後を
+  インデントブロックにする等）は、**それを使うことで明らかに可読性が良くなる箇所に限定**する。
+  **基本は波括弧 `{}` を使う**。
+  - 理由: 省略と波括弧が混在すると読み手が構文境界を追いにくく、特に**深いネストや長いメソッドで
+    どこまでがブロックか分からなくなる**。Kotlin（波括弧必須）からの移植コードとの見比べも難しくなる。
+  - `if ... then` / `while ... do` などの新制御構文自体は可。複数行になるブロックは `{}` で囲む。
+    `match` の `case ... =>` 本体は従来どおり波括弧不要。
+  - 既存ソースは `-no-indent -rewrite` で一括変換済み。残存確認は
+    `sbt 'set ThisBuild / scalacOptions += "-no-indent"' Test/compile` がエラーなく通ることで行う
+    （例外を許す方針のため、ビルド設定では `-no-indent` を常時強制しない）。
 - テストは `npm test` で通ること。統合テストは実 Wrangler をローカルストレージで起動して検証する（本番ストレージは使わない）。
 
 ### 3.6 セキュリティ
