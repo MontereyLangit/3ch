@@ -35,6 +35,7 @@ Cloudflare Workers / Durable Objects / R2 / KV 上で動く、フルスクラッ
 | `3ch_ui` | 新 UI のデザイン案・HTML モック |
 | `v6`, `v6-s`, `v6-k`, `v6-s2`, `v6-bp` | v6 検討・試作（Kotlin/Spring Boot 版含む） |
 | `kako-data` | 過去ログデータ（step 6 の移行対象） |
+| `3ch_workers` | v5 から途中で分離した別系統（`mmr-3ch/3ch_workers`）。TS + Hono JSX 移行試作を含む（1.7） |
 
 ### 1.3 技術スタック（現行 v5）
 
@@ -87,6 +88,33 @@ npm run deploy         # wrangler deploy --config wrangler.jsonc --minify
 
 管理画面のローカル利用は `.dev.vars` に `ADMIN_PASSWORD="..."` を設定（Git 管理外）。
 本番は `npx wrangler secret put ADMIN_PASSWORD --config wrangler.jsonc`。
+
+### 1.7 参考ブランチ `feature/transfering_to_ts_hono_jsx`
+
+`mmr-3ch/3ch_workers` の同名ブランチを本リポジトリ（`3ch-io/v5`）へそのまま載せたもの（2026-09-24、
+先頭 `f3b6511`、49 コミット、2025-09-10〜10-05）。**v6 実装の参考資料であり、`develop` / `develop_v6s` へは統合しない。**
+`develop` 系と共通祖先がない独立した履歴なので、参照は `git show origin/feature/transfering_to_ts_hono_jsx:<path>` 等で行う。
+
+**内容**: v5 系 JS を **TypeScript + Hono + hono/jsx** へ書き換えた試作（`src/index.tsx` 起点、MVC 風に
+`services/`・`model/`・`views/` へ分割）。
+- ルート: `POST /test/bbs.cgi`・`/test/subbbs.cgi`、`GET /:bbs/`、`/:bbs/:key.dat`、`/:bbs/subject.txt`・`head.txt`・`SETTING.TXT`、
+  `/test/read.cgi/:bbs/:key/`、`/boards/:bbs/`、認証用 `GET /api/auth.js`・`POST /api/auth`
+- 投稿: `services/PostService.ts` に検証 → 板/スレ設定読込 → 規制（deny リスト・立て過ぎ等）→ ID/トリップ → 保存のパイプライン。
+  設計メモは `post.markdown`（v5 系 `bbs_cgi` の関数単位の説明）
+- 認証: 新設の `User` DO による忍法帖相当のユーザー識別（`services/AuthService.ts`、`views/auth*.ts(x)`）
+- 画面: `views/` の JSX テンプレート（`3chiko.template.tsx`・板トップ・投稿結果・エラー）と、
+  `.html/itest3ch/` の Web 版 HTML ひな形（htmx 使用）
+
+**v5 / step 3 との違い（参考にする際の注意）**:
+- **ストレージスキーマが v5 と異なる**: DO は `Bbs` / `Thread` / `User`（v5 は `Board` / `Thread`）。`SETTING.TXT`・`head.txt`・
+  `subject.txt` を `Bbs` DO のストレージに持ち、R2 バインディングがない。
+- Shift_JIS 変換は `encoding-japanese`、crypt(3) は `unix-crypt-td-js` を使う。v5 とのバイト単位の一致は検証されていない
+  （Shift_JIS の差異は `docs/移植方針_step3_ScalaJS.md` R-01 参照）。
+- 以上から **step 3（仕様・スキーマ不変の移植）の手本にはしない**。新仕様を扱う step 4 / 5（UI・`User` 相当の認証・
+  規制の設計）の参考として使う。
+- `src/index.tsx` は `@/durable_objects/Bbs` 等を大文字で import しているが、実ファイルは小文字（`bbs.ts`）。
+  大文字小文字を区別しないファイルシステム（Windows・既定の macOS）でしかビルドできない。
+- `src/services/AuthService.ts` に認証署名用の値がハードコードされている。流用する場合は secret に移すこと（値を転記しない）。
 
 ---
 
