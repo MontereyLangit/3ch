@@ -15,7 +15,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
  * 追加するだけの経路（KB-05/KB-06のHTTPヘッダ検証が主目的）で、既存スレへのsage/age更新・
  * タイトル省略時の抽出・件数打ち切り・負のmaxThreads・バイト上限のいずれも踏んでいない。
  */
-class BoardSuite extends FunSuite:
+class BoardSuite extends FunSuite {
 
   private def data(key: String, title: js.UndefOr[String], resNum: Int): js.Dynamic =
     js.Dynamic.literal(key = key, title = title, resNum = resNum)
@@ -23,7 +23,7 @@ class BoardSuite extends FunSuite:
   test("sageは既存行をその場で更新し、ageは先頭へ移動する。タイトル省略時は既存行から抽出する") {
     val env = DurableTestKit.newEnv()
     val board = env.board("board1")
-    for
+    for {
       _ <- board.updateThread(data("A", "TitleA", 1), false).toFuture
       s1 <- board.getSubject().toFuture
       _ = assertEquals(s1, "A.dat<>TitleA (1)\n")
@@ -38,25 +38,25 @@ class BoardSuite extends FunSuite:
       _ <- board.updateThread(data("A", "TitleA", 3), false).toFuture
       s4 <- board.getSubject().toFuture
       _ = assertEquals(s4, "A.dat<>TitleA (3)\nB.dat<>TitleB (1)\n", "ageは先頭に移動する")
-    yield ()
+    } yield ()
   }
 
   test("maxThreadsを超えた分は末尾（＝古い方）から切り捨てられる") {
     val env = DurableTestKit.newEnv()
     val board = env.board("board1")
-    for
+    for {
       _ <- board.updateThread(data("T1", "A", 1), false, 2).toFuture
       _ <- board.updateThread(data("T2", "B", 1), false, 2).toFuture
       _ <- board.updateThread(data("T3", "C", 1), false, 2).toFuture
       subject <- board.getSubject().toFuture
       _ = assertEquals(subject, "T3.dat<>C (1)\nT2.dat<>B (1)\n", "T1(最古)がmaxThreads=2により切り捨てられる")
-    yield ()
+    } yield ()
   }
 
   test("KB相当の非自明な分岐: maxThreadsが負の場合はArray.slice(0,負)と同じ「末尾からその分だけ切る」挙動になる") {
     val env = DurableTestKit.newEnv()
     val board = env.board("board1")
-    for
+    for {
       _ <- board.updateThread(data("T1", "A", 1), false, 700).toFuture
       _ <- board.updateThread(data("T2", "B", 1), false, 700).toFuture
       _ <- board.updateThread(data("T3", "C", 1), false, 700).toFuture
@@ -68,7 +68,7 @@ class BoardSuite extends FunSuite:
       _ <- board.updateThread(data("T3", js.undefined, 2), true, -1).toFuture
       after <- board.getSubject().toFuture
       _ = assertEquals(after, "T3.dat<>C (2)\nT2.dat<>B (1)\n", "T1(末尾)だけが切り捨てられ、T3は位置と件数のみ更新される")
-    yield ()
+    } yield ()
   }
 
   test("subjectListが512KBを超えたら、512KB以下になるまで末尾の行から削除する") {
@@ -81,7 +81,7 @@ class BoardSuite extends FunSuite:
     // 行1本だけでちょうどcapBytesになるよう調整する。閾値判定は`> capBytes`(厳密に超えた場合のみ)
     // なので、これ単体ではまだ削除されないことを先に確認してから、2件目を足して押し出す。
     val hugeTitle = "a".repeat(capBytes - fixedOverhead)
-    for
+    for {
       _ <- board.updateThread(data("huge", hugeTitle, 1), false, 700).toFuture
       beforeAdd <- board.getSubject().toFuture
       _ = assertEquals(beforeAdd.length, capBytes, "前提: 巨大行1本だけでちょうど512KB（`>`条件なので単体では削除されない）")
@@ -90,13 +90,13 @@ class BoardSuite extends FunSuite:
       _ <- board.updateThread(data("new", "New", 1), false, 700).toFuture
       after <- board.getSubject().toFuture
       _ = assertEquals(after, "new.dat<>New (1)\n", "512KBの壁を超えた巨大な既存行(末尾)が丸ごと切り捨てられる")
-    yield ()
+    } yield ()
   }
 
   test("removeThread: 対象keyの行だけを削除し、removedリストは重複を追加しない") {
     val env = DurableTestKit.newEnv()
     val board = env.board("board1")
-    for
+    for {
       _ <- board.updateThread(data("A", "TitleA", 1), false).toFuture
       _ <- board.updateThread(data("B", "TitleB", 1), false).toFuture
       _ <- board.removeThread("A").toFuture
@@ -112,16 +112,17 @@ class BoardSuite extends FunSuite:
       _ = assertEquals(subjectAfterAll, "", "全スレ削除後のsubjectListは空文字列")
       removed3 <- board.getRemoved().toFuture
       _ = assertEquals(removed3.toList, List("A", "B"))
-    yield ()
+    } yield ()
   }
 
   test("板にスレが無い場合、getSubjectは空文字列を返す") {
     val env = DurableTestKit.newEnv()
     val board = env.board("emptyboard")
-    for
+    for {
       subject <- board.getSubject().toFuture
       _ = assertEquals(subject, "")
       removed <- board.getRemoved().toFuture
       _ = assertEquals(removed.toList, Nil)
-    yield ()
+    } yield ()
   }
+}

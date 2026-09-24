@@ -22,7 +22,7 @@ import scala.scalajs.js.annotation.JSExportTopLevel
  * 公開メソッドが `@JSExport` 無しで素のJS名としてexportされる）。
  */
 @JSExportTopLevel("V6PlaceholderDurableObject", "server")
-class V6PlaceholderDurableObject(ctx: DurableObjectState, env: js.Any) extends DurableObject(ctx, env):
+class V6PlaceholderDurableObject(ctx: DurableObjectState, env: js.Any) extends DurableObject(ctx, env) {
 
   private var loaded: Boolean = false
   private var count: Int = 0
@@ -54,3 +54,4 @@ class V6PlaceholderDurableObject(ctx: DurableObjectState, env: js.Any) extends D
       val newCount = count
       ctx.storage.put("count", newCount.toDouble).`then`(_ => newCount)
     }
+}

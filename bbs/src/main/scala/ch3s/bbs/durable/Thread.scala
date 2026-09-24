@@ -8,7 +8,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 
 @JSExportTopLevel("Thread", "server")
-class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObject(state, env):
+class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObject(state, env) {
   private def read(key: String): Future[js.Any] = state.storage.get[js.Any](key).toFuture.map(_.asInstanceOf[js.Any])
   private def truth(value: js.Any): Boolean = js.Dynamic.global.Boolean(value).asInstanceOf[Boolean]
   private def str(value: js.Any): String = js.Dynamic.global.String(value).asInstanceOf[String]
@@ -19,9 +19,10 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
   private def fail(message: String): Nothing = throw js.JavaScriptException(new js.Error(message))
   private def trimEnd(s: String): String = s.asInstanceOf[js.Dynamic].trimEnd().asInstanceOf[String]
   private def trim(s: String): String = s.asInstanceOf[js.Dynamic].trim().asInstanceOf[String]
-  private def escape(value: js.Any): String =
+  private def escape(value: js.Any): String = {
     val s = if value == null || js.isUndefined(value) then "" else str(value)
     s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replaceAll("\r?\n", " <br> ")
+  }
 
   // Catch inside the concurrency gate: rejecting the gate would reset the DO.
   private def locked[A](f: => Future[A]): Future[A] =
@@ -36,35 +37,35 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
     }
 
   def getDat(bbs: String = "", key: String = "0"): js.Promise[String] =
-    (for
+    (for {
       hidden <- read("hidden")
       result <- if truth(hidden) then Future.successful("") else
         text("dat").flatMap { existing =>
           val number = js.Dynamic.global.Number(key).asInstanceOf[Double]
-          val imported = if existing.isEmpty && bbs.nonEmpty && number > 1761990000d && number < 1762087165d then
+          val imported = if existing.isEmpty && bbs.nonEmpty && number > 1761990000d && number < 1762087165d then {
             val old = thread(key)
             old.getDat().toFuture.flatMap { dat =>
               if dat.isEmpty then Future.successful("") else
-                for
+                for {
                   log <- old.getLog().toFuture
                   settings <- old.getSettings().toFuture
                   _ <- put("dat" -> dat, "log" -> log, "settings" -> settings)
-                yield dat
+                } yield dat
             }
-          else Future.successful(existing)
+          } else Future.successful(existing)
           imported.flatMap { dat =>
             val parsed = js.Dynamic.global.parseInt(key).asInstanceOf[Double]
             if dat.isEmpty && bbs.nonEmpty && parsed > 0 && parsed < 1762009199d then importLegacy(bbs, key)
             else Future.successful(dat)
           }
         }
-    yield result).toJSPromise
+    } yield result).toJSPromise
 
   private def importLegacy(bbs: String, key: String): Future[String] =
-    (for
+    (for {
       obj <- env.ch3www.get(s"$bbs/thread/${key.take(4)}/$key.cgi").toFuture
       dat <- if obj == null then put("dat" -> "").map(_ => "") else
-        for
+        for {
           log <- obj.text().toFuture
           _ <- put("legacyLog" -> log)
           rows = log.split("\n", -1)
@@ -72,10 +73,10 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
           _ <- put("settings" -> rows(1))
           dat = convertLegacy(rows)
           _ <- put("dat" -> dat)
-        yield dat
-    yield dat).recover { case _ => "" }
+        } yield dat
+    } yield dat).recover { case _ => "" }
 
-  private def convertLegacy(rows: Array[String]): String =
+  private def convertLegacy(rows: Array[String]): String = {
     val settings = scala.collection.mutable.Map.empty[String, String]
     trim(rows(1)).split("<>", -1).foreach { s =>
       val parts = s.split("=", -1)
@@ -87,7 +88,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
     var count = 0
     rows.drop(2).foreach { row =>
       val fields = trim(row).split("<>", -1)
-      if fields.length >= 6 && fields(0).matches("^[0-9]+$") && fields(0).toDouble >= 1 && fields(3).nonEmpty then
+      if fields.length >= 6 && fields(0).matches("^[0-9]+$") && fields(0).toDouble >= 1 && fields(3).nonEmpty then {
         val next = fields(0).toDouble.toInt
         for i <- count + 1 until next do out.append(s"$i<>あぼーん<>あぼーん<>あぼーん<>あぼーん\n")
         count = next
@@ -101,15 +102,17 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
         out.append(s"$name<><>$date<> $message <>")
         if count == 1 then out.append(rows(0))
         out.append('\n')
+      }
     }
     out.toString
+  }
 
   def getPublicData(bbs: String, key: String): js.Promise[js.Dynamic] =
-    (for
+    (for {
       dat <- getDat(bbs, key).toFuture
       modified <- read("modifiedAt")
       edited <- read("edited")
-    yield js.Dynamic.literal(dat = dat, modifiedAt = modified, edited = truth(edited))).toJSPromise
+    } yield js.Dynamic.literal(dat = dat, modifiedAt = modified, edited = truth(edited))).toJSPromise
   def getLog(): js.Promise[String] = text("log").toJSPromise
   def getSettings(): js.Promise[String] = text("settings").toJSPromise
   def setSettings(settings: String): js.Promise[Unit] = put("settings" -> settings).toJSPromise
@@ -123,7 +126,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
     val rawPosting = posting.asInstanceOf[js.Any]
     val hasPosting = rawPosting != null && !js.isUndefined(rawPosting)
     val p = if hasPosting then posting.get else js.Dynamic.literal()
-    for
+    for {
       hidden <- read("hidden")
       stopped <- if truth(hidden) then Future.successful[js.Any](true) else read("stopped")
       moving <- if truth(stopped) then Future.successful[js.Any](true) else read("movingTo")
@@ -140,21 +143,20 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
       _ = if truth(p.create) then update("settings") = (if truth(p.initialSettings) then p.initialSettings else "")
       _ <- state.storage.put(update).toFuture
       _ <- if hasPosting then board(str(p.bbs)).updateThread(js.Dynamic.literal(key = p.key, title = p.title, resNum = count), p.sage.asInstanceOf[js.UndefOr[Boolean]], p.maxThreads.asInstanceOf[js.UndefOr[Double]]).toFuture else Future.unit
-    yield count
+    } yield count
   }.toJSPromise
 
   def inspect(bbs: js.UndefOr[String] = js.undefined, key: js.UndefOr[String] = js.undefined): js.Promise[js.Dynamic] =
-    (for
+    (for {
       _ <- getDat(bbs.getOrElse(""), key.getOrElse("0")).toFuture
       data <- state.storage.get(js.Array("dat", "log", "legacyLog", "settings", "hidden", "stopped", "movedTo", "movingTo", "importedFrom")).toFuture
       _ <- if !data.contains("legacyLog") && bbs.exists(_.nonEmpty) && key.exists(_.nonEmpty) then
         env.ch3www.get(s"${bbs.get}/thread/${key.get.take(4)}/${key.get}.cgi").toFuture.flatMap { obj =>
           if obj == null then Future.unit else obj.text().toFuture.flatMap { log => data.update("legacyLog", log); put("legacyLog" -> log) }
-        }
-      else Future.unit
-    yield js.Dynamic.global.Object.fromEntries(data)).toJSPromise
+        } else Future.unit
+    } yield js.Dynamic.global.Object.fromEntries(data)).toJSPromise
 
-  def moderate(action: String, input: js.Dynamic): js.Promise[Unit] =
+  def moderate(action: String, input: js.Dynamic): js.Promise[Unit] = {
     val source = s"${str(input.bbs)}/${str(input.key)}"
     val target = s"${str(input.targetBoard)}/${str(input.targetKey)}"
     val preflight = if action == "move" then Future.unit.flatMap { _ =>
@@ -164,7 +166,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
       }
     } else Future.unit
     preflight.flatMap { _ => locked {
-      for
+      for {
         dat <- text("dat")
         _ = if dat.isEmpty then fail("スレッドがありません。")
         boardStub = board(str(input.bbs))
@@ -172,93 +174,99 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
         _ = if truth(pending) then fail("移動先の準備中です。移動元から同じ移動を再実行してください。")
         moving <- read("movingTo")
         _ = if action != "move" && truth(moving) then fail("移動処理中です。同じ移動先で再実行してください。")
-        _ <- action match
+        _ <- action match {
           case "delete" => put("hidden" -> true).flatMap(_ => boardStub.removeThread(str(input.key)).toFuture)
           case "stop" | "resume" =>
-            for
+            for {
               _ <- put("stopped" -> (action == "stop"))
               settings <- text("settings")
               entries = settings.split("<>", -1).filter(s => s.nonEmpty && !s.startsWith("BBS_HEISA="))
               _ <- put("settings" -> (entries :+ s"BBS_HEISA=${if action == "stop" then "checked" else ""}").mkString("<>"))
-            yield ()
+            } yield ()
           case "editRes" | "deleteRes" =>
             val lines = trimEnd(dat).split("\n", -1)
             val number = js.Dynamic.global.Number(input.number).asInstanceOf[Double]
             if !js.Dynamic.global.Number.isInteger(number).asInstanceOf[Boolean] || number < 1 || number > lines.length then fail("レス番号が不正です。")
             val fields = lines(number.toInt - 1).split("<>", -1).toBuffer
-            if action == "deleteRes" then
+            if action == "deleteRes" then {
               fields.remove(0, math.min(4, fields.length))
               fields.prependAll(Seq.fill(4)("あぼーん"))
-            else
+            } else {
               while fields.length < 4 do fields += ""
               fields(0) = escape(input.name); fields(1) = escape(input.mail); fields(3) = escape(input.message)
+            }
             lines(number.toInt - 1) = fields.mkString("<>")
             put("dat" -> (lines.mkString("\n") + "\n"), "modifiedAt" -> js.Date.now(), "edited" -> true)
           case "move" => move(input, dat, source, target, moving, boardStub)
           case _ => fail("操作が不正です。")
-      yield ()
+        }
+      } yield ()
     }}.toJSPromise
+  }
 
-  private def move(input: js.Dynamic, dat: String, source: String, target: String, moving: js.Any, boardStub: BoardDoStub): Future[Unit] =
+  private def move(input: js.Dynamic, dat: String, source: String, target: String, moving: js.Any, boardStub: BoardDoStub): Future[Unit] = {
     if truth(moving) && str(moving) != target then fail("処理中の移動先と異なります。")
-    for
+    for {
       hidden <- read("hidden")
       _ = if truth(hidden) && !truth(moving) then fail("削除・移動済みスレッドは移動できません。")
       _ = if target == source then fail("移動元と移動先が同じです。")
       _ <- put("movingTo" -> target)
-      _ <- (for
+      _ <- (for {
         log <- text("log")
         legacy <- text("legacyLog")
         settings <- text("settings")
         stopped <- read("stopped")
         edited <- read("edited")
         _ <- thread(target).receiveMove(js.Dynamic.literal(dat = dat, log = log, legacyLog = legacy, settings = settings, stopped = truth(stopped), edited = truth(edited), modifiedAt = js.Date.now()), source).toFuture
-      yield ()).recoverWith { case e =>
-        val message = e match
+      } yield ()).recoverWith { case e =>
+        val message = e match {
           case x: js.JavaScriptException => str(x.exception.asInstanceOf[js.Dynamic].message)
           case _ => e.getMessage
+        }
         if message.contains("移動先のkeyは使用済み") then state.storage.delete("movingTo").toFuture.flatMap(_ => Future.failed(e)) else Future.failed(e)
       }
       _ <- put("hidden" -> true, "movedTo" -> target)
       _ <- boardStub.removeThread(str(input.key)).toFuture
       _ <- thread(target).publishMove(source, str(input.targetBoard), str(input.targetKey)).toFuture
       _ <- state.storage.delete("movingTo").toFuture
-    yield ()
+    } yield ()
+  }
 
   def receiveMove(data: js.Dynamic, source: String): js.Promise[Unit] = locked {
     read("importedFrom").flatMap { imported =>
       if imported == source.asInstanceOf[js.Any] then Future.unit else
-        for
+        for {
           dat <- read("dat")
           hidden <- read("hidden")
           _ = if truth(dat) || truth(hidden) then fail("移動先のkeyは使用済みです。")
           values = js.Dynamic.global.Object.assign(js.Dynamic.literal(), data, js.Dynamic.literal(importedFrom = source, hidden = true, pendingMove = true)).asInstanceOf[js.Dictionary[js.Any]]
           _ <- state.storage.put(values).toFuture
-        yield ()
+        } yield ()
     }
   }.toJSPromise
 
   def publishMove(source: String, bbs: String, key: String): js.Promise[Unit] = locked {
-    for
+    for {
       imported <- read("importedFrom")
       _ = if imported != source.asInstanceOf[js.Any] then fail("移動元が一致しません。")
       pending <- read("pendingMove")
       _ <- if !truth(pending) then Future.unit else
-        for
+        for {
           dat <- text("dat")
           title = dat.split("\n", -1)(0).split("<>", -1).lift(4).orUndefined
           _ <- board(bbs).updateThread(js.Dynamic.literal(key = key, title = title, resNum = trimEnd(dat).split("\n", -1).length), false).toFuture
           _ <- put("hidden" -> false, "pendingMove" -> false)
-        yield ()
-    yield ()
+        } yield ()
+    } yield ()
   }.toJSPromise
 
   def deleteRes(resNum: Int): js.Promise[Unit] = getDat().toFuture.flatMap { dat =>
     val lines = dat.split("\n", -1)
-    if resNum > 0 && resNum < lines.length then
+    if resNum > 0 && resNum < lines.length then {
       lines(resNum - 1) = "あぼーん<>あぼーん<>あぼーん<>あぼーん<>あぼーん"
       put("dat" -> lines.mkString("\n"))
-    else Future.unit
+    } else Future.unit
   }.toJSPromise
 
   def setDat(dat: String): js.Promise[Unit] = read("hidden").flatMap(v => if truth(v) then Future.unit else put("dat" -> dat)).toJSPromise
+}

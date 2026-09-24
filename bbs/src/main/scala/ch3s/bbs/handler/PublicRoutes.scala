@@ -8,13 +8,14 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 
-object PublicRoutes:
+object PublicRoutes {
   private def str(v: js.Any): String = js.Dynamic.global.String(v).asInstanceOf[String]
   private def truth(v: js.Any): Boolean = js.Dynamic.global.Boolean(v).asInstanceOf[Boolean]
   private def trim(v: String): String = v.asInstanceOf[js.Dynamic].trim().asInstanceOf[String]
-  private def error(e: Throwable): String = e match
+  private def error(e: Throwable): String = e match {
     case x: js.JavaScriptException => str(x.exception.asInstanceOf[js.Any])
     case _ => e.toString
+  }
   private def notFound(path: String): Response = Responses.response(PublicText.respond404(path), 404, js.Dictionary("content-type" -> "text/html;charset=UTF-8"))
   private def failed(message: String): Response = Responses.response(PublicText.respond500(message), 500, js.Dictionary("content-type" -> "text/html;charset=UTF-8"))
   private def board(e: WorkerEnv, bbs: String): BoardDoStub = e.BOARD_DO.get(e.BOARD_DO.idFromName(bbs)).asInstanceOf[BoardDoStub]
@@ -23,11 +24,11 @@ object PublicRoutes:
   private def date(s: String, parse: Boolean = false): js.Date = new js.Date((if parse then js.Dynamic.global.parseInt(s).asInstanceOf[Double] else js.Dynamic.global.Number(s).asInstanceOf[Double]) * 1000)
   private def guard(path: String)(f: => Future[Response]): Future[Response] = Future.unit.flatMap(_ => f).recover { case e => failed(s"$path Error -> ${error(e)}") }
 
-  def fetch(r: Request, e: WorkerEnv, ctx: js.Dynamic): js.Promise[Response] =
+  def fetch(r: Request, e: WorkerEnv, ctx: js.Dynamic): js.Promise[Response] = {
     val url = js.Dynamic.newInstance(js.Dynamic.global.URL)(r.url)
     val path = str(url.pathname)
     def h(name: String): String = Option(r.headers.get(name)).getOrElse("")
-    def cached(work: => Future[Response]): Future[Response] =
+    def cached(work: => Future[Response]): Future[Response] = {
       val cache = js.Dynamic.global.caches.default
       val key = js.Dynamic.newInstance(js.Dynamic.global.Request)(url.toString(), r)
       cache.`match`(key).asInstanceOf[js.Promise[js.Dynamic]].toFuture.flatMap { hit =>
@@ -37,6 +38,7 @@ object PublicRoutes:
           response
         }
       }
+    }
     val result: Future[Response] = if path == "/admin" || path.startsWith("/admin/") then Admin.handle(r, e).toFuture
     else if path == "/test/sakubbs.cgi/25" then Future.successful(Responses.plain("sakubbs.cgi v25", "plain"))
     else if new js.RegExp("^/test/(sub)?bbs.cgi").test(path) then Posting.entry(r, e).toFuture
@@ -57,8 +59,7 @@ object PublicRoutes:
               Responses.plain(html, "html", "Shift_JIS", modified = modified, since = h("if-modified-since"), extra = js.Dictionary("max-age" -> "60", "s-maxage" -> "60"))
           }
         }}
-      }
-    else if path == "/headline/subject.txt" then guard("headline.txt") {
+      } else if path == "/headline/subject.txt" then guard("headline.txt") {
       read(e, "headline.txt").flatMap {
         case None => Future.successful(notFound("headline.txt"))
         case Some(text) =>
@@ -67,14 +68,13 @@ object PublicRoutes:
           val lines = rows.drop(1).map(row => trim(row).split("<>", -1)).filter(validHead)
           lines.foldLeft(Future.successful("")) { (acc, f) => acc.flatMap(s => board(e, f(0)).getRemoved().toFuture.map(removed => s + (if removed.contains(f(3)) then "" else f.take(5).mkString("<>") + "\n"))) }.map(text => Responses.plain(text, "plain", modified = modified, extra = js.Dictionary("cache-control" -> "no-store")))
       }
-    }
-    else
+    } else {
       val route = RouteTable.publicPatterns.iterator.map { (kind, regex) => (kind, new js.RegExp(regex).exec(path)) }.find(_._2 != null)
-      route match
+      route match {
         case None => Future.successful(notFound(path))
         case Some((kind, matched)) =>
           val bbs = matched(1).get
-          kind match
+          kind match {
             case "dat" =>
               val key = matched(2).get
               val canonical = s"/$bbs/dat/$key.dat"
@@ -82,13 +82,14 @@ object PublicRoutes:
                 val stub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$key")).asInstanceOf[js.Dynamic]
                 stub.getPublicData(bbs, key).asInstanceOf[js.Promise[js.Dynamic]].toFuture.map { data =>
                   val dat = str(data.dat)
-                  if !truth(data.dat) then notFound(canonical) else
+                  if !truth(data.dat) then notFound(canonical) else {
                     var modified: js.Date = if truth(data.modifiedAt) then new js.Date(data.modifiedAt.asInstanceOf[Double]) else null
                     val last = trim(dat).split("\n", -1).last.split("<>", -1).lift(2).getOrElse("")
                     val dateMatch = new js.RegExp("(\\d{4}/\\d{2}/\\d{2}\\([日月火水木金土]\\) \\d{2}:\\d{2}:\\d{2})").exec(last)
                     if dateMatch != null && modified == null then modified = new js.Date(dateMatch(1).get)
                     val edited = truth(data.edited)
                     Responses.plain(dat, "plain", "Shift_JIS", if edited then "" else h("range"), if modified == null then new js.Date() else modified, if edited then "" else h("if-modified-since"), js.Dictionary("cache-control" -> "no-store", "s-maxage" -> "1"))
+                  }
                 }
               }
             case "subject" => guard(s"/$bbs/subject.txt") {
@@ -121,10 +122,16 @@ object PublicRoutes:
                 read(e, s"$bbs/$file").map { stored =>
                   val text = stored.getOrElse(if kind == "head" then "" else PostingText.settingTxtDefault)
                   val settings = if kind == "head" then text else text.replace("<DIR_NAME>", bbs)
-                  if kind != "board" then Responses.plain(settings, "plain", "Shift_JIS") else
+                  if kind != "board" then Responses.plain(settings, "plain", "Shift_JIS") else {
                     val title = trim(settings).split("\n", -1).map(_.split("=", -1)).find(_(0) == "BBS_TITLE").map(f => trim(f.lift(1).getOrElse(""))).getOrElse(bbs + "＠3ch掲示板")
                     Responses.plain(PublicText.board(title, bbs), "html", "Shift_JIS")
+                  }
                 }
               }
             case _ => Future.successful(notFound(path))
+          }
+      }
+    }
     result.toJSPromise
+  }
+}

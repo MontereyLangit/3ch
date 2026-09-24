@@ -6,27 +6,29 @@ import ch3s.common.text.Utf8
 import scala.scalajs.js
 import scala.scalajs.js.typedarray.Uint8Array
 
-object Responses:
-  def response(body: js.Any, status: Int = 200, headers: js.Dictionary[String] = js.Dictionary.empty[String]): Response =
+object Responses {
+  def response(body: js.Any, status: Int = 200, headers: js.Dictionary[String] = js.Dictionary.empty[String]): Response = {
     val init = new ResponseInit {}
     init.status = status
     init.headers = headers.asInstanceOf[js.Object]
     new Response(body, init)
+  }
 
-  def plain(text: String, kind: String, encoding: String = "UTF-8", range: String = "", modified: js.Date = new js.Date(), since: String = "", extra: js.Dictionary[String] = js.Dictionary.empty[String]): Response =
+  def plain(text: String, kind: String, encoding: String = "UTF-8", range: String = "", modified: js.Date = new js.Date(), since: String = "", extra: js.Dictionary[String] = js.Dictionary.empty[String]): Response = {
     if since.nonEmpty && modified.getTime() <= new js.Date(since).getTime() then
       return response(null, 304, js.Dictionary("Last-Modified" -> modified.toUTCString()))
     val sjis = encoding == "Shift_JIS"
     val bytes =
       if sjis then SjisEncoding.encode(text)
-      else
+      else {
         val data = Utf8.encode(text)
         val u8 = new Uint8Array(data.length)
         data.indices.foreach(i => u8(i) = data(i).toShort)
         u8
+      }
     val size = bytes.length
     val headers = js.Dictionary.empty[String]
-    val result = if range.nonEmpty then
+    val result = if range.nonEmpty then {
       val matched = new js.RegExp("^bytes=(\\d*)-(\\d*)$").exec(range)
       if matched == null then return response("Bad Range Header", 400)
       val start = if matched(1).get.isEmpty then 0d else js.Dynamic.global.parseInt(matched(1), 10).asInstanceOf[Double]
@@ -40,12 +42,16 @@ object Responses:
       headers("Content-Range") = s"bytes ${start.toInt}-$last/$size"
       headers("Accept-Ranges") = "bytes"
       response(chunk, 206, headers)
-    else
+    } else {
       headers("content-type") = s"text/$kind;charset=${if sjis then "Shift_JIS" else "UTF-8"}"
       headers("Content-Length") = size.toString
-      if kind == "plain" then
+      if kind == "plain" then {
         headers("Last-Modified") = modified.toUTCString()
         headers("Accept-Ranges") = "bytes"
+      }
       response(if sjis then bytes else text, 200, headers)
+    }
     extra.foreach((name, value) => result.headers.set(name, value))
     result
+  }
+}

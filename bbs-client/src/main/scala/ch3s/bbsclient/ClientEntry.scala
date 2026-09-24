@@ -11,7 +11,8 @@ import scala.scalajs.js.annotation.JSExportTopLevel
  * 取り込まれ、同一sbtプロジェクト内で `moduleID = "client"` としてコンパイルされる
  * （参照実装 ch3s-migration の単一sbtプロジェクトパターン。sbtの二重起動を避けるため）。
  */
-object ClientEntry:
+object ClientEntry {
 
   @JSExportTopLevel("v6ClientPing", "client")
   def v6ClientPing(): String = "pong-from-client"
+}

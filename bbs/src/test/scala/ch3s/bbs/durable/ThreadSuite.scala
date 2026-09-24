@@ -21,7 +21,7 @@ import scala.concurrent.Future
  *     settings文字列の厳密な組み立て、editRes/deleteResのフィールド単位のエスケープ、
  *     standalone `deleteRes(Int)` の `resNum < lines.length` という非自明な境界）を追加する。
  */
-class ThreadSuite extends FunSuite:
+class ThreadSuite extends FunSuite {
   import DurableTestKit.{newEnv, seed, rejectionMessage}
 
   private val dat = "name<><>date<>message<>title\n"
@@ -35,7 +35,7 @@ class ThreadSuite extends FunSuite:
     val source = env.thread(s"source/$key")
     // 1700000000 を Asia/Tokyo で Intl.DateTimeFormat 整形した固定値（タイムゾーン指定込みなのでシステムTZに依存しない）。
     val expectedDat = "name<><>2023/11/15(水) 07:13:20 ID:one<> text <>legacy title\n"
-    for
+    for {
       before <- source.inspect("source", key).toFuture
       _ = assertEquals(before.legacyLog.toOption, Some("legacy title\nBBS_HEISA=checked\n1<>name<><>1700000000<>ID:one<>text<>IP:192.0.2.1\n"))
       _ = assertEquals(before.settings.toOption, Some("BBS_HEISA=checked"))
@@ -48,7 +48,7 @@ class ThreadSuite extends FunSuite:
       _ = assertEquals(after.legacyLog.toOption, before.legacyLog.toOption, "旧R2ログはdelete後も保持される")
       removed <- env.board("source").getRemoved().toFuture
       _ = assertEquals(removed.toList, List(key))
-    yield ()
+    } yield ()
   }
 
   test("移動の途中失敗は同じ移動先への再実行で復旧し、ログ・停止状態を保持する（完全一致）") {
@@ -58,7 +58,7 @@ class ThreadSuite extends FunSuite:
     val sourceInstance = env.threadInstance("source/1800000000")
     val boardTargetOriginal = env.board("target").asInstanceOf[js.Dynamic]
     val originalUpdateThread = boardTargetOriginal.updateThread
-    for
+    for {
       _ <- seed(sourceInstance, "dat" -> dat, "log" -> "1<>IP:192.0.2.1\n", "legacyLog" -> "old private log", "settings" -> "BBS_HEISA=checked", "stopped" -> true)
       // Board.updateThread を一時的に失敗させ、移動の後半だけが失敗するケースを再現する。
       _ = boardTargetOriginal.updateThread = ((_: js.Any, _: js.Any, _: js.Any) => js.Promise.reject(new js.Error("temporary failure"))): js.Function3[js.Any, js.Any, js.Any, js.Any]
@@ -86,7 +86,7 @@ class ThreadSuite extends FunSuite:
       _ = assertEquals(subject, "1800000001.dat<>title (1)\n")
       sourceInspect <- source.inspect().toFuture
       _ = assertEquals(sourceInspect.dat.toOption, Some(dat), "移動元のstorage上のdatはhidden化後も保持される")
-    yield ()
+    } yield ()
   }
 
   test("移動先保存後に応答を失っても二重コピーせず復旧できる") {
@@ -94,7 +94,7 @@ class ThreadSuite extends FunSuite:
     val source = env.thread("source/1800000000")
     val destination = env.thread("target/1800000001")
     val destInstance = env.threadInstance("target/1800000001")
-    for
+    for {
       _ <- source.setDat(dat).toFuture
       destDynamic = destInstance.asInstanceOf[js.Dynamic]
       originalReceiveMove = destDynamic.receiveMove
@@ -112,14 +112,14 @@ class ThreadSuite extends FunSuite:
       _ <- source.moderate("move", moveInput()).toFuture
       destDat <- destination.getDat().toFuture
       _ = assertEquals(destDat, dat)
-    yield ()
+    } yield ()
   }
 
   test("既存スレ同士の相互移動はロック前に拒否し、元データを保持する") {
     val env = newEnv()
     val source = env.thread("source/1800000000")
     val destination = env.thread("target/1800000001")
-    for
+    for {
       _ <- source.setDat(dat).toFuture
       _ <- destination.setDat(dat).toFuture
       failures <- Future.sequence(Seq(
@@ -131,14 +131,14 @@ class ThreadSuite extends FunSuite:
       _ = assertEquals(sourceDat, dat)
       destDat <- destination.getDat().toFuture
       _ = assertEquals(destDat, dat)
-    yield ()
+    } yield ()
   }
 
   test("同時投稿はレスとログの連番を保持し、停止後の投稿を拒否する（dat/logを完全一致で確認）") {
     val env = newEnv()
     val instance = env.threadInstance("source/1800000000")
     val thread = env.thread("source/1800000000")
-    for
+    for {
       _ <- seed(instance, "dat" -> dat, "log" -> "1<>first\n")
       // JS版と同じ前提: 2つのaddRes呼び出しをawaitせず同時に発行すると、blockConcurrencyWhileの
       // キュー投入順（=Scalaが引数を評価する順）でロックの取得順が決まり、後続は前段の完了を待つ。
@@ -154,14 +154,14 @@ class ThreadSuite extends FunSuite:
       _ <- thread.moderate("stop", moveInput(bbs = "source", key = "1800000000")).toFuture
       blocked <- rejectionMessage(thread.addRes("fourth", "4<>fourth").toFuture)
       _ = assert(blocked.contains("停止"), blocked)
-    yield ()
+    } yield ()
   }
 
   test("旧スレへの直接返信は移行し、旧設定の停止も強制する（addRes後のdat/logを完全一致で確認）") {
     val env = newEnv()
     env.putR2("source/thread/1700/1700000000.cgi", "legacy title\n\n1<>name<><>1700000000<>ID:one<>text<>IP:192.0.2.1\n")
     val source = env.thread("source/1700000000")
-    for
+    for {
       count <- source.addRes("second<><><><>", "2<>log", js.Dynamic.literal(bbs = "source", key = "1700000000", title = "legacy title", create = false)).toFuture
       _ = assertEquals(count, 2)
       newDat <- source.getDat().toFuture
@@ -171,7 +171,7 @@ class ThreadSuite extends FunSuite:
       _ = env.putR2("source/thread/1700/1700000001.cgi", "legacy title\nBBS_HEISA=checked\n1<>name<><>1700000000<>ID:one<>text<>IP:192.0.2.1\n")
       blockedMsg <- rejectionMessage(env.thread("source/1700000001").addRes("second<><><><>", "2<>log", js.Dynamic.literal(bbs = "source", key = "1700000001", create = false)).toFuture)
       _ = assert(blockedMsg.contains("停止"), blockedMsg)
-    yield ()
+    } yield ()
   }
 
   // ---------- ここから: replayハーネスが踏んでいない追加シナリオ ----------
@@ -180,7 +180,7 @@ class ThreadSuite extends FunSuite:
     val env = newEnv()
     val instance998 = env.threadInstance("board1/1")
     val seeded998 = (1 to 998).map(i => s"$i<>x<><>msg<>\n").mkString
-    for
+    for {
       _ <- seed(instance998, "dat" -> seeded998, "log" -> "")
       count <- env.thread("board1/1").addRes("999<>new<><>msg<>", "999<>log").toFuture
       _ = assertEquals(count, 999)
@@ -194,14 +194,14 @@ class ThreadSuite extends FunSuite:
       _ = assertEquals(msg, "このスレッドは1000を超えたのでもう書けません。")
       unchanged <- env.thread("board1/2").getDat().toFuture
       _ = assertEquals(unchanged, seeded999, "拒否された投稿はdatに反映されない")
-    yield ()
+    } yield ()
   }
 
   test("stop/resumeはBBS_HEISAだけを入れ替え、他の設定の順序・値を保ちながら文字列を完全一致で組み立てる") {
     val env = newEnv()
     val instance = env.threadInstance("board1/3")
     val thread = env.thread("board1/3")
-    for
+    for {
       _ <- seed(instance, "dat" -> "1<>x<><>msg<>title\n", "settings" -> "FOO=bar<>BBS_HEISA=checked<>BAR=baz")
       _ <- thread.moderate("stop", moveInput(bbs = "board1", key = "3")).toFuture
       afterStop <- thread.getSettings().toFuture
@@ -215,7 +215,7 @@ class ThreadSuite extends FunSuite:
       _ = assertEquals(afterResume, "FOO=bar<>BAR=baz<>BBS_HEISA=")
       resumedInspect <- thread.inspect().toFuture
       _ = assertEquals(resumedInspect.stopped.toOption, Some(false))
-    yield ()
+    } yield ()
   }
 
   test("editRes: name/mail/messageだけをエスケープ・<br>変換し、識別ID欄とタイトル欄は素通りする") {
@@ -224,7 +224,7 @@ class ThreadSuite extends FunSuite:
     val thread = env.thread("board1/4")
     val row1 = "Name1<><>2023/01/01(日) 00:00:00 ID:xxx<> original message <>ThreadTitle"
     val row2 = "Name2<><>2023/01/01(日) 00:00:05 ID:yyy<> original message2 <>"
-    for
+    for {
       _ <- seed(instance, "dat" -> (row1 + "\n" + row2 + "\n"))
       _ <- thread.moderate("editRes", js.Dynamic.literal(bbs = "board1", key = "4", number = "2", name = "New<Name>", mail = "test@example.com", message = "line1\nline2")).toFuture
       after <- thread.getDat().toFuture
@@ -233,7 +233,7 @@ class ThreadSuite extends FunSuite:
       // movingTo/importedFrom）に含まれない。moderate側で立てたフラグはstorageを直接読んで確認する。
       editedFlag <- instance.state.storage.get[Boolean]("edited").toFuture
       _ = assertEquals(editedFlag.getOrElse(false), true)
-    yield ()
+    } yield ()
   }
 
   test("moderate('deleteRes', ...): 先頭4フィールドだけを「あぼーん」に置き換え、5番目(タイトル)フィールドは残す") {
@@ -242,32 +242,32 @@ class ThreadSuite extends FunSuite:
     val thread = env.thread("board1/5")
     val row1 = "Name1<><>2023/01/01(日) 00:00:00 ID:xxx<> original message <>ThreadTitle"
     val row2 = "Name2<><>2023/01/01(日) 00:00:05 ID:yyy<> original message2 <>"
-    for
+    for {
       _ <- seed(instance, "dat" -> (row1 + "\n" + row2 + "\n"))
       _ <- thread.moderate("deleteRes", js.Dynamic.literal(bbs = "board1", key = "5", number = "1")).toFuture
       after <- thread.getDat().toFuture
       _ = assertEquals(after, "あぼーん<>あぼーん<>あぼーん<>あぼーん<>ThreadTitle" + "\n" + row2 + "\n")
-    yield ()
+    } yield ()
   }
 
   test("moderate('editRes'/'deleteRes'): レス番号が範囲外なら完全一致のメッセージで拒否する") {
     val env = newEnv()
     val instance = env.threadInstance("board1/6")
     val thread = env.thread("board1/6")
-    for
+    for {
       _ <- seed(instance, "dat" -> "1<>x<><>msg<>title\n")
       msg <- rejectionMessage(thread.moderate("deleteRes", js.Dynamic.literal(bbs = "board1", key = "6", number = "2")).toFuture)
       _ = assertEquals(msg, "レス番号が不正です。")
       msg0 <- rejectionMessage(thread.moderate("editRes", js.Dynamic.literal(bbs = "board1", key = "6", number = "0", name = "a", mail = "", message = "b")).toFuture)
       _ = assertEquals(msg0, "レス番号が不正です。")
-    yield ()
+    } yield ()
   }
 
   test("deleteRes(resNum): 全5フィールドを丸ごとあぼーん化し、resNum==lines.lengthの境界は無視する") {
     val env = newEnv()
     // deleteRes(Int) はRPCスタブ(ThreadDoStub)に生えていない管理用メソッドなので、生インスタンスを使う。
     val instance = env.threadInstance("board1/7")
-    for
+    for {
       _ <- seed(instance, "dat" -> "1<>a<><>msg1<>title\n2<>b<><>msg2<>\n")
       _ <- instance.deleteRes(2).toFuture
       after <- instance.getDat().toFuture
@@ -277,7 +277,7 @@ class ThreadSuite extends FunSuite:
       _ <- instance.deleteRes(3).toFuture
       unchanged <- instance.getDat().toFuture
       _ = assertEquals(unchanged, after, "resNum(3) はlines.length(3)未満でないため無視される")
-    yield ()
+    } yield ()
   }
 
   test("null vs undefined: postingへ生のnullを渡してもundefined省略時と同じ挙動になる（旧: posting.isDefinedのnull/undefined不一致を修正）") {
@@ -287,7 +287,7 @@ class ThreadSuite extends FunSuite:
     // JSの `posting?.bbs` / `if (posting) ...` はnullに対してもundefinedと同じ「falsy」として振る舞う。
     // Scala側はDO越しに生のnullが来ても同じ結果になるよう、posting.isDefined(=「undefinedでない」)
     // ではなく「nullでもundefinedでもない」ことをチェックする。
-    for
+    for {
       countWithNull <- thread.asInstanceOf[js.Dynamic].addRes("1<>a<><>msg<>title", "1<>log", null.asInstanceOf[js.Any]).asInstanceOf[js.Promise[Int]].toFuture
       _ = assertEquals(countWithNull, 1)
       datWithNull <- thread.getDat().toFuture
@@ -297,5 +297,6 @@ class ThreadSuite extends FunSuite:
       threadOmitted = env.thread("board1/9")
       countOmitted <- threadOmitted.addRes("1<>a<><>msg<>title", "1<>log").toFuture
       _ = assertEquals(countOmitted, 1, "posting省略(undefined)時と同じ結果になる")
-    yield ()
+    } yield ()
   }
+}

@@ -18,7 +18,7 @@ import scala.scalajs.js.typedarray.Uint8Array
  * クラス自体がJS向けクラスになるためメンバは自動的に素の名前でexportされるが、
  * この `Main` のような独立関数のexportにはその仕組みが働かないため `@JSExportTopLevel` が必要。
  */
-object Main:
+object Main {
 
   @JSExportTopLevel("admin", "server")
   def admin(request: external.web.Request, env: external.cloudflare.WorkerEnv): js.Promise[Response] = handler.Admin.handle(request, env)
@@ -53,3 +53,4 @@ object Main:
 
   @JSExportTopLevel("sjisDecode", "server")
   def sjisDecode(bytes: Uint8Array): String = SjisEncoding.decode(bytes)
+}

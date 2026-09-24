@@ -9,13 +9,15 @@ import scala.scalajs.js
  * 使わないため、次タスクで必要になるメンバから最小限だけ先取りしてある。
  */
 @js.native
-trait HonoRequestFacade extends js.Object:
+trait HonoRequestFacade extends js.Object {
   def param(name: String): js.UndefOr[String] = js.native
   def header(name: String): js.UndefOr[String] = js.native
+}
 
 @js.native
-trait HonoContextFacade extends js.Object:
+trait HonoContextFacade extends js.Object {
   val req: HonoRequestFacade = js.native
 
   /** Workersバインディング（`env.V6_PLACEHOLDER_DO` 等）。呼び出し側で `WorkerEnv` へキャストする。 */
   val env: js.Any = js.native
+}

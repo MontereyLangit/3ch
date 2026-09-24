@@ -140,8 +140,7 @@ object Json {
       while (continue) {
         if (i >= s.length) throw new IllegalArgumentException("unterminated string")
         val c = s.charAt(i)
-        if (c == '"') { i += 1; continue = false }
-        else if (c == '\\') {
+        if (c == '"') { i += 1; continue = false } else if (c == '\\') {
           i += 1
           val esc = s.charAt(i)
           esc match {

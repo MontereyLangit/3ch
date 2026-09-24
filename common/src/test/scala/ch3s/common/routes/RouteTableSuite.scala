@@ -2,7 +2,7 @@ package ch3s.common.routes
 
 import munit.FunSuite
 
-class RouteTableSuite extends FunSuite:
+class RouteTableSuite extends FunSuite {
 
   test("routes include the health route and the all-method legacy dispatcher") {
     assertEquals(RouteTable.routes.map(_.filePath), List("_v6/health.ts", "index.ts"))
@@ -24,3 +24,4 @@ class RouteTableSuite extends FunSuite:
     val rendered = RouteTable.renderRouteFile(entry)
     assert(rendered.contains("export const POST = createRoute((c) => probeHandler(c));"))
   }
+}

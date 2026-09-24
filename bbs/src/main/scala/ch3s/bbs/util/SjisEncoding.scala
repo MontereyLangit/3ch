@@ -54,10 +54,11 @@ import scala.scalajs.js.typedarray.Uint8Array
  */
 @js.native
 @JSGlobal("TextDecoder")
-private class NativeTextDecoder(label: String) extends js.Object:
+private class NativeTextDecoder(label: String) extends js.Object {
   def decode(input: Uint8Array): String = js.native
+}
 
-object SjisEncoding:
+object SjisEncoding {
 
   /**
    * v5と同一のテーブルを一度だけ構築する（[[buildTables]]）。v5は呼び出しごとに `new sjis()`
@@ -97,50 +98,60 @@ object SjisEncoding:
    * 各バイト列を実際に`TextDecoder('sjis').decode`し、結果が長さ1（サロゲートペアや複数文字に
    * ならない、単一のUTF-16コード単位）の場合のみテーブルへ登録する（v5の`_.length==1`判定）。
    */
-  private def buildTables(): (Map[Int, Array[Int]], js.Array[js.Any]) =
+  private def buildTables(): (Map[Int, Array[Int]], js.Array[js.Any]) = {
     val td = new NativeTextDecoder("sjis")
     val encode = scala.collection.mutable.LinkedHashMap.empty[Int, Array[Int]]
     val root = js.Array[js.Any]()
     var z = 0
-    while z < 256 do
+    while z < 256 do {
       root.push(js.undefined)
       z += 1
+    }
 
-    def record(bytes: Array[Int]): Unit =
+    def record(bytes: Array[Int]): Unit = {
       val u8 = new Uint8Array(bytes.length)
       var k = 0
-      while k < bytes.length do
+      while k < bytes.length do {
         u8(k) = bytes(k).toShort
         k += 1
+      }
       val decoded = td.decode(u8)
-      if decoded.length == 1 then
+      if decoded.length == 1 then {
         encode(decoded.charAt(0).toInt) = bytes
         if bytes.length == 1 then root(bytes(0)) = decoded
-        else
+        else {
           val branch: js.Array[js.Any] =
-            if js.isUndefined(root(bytes(0))) then
+            if js.isUndefined(root(bytes(0))) then {
               val b = js.Array[js.Any]()
               var w = 0
-              while w < 256 do
+              while w < 256 do {
                 b.push(js.undefined)
                 w += 1
+              }
               root(bytes(0)) = b
               b
-            else root(bytes(0)).asInstanceOf[js.Array[js.Any]]
+            } else root(bytes(0)).asInstanceOf[js.Array[js.Any]]
           branch(bytes(1)) = decoded
+        }
+      }
+    }
 
     var i = 0
-    while i < 238 do
+    while i < 238 do {
       if i < 191 then record(Array(i + (if i < 128 then 0 else 0xa1 - 128)))
-      else
+      else {
         val leadByte = (i - 191) + (if (i - 191) < 31 then 0x81 else 0xe0 - 31)
         var j = 0
-        while j < 188 do
+        while j < 188 do {
           record(Array(leadByte, j + 0x40 + (if 62 < j then 1 else 0)))
           j += 1
+        }
+      }
       i += 1
+    }
 
     (encode.toMap, root)
+  }
 
   /**
    * 文字列 → SJISバイト列。
@@ -149,34 +160,40 @@ object SjisEncoding:
    * サロゲートペアは1要素）で走査し、テーブルに存在すればv5と同一のバイト列を出力する。
    * 存在しない場合（KB-17）は、v5のNULバイトの代わりにNCR（`&#codepoint;`）へフォールバックする。
    */
-  def encode(text: String): Uint8Array =
+  def encode(text: String): Uint8Array = {
     val out = js.Array[Int]()
     val n = text.length
     var i = 0
-    while i < n do
+    while i < n do {
       val c1 = text.charAt(i)
       val cp: Int =
-        if isHighSurrogate(c1) && i + 1 < n && isLowSurrogate(text.charAt(i + 1)) then
+        if isHighSurrogate(c1) && i + 1 < n && isLowSurrogate(text.charAt(i + 1)) then {
           val combined = 0x10000 + ((c1.toInt - 0xd800) << 10) + (text.charAt(i + 1).toInt - 0xdc00)
           i += 2
           combined
-        else
+        } else {
           i += 1
           c1.toInt
-      encodeTable.get(cp) match
+        }
+      encodeTable.get(cp) match {
         case Some(bytes) => bytes.foreach(b => out.push(b))
         case None =>
           val ncr = s"&#$cp;"
           var k = 0
-          while k < ncr.length do
+          while k < ncr.length do {
             out.push(ncr.charAt(k).toInt)
             k += 1
+          }
+      }
+    }
     val result = new Uint8Array(out.length)
     var j = 0
-    while j < out.length do
+    while j < out.length do {
       result(j) = out(j).toShort
       j += 1
+    }
     result
+  }
 
   /**
    * SJISバイト列 → 文字列。
@@ -187,31 +204,35 @@ object SjisEncoding:
    * 例外を投げずに`?`へフォールバックする（KB-18。廃止した`encoding-japanese`ベース実装の
    * フォールバック文字を継承し、ダウンストリームの出力を変えない）。
    */
-  def decode(bytes: Uint8Array): String =
+  def decode(bytes: Uint8Array): String = {
     val sb = new StringBuilder
     val n = bytes.length
     var i = 0
-    while i < n do
+    while i < n do {
       val b = bytes(i) & 0xff
       val slot = rootTable(b)
-      if js.typeOf(slot) == "string" then
+      if js.typeOf(slot) == "string" then {
         sb.append(slot.asInstanceOf[String])
         i += 1
-      else if !js.isUndefined(slot) then
+      } else if !js.isUndefined(slot) then
         // 枝（第2バイト用の配列）。v5と同様、ここまでの1バイトはまだ確定していない。
-        if i + 1 < n then
+        if i + 1 < n then {
           val second = bytes(i + 1) & 0xff
           val leaf = slot.asInstanceOf[js.Array[js.Any]](second)
           if js.typeOf(leaf) == "string" then sb.append(leaf.asInstanceOf[String])
           else sb.append('?') // KB-18: 未知の第2バイト（両バイトを消費）
           i += 2
-        else
+        } else {
           sb.append('?') // KB-18: 末尾の不完全なリードバイト（v5は無音で捨てる）
           i += 1
-      else
+        } else {
         sb.append('?') // KB-18: 未知のバイト（KB-04のIBM拡張行 0xF0-0xFC を含む）
         i += 1
+      }
+    }
     sb.toString
+  }
 
   private def isHighSurrogate(c: Char): Boolean = c >= 0xd800 && c <= 0xdbff
   private def isLowSurrogate(c: Char): Boolean = c >= 0xdc00 && c <= 0xdfff
+}
