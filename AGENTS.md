@@ -32,7 +32,7 @@ Cloudflare Workers / Durable Objects / R2 / KV 上で動く、フルスクラッ
 | **`ch3s`（本リポジトリ）** | **v5 = 現行稼働システム**。Cloudflare Workers + DO + R2 + KV / JS |
 | `ch3s-migration` | **Scala.js × HonoX 移植の参照実装**（後述 step 3 の手本） |
 | `ch3/3chiko` | フロントエンド（read.cgi 相当の閲覧 UI, `3chiko.html`）。**別リポジトリ** |
-| `3ch_ui` | 新 UI のデザイン案・HTML モック |
+| `v6/docs/3ch_ui` | Web 版新 UI の画面モック。**step 4 では利用者画面（read.cgi・板top 等）のみ参考にする。管理画面・bg のモックは参考にしない** |
 | `v6`, `v6-s`, `v6-k`, `v6-s2`, `v6-bp` | v6 検討・試作（Kotlin/Spring Boot 版含む） |
 | `kako-data` | 過去ログデータ（step 6 の移行対象） |
 
@@ -133,7 +133,7 @@ step 2 のキャラクタリゼーションテストは `src/*.js` を直接 imp
     絶対値を再現できないため。両者に同じ入力を与えて**相対的に一致すること**を示す方が強い保証になる。
 
 ### Step 4. フロントエンドを新仕様で Next.js 化
-- **新仕様は別途検討**（`3ch_ui/` のモックが起点）。
+- **新仕様は別途検討**（`../v6/docs/3ch_ui/` の画面モックのうち利用者画面のみ参考にする。管理画面は参考にしない）。
 - **DB 変更なし。**
 
 ### Step 5. バックエンドを新仕様へ移行
