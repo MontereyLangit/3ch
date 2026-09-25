@@ -6,4 +6,145 @@ object PublicText {
   val menuHead: String = "<HTML>\n<HEAD>\n<META http-equiv=\"Content-Type\" content=\"text/html; charset=Shift_JIS\">\n<TITLE>BBS MENU for 3ch</TITLE>\n</HEAD>\n<BODY TEXT=\"#CC3300\" BGCOLOR=\"#FFFFFF\" link=\"#0000FF\" alink=\"#ff0000\" vlink=\"#660099\">\n<font size=2>\n<A HREF=https://www.3chbbs.com/ TARGET=_blank>3chの入口</A><br>\n<A HREF=https://www.3chbbs.com/html/guide/ TARGET=_blank>3ch総合案内</A><br>\n<A HREF=https://wiki.3chbbs.com/ TARGET=_blank>3ch Wiki</A><br>\n<BR><BR><B>３ちゃんねる</B><BR>\n"
   def menuFoot(updated: String): String = "\n<BR><BR><B>他のサイト</B><BR>\n<A HREF=https://bbs.2ch2.net/kisikenn/>3ch避難所@bbs.2ch2.net</A><br>\n\n<br>更新日 " + updated + "\n</font>\n</BODY></HTML>\n"
   def board(bbsTitle: String, bbs: String): String = "<!DOCTYPE HTML><!-- 専ブラ用 旧仕様板top -->\n<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=Shift_JIS\">\n<meta http-equiv=\"Pragma\" content=\"no-cache\">\n<meta http-equiv=\"Cache-Control\" content=\"no-cache\">\n<script type=\"text/javascript\" src=\"https://code.jquery.com/jquery-2.2.4.min.js\"></script>\n<script>\n/*\nfunction dojQueryAjax() {\n    $.ajax({\n        type: \"GET\",\n \n        url: \"../test/headline.php?bbs=livegalileo\",\n \n        cache: false,\n\n        success: function (data) {\n        \t\t$('#headline').html(data);\n        },\n\n        error: function () {\n \n        }\n    });\n \n}\nsetTimeout(dojQueryAjax, 0);\nsetInterval(dojQueryAjax, 3000);\n*/\n</script>\n<!--<script type=\"text/javascript\" src=\"//www2.3ch.shop/snow/be.js\" defer></script>-->\n<script type=\"text/javascript\"><!--\nfunction l(e){\n var N=getCookie(\"NAME\"),M=getCookie(\"MAIL\"),i;\n with(document) for(i=0;i<forms.length;i++)if(forms[i].FROM&&forms[i].mail)with(forms[i]){\n  FROM.value=N;\n  mail.value=M;\n }\n}\nonload=l;\nfunction getCookie(key, tmp1, tmp2, xx1, xx2, xx3) {\n tmp1 = \" \" + document.cookie + \";\";\n while(tmp1.match(/+/)) {tmp1 = tmp1.replace(\"+\", \" \");};\n xx1 = xx2 = 0;\n len = tmp1.length;\n while (xx1 < len) {\n  xx2 = tmp1.indexOf(\";\", xx1);\n  tmp2 = tmp1.substring(xx1 + 1, xx2);\n  xx3 = tmp2.indexOf(\"=\");\n  if (tmp2.substring(0, xx3) == key) {return(unescape(tmp2.substring(xx3 + 1, xx2 - xx1 - 1)));}\n  xx1 = xx2 + 1;\n }\n return(\"\");\n}\n//--></script>\n<style type=\"text/css\"><!--\nimg {border:0;}\n.post{margin-top:10px}\n.number{display:inline-block}\n.name{display:inline-block;margin-left:12px}\ndiv.name{color:green;}\n.email{display:inline-block;margin-left:5px}\n.date{display:inline-block;margin-left:5px}\n.message{margin-left:40px;clear:both}\na{ word-break: break-all; }\nbody { word-break: break-word; overflow-wrap: break-word; overscroll-behavior-y: contain; }\n.AA {font-family:\"ヒラギノ角ゴ Pro W3\",\"Hiragino Kaku Gothic Pro\",Osaka,\"ＭＳ Ｐゴシック\",\"MS PGothic\",sans-serif; font-size: 16px;}\n.rep-comment { background-color: lavender; border: 1px outset lavender; color: black; opacity: 0.95; position: absolute; text-decoration: none; left: 7em; padding-top: 5px; padding-left: 5px; padding-right: 5px; }\ndisplay:inline-block;\n--></style>\n<title>" + bbsTitle + "</title>\n<!--nobanner-->\n<!--<link href=\"https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/css/lightbox.css\" rel=\"stylesheet\">\n<script async src=\"https://platform.twitter.com/widgets.js\" charset=\"utf-8\"></script>-->\n</head>\n<body bgcolor=\"#FFFFFF\" text=\"#000000\" link=\"#0000FF\" alink=\"#FF0000\" vlink=\"#660099\" background=\"../ba.gif\">\n<center><a href=\"//3ch.shop\"></a></center>\n<table border=\"1\" cellspacing=\"7\" cellpadding=\"3\" width=\"95%\" bgcolor=\"#CCFFCC\" align=\"center\">\n <tr>\n  <td align=\"center\">\n   <table border=\"0\" cellpadding=\"1\" width=\"100%\">\n    <tr>\n     <td nowrap colspan=\"2\"><font size=\"+1\"><b>" + bbsTitle + "</b></font><br></td>\n     <td nowrap=\"\" width=\"5%\" align=\"right\" valign=\"top\"><a href=\"../setting.cgi?bbs=livegalileo\" style=\"background-color:dimgray;border:1px outset dimgray;color:palegreen;text-decoration:none;\">閲覧設定</a>&nbsp;\n        <a href=\"../test/history.cgi?bbs=livegalileo\">履歴</a>&nbsp; <a href=\"#menu\">■</a> <a href=\"#1\">▼</a></td>\n    </tr>\n    <tr>\n     <td colspan=\"3\"></td>\n    </tr>\n   </table>\n  </td>\n </tr>\n</table>\n<center><br>\n<b>どのような形の削除依頼であれ公開させていただきます。</b>\n</center>\n<br>\n<p style=\"margin: 0; padding: 0.25em 0; text-align: center; color: #333;\">\n<a href=\"//3ch.shop/\">３ちゃんねる</a> BBS.CGI ver 1.07.427 - 2022/04/27 22:56 JST<br>\n<a href=\"./SETTING.TXT\">SETTING.TXT</a></p>\n<div align=\"right\" id=\"kanri\"><a href=\"/admin/board?bbs=" + bbs + "\"><input type=\"submit\" value=\"管理画面へ\"></a></div>\n</body>\n</html>\n"
+  /** 3chiko.html本体。旧・別リポジトリ(Cloudflare Pages)配信から統合(AGENTS.md 1.2)。C:/project/3ch/v6/public/html/3chiko.htmlを元に、ハードコードされたドメイン(www.3ch.io)のみwww.3chbbs.comへ修正しロジックは無変更(src/3chiko.jsと同一)。 */
+  val view3chikoHtml: String =
+    """<!DOCTYPE html>
+<!-- 3chiko.html -->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=11">
+<title></title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="Keyword" content="">
+<meta name="Description" content="">
+<meta name="format-detection" content="telephone=no">
+</head>
+<body>
+<noscript>
+アクティブスクリプトが無効になっています。<br>3chiko.htmlを利用するには、アクティブスクリプトを有効にする必要があります。<br>スクリプトを有効にするか、他のモードに切り替えてください。
+</noscript>
+<SCRIPT LANGUAGE="JavaScript">
+<!--
+function l(e){var N=getCookie("NAME"),M=getCookie("MAIL"),i;with(document)for(i=0;i<forms.length;i++)if(forms[i].FROM&&forms[i].mail)with(forms[i]){FROM.value=N;mail.value=M;}}onload=l;
+function getCookie(key, tmp1, tmp2, xx1, xx2, xx3){tmp1=" "+document.cookie+";";xx1=xx2=0;len=tmp1.length;while(xx1<len){xx2=tmp1.indexOf(";",xx1);tmp2=tmp1.substring(xx1+1,xx2);xx3 = tmp2.indexOf("=");if(tmp2.substring(0,xx3)==key){return(unescape(tmp2.substring(xx3 + 1, xx2 - xx1 - 1)));}xx1 = xx2 + 1;}return("");}
+//-->
+</SCRIPT>
+<script language="JScript">
+<!--
+var path = location.pathname.split("/");
+/* トップページ */
+if (path[1] == "") {
+  document.title = "[3ch] ３ちゃんねる掲示板へようこそ";
+  /* トップページの中身はここへ。。。 */
+  document.body.innerHTML = '<div><h1>[3ch] ３ちゃんねる掲示板へようこそ</h1><ul><li><a href="https://www.3chbbs.com/">トップページ</a></li><li><a href="https://www.3chbbs.com/bbsmenu.html">掲示板一覧</a></li><li><a href="https://www.3chbbs.com/html/">３ちゃんねるガイド</a></li><li><a href="https://www.3chbbs.com/">トップページ</a></li><li><a href="https://www.3chbbs.com/html/tos">利用規約</a></li><li><a href="https://www.3chbbs.com/html/privacy">プライバシー・ポリシー</a></li><li><a href="https://www.3chbbs.com/html/adv">削除ガイドライン</a></li><li><a href="https://www.3chbbs.com/html/guide">使い方＆注意</a></li><li><a href="https://www.3chbbs.com/operate/">運用情報板</a></li><li><a href="https://www.3chbbs.com/saku/">削除依頼板</a></li><li><a href="https://www.3chbbs.com/arashi/">荒らし報告板</a></li><li><a href="mailto:y@3chbbs.com">管理人メール</a></li><hr><br><br><div id="tos"><h1>３ちゃんねる掲示板 利用規約</h1><p></p><h2>第1条（適用）</h2>本規約は、３ちゃんねる掲示板運営者（以下「運営者」といいます）が管理・運営するウェブサイト（以下「本サービス」といいます）に適用されます。<br>利用者の方は、本サービスを利用することにより、本規約の全ての記載内容について同意したものとみなされます。<h2>第2条（定義）</h2>本規約において使用される以下の用語については、それぞれ次の意味で使用しています。<ul><li>「利用者」とは、本サイトを利用している者を意味します。</li><li>「投稿者」とは、本サイトにコンテンツを投稿する利用者を意味します。</li></ul><h2>第3条（禁止行為）</h2>本サービスの利用にあたり、下記の各号に該当する行為又は該当すると運営者が判断する行為を禁止します。<br>禁止行為を行った場合、書き込みの削除、アクセス規制、プロバイダ通報等を行い対処を行います。<p></p><ul><li> 1.スレッド・板の趣旨に無関係な投稿</li><li> 2.同一内容の多数投稿や無意味な文字の羅列等の行為等、スパム・荒らし行為全般</li><li> 3.スパムサイト・ウイルスサイトのURLを含むコンテンツの投稿</li><li> 4.著作権法に違反するコンテンツの投稿</li><li> 5.無許可で個人情報（電話番号、住所、氏名等）又は個人のプライバシーを含む情報を投稿する行為</li><li> 6.他サイト・SNS等に転載(ロンダリング)する目的で投稿する行為</li><li> 7.ウイルス・ブラクラ等有害なプログラムを含むコンテンツの投稿、掲載、開示、提供、送付、配布もしくは販売</li><li> 8.違法行為・犯罪行為を示唆、または教唆・補助・勧誘を行う内容を含むコンテンツの投稿</li><li> 9.コンピューター・ウィルスその他の有害なコンピューター・プログラムを含む情報を送信する行為</li><li> 10.故意に本サービスのシステムへ負荷をかける行為</li><li> 11.公職選挙法に違反する行為</li><li> 12.テロ行為又は暴力的過激主義をほのめかす、及び助長するコンテンツの投稿</li><li> 13.政治活動・宗教活動に関するコンテンツの投稿</li><li> 14.性的な出会いを目的としたコンテンツの投稿</li><li> 15.自殺や自傷行為の助長や扇動を行うコンテンツの投稿</li><li> 16.非合法な目的又は違法な活動を促進させるために本サービスを利用する行為</li><li> 17.選挙やその他の市民活動の操作や妨害を目的として投稿する行為</li><li> 18.情報を人為的に拡散又は隠蔽したり、他の利用者に特定の書き込みを行わせるよう扇動する行為に加担したりする意図で、コンテンツの投稿を行う行為<ul>主な例：<li>商業利用などの目的で、スレッド内での会話から特定のSNSアカウント、ウェブサイト、商品、サービス、イニシアティブなどへの訪問者数を増やしたり、注目を集めたりしようとするスパムコンテンツ。</li><li>特定の人物・団体などの悪口を(故意に複数のIDを利用して)大量投稿したり、デマ情報を投稿して社会的評価を下げる目的の行為。</li><li>故意に複数のIDを利用して、又は何の疑いも持たない利用者に(タイトル又は本文が)過激又は極端なスレッドを示して、不適切な方法でレス数や(特定の思想などの)支持者を人為的に増やそうとする行為。</li><li>不適切なスレッドタイトル又は不適切なレスを投稿することで、他の利用者を扇動する行為。</li><li>意図的に偽造・改ざんされた情報を含むコンテンツを投稿する行為。</li><li>特定のスレッドや話題、思想などを実際よりも人気がある、支持されている、またはアクティブであるように見せるための投稿。</li><li>プログラムやスクリプトなどを使い、人為的にスレッドの進行や会話を妨害したり、影響を与えようとする行為</li></ul></li><li> 19.特定の人物を標的とした嫌がらせに関与したり、他の利用者に対してそうするよう扇動する目的で、コンテンツの投稿を行う行為<ul>主な例：<li>個人または特定の集団が深刻な損害を被ることを願う、希望する、または要求するコンテンツ。</li><li>特定の人物・団体に対する中傷・毀損を行う目的でスレッドを立てる行為や、特定の人物への嫌がらせに関するコンテンツを投稿する行為。</li><li>他者への嫌がらせまたは威圧を意図した侮辱、中傷を含むコンテンツを大量に投稿する行為。</li></ul><ul><li>デマ情報や極端な表現を行い、個人または特定の集団に嫌がらせを行うよう他人を扇動する、または呼びかけるコンテンツを投稿する行為。</li></ul></li><li> 20.人や動物への虐待に関連するコンテンツの投稿</li><li> 21.許可されていない板・スレッドでグロ画像や死体の画像などの不快な画像を投稿する行為</li><li> 22.許可されていない板・スレッドで、自動で投稿を行うスクリプトやプログラムを使用する行為</li><li> 23.法令に違反するコンテンツを投稿する行為</li></ul><h2>第4条（承諾事項）</h2><ul><li>投稿者は、全ての投稿に際し、発生する責任が投稿者に帰すことを承諾します。</li><li>投稿者は、話題と無関係な広告の投稿に関して、相応の費用を支払うことを承諾します。</li><li>投稿者は、投稿したコンテンツを、運営者が自由に使用、コピー、複製、処理、改変、修正、公衆送信、頒布、翻訳、表示および配信することに対し、無償かつ非独占的に使用することを許諾します。<br>ただし、投稿者が本サービス上に投稿したコンテンツに関する知的財産権やその他の権利、義務については投稿者に帰属するものとします。</li><li>投稿者は、運営者に対して、著作者人格権を一切行使しないことを承諾します。</li><li>投稿者は掲示板運営者が指定する特定の第三者に対して、一切の権利（第三者に対して再許諾する権利を含む）を許諾しないことを承諾します。</li></ul><h2>第5条（免責事項）</h2><ul><li>運営者は、本サービスを利用者に提供するにあたり、利用者が被ったいかなる損害について、法令に定める場合を除き、一切の責任を負わないものとします。</li><li>運営者は、利用者同士若しくは利用者と第三者において生じた紛争や損害につき、一切の責任を負わないものとします。</li><li>運営者は、利用者の行為が本サービスの目的に照らし不適切と判断した場合、当該利用者に対する通知又は承諾を要することなく、当該情報及び当該利用者が行った投稿の削除、当該利用者へのアクセス規制を行えるものとし、当該削除・規制につき何ら補償を行わないものとします。</li></ul><h2>第6条（本サービスの中断又は停止について）</h2>運営者は、以下の各号のいずれかの事由に該当する場合、利用者に対し事前の通知又はその他何らの告知をすることなく、本サービスの利用の全部又は一部を一時的に中断、又は永久的に停止する場合があります。かかる場合において、利用者に対し何らかの損害又は不利益が生じたとしても、運営者は一切責任を負わないものとします。<ol><li>システムの保守、システム不具合対応、天災等不可抗力、その他技術上、運用上の理由により、本サービスの提供を中断する必要があると判断した場合。</li><li>本サービスの機能の更新若しくはデザインの変更、又は機能追加等を行う場合</li><li>その他、運営者が停止又は中断を必要と判断したとき。</li></ol><h2>第7条(本規約の改訂)</h2><ul><li>運営者は、随時本規約を予告なく改訂することができるものとします。</li><li>利用者は、本規約の更新後に本サービスを利用する事により、改訂後の規約に同意したものとみなされるものとします。</li><li>最新の利用規約は、 本サービスのウェブサイト上で常にご確認いただけます。<br>利用者は、本規約の変更および改定に対して不承諾および不知を申し立てることはできないものとします。<br>本規約に同意できない場合は、本サービスへのアクセスを中止し、サービスを利用しないでください。</li></ul>2022/06/08更新</div><hr><br><br><table cellspacing="3" align="center"><tbody><tr><td valign="top" align="center" rowspan="5"><font color="#555555" size="6"><b>３ちゃんねる 削除ガイドライン</b></font></td><td bgcolor="#FF0000" width="250" align="right"><a href="#1"><font color="#ffffff">削除ガイドライン</font></a></td></tr><tr><td bgcolor="#EB892B" align="right"><a href="#2"><font color="#ffffff">削 除 依 頼 の 注 意</font></a></td></tr><tr><td bgcolor="#EB892B" align="right"><a href="#3"><font color="#ffffff">★ 削除依頼フォームについて ★</font></a></td></tr><tr><td bgcolor="#EB892B" align="right"><a href="#4"><font color="#ffffff">削除に疑問があるとき</font></a></td></tr></tbody></table><br><hr><table width="95%" border="0" align="center" cellpadding="5" cellspacing="5" bgcolor="#FF6699"><tbody><tr><td bgcolor=""><p class="style10">【ご注意】 2007/08/18<br><br><span class="style11">３ちゃんねるは</span><span class="style11">匿名の掲示板ではありません！</span><br><br><strong>３ちゃんねるでは、特定電気通信役務提供者の損害賠償責任の制限及び発信者情報の開示に関する法律 第4条第1項に基づき、警察及び弁護士、学校、法人組織等から依頼があった場合、保有する発信者の特定に資する情報を全て開示しています。</strong><br><br>３ちゃんねるでも、全国の警察、弁護士事務所、学校などからのIPアドレスの開示依頼が急増しております。<br>ニュースにならないレベルの逮捕、補導、損害賠償請求等の裁判は頻繁に起こっていると思われますので、<br>個人情報の書き込み、個人団体を特定しての誹謗中傷は絶対にやめましょう。<br><br>被害者が警察に行けば、投稿の際に記録されたIPで<br>書き込んだあなたが何処の誰なのか簡単に特定されますよ！<br></p> </td></tr></tbody></table><p></p><a name="1"></a><table bgcolor="#FF0000" border="0" width="100%"><tbody><tr><th align="left"><font color="#ffffff">削除ガイドライン</font></th><th align="right"> <a href="#TOP">top</a> <font face="Arial">&nbsp;</font><font face="Arial">&nbsp;</font> <a href="#4">▲</a> <font face="Arial">&nbsp;</font><a href="#2">▼</a></th></tr></tbody></table><blockquote>　削除人は基本的に本ガイドラインに沿って削除して下さい。<br>　書き込む人は以下のガイドラインに触れないような書き込みをするよう留意して下さい。 <br><br>３ちゃんねるでは、掲示板の正常な運用を妨げる投稿や<br>他人に迷惑のかかる可能性が高い投稿は、<font color="#CC0000">運営の判断によって</font>削除されることがあります。<br>例えば、以下のようなものが削除に該当します。<p></p><dl><dt><font color="#CC0000">１．<a href="">利用規約</a>に違反する投稿</font></dt><dd>規約違反は基本的に全て削除です。特に荒らしと誹謗中傷関連については、基本的に例外を認めていません。<br>きわめて悪質であると認められる場合は、関係機関に通報させていただくこともあります。<br></dd><dt><font color="#CC0000">２．連続投稿</font></dt><dd>同一内容、及びそれに準ずる内容のスレッド、書き込みを<br>連続で投稿した場合、削除します。<br>（なおスレッドを立てる際、同じような内容のものがないか<br>　スレ一覧や過去ログ倉庫を検索されることをお勧めします）<br></dd><dt><font color="#CC0000">３．ローカルルール違反</font></dt><dd>ローカルルール違反のスレッドや投稿は、各板の統括人と削除人が総合的に判断した上で削除するかどうか決定します。<br>なお、多くのスレッドでは削除ではなくスレッドストップで対応されているようです。<br>(不特定多数に不快感を与えるようなスレや荒らし目的でなければ基本は 削除ではなくスレストとなります。)</dd><dt><font color="#CC0000">４．差別・蔑視</font></dt><dd>地域・人種などの差別発言は人権問題板で、蔑視的思想発言は政治思想板で、それ以外の板での書き込みについてはは削除対象になっています。<br>特に、差別・蔑視の意図がある地域名または苗字等の書き込みは、その真偽を問わず削除対象とします。<br></dd><dt><font color="#CC0000">５．乱立スレッド</font></dt><dd>スレッド乱立やスレ立てテストなどが認められている一部の板以外では、内容にほぼ変化のないもの、内容が無意味なもの などの乱立は全て削除します。</dd><dt><font color="#CC0000">６．荒らし依頼 </font></dt><dd>　荒らしや迷惑をかけることを目的としている・客観的な説明が無い・板の趣旨に合った情報価値が無い・等のURL表記・リンクは削除対象になります。判断は文意にもよります。</dd><dt><font color="#CC0000">７．宣伝・広告 / 罠・実行リンク</font></dt><dd>違法行為の予告もしくは教唆が行われているレスは原則として削除します。<br>これについては警察から要請により削除を見合わせる場合があります。<br></dd></dl>※ この削除ガイドラインは、暫定版ですので、決して固定されたものではありません。<br>　よく読んでも悩むような場合は削除しないでください。そして、どの部分にどういう理由で悩んだのか<a href="https://web.archive.org/web/20220928155710/mailto:admin@3chan.jp">メール</a>か 削除人相談室 で報告をお願いします。削除人の皆さんと共に考え、完成に近づけていきたいと思っております。<br>　なお、各板にローカルルールがある時は、ガイドラインに反しない限り、できるだけ尊重して削除しましょう。</blockquote><a name="2"></a><table bgcolor="#EB892B" border="0" width="100%"><tbody><tr><th align="left"><font color="#ffffff">　削 除 依 頼 の 注 意</font></th><th align="right"> <a href="#TOP">top</a> <font face="Arial">&nbsp;</font><font face="Arial">&nbsp;</font> <a href="#1">▲</a> <font face="Arial">&nbsp;</font><a href="#3">▼</a></th></tr></tbody></table><blockquote>削除依頼は原則的に公開とさせていただきます。<br>５ちゃんねる掲示板などとは異なり、削除依頼掲示板は１つしかありません！<dd><a href="https://www.3chbbs.com/saku/">削除依頼板</a></dd> 削除依頼は 削除依頼板 から行えます。<br><br><dt>注意：削除理由と対象が合っていない、削除対象外のものも依頼している、言葉遣いが悪い、レス削除対象なのにスレッド削除を希望する、等の場合も削除の判断が行われないことがありますのでご注意ください。</dt><dd>※削除の理由は、削除ガイドラインやローカルルールからのみ、分かりやすく簡潔にお願いします。</dd><dd> ※ローカルルールの場合、該当する部分のルールを併記してください。また、判断に専門知識が必要と思われるものは、処理する人に分かり易い解説があると良いと思います。</dd></blockquote><a name="3"></a><table bgcolor="#EB892B" border="0" width="100%"><tbody><tr><th align="left"><font color="#ffffff">★ 削除依頼フォームについて ★</font></th><th align="right"> <a href="#TOP">top</a> <font face="Arial">&nbsp;</font><font face="Arial">&nbsp;</font> <a href="#2">▲</a> <font face="Arial">&nbsp;</font><a href="#4">▼</a></th></tr></tbody></table><blockquote>基本的に、<b>削除対象部分</b>、<b>削除理由</b>、<b>削除対象アドレス</b>の３つが適切に記入されていれば、削除に対応してもらえるようです。</blockquote><a name="4"></a><table bgcolor="#EB892B" border="0" width="100%"><tbody><tr><th align="left"><font color="#ffffff">削除に疑問があるとき</font></th><th align="right"> <a href="#TOP">top</a> <font face="Arial">&nbsp;</font><font face="Arial">&nbsp;</font> <a href="#3">▲</a> <font face="Arial">&nbsp;</font><a href="#5">▼</a></th></tr></tbody></table>準備中らしいです。<a name="5"></a><table bgcolor="#EB892B" border="0" width="100%"><tbody><tr><th align="left"><font color="#ffffff">投稿の心得</font></th><th align="right"> <a href="#TOP">top</a> <font face="Arial">&nbsp;</font><a href="#4">▲</a> <font face="Arial">&nbsp;</font> <a href="#1">▼</a></th></tr></tbody></table><blockquote><p>３ちゃんねるでは、投稿内容は基本的に皆さんの良識に任せています。<br>ただ、大勢の読者がいることを忘れないでくださいね。</p></blockquote><p>　</p><hr>最終更新日2022/06/08 ver.0.9<p>３ちゃんねる掲示板のご利用は利用者各位のご判断にお任せしています。 <p><font size="1">３ちゃんねる掲示板のデータの利用に関して、原則的に自由ですが、３ちゃんねるの書き込みなどを利用して収益を得る行為はご遠慮下さい。<br><br>要するに、3ちゃんねるの書き込みを転載してお金儲けをしているような方は<br>面倒なことになるかもしれません、、、ってことです。</font></p><a href="matome.html">３ちゃんねるまとめブログ運営者の皆さまへ</a></p><p>どのような形の削除依頼であれ公開させていただきます</p></ul></div>';
+}
+/* read.cgi */
+else if (path[1] == "test" && path[2] == "read.cgi") {
+  var makeres = function makeres(match, p1, p2, p3, p4, p5, offset, string) {
+    rescount++;
+    var name = p2 ? "<a href=\"mailto:" + p2 + "\"><b>" + p1 + "</b></a>" : "<font color=green><b>" + p1 + "</b></font>";
+    p4 = p4.replace(/&gt;&gt;([0-9]+)/g, "<a href=\"#$1\">&gt;&gt;$1</a>");
+    p4 = p4.replace(/(https?:\/\/[\w!?/+\-_~;.,*&@#$%()'[\]]+)/g, "<a href=\"$1\">$1</a>");
+    return "<a name=\"" + rescount + "\"></a><dt>" + rescount + " ：" + name + "：" + p3 + "<dd>" + p4 + "<br><br>";
+  };
+  var NOWTIME = Math.floor(new Date().getTime() / 1000);
+  var THREAD = ajax("/" + path[3] + "/dat/" + path[4] + ".dat");
+  var match = THREAD.match(/^.*?<>.*?<>(.*?)<>(.*?)<>(.*?)\n/);
+  var rescount = 0;
+  THREAD = THREAD.replace(/(.*?)<>(.*?)<>(.*?)<>(.*?)<>(.*?)\n/g, makeres);
+  document.title = match[3];
+  document.body.innerHTML = '<div>もう22時か、</div><div style="margin-top:1em;"><span style=\'float:left;\'><a href="https://www.3chbbs.com/">３ちゃんねる</a> <a href="/<BBS>/">■掲示板に戻る■</a> <a href="/test/read.cgi/<BBS>/<KEY>/">全部</a><a href="javascript:switchReadJsMode();" style="background-color:dimgray;border:1px outset dimgray;color:lightgreen;text-decoration:none;">read.cgi モード切替</a></span><span style=\'float:right;\'>[PR][PR]</span>&nbsp;</div><hr style="background-color:#888;color:#888;border-width:0;height:1px;position:relative;top:-.4em;"><h1 style="color:red;font-size:larger;font-weight:normal;margin:-.5em 0 0;"><SUBJECT></h1><dl class="thread"><THREAD></dl><font color=red face="Arial"><b></b></font><font size=-1><b>[ ３ちゃんねる ]</b></font><br><hr>取りに行ったけどなかった。次は一時間後に取りに行くです。<center><a href="/test/read.cgi/<BBS>/<KEY>/">新着レスの表示</a></center><hr><a href="/<BBS>/">掲示板に戻る</a> <a href="/test/read.cgi/<BBS>/<KEY>/">全部</a><form method=POST action="/test/bbs.cgi?guid=ON"><input type=submit value="書き込む" name=submit>名前： <input name=FROM size=19>E-mail<font size=1> (省略可) </font>: <input name=mail size=19><br><textarea rows=5 cols=70 wrap=off name=MESSAGE></textarea><input type=hidden name=bbs value=<BBS>><input type=hidden name=key value=<KEY>><input type=hidden name=time value=<TIME>></form><br><br>3chiko.html (JScript) 2007/08/13<br>'.replace(/<BBS>/g, path[3]).replace(/<KEY>/g, path[4]).replace(/<TIME>/g, "" + NOWTIME).replace(/<THREAD>/g, THREAD).replace(/<DATEID>/g, match[1]).replace(/<MESSAGE>/g, match[2]).replace(/<SUBJECT>/g, match[3]);
+} else if (path[1] == "test") {
+  document.body.innerHTML = "3chiko.html (JScript) 2007/08/13";
+}
+/* 板top(subback) */
+else if (path[2] == "") {
+  var makesubj = function makesubj(match, p1, p2, offset, string) {
+    var key = p1.replace(".dat", "");
+    subjcount++;
+    return "<a href=\"/test/read.cgi/<BBS>/"+key+"/\">" + subjcount + ": " + p2 + "</a><br>";
+  };
+  var NOWTIME = Math.floor(new Date().getTime() / 1000);
+  var SUBJECT = ajax("./subject.txt");
+  var SETTING = ajax("./SETTING.TXT");
+  var HEAD = ajax("./head.txt");
+  var m1 = SETTING.match(/BBS_TITLE=(.*?)\n/);
+  var subjcount = 0;
+  SUBJECT = SUBJECT.replace(/(.*?)<>(.*?)\n/g, makesubj);
+  document.title = m1 ? m1[1] : path[1]+"＠3ch掲示板";
+  document.body.innerHTML = '<center><a name="top" /><br><a name=info></a><table border=1 cellspacing=7 cellpadding=3 width=95% bgcolor=#ffffcc><tr><td><table border=0 width=100%><tr><td><b><big><BBS_TITLE></big></b></td><td align=right><a href=#menu>■</a> <a href=#1>▼</a> <a href="javascript:switchReadJsMode();" style="background-color:dimgray;border:1px outset dimgray;color:lightgreen;text-decoration:none;">read.cgi モード切替</a></td></tr><tr><td colspan=2><a href="https://www.3chbbs.com/">３ちゃんねる</a>＞<a href="https://www.3chbbs.com/bbsmenu.html">BBS</a>＞<BBS_TITLE><br><HEAD></td></tr></table></td></tr><tr><td align=center><a href="../bbsmenu.html" Target=_blank><small>■<b>掲示板一覧</b>■</small></a></td></tr></table><br><table border=1 cellspacing=7 cellpadding=3 width=95% bgcolor=#FFFFFF align=center><td><table width="100%" border="0" cellspacing="0" cellpadding="0"><tr><td><font color="#FF6666">★３月３日は「３ちゃんねるの日」。今年も書き込みは通常の３倍！<font></td></tr><tr><td><div align="right"><font color="#0000FF"><strong><u>広告出稿のお問い合わせ</u></strong></font></div></td></tr></table></td></table><br><a name="menu" /></a><table border=1 cellspacing=7 cellpadding=3 width=95% bgcolor=#ffffcc><tr><td><small><SUBJECT><div align="right"><b><a href="https://www.3chbbs.com/<BBS>/kako/">過去ログ倉庫</a></b></div></small></td></tr></tbody></table><br><table border="1" cellspacing="7" cellpadding="3" width="95%" bgcolor="#CCFFCC" align="center"><tbody><tr><td></td><td nowrap=""><form method="POST" action="../test/bbs.cgi?guid=ON">タイトル：<input type="text" name="subject" size="40"><input type="submit" value="書き込む" name="submit"><br>名前：<input type="text" name="FROM" size="19"> E-mail：<input type="text" name="mail" size="19"><br>内容：<textarea rows="5" cols="60" wrap="OFF" name="MESSAGE"></textarea><input type="hidden" name="bbs" value="<BBS>"><input type="hidden" name="time" value="<TIME>"></form></td></tr></tbody></table><br></center><p>SETTING.TXT</p><pre><SETTING></pre><br><br><b>どのような形の削除依頼であれ公開させてもらいます</b><br><br><a href="https://www.3chbbs.com/">３ちゃんねる</a> 3chiko.html - 2007/08/13 (JScript)<br>ページのおしまいだよ。。と'.replace(/<BBS_TITLE>/g, m1 ? m1[1] : path[1]+"＠3ch掲示板").replace(/<SUBJECT>/g, SUBJECT).replace(/<SETTING>/g, SETTING).replace(/<HEAD>/g, HEAD).replace(/<BBS>/g, path[1]).replace(/<TIME>/g, "" + NOWTIME);
+}
+/* 倉庫一覧 */
+else if (path[2] == "kako" && path[3] == "") {
+  var NOWTIME = Math.floor(new Date().getTime() / 1000);
+  var KAKOLIST = ajax("./subject.txt");
+  KAKOLIST = KAKOLIST.replace(/(.*?)<>(.*?)\n/g, "<tr><td><a href=\"$1/\">#<BBS>/$1</a></td><td align=\"right\">-</td><td align=\"right\"> $2</td><td align=\"right\"><a href=\"$1/subject.txt\">subject.txt</a></td></tr>");
+  document.title = "３ちゃんねる 過去ログ倉庫 " + path[1] + "＠3ch掲示板";
+  document.body.innerHTML = '<CENTER><h1>３ちゃんねる 過去ログ倉庫</h1><P><h2><BBS>＠3ch掲示板</h2><P></CENTER><a href="https://www.3chbbs.com/">３ちゃんねる に戻る</a><P><a href="/bbsmenu.html">板一覧 に戻る</a><P><a href="/<BBS>/"><BBS>＠3ch掲示板 に戻る</a><P><TABLE BORDER=2><TR><TD>倉庫番号</TD><TD>格納数</TD><TD>初スレ</TD><TD align="center">subject.txt</TD></TR><KAKOLIST></TABLE><a href="subject.txt">倉庫一覧</a><BR><A HREF="index3.html">旧倉庫。No2</A><BR><A HREF="index9.html">999999999 以前</A><BR><hr>問題等がありましたら<a href="https://www.3chbbs.com/operate/"><font color="green">運用情報板</font></a>へお願いします。'.replace(/<KAKOLIST>/g, KAKOLIST).replace(/<BBS>/g, path[1]);
+}
+/* 過去ログ一覧 */
+else if (path[2] == "kako") {
+  var makekako = function makekako(match, p1, p2, p3, offset, string) {
+    kakocount++;
+    return p1 + " <A HREF=\"/test/read.cgi/<BBS>/" + p1 + "/\">" + p2 + "</A><BR>";
+  };
+  var NOWTIME = Math.floor(new Date().getTime() / 1000);
+  var KAKO = ajax("./subject.txt");
+  var kakocount = 0;
+  KAKO = KAKO.replace(/(.*?)<>(.*?)<>(.*?)\n/g, makekako);
+  document.title = "３ちゃんねる　過去ログ倉庫 (" + path[1] + ")";
+  document.body.innerHTML = '<a href="/<BBS>/">■掲示板に戻る■</a><a href="/bbsmenu.html">■板一覧に戻る■</a><P><a href="/<BBS>/kako/">■過去ログめにゅーに戻る■</a><P>※新しいデータ形式(teriのタイプ)のスレッド<p><KAKO><hr>スレッド数 = <KAKOCOUNT><hr>問題等がありましたら<a href="https://www.3chbbs.com/operate/"><font color="green">運用情報板</font></a>へお願いします。'.replace(/<KAKO>/g, KAKO).replace(/<KAKOCOUNT>/g, "" + kakocount).replace(/<BBS>/g, path[1]);
+} else {
+  document.open();
+  document.write("<p>404 Not Found</p>");
+  document.write("<br><br><a href=\"https://www.3chbbs.com/\">３ちゃんねる</a> 3chiko.html(JScript) 2007/08/13");
+  document.close();
+}
+
+function ajax(url) {
+  var data = "読み込み中。。。";
+  var xhr;
+  if (window.XMLHttpRequest) {
+    xhr = new XMLHttpRequest();
+  } else {
+    try {
+      xhr = new ActiveXObject("Msxml2.XMLHTTP");
+    } catch (e) {
+      xhr = new ActiveXObject("Microsoft.XMLHTTP");
+    }
+  }
+  xhr.onreadystatechange = function () {
+    switch (xhr.readyState) {
+      case 0:
+        data = "エラー0<br>" + url;
+        break;
+      case 1:
+        data = "読み込み中1。。。<br>" + url;
+        break;
+      case 2:
+        data = "読み込み中2。。。<br>" + url;
+        break;
+      case 3:
+        data = "読み込み中3。。。<br>" + xhr.responseText.length + " bytes.<br>" + url;
+        break;
+      case 4:
+        if (xhr.status == 200 || xhr.status == 304) {
+          data = xhr.responseText;
+        } else {
+          data = "エラー1 (" + xhr.statusText + ")<br>" + url;
+        }
+        break;
+    }
+  };
+  xhr.open("GET", url+"?"+(Math.floor(new Date().getTime() / 1000).toString().slice(0,9)), false);
+  xhr.send();
+  xhr.abort();
+  return data;
+}
+//-->
+</script>
+</body>
+</html>
+"""
 }

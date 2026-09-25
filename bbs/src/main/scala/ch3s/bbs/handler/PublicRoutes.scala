@@ -16,6 +16,7 @@ object PublicRoutes {
     case x: js.JavaScriptException => str(x.exception.asInstanceOf[js.Any])
     case _ => e.toString
   }
+  private def blank(v: js.Any): String = if truth(v) then str(v) else ""
   private def notFound(path: String): Response = Responses.response(PublicText.respond404(path), 404, js.Dictionary("content-type" -> "text/html;charset=UTF-8"))
   private def failed(message: String): Response = Responses.response(PublicText.respond500(message), 500, js.Dictionary("content-type" -> "text/html;charset=UTF-8"))
   private def board(e: WorkerEnv, bbs: String): BoardDoStub = e.BOARD_DO.get(e.BOARD_DO.idFromName(bbs)).asInstanceOf[BoardDoStub]
@@ -28,6 +29,15 @@ object PublicRoutes {
     val url = js.Dynamic.newInstance(js.Dynamic.global.URL)(r.url)
     val path = str(url.pathname)
     def h(name: String): String = Option(r.headers.get(name)).getOrElse("")
+    // webclient=3chiko の場合のみ3chiko.htmlを返す判定(cookie優先度はv5のsrc/3chiko.jsに合わせクエリを優先)。
+    def webclientParam(): String = {
+      val query = blank(url.searchParams.get("webclient"))
+      if query.nonEmpty then query
+      else h("cookie").split("[;,]\\s*", -1).flatMap { pair =>
+        val parts = pair.split("=", 2)
+        if parts.length == 2 && parts(0) == "webclient" then Some(parts(1)) else None
+      }.headOption.getOrElse("")
+    }
     def cached(work: => Future[Response]): Future[Response] = {
       val cache = js.Dynamic.global.caches.default
       val key = js.Dynamic.newInstance(js.Dynamic.global.Request)(url.toString(), r)
@@ -40,6 +50,12 @@ object PublicRoutes {
       }
     }
     val result: Future[Response] = if path == "/admin" || path.startsWith("/admin/") then Admin.handle(r, e).toFuture
+    // トップページ (3chiko.html)
+    else if path == "/" then Future.successful(Responses.plain(PublicText.view3chikoHtml, "html"))
+    // read.cgi スレ表示 (3chiko.html)
+    else if new js.RegExp("^/test/read\\.cgi/[a-zA-Z0-9\\-_]+/[0-9]{10}/$").test(path) then Future.successful(Responses.plain(PublicText.view3chikoHtml, "html"))
+    // 過去ログ倉庫 (3chiko.html)。subject.txt系APIはRouteTable経由で別途下(archive/archives)で処理する
+    else if new js.RegExp("^/[a-zA-Z0-9\\-_]+/kako(/.*)?$").test(path) && !path.endsWith("/subject.txt") then Future.successful(Responses.plain(PublicText.view3chikoHtml, "html"))
     else if path == "/test/sakubbs.cgi/25" then Future.successful(Responses.plain("sakubbs.cgi v25", "plain"))
     else if new js.RegExp("^/test/(sub)?bbs.cgi").test(path) then Posting.entry(r, e).toFuture
     else if path == "/auth.js" then Future.successful(Responses.response("/* test */", headers = js.Dictionary("content-type" -> "application/javascript;charset=UTF-8")))
@@ -117,14 +133,19 @@ object PublicRoutes {
               }
               if single then work else cached(work)
             case "head" | "settings" | "board" =>
-              val file = if kind == "head" then "head.txt" else "SETTING.TXT"
-              guard(s"/$bbs/$file") {
-                read(e, s"$bbs/$file").map { stored =>
-                  val text = stored.getOrElse(if kind == "head" then "" else PostingText.settingTxtDefault)
-                  val settings = if kind == "head" then text else text.replace("<DIR_NAME>", bbs)
-                  if kind != "board" then Responses.plain(settings, "plain", "Shift_JIS") else {
-                    val title = trim(settings).split("\n", -1).map(_.split("=", -1)).find(_(0) == "BBS_TITLE").map(f => trim(f.lift(1).getOrElse(""))).getOrElse(bbs + "＠3ch掲示板")
-                    Responses.plain(PublicText.board(title, bbs), "html", "Shift_JIS")
+              // 板トップは webclient=3chiko (cookie/クエリ) 指定時のみ3chiko.htmlを返す。専ブラは板名取得の
+              // ためこのURLへアクセスするため、既定では従来どおり専ブラ用の板名ページを返す(main.js準拠)。
+              if kind == "board" && webclientParam() == "3chiko" then Future.successful(Responses.plain(PublicText.view3chikoHtml, "html"))
+              else {
+                val file = if kind == "head" then "head.txt" else "SETTING.TXT"
+                guard(s"/$bbs/$file") {
+                  read(e, s"$bbs/$file").map { stored =>
+                    val text = stored.getOrElse(if kind == "head" then "" else PostingText.settingTxtDefault)
+                    val settings = if kind == "head" then text else text.replace("<DIR_NAME>", bbs)
+                    if kind != "board" then Responses.plain(settings, "plain", "Shift_JIS") else {
+                      val title = trim(settings).split("\n", -1).map(_.split("=", -1)).find(_(0) == "BBS_TITLE").map(f => trim(f.lift(1).getOrElse(""))).getOrElse(bbs + "＠3ch掲示板")
+                      Responses.plain(PublicText.board(title, bbs), "html", "Shift_JIS")
+                    }
                   }
                 }
               }
