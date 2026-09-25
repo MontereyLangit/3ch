@@ -25,7 +25,8 @@ async function loadMain() {
     .replace(/\r?\nexport \{ Board \};\r?\nexport \{ Thread \};\r?\n?/, '\n')
     .replace('"./admin.js"', JSON.stringify(new URL('admin.js', srcDir).href))
     .replace('"./common.js"', JSON.stringify(new URL('common.js', srcDir).href))
-    .replace('"./bbs.cgi.js"', JSON.stringify(new URL('bbs.cgi.js', srcDir).href));
+    .replace('"./bbs.cgi.js"', JSON.stringify(new URL('bbs.cgi.js', srcDir).href))
+    .replace('"./3chiko.js"', JSON.stringify(new URL('3chiko.js', srcDir).href));
   const dir = await mkdtemp(join(tmpdir(), 'ch3s-main-'));
   const file = join(dir, 'main.generated.mjs');
   await writeFile(file, code, 'utf8');
@@ -376,6 +377,60 @@ for (const path of ['/board1/', '/board1/index.html']) {
     assert.match(html, /<title>board1＠3ch掲示板<\/title>/);
   });
 }
+
+// ---------- 5b. 3chiko.html統合 ----------
+
+test('トップページ /: 3chiko.htmlをUTF-8で返す', async () => {
+  const { env, ctx } = setup();
+  const res = await fetchHandler(new Request('http://x/'), env, ctx);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'text/html;charset=UTF-8');
+  const html = await res.text();
+  assert.match(html, /<!-- 3chiko\.html -->/);
+});
+
+test('read.cgi /test/read.cgi/{bbs}/{key}/: 3chiko.htmlを返す', async () => {
+  const { env, ctx } = setup();
+  const res = await fetchHandler(new Request('http://x/test/read.cgi/board1/1800000000/'), env, ctx);
+  assert.equal(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /<!-- 3chiko\.html -->/);
+});
+
+for (const path of ['/board1/kako/', '/board1/kako/1700']) {
+  test(`過去ログ倉庫 ${path}: 3chiko.htmlを返す（subject.txt系APIとは別ルート）`, async () => {
+    const { env, ctx } = setup();
+    const res = await fetchHandler(new Request('http://x' + path), env, ctx);
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.match(html, /<!-- 3chiko\.html -->/);
+  });
+}
+
+test('板トップ /{bbs}/?webclient=3chiko: クエリ指定で3chiko.htmlを返す', async () => {
+  const { env, ctx } = setup();
+  const res = await fetchHandler(new Request('http://x/board1/?webclient=3chiko'), env, ctx);
+  assert.equal(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /<!-- 3chiko\.html -->/);
+});
+
+test('板トップ /{bbs}/: webclient=3chiko cookieでも3chiko.htmlを返す', async () => {
+  const { env, ctx } = setup();
+  const res = await fetchHandler(new Request('http://x/board1/', { headers: { cookie: 'webclient=3chiko' } }), env, ctx);
+  assert.equal(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /<!-- 3chiko\.html -->/);
+});
+
+test('板トップ /{bbs}/: webclient指定が無ければ従来どおり専ブラ用HTMLのまま', async () => {
+  const { env, ctx } = setup();
+  const res = await fetchHandler(new Request('http://x/board1/'), env, ctx);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'text/html;charset=Shift_JIS');
+  const html = new sjis().decode([...await bytesOf(res)]);
+  assert.match(html, /専ブラ用/);
+});
 
 // ---------- 6. /bbsmenu.html ----------
 
