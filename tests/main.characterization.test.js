@@ -61,9 +61,23 @@ function makeCaches() {
   } };
 }
 
+// wrangler.jsonc の `assets` (binding: ASSETS) の簡易モック。実Wranglerと同じく
+// public/配下のファイルをパス一致で返す(条件付きGET/Range等は本テストの対象外)。
+function makeAssets() {
+  return {
+    fetch: async req => {
+      const pathname = new URL(req.url).pathname;
+      let body;
+      try { body = await readFile(new URL('../public' + pathname, import.meta.url), 'utf8'); }
+      catch { return new Response('Not Found', { status: 404 }); }
+      return new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+    },
+  };
+}
+
 function setup() {
   const objects = new Map(), boards = new Map(), r2 = new Map();
-  const env = { ch3www: { get: async key => r2.has(key) ? { text: async () => r2.get(key) } : null } };
+  const env = { ch3www: { get: async key => r2.has(key) ? { text: async () => r2.get(key) } : null }, ASSETS: makeAssets() };
   for (const [binding, Class, instances] of [['THREAD_DO', Thread, objects], ['BOARD_DO', Board, boards]]) {
     env[binding] = { idFromName: key => key, get: key => { if (!instances.has(key)) instances.set(key, new Class(state(), env)); return instances.get(key); } };
   }
@@ -380,11 +394,10 @@ for (const path of ['/board1/', '/board1/index.html']) {
 
 // ---------- 5b. 3chiko.html統合 ----------
 
-test('トップページ /: 3chiko.htmlをUTF-8で返す', async () => {
+test('トップページ /: Static Assets(ASSETS binding)経由で3chiko.htmlを返す', async () => {
   const { env, ctx } = setup();
   const res = await fetchHandler(new Request('http://x/'), env, ctx);
   assert.equal(res.status, 200);
-  assert.equal(res.headers.get('content-type'), 'text/html;charset=UTF-8');
   const html = await res.text();
   assert.match(html, /<!-- 3chiko\.html -->/);
 });

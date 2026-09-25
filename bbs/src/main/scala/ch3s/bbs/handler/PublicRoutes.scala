@@ -24,6 +24,12 @@ object PublicRoutes {
   private def read(e: WorkerEnv, file: String): Future[Option[String]] = e.ch3www.get(file).toFuture.flatMap(o => if o == null then Future.successful(None) else o.text().toFuture.map(Some(_)))
   private def date(s: String, parse: Boolean = false): js.Date = new js.Date((if parse then js.Dynamic.global.parseInt(s).asInstanceOf[Double] else js.Dynamic.global.Number(s).asInstanceOf[Double]) * 1000)
   private def guard(path: String)(f: => Future[Response]): Future[Response] = Future.unit.flatMap(_ => f).recover { case e => failed(s"$path Error -> ${error(e)}") }
+  /** 3chiko.html本体をWorkers Static Assets(env.ASSETS)経由で取得する(public/3chiko.html、src/3chiko.js参照)。 */
+  private def view3chiko(e: WorkerEnv, url: js.Dynamic, r: Request): Future[Response] = {
+    val assetUrl = js.Dynamic.newInstance(js.Dynamic.global.URL)("/3chiko.html", url)
+    val assetRequest = js.Dynamic.newInstance(js.Dynamic.global.Request)(assetUrl, r)
+    e.ASSETS.fetch(assetRequest.asInstanceOf[Request]).toFuture
+  }
 
   def fetch(r: Request, e: WorkerEnv, ctx: js.Dynamic): js.Promise[Response] = {
     val url = js.Dynamic.newInstance(js.Dynamic.global.URL)(r.url)
@@ -51,11 +57,11 @@ object PublicRoutes {
     }
     val result: Future[Response] = if path == "/admin" || path.startsWith("/admin/") then Admin.handle(r, e).toFuture
     // トップページ (3chiko.html)
-    else if path == "/" then Future.successful(Responses.plain(PublicText.view3chikoHtml, "html"))
+    else if path == "/" then view3chiko(e, url, r)
     // read.cgi スレ表示 (3chiko.html)
-    else if new js.RegExp("^/test/read\\.cgi/[a-zA-Z0-9\\-_]+/[0-9]{10}/$").test(path) then Future.successful(Responses.plain(PublicText.view3chikoHtml, "html"))
+    else if new js.RegExp("^/test/read\\.cgi/[a-zA-Z0-9\\-_]+/[0-9]{10}/$").test(path) then view3chiko(e, url, r)
     // 過去ログ倉庫 (3chiko.html)。subject.txt系APIはRouteTable経由で別途下(archive/archives)で処理する
-    else if new js.RegExp("^/[a-zA-Z0-9\\-_]+/kako(/.*)?$").test(path) && !path.endsWith("/subject.txt") then Future.successful(Responses.plain(PublicText.view3chikoHtml, "html"))
+    else if new js.RegExp("^/[a-zA-Z0-9\\-_]+/kako(/.*)?$").test(path) && !path.endsWith("/subject.txt") then view3chiko(e, url, r)
     else if path == "/test/sakubbs.cgi/25" then Future.successful(Responses.plain("sakubbs.cgi v25", "plain"))
     else if new js.RegExp("^/test/(sub)?bbs.cgi").test(path) then Posting.entry(r, e).toFuture
     else if path == "/auth.js" then Future.successful(Responses.response("/* test */", headers = js.Dictionary("content-type" -> "application/javascript;charset=UTF-8")))
@@ -135,7 +141,7 @@ object PublicRoutes {
             case "head" | "settings" | "board" =>
               // 板トップは webclient=3chiko (cookie/クエリ) 指定時のみ3chiko.htmlを返す。専ブラは板名取得の
               // ためこのURLへアクセスするため、既定では従来どおり専ブラ用の板名ページを返す(main.js準拠)。
-              if kind == "board" && webclientParam() == "3chiko" then Future.successful(Responses.plain(PublicText.view3chikoHtml, "html"))
+              if kind == "board" && webclientParam() == "3chiko" then view3chiko(e, url, r)
               else {
                 val file = if kind == "head" then "head.txt" else "SETTING.TXT"
                 guard(s"/$bbs/$file") {

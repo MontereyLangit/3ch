@@ -11,13 +11,13 @@ export default {
     if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) return admin(request, env);
 
     /* トップページ (3chiko.html) */
-    if (url.pathname === "/") return respondView3chiko();
+    if (url.pathname === "/") return respondView3chiko(env, request);
 
     /* read.cgi スレ表示 (3chiko.html) */
-    if (/^\/test\/read\.cgi\/[a-zA-Z0-9\-_]+\/[0-9]{10}\/$/.test(url.pathname)) return respondView3chiko();
+    if (/^\/test\/read\.cgi\/[a-zA-Z0-9\-_]+\/[0-9]{10}\/$/.test(url.pathname)) return respondView3chiko(env, request);
 
     /* 過去ログ倉庫 (3chiko.html)。subject.txt系APIは別途下で処理する */
-    if (/^\/[a-zA-Z0-9\-_]+\/kako(\/.*)?$/.test(url.pathname) && !url.pathname.endsWith("/subject.txt")) return respondView3chiko();
+    if (/^\/[a-zA-Z0-9\-_]+\/kako(\/.*)?$/.test(url.pathname) && !url.pathname.endsWith("/subject.txt")) return respondView3chiko(env, request);
 
     const version = "<a href=\"https://www.3chbbs.com/\">３ちゃんねる</a>(<a href=\"https://wiki.3chbbs.com/index.php/Project_edge\">edge</a>) "
 + "Ver.0.1.1 2025/07/05"
@@ -459,7 +459,7 @@ export default {
     // webclient=3chiko の場合のみ3chiko.htmlを返す。専ブラは板名取得のため
     // このURLにアクセスするため、既定では従来どおり専ブラ用の板名ページを返す。
     if (/^\/[a-zA-Z0-9\-_]+\/(index\.html)?$/.test(url.pathname)) {
-      if (getWebclientParam(request, url) === "3chiko") return respondView3chiko();
+      if (getWebclientParam(request, url) === "3chiko") return respondView3chiko(env, request);
 
       const match = url.pathname.match(/^\/([a-zA-Z0-9\-_]+)\/(index\.html)?$/);
       const bbs = match[1];

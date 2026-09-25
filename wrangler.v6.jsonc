@@ -16,9 +16,14 @@
     // v5 の `npm run dev`（既定の8787）と衝突しないポートに固定する。
     "port": 8801
   },
-  // クライアント側hydrationバンドル（`npm run v6:build:client` の成果物）を静的配信する。
+  // クライアント側hydrationバンドル（`npm run v6:build:client` の成果物）と、Vite標準の
+  // publicDir(`public/`)からコピーされる 3chiko.html（PublicRoutes.view3chiko が
+  // env.ASSETS.fetch で参照。v5側 assets 設定 = wrangler.jsonc と同じ理由でhtml_handlingを無効化）
+  // を静的配信する。
   "assets": {
-    "directory": "dist"
+    "directory": "dist",
+    "binding": "ASSETS",
+    "html_handling": "none"
   },
   "durable_objects": {
     "bindings": [

@@ -31,7 +31,7 @@ Cloudflare Workers / Durable Objects / R2 / KV 上で動く、フルスクラッ
 | `v3`, `delightly-v2`(=v4) | 旧 3ch システム（PHP）。現在ほぼ未使用 |
 | **`ch3s`（本リポジトリ）** | **v5 = 現行稼働システム**。Cloudflare Workers + DO + R2 + KV / JS |
 | `ch3s-migration` | **Scala.js × HonoX 移植の参照実装**（後述 step 3 の手本） |
-| `ch3/3chiko` | 旧フロントエンド配布元（`3chiko.html`, Cloudflare Pages 経由）。**2026-09-25、`ch3s` へ統合済み**（v5: `src/3chiko.js` / v6s: `bbs/src/main/scala/ch3s/bbs/handler/PublicText.scala` の `view3chikoHtml`）。以後はこちらを更新しない |
+| `ch3/3chiko` | 旧フロントエンド配布元（`3chiko.html`, Cloudflare Pages 経由）。**2026-09-25、`ch3s` へ統合済み**（本体は `public/3chiko.html` 1本。v5/v6s 双方とも Workers Static Assets(`env.ASSETS`)経由で配信）。以後はこちらを更新しない |
 | `3ch_ui` | 新 UI のデザイン案・HTML モック |
 | `v6`, `v6-s`, `v6-k`, `v6-s2`, `v6-bp` | v6 検討・試作（Kotlin/Spring Boot 版含む） |
 | `kako-data` | 過去ログデータ（step 6 の移行対象） |
@@ -55,10 +55,14 @@ src/
   common.js            Shift_JIS 変換, MD5, crypt(3), SHA ユーティリティ, 板設定既定値
   moderation.js        アクセス規制・NG ワード判定 (deny.cgi / ngwords.cgi)
   admin.js             Web 管理画面 /admin/*（Basic 認証）
-  3chiko.js            3chiko.html（read.cgi 相当の閲覧UI）本体。旧・別リポジトリ+Cloudflare Pages配信から統合（1.2）
+  3chiko.js            3chiko.html配信のルーティング薄ラッパー（env.ASSETS.fetch。本体はpublic/3chiko.html）
   durable_objects/
     board.js           Board DO
     thread.js          Thread DO
+public/
+  3chiko.html          3chiko.html本体（Workers Static Assets, wrangler.jsonc `assets`）。旧・別リポジトリ
+                       +Cloudflare Pages配信から統合（1.2）。v6s(Scala.js)側もVite publicDirの標準コピーで
+                       dist/3chiko.htmlとして同じファイルを共有する
 tests/                 node:test による単体 / 統合テスト
 docs/                  仕様書・設計メモ（後述）
 wrangler.jsonc         現行の Wrangler 設定（npm スクリプトはこちらを明示指定）
@@ -134,8 +138,8 @@ Scala.js 移植の前提として、**現行 v5 の振る舞いをテストで�
 ### Step 3. JS → Scala.js 移植 + HonoX 導入
 `ch3s-migration` を参照実装として、**バックエンドをリプレイス**する。
 - **仕様は step 2 で固定したものから変えない。**
-- フロントエンドは **`3chiko.html` のまま**（2026-09-25 に `ch3s` へ統合済み。v5側の原本は
-  `src/3chiko.js`、v6s(Scala.js)側は `PublicText.view3chikoHtml` に同一内容を移植済み。ロジックは変更しない）。
+- フロントエンドは **`3chiko.html` のまま**（2026-09-25 に `ch3s` へ統合済み。本体は `public/3chiko.html`
+  1本を Workers Static Assets(`env.ASSETS`)で v5/v6s 双方から配信する。ロジックは変更しない）。
 - **DB / ストレージ構成の変更なし**（DO / R2 / KV のスキーマそのまま）。
 - 構成規約は `../ch3s-migration/GEMINI.md` に準拠（Scala 3 / Scala.js, HonoX, React 19, Vite, 単一 sbt プロジェクト, ルーティングは `RouteTable.scala` からの自動生成、Scala↔TS 境界型の制約）。
 

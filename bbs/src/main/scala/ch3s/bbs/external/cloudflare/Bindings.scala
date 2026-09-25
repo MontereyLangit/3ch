@@ -1,5 +1,6 @@
 package ch3s.bbs.external.cloudflare
 
+import ch3s.bbs.external.web.{Request, Response}
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
 
@@ -121,6 +122,12 @@ trait KVNamespace extends js.Object {
   def put(key: String, value: String): js.Promise[Unit] = js.native
 }
 
+/** Workers Static Assets バインディング（`env.ASSETS`）。3chiko.html配信に使う（PublicRoutes参照）。 */
+@js.native
+trait Fetcher extends js.Object {
+  def fetch(request: Request): js.Promise[Response] = js.native
+}
+
 /**
  * Workers バインディング一式。`env.THREAD_DO` 等へ型付きで触るためのキャスト先。
  * `V6_PLACEHOLDER_DO` は本骨格でのみ使う検証用DO（次タスクで `THREAD_DO`/`BOARD_DO` に置き換わる）。
@@ -133,4 +140,5 @@ trait WorkerEnv extends js.Object {
   val BOARD_DO: DurableObjectNamespace = js.native
   val ch3www: R2Bucket = js.native
   val CAP: KVNamespace = js.native
+  val ASSETS: Fetcher = js.native
 }
