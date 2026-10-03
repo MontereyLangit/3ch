@@ -5,6 +5,7 @@ import buildCloudflareWorkers, {
   defaultOptions as cloudflareWorkersDefaultOptions,
 } from "@hono/vite-build/cloudflare-workers";
 import scalaJSPlugin from "@scala-js/vite-plugin-scalajs";
+import tailwindcss from "@tailwindcss/vite";
 
 // v6s ビルド骨格（docs/移植方針_step3_ScalaJS.md）。参照実装 C:/project/3ch/ch3s-migration の
 // vite.config.ts をベースにする。参照実装には `sequentialBuildStart`（2つの scalaJSPlugin
@@ -19,7 +20,7 @@ const scalaCwd = path.resolve(__dirname);
 export default defineConfig(({ mode }) => {
   if (mode === "client") {
     return {
-      plugins: [scalaJSPlugin({ cwd: scalaCwd, projectID: "bbs" })],
+      plugins: [tailwindcss(), scalaJSPlugin({ cwd: scalaCwd, projectID: "bbs" })],
       build: {
         rollupOptions: {
           input: ["./app/client.ts"],

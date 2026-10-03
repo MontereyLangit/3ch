@@ -14,7 +14,9 @@
   "devDependencies": {
     "@hono/vite-build": "1.11.1",
     "@scala-js/vite-plugin-scalajs": "1.1.0",
+    "@tailwindcss/vite": "4.3.3",
     "@types/node": "^22",
+    "tailwindcss": "4.3.3",
     "typescript": "^5",
     "vite": "7.3.6",
     "wrangler": "^4.146.0"
