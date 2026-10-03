@@ -60,6 +60,8 @@ lazy val bbs = project
     // sbtの二重起動（ServerAlreadyBootingException）を避けられる（参照実装で実測済み）。
     Compile / unmanagedSourceDirectories += baseDirectory.value / ".." / "bbs-client" / "src" / "main" / "scala",
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
+    // テストが Date / Math.random / caches 等のグローバルを一時的に差し替えるため、スイート間は直列に実行する。
+    Test / parallelExecution := false,
     // 参照実装からの既知の地雷: `@JSImport("cloudflare:workers", "DurableObject")` を extends した
     // クラスが常にexportされるため、Testのリンク成果物にも巻き込まれる。素の NodeJSEnv では
     // cloudflare: スキームを解決できず Test 全体が起動できないため、Node の Module customization

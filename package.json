@@ -2,18 +2,14 @@
   "name": "3ch",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --config wrangler.jsonc",
-    "deploy": "wrangler deploy --config wrangler.jsonc --minify",
+    "dev": "npm run v6:build && wrangler dev --config wrangler.jsonc",
+    "deploy": "npm run v6:build && wrangler deploy --config wrangler.jsonc --minify",
     "test": "node --test tests/*.test.js",
     "v6:generate": "sbt codegen/run",
     "v6:build:client": "vite build --mode client",
     "v6:build:server": "vite build --mode workers",
     "v6:build": "npm run v6:generate && npm run v6:build:client && npm run v6:build:server",
-    "v6:dev:workers": "wrangler dev --config wrangler.v6.jsonc",
-    "v6:test:characterization": "sbt bbs/fastLinkJS && node --import ./tests/golden/register-scala.mjs --test tests/thread.test.js tests/moderation.test.js tests/admin.test.js tests/bbscgi.characterization.test.js tests/main.characterization.test.js tests/golden/do-differential.test.mjs",
-    "v6:test:http": "sbt bbs/fastLinkJS && node --test tests/golden/http-differential.test.mjs",
-    "v6:typecheck": "tsc --noEmit",
-    "v6:bench:sjis": "sbt bbs/fastLinkJS && node --import ./bbs/test-stubs/register.mjs tests/golden/sjis-bench.mjs"
+    "v6:typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@hono/vite-build": "1.11.1",
@@ -21,7 +17,7 @@
     "@types/node": "^22",
     "typescript": "^5",
     "vite": "7.3.6",
-    "wrangler": "^4.44.0"
+    "wrangler": "^4.146.0"
   },
   "dependencies": {
     "hono": "4.13.7",

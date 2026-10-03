@@ -12,7 +12,7 @@
 4. `http://127.0.0.1:8787/admin/` を開く。
 
 本番のパスワードは `npx wrangler secret put ADMIN_PASSWORD --config wrangler.jsonc` で設定します。
-既存の `wrangler.toml` は旧構成のため、npm スクリプトは `wrangler.jsonc` を明示して使用します。
+設定は `wrangler.jsonc` です（旧 `wrangler.toml` は削除済み）。
 
 ## 操作
 

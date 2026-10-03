@@ -17,11 +17,15 @@ AI アシスタント（Claude Code / Gemini CLI / Codex CLI）および開発�
 
 ### 1.1 これは何か
 
-`ch3s` は 2ch 互換掲示板「3ch（３ちゃんねる）」の **現行稼働システム = v5** のリポジトリ。
-Cloudflare Workers / Durable Objects / R2 / KV 上で動く、フルスクラッチの JavaScript 実装。
-専用ブラウザ（専ブラ, Monazilla 系）互換の dat / subject.txt プロトコルを提供する。
+`ch3s` は 2ch 互換掲示板「3ch（３ちゃんねる）」の **現行稼働システム = v6（Scala.js + HonoX）** のリポジトリ。
+Cloudflare Workers / Durable Objects / R2 / KV 上で動く。専用ブラウザ（専ブラ, Monazilla 系）互換の
+dat / subject.txt プロトコルを提供する。
 
-本リポジトリのゴールは、この v5 を **Scala.js + HonoX ベースの v6 系へ段階的にリプレイスする**こと。
+もとは素の JavaScript 実装（v5）だった。**v5 から v6 への移植（step 3）は完了し、本番は v6 に切り替え済み**。
+v5 のソース（`src/`）は削除した。参照が必要なときは git タグ **`v5-final`** を使う
+（`git show v5-final:src/common.js` など）。docs や Scala のコメントにある `src/*.js` への言及は、このタグ上のファイルを指す。
+
+本リポジトリのゴールは、v6 を土台に step 4 以降（新 UI・新仕様バックエンド・データ移行）へ進めること。
 
 ### 1.2 3ch 系プロジェクトの位置づけ（`C:/project/3ch/`）
 
@@ -29,52 +33,54 @@ Cloudflare Workers / Durable Objects / R2 / KV 上で動く、フルスクラッ
 | :--- | :--- |
 | `2ch`, `readcgi`, `gns`, `bbs18c` | 参考用の歴史的実装（perl / C / PHP） |
 | `v3`, `delightly-v2`(=v4) | 旧 3ch システム（PHP）。現在ほぼ未使用 |
-| **`ch3s`（本リポジトリ）** | **v5 = 現行稼働システム**。Cloudflare Workers + DO + R2 + KV / JS |
+| **`ch3s`（本リポジトリ）** | **v6 = 現行稼働システム**。Scala.js + HonoX on Cloudflare Workers + DO + R2 + KV（旧 v5 はタグ `v5-final`） |
 | `ch3s-migration` | **Scala.js × HonoX 移植の参照実装**（後述 step 3 の手本） |
-| `ch3/3chiko` | 旧フロントエンド配布元（`3chiko.html`, Cloudflare Pages 経由）。**2026-09-25、`ch3s` へ統合済み**（本体は `public/3chiko.html` 1本。v5/v6s 双方とも Workers Static Assets(`env.ASSETS`)経由で配信）。以後はこちらを更新しない |
+| `ch3/3chiko` | 旧フロントエンド配布元（`3chiko.html`, Cloudflare Pages 経由）。**2026-09-25、`ch3s` へ統合済み**（本体は `public/3chiko.html` 1本。Workers Static Assets(`env.ASSETS`)経由で配信）。以後はこちらを更新しない |
 | `3ch_ui` | 新 UI のデザイン案・HTML モック |
 | `v6`, `v6-s`, `v6-k`, `v6-s2`, `v6-bp` | v6 検討・試作（Kotlin/Spring Boot 版含む） |
 | `kako-data` | 過去ログデータ（step 6 の移行対象） |
 | `3ch_workers` | v5 から途中で分離した別系統（`mmr-3ch/3ch_workers`）。TS + Hono JSX 移行試作を含む（1.7） |
 
-### 1.3 技術スタック（現行 v5）
+### 1.3 技術スタック（現行 v6）
 
-- **ランタイム**: Cloudflare Workers (ES Modules, `compatibility_date: 2025-09-19`)
+- **ランタイム**: Cloudflare Workers (ES Modules, `compatibility_date: 2026-08-04`。この日付以降は `nodejs_compat` が既定で有効)
+- **言語 / フレームワーク**: Scala 3 / Scala.js（`bbs/` = Worker・DO・ハンドラ、`common/` = 純粋ロジック）+ HonoX + Vite。ルーティングは `common/.../routes/RouteTable.scala` から `codegen` が生成
 - **状態管理**: Durable Objects — `Board`（板: スレ一覧 / 削除済み一覧）, `Thread`（スレ: dat / log / settings / hidden / stopped / movedTo）
 - **オブジェクトストレージ**: R2 `ch3www`（`SETTING.TXT`, `head.txt`, `bbsmenu.html`, `headline.txt`, `deny.cgi`, `ngwords.cgi`, 過去ログ `.cgi`）
 - **KV**: `CAP`（キャップ: パスワードハッシュ → 表示名）, `TEST`
-- **暗号**: Web Crypto (SHA-1 / SHA-256) + 自前 MD5 / Unix crypt(3) DES（トリップ用）
-- **文字コード**: 自前 Shift_JIS (JIS X 0208) エンコーダ/デコーダ
+- **暗号**: Web Crypto (SHA-1 / SHA-256) + 自前 MD5 / Unix crypt(3) DES（トリップ用。`common/`）
+- **文字コード**: 自前 Shift_JIS (JIS X 0208) エンコーダ/デコーダ（`bbs/.../util/SjisEncoding.scala`、背景は `docs/sjis差異一覧.md`）
 
 ### 1.4 ディレクトリ構成
 
 ```
-src/
-  main.js              ルーティング・公開エンドポイント (dat, subject.txt, SETTING.TXT, bbsmenu 等)
-  bbs.cgi.js           投稿・スレ立てパイプライン（検証 → 整形 → ID/トリップ/キャップ → 永続化）
-  common.js            Shift_JIS 変換, MD5, crypt(3), SHA ユーティリティ, 板設定既定値
-  moderation.js        アクセス規制・NG ワード判定 (deny.cgi / ngwords.cgi)
-  admin.js             Web 管理画面 /admin/*（Basic 認証）
-  3chiko.js            3chiko.html配信のルーティング薄ラッパー（env.ASSETS.fetch。本体はpublic/3chiko.html）
-  durable_objects/
-    board.js           Board DO
-    thread.js          Thread DO
+common/                Scala (JVM/JS cross)。Shift_JIS 以外の純粋ロジック（MD5, crypt(3), ルート表 RouteTable.scala 等）
+bbs/
+  src/main/scala/ch3s/bbs/
+    Main.scala         Worker エントリ（JSExportTopLevel）
+    handler/           PublicRoutes（dat, subject.txt, SETTING.TXT, bbsmenu 等）, Posting（投稿パイプライン）,
+                       Moderation, AdminHandler（/admin/*）, Responses
+    durable/           Board DO, Thread DO（V6PlaceholderDurableObject は骨格確認用の残り）
+    external/cloudflare/  Workers / DO / R2 / KV の facade
+    hash/, util/       Web Crypto ハッシュ, Shift_JIS 変換
+  src/test/            Scala 側テスト
+  test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ
+bbs-client/            クライアント側（hydration）Scala
+codegen/               RouteTable.scala から app/routes/ を生成
+app/                   HonoX（server.ts がエントリ。routes/ は生成物）
 public/
-  3chiko.html          3chiko.html本体（Workers Static Assets, wrangler.jsonc `assets`）。旧・別リポジトリ
-                       +Cloudflare Pages配信から統合（1.2）。v6s(Scala.js)側もVite publicDirの標準コピーで
-                       dist/3chiko.htmlとして同じファイルを共有する
-tests/                 node:test による単体 / 統合テスト
+  3chiko.html          3chiko.html本体。Vite の publicDir として dist/ へコピーされ Workers Static Assets で配信
+tests/                 admin.integration.test.js（実 workerd）。golden/ は言語中立の入出力表（Scala 側が読む）
 docs/                  仕様書・設計メモ（後述）
-wrangler.jsonc         現行の Wrangler 設定（npm スクリプトはこちらを明示指定）
-wrangler.toml          旧構成。参照のみ、使用しない
+wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 ```
 
 ### 1.5 必読ドキュメント
 
 | ファイル | 位置づけ |
 | :--- | :--- |
-| **`docs/現行システム仕様書.md`** | **最重要。v5 の全ロジックを抽出した仕様書（版 2.0.0）。** 移植の際の「正」はコードとこの文書。第11章に既知の不具合とv6推奨仕様の対照表あり |
-| **`docs/既知不具合台帳.md`** | **既知不具合の一覧（KB-nn）。移植完了までは修正せず記録のみ。** 新たに見つけた不具合もここに追記する |
+| **`docs/現行システム仕様書.md`** | **最重要。v5 の全ロジックを抽出した仕様書（版 2.0.0）。v6 は同一仕様を実装している。** 文中の `src/*.js` はタグ `v5-final` 上のファイル。第11章に既知の不具合とv6推奨仕様の対照表あり |
+| **`docs/既知不具合台帳.md`** | **既知不具合の一覧（KB-nn）。** 新たに見つけた不具合もここに追記する。修正方針は 3.3 |
 | `docs/v6s実装メモ.md` | Scala.js 実装（`bbs/`）の設計背景。doc コメントから参照される（3.5） |
 | `docs/admin.md` | 管理画面の利用手順・規制ルール書式 |
 | `docs/admin-review.md` | 管理画面追加時のレビュー記録（セルフ / Gemini CLI） |
@@ -86,9 +92,11 @@ wrangler.toml          旧構成。参照のみ、使用しない
 
 ```bash
 npm ci                 # 依存導入
-npm run dev            # wrangler dev --config wrangler.jsonc → http://127.0.0.1:8787
-npm test               # node --test tests/*.test.js
-npm run deploy         # wrangler deploy --config wrangler.jsonc --minify
+npm run v6:build       # sbt codegen/run → vite build（client / workers）→ dist/
+npm run dev            # v6:build 後に wrangler dev --config wrangler.jsonc → http://127.0.0.1:8787
+sbt test               # 現仕様固定テスト（munit。golden 照合を含む）
+npm test               # 実 workerd を使う統合テストのみ（要 dist/）
+npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc --minify
 ```
 
 管理画面のローカル利用は `.dev.vars` に `ADMIN_PASSWORD="..."` を設定（Git 管理外）。
@@ -125,21 +133,21 @@ npm run deploy         # wrangler deploy --config wrangler.jsonc --minify
 
 ## 2. 移植計画（ロードマップ）
 
-本リポジトリで進める作業の全体像。**上から順に実施する。**
+本リポジトリで進める作業の全体像。**上から順に実施する。** Step 1〜3 は完了（本番は v6 に切替済み）。
 
-### Step 1. 作業ブランチ整備
+### Step 1. 作業ブランチ整備（完了）
 `develop` から作業用ブランチ **`develop_v6s`** を作成し、`feature/add_controll_panel`（管理画面 + 投稿モデレーション）を取り込む。以降の作業はこのブランチを起点とする。
 
-### Step 2. キャラクタリゼーションテスト追加（仕様固定化）
+### Step 2. キャラクタリゼーションテスト追加（仕様固定化）（完了）
 Scala.js 移植の前提として、**現行 v5 の振る舞いをテストで固定する**。
 - 目的は「正しさ」の検証ではなく **現行の実動作の写し取り**。
 - 重点範囲: dat フォーマット（`<>` 区切り・本文前後の半角スペース・第5フィールド）、ID / 識別ID / トリップ / キャップ生成、Shift_JIS 変換、投稿パイプラインの検証順序とエラー文言、Range / If-Modified-Since、規制判定、Board/Thread DO の状態遷移。
 
-### Step 3. JS → Scala.js 移植 + HonoX 導入
+### Step 3. JS → Scala.js 移植 + HonoX 導入（完了）
 `ch3s-migration` を参照実装として、**バックエンドをリプレイス**する。
 - **仕様は step 2 で固定したものから変えない。**
 - フロントエンドは **`3chiko.html` のまま**（2026-09-25 に `ch3s` へ統合済み。本体は `public/3chiko.html`
-  1本を Workers Static Assets(`env.ASSETS`)で v5/v6s 双方から配信する。ロジックは変更しない）。
+  1本を Workers Static Assets(`env.ASSETS`)で配信する。ロジックは変更しない）。
 - **DB / ストレージ構成の変更なし**（DO / R2 / KV のスキーマそのまま）。
 - 構成規約は `../ch3s-migration/GEMINI.md` に準拠（Scala 3 / Scala.js, HonoX, React 19, Vite, 単一 sbt プロジェクト, ルーティングは `RouteTable.scala` からの自動生成、Scala↔TS 境界型の制約）。
 
@@ -152,20 +160,22 @@ Scala.js 移植の前提として、**現行 v5 の振る舞いをテストで�
 5. `main` ルーティング + HonoX 配線
 6. `admin`
 
-#### 等価性の検証方式（重要）
-step 2 のキャラクタリゼーションテストは `src/*.js` を直接 import する単体テストであり、
-**それだけでは Scala.js 版を検証できない**（import 先が変わる）。そこで二段構えにする。
+#### 等価性の検証方式（移植時の記録）
+移植中は二段構えで v5 との等価性を示した。**この検証は完了し、v5 のソース（`src/`）とともに廃止した**（`v5-final` タグに残る）。
+- **単体レベル**: v5 で記録した入出力表を `tests/golden/*.json` に固定し、Scala 側の単体テストが同じ表を読んで照合する。**この表は現仕様の固定として残す**（再生成元の v5 は無いので手で編集しない）。
+- **HTTP レベル**: v5 と v6 を別ポートの `wrangler dev` で同時起動して突き合わせる差分テストを行った。**廃止済み。**
 
-- **単体レベル**: 純粋関数（Shift_JIS 変換・各種ハッシュ・トリップ生成）は、JS 版で記録した
-  入出力表を `tests/golden/` に固定値として書き出し、Scala 版の単体テストからも同じ表を読んで照合する。
-  実装言語に依存しないデータとして持つのがポイント。
-- **HTTP レベル**: **差分テスト（differential testing）** を採る。v5(JS) と v6(Scala.js) を
-  別ポートの `wrangler dev` で同時に起動し、**同一のリクエスト列を両方に投げてレスポンスを突き合わせる**。
-  - 比較対象: ステータス / ヘッダ / **ボディのバイト列**。
-  - 時刻・スレッドキーなど本質的に変動する値は、比較前に正規化（マスク）する。
-    マスクした箇所が仕様上重要な場合は、別途フォーマット検査で担保する。
-  - 絶対値を固定する golden 方式ではなく差分方式にするのは、投稿系が `Date.now()` に依存していて
-    絶対値を再現できないため。両者に同じ入力を与えて**相対的に一致すること**を示す方が強い保証になる。
+#### 現仕様の固定（移植後）
+v6 の振る舞いは次で固定する。仕様変更時は、対応するアサーションを意図的に更新する。
+- **`sbt test`（Scala, munit）が主**: `bbs/src/test/scala/ch3s/bbs/`
+  - `handler/PostingSuite`（投稿パイプライン）、`PublicRoutesSuite`（公開ルーティング）、`RangeSuite`（dat の Range / 304）、
+    `ModerationSuite`、`AdminSuite`、`durable/ThreadSuite`・`BoardSuite`（DO）。
+  - R2 / KV / `caches.default` / ASSETS / 時刻・乱数のフェイクは `durable/DurableTestKit` と `handler/HandlerTestKit`。
+    Date / Math.random / `caches` を差し替えるため、`bbs` は `Test / parallelExecution := false`。
+  - 期待値は v5 から引き継いだもの。KB-nn コメント付きのアサーションは既知不具合の現挙動の固定。
+  - `common/src/test` と `WebHashSuite` / `SjisEncodingSuite` は `tests/golden/*.json` と照合する。
+- **`npm test`（node:test）**: 実 workerd（`unstable_dev`）が要る `tests/admin.integration.test.js` のみ。
+  `dist/index.js`（`npm run v6:build`）が無いと skip される。
 
 ### Step 4. フロントエンドを新仕様で Next.js 化
 - **新仕様は別途検討**（`3ch_ui/` のモックが起点）。
@@ -196,19 +206,17 @@ step 2 のキャラクタリゼーションテストは `src/*.js` を直接 imp
 
 > 外部 CLI にコードを送信する前に、利用者の許可を取ること（`docs/admin-review.md` の先例に従う）。
 
-### 3.3 既知不具合の扱い — 移植完了まで修正しない、記録のみ
+### 3.3 既知不具合の扱い — 記録してから直す
 
-**バグを見つけても直さないこと。`docs/既知不具合台帳.md` に記録するだけにする。**
+step 3 完了までは「v5 とバイト単位で同一の出力」を検証の軸にしていたため、バグを見つけても直さず記録だけにしていた。
+**v5 との差分検証は廃止したので、修正してよい。** ただし次の手順を守る。
 
-> 理由: step 3 の Scala.js 移植は「v5 とバイト単位で同一の出力」を検証の軸にしている。
-> 移植と同時にバグを直すと、出力差分が「移植の誤り」なのか「意図した修正」なのか切り分けられなくなる。
-
-見つけたときの手順:
-1. `docs/既知不具合台帳.md` の表に `KB-nn` を採番して追記する。
-2. 現行の壊れた挙動をキャラクタリゼーションテストで固定し、そのアサーションに `// KB-nn: <一行説明>` を付ける。
-3. 仕様書の記述と実動作が食い違う場合は、**コードの実動作を正として**仕様書側を訂正する。
-
-修正に着手してよいのは step 3 完了後（Scala.js 版が v5 と同一出力であると確認できた後）。
+1. `docs/既知不具合台帳.md` に `KB-nn` を採番して追記する（未記録のものを見つけた場合）。
+2. 修正は 1 件ずつ独立したコミットにし、現挙動を固定しているアサーション（`// KB-nn:` コメント付き）を
+   意図した新挙動へ更新する。台帳のステータスも更新する。
+3. 3.4 の不変条件に触れる修正（ID / トリップ / キャップの値、dat 構造、Shift_JIS 出力など）は、
+   既存ユーザーへの影響を台帳に書き、利用者の承認を得てから行う（KB-14 / KB-19 など）。
+4. 仕様書の記述と実動作が食い違う場合は、**コードの実動作を正として**仕様書側を訂正する。
 
 ### 3.4 変更時の不変条件（壊してはいけないもの）
 - **専ブラ互換**: dat の `<>` 5 フィールド構造、本文フィールド前後の半角スペース、エラー時も HTTP 200 + `<!-- 2ch_X:error -->` マーカー、`Range` / `304` の挙動。
