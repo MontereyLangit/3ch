@@ -6,14 +6,7 @@ import ch3s.bbs.external.web.{Response, ResponseInit}
 
 import scala.scalajs.js
 
-/**
- * `GET /_v6/health`。v6s ビルド骨格が実際にリクエストを処理できることを示すためだけの
- * 固定文字列レスポンス。BBSロジックは一切含まない（docs/移植方針_step3_ScalaJS.md のスコープ外）。
- *
- * `V6PlaceholderDurableObject.ping()` をRPC経由で呼び、その結果をレスポンスへ含める。
- * これにより「named export ワークアラウンド」と「DOバインディング」の両方が実機（`wrangler dev`）で
- * 実際に機能していることを、DOの一覧登録だけでなく実インスタンス化・実RPC呼び出しで証明する。
- */
+/** `GET /_v6/health`。DO への RPC を含む骨格の疎通確認用（docs/v6s実装メモ.md 1.3）。 */
 object HealthHandler {
 
   val Body: String = "ch3s v6s ok"

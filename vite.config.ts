@@ -5,6 +5,7 @@ import buildCloudflareWorkers, {
   defaultOptions as cloudflareWorkersDefaultOptions,
 } from "@hono/vite-build/cloudflare-workers";
 import scalaJSPlugin from "@scala-js/vite-plugin-scalajs";
+import tailwindcss from "@tailwindcss/vite";
 
 // v6s ビルド骨格（docs/移植方針_step3_ScalaJS.md）。参照実装 C:/project/3ch/ch3s-migration の
 // vite.config.ts をベースにする。参照実装には `sequentialBuildStart`（2つの scalaJSPlugin
@@ -19,7 +20,7 @@ const scalaCwd = path.resolve(__dirname);
 export default defineConfig(({ mode }) => {
   if (mode === "client") {
     return {
-      plugins: [scalaJSPlugin({ cwd: scalaCwd, projectID: "bbs" })],
+      plugins: [tailwindcss(), scalaJSPlugin({ cwd: scalaCwd, projectID: "bbs" })],
       build: {
         rollupOptions: {
           input: ["./app/client.ts"],
@@ -43,7 +44,7 @@ export default defineConfig(({ mode }) => {
   // （`node_modules/@hono/vite-build/dist/entry/index.mjs` 参照）。そのため `app/server.ts` の
   // `export { V6PlaceholderDurableObject }`（named export）は仮想エントリのどこからも
   // 再exportされず、最終 `dist/index.js` に現れない（素朴に `buildCloudflareWorkers()` だけを
-  // 呼ぶと、DOクラスを持たない `dist/index.js` が生成され、`wrangler.v6.jsonc` の
+  // 呼ぶと、DOクラスを持たない `dist/index.js` が生成され、`wrangler.jsonc` の
   // `durable_objects.bindings` が指す `class_name` を解決できずローカル実行が壊れる）。
   // → `entryContentAfterHooks`（既定のフック配列にappendする。置き換えるとプリセット既定の
   // 他の挙動を失うため）で `app/server.ts` からの named re-export 文を仮想エントリへ追加する。

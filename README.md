@@ -1,2 +1,1 @@
-Cloudflare Workers、Cloudflare Durable Objectsを使用した3ch v5（v6のDurable Objects連携・コンテナ管理用）  
-2025～
+Scala.jsとHonoXで構築したCloudflare Workers上の2ch型掲示板「３ちゃんねる」（3ch.io）。

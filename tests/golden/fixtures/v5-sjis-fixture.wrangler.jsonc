@@ -1,9 +1,0 @@
-{
-  // Diagnostic-only config for tests/golden/http-differential.test.mjs (R-06 closure).
-  // Runs the real, unmodified `sjis` class from src/common.js under real `wrangler dev` (workerd),
-  // exposing an exhaustive encode/decode sweep. Local storage only; no bindings needed (pure logic).
-  "$schema": "../../../node_modules/wrangler/config-schema.json",
-  "name": "ch3s-diff-v5-sjis-fixture",
-  "main": "v5-sjis-fixture.mjs",
-  "compatibility_date": "2025-09-19"
-}

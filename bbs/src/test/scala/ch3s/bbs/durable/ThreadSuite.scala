@@ -8,19 +8,7 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 
-/**
- * `tests/thread.test.js`（v5互換のキャラクタリゼーションテスト。差分テストのハーネス経由でのみ
- * Scala.js版を検証している）と同じシナリオをネイティブmunitで固定する。
- *
- * ここでの狙いは replay ハーネスと違う角度からの検証:
- *   - dat/log/settings/subjectListを「含む」ではなく**完全一致**で確認する
- *     （replayハーネス側は元のJSアサーション──主に `assert.match` の正規表現や
- *     `before`との同値比較──をそのまま使っているため、期待値そのものを
- *     フィールド単位で書き下すことはしていない）。
- *   - replayハーネスが踏んでいないコーナー（999→1000件目の境界、stop/resumeの
- *     settings文字列の厳密な組み立て、editRes/deleteResのフィールド単位のエスケープ、
- *     standalone `deleteRes(Int)` の `resNum < lines.length` という非自明な境界）を追加する。
- */
+/** `Thread` DO を完全一致で固定し、replay ハーネスが踏まない境界を補う（docs/v6s実装メモ.md 4.2）。 */
 class ThreadSuite extends FunSuite {
   import DurableTestKit.{newEnv, seed, rejectionMessage}
 

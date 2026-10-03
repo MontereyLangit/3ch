@@ -5,23 +5,8 @@ import munit.FunSuite
 import scala.scalajs.js.typedarray.Uint8Array
 
 /**
- * [[SjisEncoding]]（v6s の唯一の公開 Shift_JIS 変換経路）を、v5 (`src/common.js` の `sjis`
- * クラス) の実測 golden データと突き合わせる。
- *
- * docs/移植方針_step3_ScalaJS.md R-01（**`encoding-japanese`案Aを破棄し、v5と同じ構築手順へ
- * 戻した最終決定**）の受け入れ基準を検証する: v5が正しく変換できていた文字はバイト単位・
- * 文字単位で完全一致すること。差異が許されるのは KB-17（encode: NCRフォールバック）と
- * KB-18（decode: `?`フォールバック）のみで、それ以外はこのテストが検知して失敗する
- * （未列挙の差異＝移植の失敗）。
- *
- * 本テストは2種類の検証を行う:
- *   1. `tests/golden/sjis-table.json`（v5実表 9,027件）・`sjis-encode.json`・`sjis-decode.json`
- *      に対する golden 突き合わせ（v5実測データそのものとの一致）。
- *   2. golden データから独立に構築した参照実装（[[referenceEncode]] / [[referenceDecode]]。
- *      本ファイル内でゼロから再構築するミラーであり、[[SjisEncoding]] 本体のコードは一切
- *      呼ばない）に対する BMP 全域(65,536件)の encode 往復・1/2バイト全数(65,536件)の decode
- *      スイープ。[[SjisEncoding]] の実装（テーブル構築・状態遷移）そのものにバグが無いことを、
- *      golden データに基づく独立実装との突き合わせで確認する。
+ * [[SjisEncoding]] を v5 golden と独立参照実装に全数照合する。KB-17 / KB-18 以外の差異で失敗する。
+ * 検証内容は docs/v6s実装メモ.md 4.5。
  */
 class SjisEncodingSuite extends FunSuite {
 
@@ -61,12 +46,7 @@ class SjisEncodingSuite extends FunSuite {
       .mapValues(_.map(e => e.field("second").asInt -> charFromCodePoint(e.field("char").asInt).charAt(0)).toMap)
       .toMap
 
-  /**
-   * v5実表の encode 表（`this.e` 相当）。golden データの並び順（単バイト昇順 → 2バイトは
-   * リードバイト昇順・第2バイト昇順、`sjis-table.json` の `note` に明記されている構築順）で
-   * 走査し、後から出てきたエントリで上書きする（同じ文字に複数のバイト列が対応する場合、
-   * JS の `this.e[_] = w` 代入と同じ「後勝ち」になる。CP932重複符号の採用側はこれで決まる）。
-   */
+  /** v5 の encode 表（`this.e`）を golden から構築する。重複符号は後勝ち（docs/v6s実装メモ.md 4.5）。 */
   private val refEncodeTable: Map[Int, Array[Int]] = {
     val m = scala.collection.mutable.LinkedHashMap.empty[Int, Array[Int]]
     for (e <- goldenTable("singleByte").asArr) m(e.field("char").asInt) = Array(e.field("byte").asInt)
@@ -77,12 +57,7 @@ class SjisEncodingSuite extends FunSuite {
   /** KB-17: v5に存在しない文字はNCR（v5のNULバイトの代わり）。それ以外はv5と同一バイト列。 */
   private def referenceEncode(cp: Int): Array[Int] = refEncodeTable.getOrElse(cp, ncrBytes(cp))
 
-  /**
-   * KB-18: v5が`TypeError`を送出する（未知のリードバイト・未知の第2バイト）箇所、および
-   * v5が無音で捨てる（末尾の不完全なリードバイト）箇所を、`?`へのフォールバックに置き換える。
-   * それ以外はv5実表と同一の文字を返す。[[SjisEncoding.decode]] と同じ状態遷移を、golden
-   * データのみから独立に再構築したもの。
-   */
+  /** [[SjisEncoding.decode]] と同じ状態遷移を golden から独立に再構築したもの（KB-18 は `?`）。 */
   private def referenceDecode(bytes: Array[Int]): String = {
     val sb = new StringBuilder
     var i = 0

@@ -6,21 +6,8 @@ import scala.scalajs.js
 import scala.scalajs.js.typedarray.Uint8Array
 
 /**
- * `src/common.js` の `sha1Base64` / `hash` の Scala.js 移植。
- *
- * この2関数は Web Crypto (`crypto.subtle.digest`) に依存する非同期処理であり、
- * `common`（cross project, 純粋関数のみ・I/O禁止）には置けない
- * （JVM側にWeb Cryptoは存在せず、`java.security.MessageDigest`で代替すると
- * 「プラットフォーム毎に別の実装」になってしまい、移植方針_step3_ScalaJS.mdが
- * 求める「本番コードは実際に動く一本の実装」から外れる）。
- * そのため課題文の指示どおり、Web Crypto依存部分は `bbs`（Scala.js専用）側に置いた。
- *
- * KB-14: `sha1Base64` は内部で `new TextEncoder().encode(str)` を使うため、
- * 呼び出し元がすでにShift_JISバイト列を文字列化したものを渡してきた場合、それを
- * **再度UTF-8としてバイト化**した上でSHA-1を取る「二重エンコード」になる。
- * これは本家2chのトリップ値と異なる3ch独自のトリップを生む既知の挙動であり、
- * ここでは元のJSと同じく無条件に`TextEncoder`へ委譲することでその二重エンコードを保持する
- * （「正しい」バイト列変換に修正してはいけない）。
+ * `src/common.js` の `sha1Base64` / `hash` の移植（Web Crypto 依存のため `bbs` 側に置く）。
+ * KB-14 の二重エンコードを保持する。背景は docs/v6s実装メモ.md 3。
  */
 object WebHash {
 

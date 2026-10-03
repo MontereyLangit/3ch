@@ -9,7 +9,7 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 
-object Admin {
+object AdminHandler {
   private def str(v: js.Any): String = js.Dynamic.global.String(v).asInstanceOf[String]
   private def truth(v: js.Any): Boolean = js.Dynamic.global.Boolean(v).asInstanceOf[Boolean]
   private def blank(v: js.Any): String = if truth(v) then str(v) else ""
@@ -54,30 +54,27 @@ object Admin {
         val action = Future.unit.flatMap { _ =>
           if r.method == "POST" then {
             val origin = r.headers.get("origin")
-            if origin != str(url.origin) && !(origin == null && r.headers.get("sec-fetch-site") == "same-origin") then Future.successful(Responses.response("送信元が不正です。", 403, headers))
-            else {
-              if js.Dynamic.global.Number(r.headers.get("content-length")).asInstanceOf[Double] > 262144 then fail("入力が大きすぎます。")
-              r.asInstanceOf[js.Dynamic].text().asInstanceOf[js.Promise[String]].toFuture.flatMap { body =>
-                if Utf8.encode(body).length > 262144 then fail("入力が大きすぎます。")
-                val data = js.Dynamic.global.Object.fromEntries(js.Dynamic.newInstance(js.Dynamic.global.URLSearchParams)(body))
-                val save: Future[Unit] = path match {
-                  case "/admin/board" =>
-                    val bbs = board(url.searchParams.get("bbs"))
-                    if str(data.action) != "save" then fail("操作が不正です。")
-                    e.ch3www.put(s"$bbs/head.txt", blank(data.head)).toFuture.flatMap(_ => e.ch3www.put(s"$bbs/SETTING.TXT", blank(data.settings)).toFuture).map(_ => ())
-                  case "/admin/access" | "/admin/ngwords" =>
-                    Moderation.parseRules(blank(data.rules))
-                    e.ch3www.put(if path.endsWith("access") then "deny.cgi" else "ngwords.cgi", blank(data.rules)).toFuture.map(_ => ())
-                  case "/admin/menu" => e.ch3www.put("bbsmenu.html", blank(data.html)).toFuture.map(_ => ())
-                  case "/admin/thread" =>
-                    val bbs = board(url.searchParams.get("bbs")); val k = key(url.searchParams.get("key"))
-                    if str(data.action) == "move" then { board(data.targetBoard); key(data.targetKey) }
-                    val stub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$k")).asInstanceOf[ThreadDoStub]
-                    stub.inspect(bbs, k).toFuture.flatMap(_ => stub.moderate(str(data.action), js.Dynamic.global.Object.assign(js.Dynamic.literal(), data, js.Dynamic.literal(bbs = bbs, key = k))).toFuture)
-                  case _ => fail("操作先が不正です。")
-                }
-                save.map { _ => headers("location") = path + str(url.search); Responses.response(null, 303, headers) }
+            if js.Dynamic.global.Number(r.headers.get("content-length")).asInstanceOf[Double] > 262144 then fail("入力が大きすぎます。")
+            r.asInstanceOf[js.Dynamic].text().asInstanceOf[js.Promise[String]].toFuture.flatMap { body =>
+              if Utf8.encode(body).length > 262144 then fail("入力が大きすぎます。")
+              val data = js.Dynamic.global.Object.fromEntries(js.Dynamic.newInstance(js.Dynamic.global.URLSearchParams)(body))
+              val save: Future[Unit] = path match {
+                case "/admin/board" =>
+                  val bbs = board(url.searchParams.get("bbs"))
+                  if str(data.action) != "save" then fail("操作が不正です。")
+                  e.ch3www.put(s"$bbs/head.txt", blank(data.head)).toFuture.flatMap(_ => e.ch3www.put(s"$bbs/SETTING.TXT", blank(data.settings)).toFuture).map(_ => ())
+                case "/admin/access" | "/admin/ngwords" =>
+                  Moderation.parseRules(blank(data.rules))
+                  e.ch3www.put(if path.endsWith("access") then "deny.cgi" else "ngwords.cgi", blank(data.rules)).toFuture.map(_ => ())
+                case "/admin/menu" => e.ch3www.put("bbsmenu.html", blank(data.html)).toFuture.map(_ => ())
+                case "/admin/thread" =>
+                  val bbs = board(url.searchParams.get("bbs")); val k = key(url.searchParams.get("key"))
+                  if str(data.action) == "move" then { board(data.targetBoard); key(data.targetKey) }
+                  val stub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$k")).asInstanceOf[ThreadDoStub]
+                  stub.inspect(bbs, k).toFuture.flatMap(_ => stub.moderate(str(data.action), js.Dynamic.global.Object.assign(js.Dynamic.literal(), data, js.Dynamic.literal(bbs = bbs, key = k))).toFuture)
+                case _ => fail("操作先が不正です。")
               }
+              save.map { _ => headers("location") = path + str(url.search); Responses.response(null, 303, headers) }
             }
           } else render(path, url, e).map { case (html, status) => page(html, status) }
         }

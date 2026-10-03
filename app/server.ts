@@ -10,7 +10,7 @@ export default app;
 
 // =========================================================
 // !!! CRITICAL STEP: EXPORT THE DURABLE OBJECT CLASSES !!!
-// wrangler.v6.jsonc の durable_objects.bindings が参照する class_name はこのexport名と
+// wrangler.jsonc の durable_objects.bindings が参照する class_name はこのexport名と
 // 一致する必要がある。@hono/vite-build/cloudflare-workers は本番ビルド用の仮想エントリを
 // 合成し、各エントリファイルの **default export のみ** を取り込むため、この named export は
 // 素朴には最終バンドルへ現れない（vite.config.ts の entryContentAfterHooks で再export している）。

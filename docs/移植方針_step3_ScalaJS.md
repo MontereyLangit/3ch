@@ -3,6 +3,9 @@
 対象: v5 バックエンドの Scala 3 / Scala.js 移植。**仕様は step 2 で固定したものから変えない。**
 フロントは `3chiko.html` のまま。DO / R2 / KV のスキーマ変更なし。
 
+> **完了（2026-10-02）:** 移植と本番切替は完了。v5 の `src/` と v5 との差分テストは廃止した（v5 はタグ `v5-final`）。
+> 以下は移植時の方針記録で、`src/*.js` / `tests/golden/http-differential.test.mjs` への言及はタグ上のもの、または廃止済み。
+
 参照実装: `C:/project/3ch/ch3s-migration`（以下「参照実装」）。
 
 ---

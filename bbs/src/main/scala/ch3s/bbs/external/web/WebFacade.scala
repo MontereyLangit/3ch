@@ -3,13 +3,7 @@ package ch3s.bbs.external.web
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSGlobal
 
-/**
- * Fetch API `Response`/`ResponseInit` の手書きfacade。参照実装 ch3s-migration の
- * `bbs/src/main/scala/ch3s/bbs/external/web/WebFacade.scala` をそのまま踏襲する。
- *
- * scalajs-domは依存に加えない（ScalablyTyped/追加npm依存を増やさない方針。Workers/ブラウザ双方の
- * グローバルに実在する `Response` コンストラクタを直接 `@JSGlobal` で参照する最小facadeにした）。
- */
+/** Fetch API `Response` / `ResponseInit` の最小手書き facade（docs/v6s実装メモ.md 2.5）。 */
 trait ResponseInit extends js.Object {
   var status: js.UndefOr[Int] = js.undefined
   var headers: js.UndefOr[js.Object] = js.undefined

@@ -7,15 +7,7 @@ import scala.concurrent.Future
 import scala.scalajs.js.Thenable.Implicits._
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
-/**
- * `tests/golden/sha1base64.json` / `hash.json` を読み、`src/common.js` の
- * `sha1Base64()` / `hash()`（Web Crypto依存、KB-14の二重エンコードを含む）と
- * Scala.js版 [[WebHash]] の出力が一致することを確認する。
- *
- * golden JSON の読み込みには `common` プロジェクトのテスト専用ユーティリティ
- * （`ch3s.common.golden.{Json, GoldenFile}`）を `"test->test"` 依存でそのまま再利用している
- * （build.sbt の `bbs` プロジェクト設定を参照）。
- */
+/** [[WebHash]] を `sha1base64.json` / `hash.json` の JS 実測値と照合する（KB-14 を含む）。 */
 class WebHashSuite extends FunSuite {
 
   test("golden: sha1base64.json の全ケースがJS実測値と一致する(KB-14: TextEncoderによる二重エンコードを含む)") {

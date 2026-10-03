@@ -1,8 +1,7 @@
 package ch3s.common.hash
 
 /**
- * `src/common.js` の `hexToBinary(hex)` の Scala 3 移植。
- * 16進文字列 → 1バイト1文字のバイナリ文字列（各 `Char` の下位8bitがそのバイト値）。
+ * 16進文字列 → 1バイト1文字のバイナリ文字列（各 `Char` の下位8bitがそのバイト値）
  *
  * JS 実装:
  * ```
@@ -18,7 +17,7 @@ package ch3s.common.hash
 object HexToBinary {
 
   def hexToBinary(hex: String): String = {
-    val n = hex.length / 2 // Scalaの整数除算も同じく切り捨て（floor、常に非負のためJSのToLengthと一致）
+    val n = hex.length / 2
     val sb = new StringBuilder(n)
     var i = 0
     while (i < n) {

@@ -3,19 +3,16 @@ package ch3s.common.text
 import scala.collection.mutable
 
 /**
- * WHATWG Encoding Standard 準拠の UTF-8 エンコーダを手書きでポートしたもの。
+ * WHATWG Encoding Standard 準拠の UTF-8 エンコーダを手書きでポートしたオブジェクト
  *
  * `src/common.js` の `md5()`（内部で `new TextEncoder().encode(s)` を使う）、および
  * `sha1Base64()` / `hash()`（同様に `TextEncoder` を使う）と**同一のバイト列**を
- * JVM/JS 双方で再現するために用意した。
+ * JVM/JS 双方で再現するために使う
  *
- * `md5` は `common`（cross project, 純粋関数のみ）に置くため、JVM の `java.nio.charset`
- * に依存できない（Scala.js 側には無いAPIであり、かつ孤立サロゲートの扱いが
- * `TextEncoder` と厳密に一致するとは限らない）。そのため、この最小限の UTF-8
- * エンコーダを cross project 内に自前で持つ。
+ * commonではJVMの`java.nio.charset`に依存できないので、この最小限のUTF-8エンコーダを利用
  *
  * 孤立サロゲート（ペアになっていない High/Low サロゲート）は、`TextEncoder` と同じく
- * 1つの `U+FFFD`（3バイト `EF BF BD`）に置き換える（実測: Node の `TextEncoder` で確認済み）。
+ * 1つの `U+FFFD`（3バイト `EF BF BD`）に置き換える（Node の `TextEncoder` で確認済み）。
  * これは Shift_JIS 側（`ch3s.bbs.util.SjisEncoding`、`[...str]` 相当のサロゲートペア走査を行うが
  * 孤立サロゲートを代替しない）とは意図的に異なる実装なので、コードポイント走査ロジックは共有しない。
  */
@@ -23,7 +20,7 @@ object Utf8 {
 
   private val ReplacementCodePoint = 0xfffd
 
-  /** 文字列をUTF-16コード単位から「WHATWG的コードポイント列」へ変換する（孤立サロゲートはU+FFFDに置換）。 */
+  /** 文字列をUTF-16コード単位から「WHATWG的コードポイント列」へ変換する（孤立サロゲートはU+FFFDに置換） */
   private def codePointsWithReplacement(s: String): Array[Int] = {
     val out = mutable.ArrayBuffer.empty[Int]
     var i = 0
@@ -55,7 +52,10 @@ object Utf8 {
     out.toArray
   }
 
-  /** 文字列を UTF-8 バイト列（各要素 0-255）へ変換する。`TextEncoder#encode` の挙動と同一。 */
+  /** 
+   * 文字列を UTF-8 バイト列（各要素 0-255）へ変換する
+   * `TextEncoder#encode`の挙動と同一
+   */
   def encode(s: String): Array[Int] = {
     val out = mutable.ArrayBuffer.empty[Int]
     for (cp <- codePointsWithReplacement(s)) {

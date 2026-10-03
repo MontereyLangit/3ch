@@ -19,3 +19,8 @@ dist/
 # server.ts / client.ts はcodegen対象外（画面が増えても変わらない一度きりの配管のため）。
 /app/routes/_v6/
 /app/routes/index.ts
+
+.vscode/
+.bloop
+.metals
+metals.sbt
