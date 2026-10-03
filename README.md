@@ -1,2 +1,1 @@
-Cloudflare Workers、Cloudflare Durable Objectsを使用した3ch v6（Scala.js + HonoX。旧 v5 は git タグ `v5-final`）  
-2025～
+Scala.jsとHonoXで構築したCloudflare Workers上の2ch型掲示板「３ちゃんねる」（3ch.io）。
