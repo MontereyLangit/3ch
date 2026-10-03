@@ -9,6 +9,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 
 //TODO: 3chiko.html spaをhonoxのssr化（3chiko.htmlはwebclient=3chiko場合のみ）
+//TODO: エンドポイント分離
 
 object PublicRoutes {
   private def str(v: js.Any): String = js.Dynamic.global.String(v).asInstanceOf[String]

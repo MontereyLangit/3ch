@@ -3,7 +3,7 @@ package ch3s.bbs.external.web
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSGlobal
 
-/** Fetch API `Response` / `ResponseInit` の最小手書き facade（docs/v6s実装メモ.md 2.5）。 */
+/** Fetch API `Response` / `ResponseInit` の手書きfacade */
 trait ResponseInit extends js.Object {
   var status: js.UndefOr[Int] = js.undefined
   var headers: js.UndefOr[js.Object] = js.undefined

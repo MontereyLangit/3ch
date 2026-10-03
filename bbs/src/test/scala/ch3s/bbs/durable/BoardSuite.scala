@@ -6,7 +6,7 @@ import scala.scalajs.js
 import scala.scalajs.js.Thenable.Implicits.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
-/** `Board.updateThread` の並び順と打ち切りを subjectList の完全一致で固定する（docs/v6s実装メモ.md 4.3）。 */
+/** `Board.updateThread` の並び順と打ち切りを subjectList の完全一致で固定する */
 class BoardSuite extends FunSuite {
 
   private def data(key: String, title: js.UndefOr[String], resNum: Int): js.Dynamic =

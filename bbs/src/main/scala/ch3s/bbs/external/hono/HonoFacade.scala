@@ -2,7 +2,7 @@ package ch3s.bbs.external.hono
 
 import scala.scalajs.js
 
-/** Hono の `c.req` / `c.env` 用の最小手書き facade（docs/v6s実装メモ.md 2.5）。 */
+/** Hono の `c.req` / `c.env` 用の最小手書き facade */
 @js.native
 trait HonoRequestFacade extends js.Object {
   def param(name: String): js.UndefOr[String] = js.native

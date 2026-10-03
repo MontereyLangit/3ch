@@ -8,7 +8,7 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 
-/** `Thread` DO を完全一致で固定し、replay ハーネスが踏まない境界を補う（docs/v6s実装メモ.md 4.2）。 */
+/** `Thread` DO を完全一致で固定し、replay ハーネスが踏まない境界を補う */
 class ThreadSuite extends FunSuite {
   import DurableTestKit.{newEnv, seed, rejectionMessage}
 

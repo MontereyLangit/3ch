@@ -6,8 +6,8 @@ import scala.scalajs.js
 import scala.scalajs.js.typedarray.Uint8Array
 
 /**
- * `src/common.js` の `sha1Base64` / `hash` の移植（Web Crypto 依存のため `bbs` 側に置く）。
- * KB-14 の二重エンコードを保持する。背景は docs/v6s実装メモ.md 3。
+ * `src/common.js` の `sha1Base64` / `hash` の移植（Web Crypto 依存のため `bbs` 側に置く）
+ * KB-14 の二重エンコードを保持する
  */
 object WebHash {
 

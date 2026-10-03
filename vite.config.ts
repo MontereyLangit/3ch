@@ -7,7 +7,7 @@ import buildCloudflareWorkers, {
 import scalaJSPlugin from "@scala-js/vite-plugin-scalajs";
 import tailwindcss from "@tailwindcss/vite";
 
-// v6s ビルド骨格（docs/移植方針_step3_ScalaJS.md）。参照実装 C:/project/3ch/ch3s-migration の
+// v6s ビルド骨格。参照実装 C:/project/3ch/ch3s-migration の
 // vite.config.ts をベースにする。参照実装には `sequentialBuildStart`（2つの scalaJSPlugin
 // インスタンスが同時に `sbt` を起動して `ServerAlreadyBootingException` になる問題への対策として
 // 定義された関数）が残っているが、実際にはどちらの config でも呼ばれておらず（grep で確認済み）、
@@ -20,7 +20,10 @@ const scalaCwd = path.resolve(__dirname);
 export default defineConfig(({ mode }) => {
   if (mode === "client") {
     return {
-      plugins: [tailwindcss(), scalaJSPlugin({ cwd: scalaCwd, projectID: "bbs" })],
+      plugins: [
+        tailwindcss(),
+        scalaJSPlugin({ cwd: scalaCwd, projectID: "bbs" }),
+      ],
       build: {
         rollupOptions: {
           input: ["./app/client.ts"],
@@ -52,7 +55,8 @@ export default defineConfig(({ mode }) => {
   // externalに指定してRollupにバンドルさせない。
   const entryContentAfterHooks = [
     ...(cloudflareWorkersDefaultOptions.entryContentAfterHooks ?? []),
-    () => `export { V6PlaceholderDurableObject, Board, Thread } from '/app/server.ts'`,
+    () =>
+      `export { V6PlaceholderDurableObject, Board, Thread } from '/app/server.ts'`,
   ];
 
   return {

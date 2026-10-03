@@ -5,9 +5,9 @@ import scala.scalajs.js.annotation.JSGlobal
 import scala.scalajs.js.typedarray.Uint8Array
 
 /**
- * Shift_JIS 変換。v5 `src/common.js` の `sjis` と同じ手順でテーブルを構築する。
- * v5 との差異は KB-17（未登録文字は NCR）と KB-18（不正バイトは `?`）のみ。
- * 背景・検証結果は docs/sjis差異一覧.md、方針は docs/移植方針_step3_ScalaJS.md R-01。
+ * Shift_JIS 変換。v5 `src/common.js` の `sjis` と同じ手順でテーブルを構築する
+ * v5 との差異は KB-17（未登録文字は NCR）と KB-18（不正バイトは `?`）のみ
+ * TODO: これ多分使っていない？
  */
 @js.native
 @JSGlobal("TextDecoder")
@@ -17,10 +17,10 @@ private class NativeTextDecoder(label: String) extends js.Object {
 
 object SjisEncoding {
 
-  /** 初回参照時に一度だけ構築する。decode 側は密な JS 配列（理由は docs/sjis差異一覧.md 5.2）。 */
+  /** 初回参照時に一度だけ構築する。decode 側は密な JS 配列 */
   private val (encodeTable, rootTable): (Map[Int, Array[Int]], js.Array[js.Any]) = buildTables()
 
-  /** v5 `sjis` コンストラクタの逐語的な再現（docs/sjis差異一覧.md 5.1）。 */
+  /** v5 `sjis` コンストラクタの逐語的な再現 */
   private def buildTables(): (Map[Int, Array[Int]], js.Array[js.Any]) = {
     val td = new NativeTextDecoder("sjis")
     val encode = scala.collection.mutable.LinkedHashMap.empty[Int, Array[Int]]
@@ -76,7 +76,7 @@ object SjisEncoding {
     (encode.toMap, root)
   }
 
-  /** 文字列 → SJIS バイト列。未登録文字は NCR `&#codepoint;` にする（KB-17）。 */
+  /** 文字列 → SJIS バイト列。未登録文字は NCR `&#codepoint;` にする */
   def encode(text: String): Uint8Array = {
     val out = js.Array[Int]()
     val n = text.length
@@ -112,7 +112,7 @@ object SjisEncoding {
     result
   }
 
-  /** SJIS バイト列 → 文字列。v5 が例外を投げる・捨てる箇所は `?` にする（KB-18）。 */
+  /** SJIS バイト列 → 文字列。v5 が例外を投げる・捨てる箇所は `?` にする */
   def decode(bytes: Uint8Array): String = {
     val sb = new StringBuilder
     val n = bytes.length

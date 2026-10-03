@@ -6,7 +6,7 @@ import ch3s.bbs.external.web.{Response, ResponseInit}
 
 import scala.scalajs.js
 
-/** `GET /_v6/health`。DO への RPC を含む骨格の疎通確認用（docs/v6s実装メモ.md 1.3）。 */
+/** `GET /_v6/health`。DO への RPC を含む骨格の疎通確認用 */
 object HealthHandler {
 
   val Body: String = "ch3s v6s ok"

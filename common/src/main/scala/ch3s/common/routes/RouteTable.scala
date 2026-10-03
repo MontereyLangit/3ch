@@ -1,16 +1,11 @@
 package ch3s.common.routes
 
 /**
- * `app/routes/配下` を機械生成するための唯一の真実（参照実装 ch3s-migration の
- * common/.../routes/RouteTable.scala を踏襲）。
+ * `app/routes/配下` を機械生成するためのルートテーブル．
  *
- * このファイルは cross-build（JVM/JS両対応。`common` は Pure cross project）で、
- * ファイルI/Oを一切行わない純粋なデータ + 文字列生成関数のみを持つ。
- * I/O は JVM専用の `codegen` プロジェクト（`ch3s.codegen.GenerateAppFiles`）が担当する。
- *
+ * TODO: BBS ロジック（dat / subject.txt / bbs.cgi 等）のルートは次タスク以降で追加する。
  * v6s骨格（インフラのみ、docs/移植方針_step3_ScalaJS.md）の時点では、生成器と生成パイプラインが
  * 実際に動くことを示すための最小ルート（`GET /_v6/health`）を1件だけ持つ。
- * TODO: BBS ロジック（dat / subject.txt / bbs.cgi 等）のルートは次タスク以降で追加する。
  */
 object RouteTable {
   // Preserve v5 prefix matches (including trailing path characters) and evaluation order.

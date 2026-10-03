@@ -9,7 +9,7 @@ import scala.concurrent.Future
 import scala.collection.mutable
 import scala.scalajs.js.annotation.JSImport
 
-/** DO / R2 / KV(CAP) / ASSETS の最小テストダブル（docs/v6s実装メモ.md 4.1）。 */
+/** DO / R2 / KV(CAP) / ASSETS の最小テストダブル */
 object DurableTestKit {
 
   private def clone(v: js.Any): js.Any =
