@@ -6,7 +6,12 @@ import scala.scalajs.js.annotation.JSExportTopLevel
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
+import scala.collection.mutable.Map
 
+/**
+ * スレッドデータを管理するDurable Object (Thread)
+ * 1つのスレッドに対して1つのインスタンスが対応します。
+ */
 @JSExportTopLevel("Thread", "server")
 class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObject(state, env) {
   private def read(key: String): Future[js.Any] = state.storage.get[js.Any](key).toFuture.map(_.asInstanceOf[js.Any])
@@ -36,6 +41,9 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
       result.value.asInstanceOf[A]
     }
 
+  /**
+   * dat形式の全スレッドデータを文字列として返します。
+   */
   def getDat(bbs: String = "", key: String = "0"): js.Promise[String] =
     (for {
       hidden <- read("hidden")
@@ -61,6 +69,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
         }
     } yield result).toJSPromise
 
+  // datが存在しない場合で keyが1以上1762009199未満の場合、R2から旧形式スレッドログを取得しdatに変換
   private def importLegacy(bbs: String, key: String): Future[String] =
     (for {
       obj <- env.ch3www.get(s"$bbs/thread/${key.take(4)}/$key.cgi").toFuture
@@ -69,6 +78,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
           log <- obj.text().toFuture
           _ <- put("legacyLog" -> log)
           rows = log.split("\n", -1)
+          /* スレの配列に最低3個要素がないとおかしい */
           _ = if rows.length < 3 then fail("スレッドのログファイルが壊れています。運用情報板で修理してもらってください。")
           _ <- put("settings" -> rows(1))
           dat = convertLegacy(rows)
@@ -77,7 +87,8 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
     } yield dat).recover { case _ => "" }
 
   private def convertLegacy(rows: Array[String]): String = {
-    val settings = scala.collection.mutable.Map.empty[String, String]
+    /* スレ設定を取得。ログの二行目に入っている。NAME=VALUE<>NAME2=VALUE2 */
+    val settings = Map.empty[String, String]
     trim(rows(1)).split("<>", -1).foreach { s =>
       val parts = s.split("=", -1)
       if parts(0).nonEmpty then settings(parts(0)) = trim(parts.lift(1).getOrElse(""))
@@ -87,20 +98,27 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
     val out = new StringBuilder
     var count = 0
     rows.drop(2).foreach { row =>
+      /* 0:num<>1:name<>2:sikibetsuId<>3:time<>4:id<>5:MESSAGE<>6:HOST999 ただし6:HOST999はここでは使わない */
       val fields = trim(row).split("<>", -1)
+      /* num無し、numが番号でない、num < 1、timeなし、本文部分まで<>がない、削除済み（num=delレス番） -> 表示しない */
       if fields.length >= 6 && fields(0).matches("^[0-9]+$") && fields(0).toDouble >= 1 && fields(3).nonEmpty then {
         val next = fields(0).toDouble.toInt
+        /* レス削除などによるレス番飛びを検出する。更新前のresnumが前のレスの番号でなければ、空いた分だけ行を挿入する。 */
         for i <- count + 1 until next do out.append(s"$i<>あぼーん<>あぼーん<>あぼーん<>あぼーん\n")
         count = next
         var name = if fields(1).nonEmpty then fields(1) else settings.getOrElse("BBS_NONAME_NAME", "774@3ch")
+        /* 識別ID欄を名前欄に追加 */
         if fields(2).nonEmpty then name += s" </b>(${fields(2)})<b>"
+        /* 日付欄の処理 */
         val timestamp = js.Dynamic.global.Number(fields(3).take(10)).asInstanceOf[Double] * 1000
         var date = formatter.format(new js.Date(timestamp)).asInstanceOf[String]
         if fields(3).length > 10 then date += "." + fields(3).drop(10)
+        /* ID欄を日付欄に追加 */
         if fields(4).nonEmpty then date += " " + fields(4)
+        /* <br>の前後にスペースを挿入。必要あるのかはわからないけど、一応。 */
         val message = fields(5).replace("<br>", " <br> ")
         out.append(s"$name<><>$date<> $message <>")
-        if count == 1 then out.append(rows(0))
+        if count == 1 then out.append(rows(0)) /* スレッドタイトルはログの一行目に入っている。 */
         out.append('\n')
       }
     }
@@ -113,10 +131,30 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
       modified <- read("modifiedAt")
       edited <- read("edited")
     } yield js.Dynamic.literal(dat = dat, modifiedAt = modified, edited = truth(edited))).toJSPromise
+
+  /**
+   * log形式の全投稿者ログを文字列として返します。
+   */
   def getLog(): js.Promise[String] = text("log").toJSPromise
+
+  /**
+   * スレ設定文字列を返します。
+   */
   def getSettings(): js.Promise[String] = text("settings").toJSPromise
+
+  /**
+   * スレ設定を更新します。
+   * @param settings - 新しいスレ設定文字列
+   */
   def setSettings(settings: String): js.Promise[Unit] = put("settings" -> settings).toJSPromise
 
+  /**
+   * 新しいレスを追加します。
+   * @param datLine - dat形式の新しい行データ
+   * @param logLine - log形式の新しい行データ
+   * @param posting
+   * @return 追加後のレス数
+   */
   def addRes(datLine: String, logLine: String, posting: js.UndefOr[js.Dynamic] = js.undefined): js.Promise[Int] = locked {
     // v5 uses `posting?.x` / `if (posting) ...` — plain JS truthiness, so a literal `null` argument
     // (indistinguishable from omission to any untyped caller across the DO RPC boundary) behaves
@@ -260,6 +298,10 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
     } yield ()
   }.toJSPromise
 
+  /**
+   * 指定されたレス番号をあぼーん化します。
+   * @param resNum - あぼーん化するレス番号 (1-based)
+   */
   def deleteRes(resNum: Int): js.Promise[Unit] = getDat().toFuture.flatMap { dat =>
     val lines = dat.split("\n", -1)
     if resNum > 0 && resNum < lines.length then {
@@ -268,5 +310,9 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
     } else Future.unit
   }.toJSPromise
 
+  /**
+   * datを上書きします。
+   * @param dat - 上書き内容
+   */
   def setDat(dat: String): js.Promise[Unit] = read("hidden").flatMap(v => if truth(v) then Future.unit else put("dat" -> dat)).toJSPromise
 }
