@@ -1,0 +1,464 @@
+{
+  "source": "旧 3ch（3ch.jp）の板一覧 bbsmenu。2026-09-26 に利用者から提供",
+  "note": "カテゴリの初期値。板は bbs（ディレクトリ名）で現行の板と突き合わせる。title は参考表示用で、板名の正は SETTING.TXT の BBS_TITLE。",
+  "categories": [
+    {
+      "id": "chat",
+      "name": "雑談",
+      "sort": 10,
+      "boards": [
+        { "bbs": "entrance", "title": "ラウンジ" },
+        { "bbs": "chugaku", "title": "中学生" }
+      ]
+    },
+    {
+      "id": "news",
+      "name": "ニュース",
+      "sort": 20,
+      "boards": [
+        { "bbs": "news", "title": "ニュース速報" },
+        { "bbs": "saigai", "title": "地震・台風" },
+        { "bbs": "keizai", "title": "経済" },
+        { "bbs": "kabu", "title": "株式・投資" },
+        { "bbs": "seiji", "title": "政治" },
+        { "bbs": "kokusai", "title": "国際情勢" },
+        { "bbs": "mass", "title": "マスコミ" },
+        { "bbs": "newsvip", "title": "ﾆｭｰ速VIP" }
+      ]
+    },
+    {
+      "id": "topic-chat",
+      "name": "カテゴリ雑談",
+      "sort": 30,
+      "boards": [
+        { "bbs": "love", "title": "恋愛サロン" },
+        { "bbs": "ex", "title": "カップル" },
+        { "bbs": "gender", "title": "男女雑談" },
+        { "bbs": "male", "title": "独身男性" },
+        { "bbs": "male2", "title": "独身男子" },
+        { "bbs": "motenai", "title": "モテない男性" },
+        { "bbs": "sfe", "title": "独身女性" },
+        { "bbs": "wmotenai", "title": "もてない女" },
+        { "bbs": "tomorrow", "title": "既婚@3ch" },
+        { "bbs": "employee", "title": "リーマン" },
+        { "bbs": "dame", "title": "無職・だめ" },
+        { "bbs": "hikky", "title": "ヒッキー" },
+        { "bbs": "campus", "title": "大学生活" },
+        { "bbs": "koko", "title": "高校生" },
+        { "bbs": "chugaku", "title": "中学生" },
+        { "bbs": "bbs", "title": "小学生", "external": "http://www.10ch.net/bbs/" }
+      ]
+    },
+    {
+      "id": "nareai",
+      "name": "馴れ合い",
+      "sort": 40,
+      "boards": [
+        { "bbs": "intro", "title": "自己紹介" },
+        { "bbs": "honobono", "title": "ほのぼの" },
+        { "bbs": "yume", "title": "夢・独り言" }
+      ]
+    },
+    {
+      "id": "aa",
+      "name": "AA",
+      "sort": 50,
+      "boards": [
+        { "bbs": "aasaloon", "title": "AAサロン" },
+        { "bbs": "aastory", "title": "AA長編" },
+        { "bbs": "kao", "title": "顔文字" }
+      ]
+    },
+    {
+      "id": "mousou",
+      "name": "妄想",
+      "sort": 60,
+      "boards": [
+        { "bbs": "moshimo", "title": "もしも…" },
+        { "bbs": "mujin", "title": "無人島" },
+        { "bbs": "et", "title": "宇宙人" },
+        { "bbs": "time", "title": "ﾀｲﾑﾏｼｰﾝ" }
+      ]
+    },
+    {
+      "id": "net",
+      "name": "ネット",
+      "sort": 70,
+      "boards": [
+        { "bbs": "2chnet", "title": "２ちゃんねる" },
+        { "bbs": "net", "title": "ネットサービス" },
+        { "bbs": "watch", "title": "ネットヲチ" },
+        { "bbs": "flash", "title": "FLASH動画" }
+      ]
+    },
+    {
+      "id": "geino",
+      "name": "芸能",
+      "sort": 80,
+      "boards": [
+        { "bbs": "geino", "title": "芸能人" },
+        { "bbs": "geinin", "title": "お笑い芸人" },
+        { "bbs": "announcer", "title": "アナウンサー" },
+        { "bbs": "actress", "title": "女優・タレント" },
+        { "bbs": "idol", "title": "アイドル" },
+        { "bbs": "morning", "title": "モー娘（牛）" },
+        { "bbs": "ueto", "title": "上戸彩" },
+        { "bbs": "korin", "title": "小倉優子" },
+        { "bbs": "mendol", "title": "男性アイドル" },
+        { "bbs": "johnnys", "title": "ジャニーズ" }
+      ]
+    },
+    {
+      "id": "music",
+      "name": "音楽",
+      "sort": 90,
+      "boards": [
+        { "bbs": "music", "title": "音楽サロン" },
+        { "bbs": "yogaku", "title": "洋楽" },
+        { "bbs": "jpop", "title": "JPOP" },
+        { "bbs": "mika", "title": "中島美嘉" },
+        { "bbs": "kodakumi", "title": "倖田來未" },
+        { "bbs": "compose", "title": "楽器・作曲" },
+        { "bbs": "jazz", "title": "ｼﾞｬｽﾞ・ﾌｭｰｼﾞｮﾝ" },
+        { "bbs": "classic", "title": "クラシック" },
+        { "bbs": "karaoke", "title": "カラオケ" }
+      ]
+    },
+    {
+      "id": "tv",
+      "name": "テレビ",
+      "sort": 100,
+      "boards": [
+        { "bbs": "tv", "title": "テレビ番組" },
+        { "bbs": "tvd", "title": "テレビドラマ" },
+        { "bbs": "tvcm", "title": "広告・CM" },
+        { "bbs": "radio", "title": "ラジオ" }
+      ]
+    },
+    {
+      "id": "tokusatsu",
+      "name": "特撮",
+      "sort": 110,
+      "boards": [
+        { "bbs": "toku", "title": "特撮サロン" }
+      ]
+    },
+    {
+      "id": "anime",
+      "name": "アニメ",
+      "sort": 120,
+      "boards": [
+        { "bbs": "asaloon", "title": "アニメサロン" },
+        { "bbs": "ranime", "title": "懐かしアニメ" },
+        { "bbs": "gundam", "title": "ガンダム" },
+        { "bbs": "ghibli", "title": "ジブリ" },
+        { "bbs": "precure", "title": "プリキュア" },
+        { "bbs": "voice", "title": "声優" },
+        { "bbs": "cosp", "title": "コスプレ" },
+        { "bbs": "moe", "title": "萌え" }
+      ]
+    },
+    {
+      "id": "comic",
+      "name": "マンガ",
+      "sort": 130,
+      "boards": [
+        { "bbs": "comic", "title": "マンガサロン" },
+        { "bbs": "scomic", "title": "少年漫画" },
+        { "bbs": "wcomic", "title": "週間少年漫画" },
+        { "bbs": "rcomic", "title": "懐かし漫画" },
+        { "bbs": "gcomic", "title": "少女漫画" },
+        { "bbs": "doujin", "title": "同人" },
+        { "bbs": "yaoi", "title": "801" }
+      ]
+    },
+    {
+      "id": "game",
+      "name": "ゲーム",
+      "sort": 140,
+      "boards": [
+        { "bbs": "game", "title": "ゲームサロン" },
+        { "bbs": "iegame", "title": "家庭用ゲーム" },
+        { "bbs": "ff", "title": "FF・ドラクエ" },
+        { "bbs": "arc", "title": "アーケード" },
+        { "bbs": "poke", "title": "携帯型ゲーム" },
+        { "bbs": "pcgame", "title": "PCゲーム" },
+        { "bbs": "mmo", "title": "オンライン" },
+        { "bbs": "galgame", "title": "ギャルゲー" }
+      ]
+    },
+    {
+      "id": "movie",
+      "name": "映画",
+      "sort": 150,
+      "boards": [
+        { "bbs": "eiga", "title": "映画サロン" },
+        { "bbs": "hoga", "title": "邦画" },
+        { "bbs": "hollwood", "title": "ハリウッド" },
+        { "bbs": "eumovie", "title": "ﾖｰﾛｯﾊﾟ映画" },
+        { "bbs": "amovie", "title": "アジア映画" }
+      ]
+    },
+    {
+      "id": "literature",
+      "name": "文学等",
+      "sort": 160,
+      "boards": [
+        { "bbs": "novel", "title": "小説" },
+        { "bbs": "poem", "title": "詩" }
+      ]
+    },
+    {
+      "id": "sports",
+      "name": "スポーツ",
+      "sort": 170,
+      "boards": [
+        { "bbs": "sports", "title": "スポーツ" },
+        { "bbs": "base", "title": "プロ野球" },
+        { "bbs": "soccer", "title": "サッカー" },
+        { "bbs": "motor", "title": "ﾓｰﾀｰｽﾎﾟｰﾂ" },
+        { "bbs": "rugby", "title": "ラグビー" },
+        { "bbs": "sumo", "title": "相撲" },
+        { "bbs": "kakutogi", "title": "格闘技" },
+        { "bbs": "wres", "title": "プロレス" },
+        { "bbs": "kinniku", "title": "筋トレ" }
+      ]
+    },
+    {
+      "id": "gamble",
+      "name": "ギャンブル",
+      "sort": 180,
+      "boards": [
+        { "bbs": "pachi", "title": "パチンコ" },
+        { "bbs": "slot", "title": "パチスロ" },
+        { "bbs": "keiba", "title": "競馬" },
+        { "bbs": "keirin", "title": "競輪" },
+        { "bbs": "kyotei", "title": "競艇" },
+        { "bbs": "kuji", "title": "宝くじ" }
+      ]
+    },
+    {
+      "id": "pc",
+      "name": "ＰＣ",
+      "sort": 190,
+      "boards": [
+        { "bbs": "win", "title": "Windows" },
+        { "bbs": "mac", "title": "Mac" },
+        { "bbs": "linux", "title": "Linux" },
+        { "bbs": "unix", "title": "UNIX" },
+        { "bbs": "soft", "title": "ソフトウェア" },
+        { "bbs": "p2p", "title": "P2P" },
+        { "bbs": "dtm", "title": "DTM" }
+      ]
+    },
+    {
+      "id": "kaden",
+      "name": "家電製品",
+      "sort": 200,
+      "boards": [
+        { "bbs": "keitai", "title": "携帯・PHS" }
+      ]
+    },
+    {
+      "id": "hobby",
+      "name": "趣味",
+      "sort": 210,
+      "boards": [
+        { "bbs": "car", "title": "自動車" },
+        { "bbs": "bike", "title": "バイク" },
+        { "bbs": "train", "title": "鉄道" },
+        { "bbs": "airplane", "title": "飛行機" },
+        { "bbs": "toys", "title": "おもちゃ" },
+        { "bbs": "pet", "title": "ペット" }
+      ]
+    },
+    {
+      "id": "guide",
+      "name": "案内",
+      "sort": 220,
+      "boards": [
+        { "bbs": "event", "title": "イベント企画" },
+        { "bbs": "gline", "title": "ガイドライン" }
+      ]
+    },
+    {
+      "id": "life",
+      "name": "生活",
+      "sort": 230,
+      "boards": [
+        { "bbs": "life", "title": "生活サロン" },
+        { "bbs": "omoide", "title": "モノより思い出" },
+        { "bbs": "fashion", "title": "ファッション" },
+        { "bbs": "goki", "title": "ゴキブリ・ハエ" },
+        { "bbs": "30dai", "title": "３０代" },
+        { "bbs": "cafe40", "title": "４０代" },
+        { "bbs": "part", "title": "アルバイト" },
+        { "bbs": "binbo", "title": "貧乏" },
+        { "bbs": "chishiki", "title": "雑学" },
+        { "bbs": "occult", "title": "オカルト" },
+        { "bbs": "diary", "title": "日記" }
+      ]
+    },
+    {
+      "id": "food",
+      "name": "食文化",
+      "sort": 240,
+      "boards": [
+        { "bbs": "cook", "title": "料理" },
+        { "bbs": "ffood", "title": "ﾌｧｰｽﾄﾌｰﾄﾞ" },
+        { "bbs": "buta", "title": "豚丼" },
+        { "bbs": "ramen", "title": "ラーメン" }
+      ]
+    },
+    {
+      "id": "mind-body",
+      "name": "心と身体",
+      "sort": 250,
+      "boards": [
+        { "bbs": "nayami", "title": "悩み相談" },
+        { "bbs": "dousei", "title": "同性愛" },
+        { "bbs": "ikiro", "title": "イ㌔" },
+        { "bbs": "mental", "title": "ﾒﾝﾀﾙﾍﾙｽ" }
+      ]
+    },
+    {
+      "id": "school",
+      "name": "学校",
+      "sort": 260,
+      "boards": [
+        { "bbs": "chugaku", "title": "中学校" },
+        { "bbs": "koko", "title": "高校" },
+        { "bbs": "yobiko", "title": "受験・予備校" },
+        { "bbs": "senmon", "title": "専門学校" },
+        { "bbs": "campus", "title": "大学・短大" }
+      ]
+    },
+    {
+      "id": "chat2",
+      "name": "雑談2",
+      "sort": 270,
+      "boards": [
+        { "bbs": "lobby", "title": "ロビー" },
+        { "bbs": "kitchin", "title": "厨房" },
+        { "bbs": "morningcoffee", "title": "モ娘(狼)" },
+        { "bbs": "siberia", "title": "シベリア超速報" },
+        { "bbs": "newsvip", "title": "ニュー速VIP" },
+        { "bbs": "neet4vip", "title": "ニー速" },
+        { "bbs": "gomi", "title": "ｺﾞﾐ" }
+      ]
+    },
+    {
+      "id": "hokkaido-tohoku",
+      "name": "北海道・東北",
+      "sort": 280,
+      "boards": [
+        { "bbs": "hokkaido", "title": "北海道" },
+        { "bbs": "aomori", "title": "青森" },
+        { "bbs": "iwate", "title": "岩手" },
+        { "bbs": "miyagi", "title": "宮城" },
+        { "bbs": "akita", "title": "秋田" },
+        { "bbs": "yamagata", "title": "山形" },
+        { "bbs": "fukushima", "title": "福島" }
+      ]
+    },
+    {
+      "id": "kanto",
+      "name": "関東",
+      "sort": 290,
+      "boards": [
+        { "bbs": "saitama", "title": "埼玉" },
+        { "bbs": "tokyo", "title": "東京" },
+        { "bbs": "kanagawa", "title": "神奈川" },
+        { "bbs": "chiba", "title": "千葉" },
+        { "bbs": "ibaraki", "title": "茨城" },
+        { "bbs": "tochigi", "title": "栃木" },
+        { "bbs": "gunma", "title": "群馬" },
+        { "bbs": "yamanashi", "title": "山梨" }
+      ]
+    },
+    {
+      "id": "chubu",
+      "name": "中部",
+      "sort": 300,
+      "boards": [
+        { "bbs": "niigata", "title": "新潟" },
+        { "bbs": "nagano", "title": "長野" },
+        { "bbs": "toyama", "title": "富山" },
+        { "bbs": "ishikawa", "title": "石川" },
+        { "bbs": "fukui", "title": "福井" },
+        { "bbs": "aichi", "title": "愛知" },
+        { "bbs": "gifu", "title": "岐阜" },
+        { "bbs": "shizuoka", "title": "静岡" }
+      ]
+    },
+    {
+      "id": "kinki",
+      "name": "近畿",
+      "sort": 310,
+      "boards": [
+        { "bbs": "mie", "title": "三重" },
+        { "bbs": "osaka", "title": "大阪" },
+        { "bbs": "hyogo", "title": "兵庫" },
+        { "bbs": "kyoto", "title": "京都" },
+        { "bbs": "shiga", "title": "滋賀" },
+        { "bbs": "nara", "title": "奈良" },
+        { "bbs": "wakayama", "title": "和歌山" }
+      ]
+    },
+    {
+      "id": "chugoku",
+      "name": "中国地方",
+      "sort": 320,
+      "boards": [
+        { "bbs": "tottori", "title": "鳥取" },
+        { "bbs": "shimane", "title": "島根" },
+        { "bbs": "okayama", "title": "岡山" },
+        { "bbs": "hiroshima", "title": "広島" },
+        { "bbs": "yamaguchi", "title": "山口" }
+      ]
+    },
+    {
+      "id": "shikoku",
+      "name": "四国",
+      "sort": 330,
+      "boards": [
+        { "bbs": "tokushima", "title": "徳島" },
+        { "bbs": "kagawa", "title": "香川" },
+        { "bbs": "ehime", "title": "愛媛" },
+        { "bbs": "kochi", "title": "高知" }
+      ]
+    },
+    {
+      "id": "kyushu-okinawa",
+      "name": "九州・沖縄",
+      "sort": 340,
+      "boards": [
+        { "bbs": "fukuoka", "title": "福岡" },
+        { "bbs": "saga", "title": "佐賀" },
+        { "bbs": "nagasaki", "title": "長崎" },
+        { "bbs": "kumamoto", "title": "熊本" },
+        { "bbs": "oita", "title": "大分" },
+        { "bbs": "miyazaki", "title": "宮崎" },
+        { "bbs": "kagoshima", "title": "鹿児島" },
+        { "bbs": "okinawa", "title": "沖縄" }
+      ]
+    },
+    {
+      "id": "temporary",
+      "name": "臨時用",
+      "sort": 350,
+      "boards": [
+        { "bbs": "hinanjo", "title": "避難所" }
+      ]
+    },
+    {
+      "id": "admin",
+      "name": "運営",
+      "sort": 360,
+      "boards": [
+        { "bbs": "accuse", "title": "批判要望" },
+        { "bbs": "saku", "title": "削除依頼" }
+      ]
+    }
+  ]
+}
