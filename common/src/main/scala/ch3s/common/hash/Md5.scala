@@ -2,13 +2,10 @@ package ch3s.common.hash
 
 import ch3s.common.text.Utf8
 
+import java.util.Arrays
+
 /**
- * `src/common.js` の手書き MD5 実装（"jsMD5" 系の古典的実装）の Scala 3 移植。
- *
- * Web Crypto の `SubtleCrypto.digest` は MD5 をサポートしないため、v5 は自前で
- * MD5 を実装している（`crypt`/トリップ生成側で使われる）。この実装自体には
- * KB台帳に載るような既知の不具合は無く、標準のMD5と一致する（characterization
- * テストで Node組み込み `crypto.createHash('md5')` との一致を確認済み）。
+ * MD5変換オブジェクト
  *
  * ただし内部で `new TextEncoder().encode(s)` を使っており、これは
  * [[ch3s.common.text.Utf8]] で忠実に再現している（孤立サロゲートの
@@ -148,7 +145,7 @@ object Md5 {
 
     if (n % 64 >= 56) {
       md5cycle(state, md5blk(tail))
-      java.util.Arrays.fill(tail, 0)
+      Arrays.fill(tail, 0)
     }
 
     val bitLen = n * 8
@@ -175,7 +172,7 @@ object Md5 {
     sb.toString
   }
 
-  /** `md5(str)`: v5 と同一の16進数(小文字)ハッシュ文字列を返す。 */
+  /** strをmd5ハッシュ化処理した16進数(小文字)ハッシュ文字列を返す */
   def md5(str: String): String = {
     val utf8 = Utf8.encode(str)
     md51(utf8).map(rhex).mkString

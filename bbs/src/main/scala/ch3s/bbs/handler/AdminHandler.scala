@@ -9,7 +9,7 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 
-object Admin {
+object AdminHandler {
   private def str(v: js.Any): String = js.Dynamic.global.String(v).asInstanceOf[String]
   private def truth(v: js.Any): Boolean = js.Dynamic.global.Boolean(v).asInstanceOf[Boolean]
   private def blank(v: js.Any): String = if truth(v) then str(v) else ""

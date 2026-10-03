@@ -9,20 +9,23 @@ import scala.scalajs.js
 import scala.scalajs.js.annotation.JSExportTopLevel
 import scala.scalajs.js.typedarray.Uint8Array
 
-/** HonoX ルートから `scalajs:server.js` 経由で呼ばれるエントリポイント（docs/v6s実装メモ.md 1.1）。 */
+import external.web.Request
+import external.cloudflare.WorkerEnv
+
 object Main {
 
   @JSExportTopLevel("admin", "server")
-  def admin(request: external.web.Request, env: external.cloudflare.WorkerEnv): js.Promise[Response] = handler.Admin.handle(request, env)
+  def admin(request: Request, env: WorkerEnv): js.Promise[Response] = handler.AdminHandler.handle(request, env)
 
+  //noinspection ScalaWeakerAccess
   @JSExportTopLevel("publicFetch", "server")
-  def publicFetch(request: external.web.Request, env: external.cloudflare.WorkerEnv, ctx: js.Dynamic): js.Promise[Response] = handler.PublicRoutes.fetch(request, env, ctx)
+  def publicFetch(request: Request, env: WorkerEnv, ctx: js.Dynamic): js.Promise[Response] = handler.PublicRoutes.fetch(request, env, ctx)
 
   @JSExportTopLevel("publicHandler", "server")
-  def publicHandler(c: js.Dynamic): js.Promise[Response] = publicFetch(c.req.raw.asInstanceOf[external.web.Request], c.env.asInstanceOf[external.cloudflare.WorkerEnv], c.executionCtx)
+  def publicHandler(c: js.Dynamic): js.Promise[Response] = publicFetch(c.req.raw.asInstanceOf[Request], c.env.asInstanceOf[WorkerEnv], c.executionCtx)
 
   @JSExportTopLevel("bbs_entry", "server")
-  def bbsEntry(request: external.web.Request, env: external.cloudflare.WorkerEnv): js.Promise[Response] = handler.Posting.entry(request, env)
+  def bbsEntry(request: Request, env: WorkerEnv): js.Promise[Response] = handler.Posting.entry(request, env)
 
   @JSExportTopLevel("settingTxtDefault", "server")
   val settingTxtDefault: String = handler.PostingText.settingTxtDefault
@@ -31,13 +34,12 @@ object Main {
   def parseRules(text: String): js.Array[js.Dynamic] = handler.Moderation.parseRules(text)
 
   @JSExportTopLevel("checkModeration", "server")
-  def checkModeration(gb: js.Dynamic, env: external.cloudflare.WorkerEnv): js.Promise[Int] = handler.Moderation.check(gb, env)
+  def checkModeration(gb: js.Dynamic, env: WorkerEnv): js.Promise[Int] = handler.Moderation.check(gb, env)
 
   @JSExportTopLevel("healthHandler", "server")
   def healthHandler(c: js.Any): js.Promise[Response] =
     HealthHandler.health(c.asInstanceOf[HonoContextFacade])
 
-  // 差分テスト（tests/golden/http-differential.test.mjs）が実機 workerd 上で
   // SjisEncoding（R-01案A）の実装そのものを exhaustive に検証するための診断用export。
   // HTTPルーティングからは呼ばれない（RouteTable.scala に対応ルートを追加していない）。
   @JSExportTopLevel("sjisEncode", "server")

@@ -10,7 +10,7 @@ package ch3s.common.routes
  *
  * v6s骨格（インフラのみ、docs/移植方針_step3_ScalaJS.md）の時点では、生成器と生成パイプラインが
  * 実際に動くことを示すための最小ルート（`GET /_v6/health`）を1件だけ持つ。
- * BBS ロジック（dat / subject.txt / bbs.cgi 等）のルートは次タスク以降で追加する。
+ * TODO: BBS ロジック（dat / subject.txt / bbs.cgi 等）のルートは次タスク以降で追加する。
  */
 object RouteTable {
   // Preserve v5 prefix matches (including trailing path characters) and evaluation order.

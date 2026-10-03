@@ -4,7 +4,7 @@ import ch3s.bbs.external.cloudflare.{DurableObject, DurableObjectState}
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSExportTopLevel
-
+// TODO: これ多分不要なので削除で
 /** ビルド骨格の動作確認専用 DO（BBS ロジックなし）。存在理由は docs/v6s実装メモ.md 1.2。 */
 @JSExportTopLevel("V6PlaceholderDurableObject", "server")
 class V6PlaceholderDurableObject(ctx: DurableObjectState, env: js.Any) extends DurableObject(ctx, env) {
