@@ -44,6 +44,7 @@
     "binding": "ASSETS",
     "html_handling": "none",
   },
+  // TODO: sqlite based backendに修正
   "migrations": [
     {
       "tag": "v1",
