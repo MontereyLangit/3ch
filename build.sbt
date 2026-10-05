@@ -86,11 +86,14 @@ lazy val bbsClient = project
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) }
   )
 
-// --- codegen: JVM — RouteTable(common) から app/routes/** を機械生成するsbtタスク ---
+// --- codegen: JVM — RouteTable からルート、DO の Scala 宣言から TS 型を生成 ---
 lazy val codegen = project
   .in(file("codegen"))
   .dependsOn(commonJVM)
   .settings(commonSettings)
+  .settings(
+    libraryDependencies += ("org.scalameta" %% "scalameta" % "4.17.4").cross(CrossVersion.for3Use2_13)
+  )
 
 lazy val root = project
   .in(file("."))

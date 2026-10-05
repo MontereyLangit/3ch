@@ -4,22 +4,27 @@ import ch3s.common.routes.RouteTable
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
+import scala.jdk.CollectionConverters.*
 
-/**
- * `RouteTable`（common, cross-build）を元に `app/routes/配下` を機械生成するsbtタスクの本体。
- * 参照実装 ch3s-migration の `ch3s.codegen.GenerateAppFiles` を踏襲する。
- *
- * JVM専用プロジェクト（`codegen`）に置く理由は、`bbs`/`bbs-client` がScala.js専用
- * （Workers向けESModule出力）でファイルI/Oを素直に書けないため。
- *
- * 起動方法: `sbt codegen/run`（`package.json` の `npm run v6:generate` から呼ばれる）。
- * 実行時のカレントディレクトリ（`user.dir`）がこのリポジトリルート（`ch3s/`）であることを前提にする。
+/** 
+ * RouteTable からルートを、DO の Scala 宣言から TS 型を生成する。
+ * リポジトリルートで `sbt codegen/run` を実行する。
  */
 object GenerateAppFiles {
 
   def main(args: Array[String]): Unit = {
     val projectRoot = Paths.get(System.getProperty("user.dir")).toAbsolutePath
     val appRoot = projectRoot.resolve("app")
+    val durableRoot = projectRoot.resolve("bbs/src/main/scala/ch3s/bbs/durable")
+    val files = Files.walk(durableRoot)
+    val sources = try {
+      files.iterator().asScala.filter(_.toString.endsWith(".scala")).toList.sortBy(_.toString).map { path =>
+        path.toString -> Files.readString(path, StandardCharsets.UTF_8)
+      }
+    } finally {
+      files.close()
+    }
+    writeFile(appRoot.resolve("scalajs-durable-objects.generated.d.ts"), GenerateDurableObjectTypes.render(sources))
 
     val routeFiles = RouteTable.routes.map { entry =>
       val path = resolveUnderApp(appRoot, "routes", entry.filePath)

@@ -35,3 +35,12 @@ Claude 自身によるファイル探索やテスト実行は行っていない�
 | --- | --- |
 | Low: `scalajs:server.js` の型宣言が `renderShell` のみで、既存 DO の import エラーが `@ts-expect-error` に隠れる | 採用。再 export 用の DO クラス宣言を追加し、`app/server.ts` の抑制と「.d.ts 無し」という説明を削除。抑制自体は従来から存在したが、新しい型宣言に合わせて整備した。 |
 | workerd 統合テストでは既存ルートが Response を直接返すため renderer 自体を実行しない | 検証範囲の制約として採用。現時点では Scala/Node の React DOM 描画と Worker ビルド・既存経路を検証。最初の `c.render()` 利用ページ追加時に workerd 上の描画検証を追加する。 |
+
+## DO 宣言の簡略化（2026-10-06）
+
+| 指摘・確認事項 | 判断・対応 |
+| --- | --- |
+| TS 側では DO を再 export するだけで、コンストラクタの型は使用しない | 利用者の指示でクラス宣言を削除し、export の存在を示す `const: unknown` に置換。実行コードの変更なし。 |
+
+- セルフレビュー: `npm run v6:typecheck`、`git diff --check` 成功。`npm test` は既存のビルド成果物で 2 件成功（実行コードの変更なし）。
+- Codex CLI → Gemini CLI レビュー: 未実施。AGENTS.md §3.2 に基づく外部送信許可待ち。
