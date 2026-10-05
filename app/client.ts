@@ -7,3 +7,19 @@ import "./style.css";
 import { v6ClientPing } from "scalajs:client.js";
 
 console.log("[v6s]", v6ClientPing());
+
+// TODO: package.jsonにdependencies:     "react": "19.2.8",     "react-dom": "19.2.8",
+// devDependencies:    "@types/react": "^19",     "@types/react-dom": "^19"を足す
+
+// import { createClient } from "honox/client";
+
+// createClient({
+//   hydrate: async (elem, root) => {
+//     const { hydrateRoot } = await import("react-dom/client");
+//     hydrateRoot(root, elem);
+//   },
+//   createElement: async (type: any, props: any) => {
+//     const { createElement } = await import("react");
+//     return createElement(type, props);
+//   },
+// });
