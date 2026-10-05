@@ -21,7 +21,7 @@ object PostingPages {
         element("title")("書きこみました。"),
         RendererShell.clientScript(),
         element("meta", js.Dictionary("httpEquiv" -> "Content-Type", "content" -> ("text/html; charset=" + charset)))(),
-        element("meta", js.Dictionary("content" -> ("5;URL=/test/read.cgi/" + str(gb.form.bbs) + "/" + str(gb.form.key) + "/l50"), "httpEquiv" -> "refresh"))()
+        element("meta", js.Dictionary("content" -> ("5;URL=/test/read.cgi/" + str(gb.form.bbs) + "/" + str(gb.form.key) + "/"), "httpEquiv" -> "refresh"))()
       ),
       element("body")(
         "書きこみが終わりました。",
