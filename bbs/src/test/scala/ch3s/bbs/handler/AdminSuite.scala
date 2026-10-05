@@ -7,7 +7,7 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
-/** 管理画面の認証と、変更系リクエストの Origin / Fetch Metadata 検証（admin.md、AGENTS.md 3.6）。 */
+/** 管理画面の認証と、Origin / Fetch Metadata によらず認証済み変更を受け付ける仕様を検証する。 */
 class AdminSuite extends FunSuite {
   import HandlerTestKit.*
 
@@ -34,7 +34,7 @@ class AdminSuite extends FunSuite {
     } yield ()
   }
 
-  test("管理変更は同一オリジンを確認し、Origin省略時はFetch Metadataで確認する") {
+  test("認証済みの管理変更はOriginとFetch Metadataによらず受け付ける") {
     val writes = mutable.ListBuffer.empty[String]
     val env = js.Dynamic.literal(
       ADMIN_PASSWORD = "test",
@@ -47,19 +47,19 @@ class AdminSuite extends FunSuite {
       admin(request("https://example.test/admin/menu", Seq("authorization" -> authorization) ++ headers, method = "POST", body = "html=menu"), env).map(status)
     for {
       noOrigin <- post()
-      _ = assertEquals(noOrigin, 403)
-      evil <- post("origin" -> "https://evil.test")
-      _ = assertEquals(evil, 403)
+      _ = assertEquals(noOrigin, 303)
+      crossOrigin <- post("origin" -> "https://other.test")
+      _ = assertEquals(crossOrigin, 303)
       nullOrigin <- post("origin" -> "null", "sec-fetch-site" -> "same-origin")
-      _ = assertEquals(nullOrigin, 403)
+      _ = assertEquals(nullOrigin, 303)
       sameSite <- post("sec-fetch-site" -> "same-site")
-      _ = assertEquals(sameSite, 403)
-      _ = assertEquals(writes.length, 0)
+      _ = assertEquals(sameSite, 303)
+      _ = assertEquals(writes.length, 4)
       fetchMetadata <- post("sec-fetch-site" -> "same-origin")
       _ = assertEquals(fetchMetadata, 303)
       origin <- post("origin" -> "https://example.test")
       _ = assertEquals(origin, 303)
-      _ = assertEquals(writes.length, 2)
+      _ = assertEquals(writes.toList, List.fill(6)("bbsmenu.html"))
     } yield ()
   }
 }

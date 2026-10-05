@@ -4,6 +4,7 @@ AI アシスタント（Claude Code / Gemini CLI / Codex CLI）および開発�
 プロジェクト概要・移植計画・作業規約。
 
 > **本ファイル `AGENTS.md` が唯一の原本。** 各エージェントは次の経路でこれを読む。
+>
 > - Codex CLI: `AGENTS.md` を直接読む。
 > - Claude Code: v2.1.277 以降は、`CLAUDE.md` がなければ `AGENTS.md` を読む（Bedrock / Vertex / Foundry 経由は未対応）。
 > - Gemini CLI: `.gemini/settings.json` の `context.fileName` で `AGENTS.md` を指定。
@@ -29,17 +30,17 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 
 ### 1.2 3ch 系プロジェクトの位置づけ（`C:/project/3ch/`）
 
-| PJ | 内容 |
-| :--- | :--- |
-| `2ch`, `readcgi`, `gns`, `bbs18c` | 参考用の歴史的実装（perl / C / PHP） |
-| `v3`, `delightly-v2`(=v4) | 旧 3ch システム（PHP）。現在ほぼ未使用 |
-| **`ch3s`（本リポジトリ）** | **v6 = 現行稼働システム**。Scala.js + HonoX on Cloudflare Workers + DO + R2 + KV（旧 v5 はタグ `v5-final`） |
-| `ch3s-migration` | **Scala.js × HonoX 移植の参照実装**（後述 step 3 の手本） |
-| `ch3/3chiko` | 旧フロントエンド配布元（`3chiko.html`, Cloudflare Pages 経由）。**2026-09-25、`ch3s` へ統合済み**（本体は `public/3chiko.html` 1本。Workers Static Assets(`env.ASSETS`)経由で配信）。以後はこちらを更新しない |
-| `3ch_ui` | 新 UI のデザイン案・HTML モック |
-| `v6`, `v6-s`, `v6-k`, `v6-s2`, `v6-bp` | v6 検討・試作（Kotlin/Spring Boot 版含む） |
-| `kako-data` | 過去ログデータ（step 6 の移行対象） |
-| `3ch_workers` | v5 から途中で分離した別系統（`mmr-3ch/3ch_workers`）。TS + Hono JSX 移行試作を含む（1.7） |
+| PJ                                     | 内容                                                                                                                                                                                                          |
+| :------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `2ch`, `readcgi`, `gns`, `bbs18c`      | 参考用の歴史的実装（perl / C / PHP）                                                                                                                                                                          |
+| `v3`, `delightly-v2`(=v4)              | 旧 3ch システム（PHP）。現在ほぼ未使用                                                                                                                                                                        |
+| **`ch3s`（本リポジトリ）**             | **v6 = 現行稼働システム**。Scala.js + HonoX on Cloudflare Workers + DO + R2 + KV（旧 v5 はタグ `v5-final`）                                                                                                   |
+| `ch3s-migration`                       | **Scala.js × HonoX 移植の参照実装**（後述 step 3 の手本）                                                                                                                                                     |
+| `ch3/3chiko`                           | 旧フロントエンド配布元（`3chiko.html`, Cloudflare Pages 経由）。**2026-09-25、`ch3s` へ統合済み**（本体は `public/3chiko.html` 1本。Workers Static Assets(`env.ASSETS`)経由で配信）。以後はこちらを更新しない |
+| `3ch_ui`                               | 新 UI のデザイン案・HTML モック                                                                                                                                                                               |
+| `v6`, `v6-s`, `v6-k`, `v6-s2`, `v6-bp` | v6 検討・試作（Kotlin/Spring Boot 版含む）                                                                                                                                                                    |
+| `kako-data`                            | 過去ログデータ（step 6 の移行対象）                                                                                                                                                                           |
+| `3ch_workers`                          | v5 から途中で分離した別系統（`mmr-3ch/3ch_workers`）。TS + Hono JSX 移行試作を含む（1.7）                                                                                                                     |
 
 ### 1.3 技術スタック（現行 v6）
 
@@ -63,30 +64,30 @@ bbs/
     durable/           Board DO, Thread DO（V6PlaceholderDurableObject は骨格確認用の残り）
     external/cloudflare/  Workers / DO / R2 / KV の facade
     hash/, util/       Web Crypto ハッシュ, Shift_JIS 変換
-  src/test/            Scala 側テスト
+  src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
   test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ
 bbs-client/            クライアント側（hydration）Scala
 codegen/               RouteTable.scala から app/routes/ を生成
 app/                   HonoX（server.ts がエントリ。routes/ は生成物）
 public/
   3chiko.html          3chiko.html本体。Vite の publicDir として dist/ へコピーされ Workers Static Assets で配信
-tests/                 admin.integration.test.js（実 workerd）。golden/ は言語中立の入出力表（Scala 側が読む）
+tests/                 実workerdを使う統合テスト（要 dist/）用ディレクトリ。admin.integration.test.js（実 workerd）。golden/ は言語中立の入出力表（Scala 側が読む）
 docs/                  仕様書・設計メモ（後述）
 wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 ```
 
 ### 1.5 必読ドキュメント
 
-| ファイル | 位置づけ |
-| :--- | :--- |
-| **`docs/現行システム仕様書.md`** | **最重要。v5 の全ロジックを抽出した仕様書（版 2.0.0）。v6 は同一仕様を実装している。** 文中の `src/*.js` はタグ `v5-final` 上のファイル。第11章に既知の不具合とv6推奨仕様の対照表あり |
-| **`docs/既知不具合台帳.md`** | **既知不具合の一覧（KB-nn）。** 新たに見つけた不具合もここに追記する。修正方針は 3.3 |
-| `docs/v6s実装メモ.md` | Scala.js 実装（`bbs/`）の設計背景。doc コメントから参照される（3.5） |
-| `docs/admin.md` | 管理画面の利用手順・規制ルール書式 |
-| `docs/admin-review.md` | 管理画面追加時のレビュー記録（セルフ / Gemini CLI） |
-| `docs/実装方針251030v1_ストレージ改修.md` | ストレージ改修の実装方針 |
-| `docs/詳細設計たたき台_ストレージ改修.md` / `docs/詳細設計仮案(AI)1_ストレージ改修.md` | 同上の設計案 |
-| `../ch3s-migration/GEMINI.md` | Scala.js × HonoX 構成の規約（step 3 で準拠する） |
+| ファイル                                                                               | 位置づけ                                                                                                                                                                              |
+| :------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`docs/現行システム仕様書.md`**                                                       | **最重要。v5 の全ロジックを抽出した仕様書（版 2.0.0）。v6 は同一仕様を実装している。** 文中の `src/*.js` はタグ `v5-final` 上のファイル。第11章に既知の不具合とv6推奨仕様の対照表あり |
+| **`docs/既知不具合台帳.md`**                                                           | **既知不具合の一覧（KB-nn）。** 新たに見つけた不具合もここに追記する。修正方針は 3.3                                                                                                  |
+| `docs/v6s実装メモ.md`                                                                  | Scala.js 実装（`bbs/`）の設計背景。doc コメントから参照される（3.5）                                                                                                                  |
+| `docs/admin.md`                                                                        | 管理画面の利用手順・規制ルール書式                                                                                                                                                    |
+| `docs/admin-review.md`                                                                 | 管理画面追加時のレビュー記録（セルフ / Gemini CLI）                                                                                                                                   |
+| `docs/実装方針251030v1_ストレージ改修.md`                                              | ストレージ改修の実装方針                                                                                                                                                              |
+| `docs/詳細設計たたき台_ストレージ改修.md` / `docs/詳細設計仮案(AI)1_ストレージ改修.md` | 同上の設計案                                                                                                                                                                          |
+| `../ch3s-migration/GEMINI.md`                                                          | Scala.js × HonoX 構成の規約（step 3 で準拠する）                                                                                                                                      |
 
 ### 1.6 開発コマンド
 
@@ -94,7 +95,7 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 npm ci                 # 依存導入
 npm run v6:build       # sbt codegen/run → vite build（client / workers）→ dist/
 npm run dev            # v6:build 後に wrangler dev --config wrangler.jsonc → http://127.0.0.1:8787
-sbt test               # 現仕様固定テスト（munit。golden 照合を含む）
+sbt test               # 単体テスト/現仕様固定テスト（munit。golden 照合を含む）
 npm test               # 実 workerd を使う統合テストのみ（要 dist/）
 npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc --minify
 ```
@@ -110,6 +111,7 @@ npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc
 
 **内容**: v5 系 JS を **TypeScript + Hono + hono/jsx** へ書き換えた試作（`src/index.tsx` 起点、MVC 風に
 `services/`・`model/`・`views/` へ分割）。
+
 - ルート: `POST /test/bbs.cgi`・`/test/subbbs.cgi`、`GET /:bbs/`、`/:bbs/:key.dat`、`/:bbs/subject.txt`・`head.txt`・`SETTING.TXT`、
   `/test/read.cgi/:bbs/:key/`、`/boards/:bbs/`、認証用 `GET /api/auth.js`・`POST /api/auth`
 - 投稿: `services/PostService.ts` に検証 → 板/スレ設定読込 → 規制（deny リスト・立て過ぎ等）→ ID/トリップ → 保存のパイプライン。
@@ -119,6 +121,7 @@ npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc
   `.html/itest3ch/` の Web 版 HTML ひな形（htmx 使用）
 
 **v5 / step 3 との違い（参考にする際の注意）**:
+
 - **ストレージスキーマが v5 と異なる**: DO は `Bbs` / `Thread` / `User`（v5 は `Board` / `Thread`）。`SETTING.TXT`・`head.txt`・
   `subject.txt` を `Bbs` DO のストレージに持ち、R2 バインディングがない。
 - Shift_JIS 変換は `encoding-japanese`、crypt(3) は `unix-crypt-td-js` を使う。v5 とのバイト単位の一致は検証されていない
@@ -136,15 +139,20 @@ npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc
 本リポジトリで進める作業の全体像。**上から順に実施する。** Step 1〜3 は完了（本番は v6 に切替済み）。
 
 ### Step 1. 作業ブランチ整備（完了）
+
 `develop` から作業用ブランチ **`develop_v6s`** を作成し、`feature/add_controll_panel`（管理画面 + 投稿モデレーション）を取り込む。以降の作業はこのブランチを起点とする。
 
 ### Step 2. キャラクタリゼーションテスト追加（仕様固定化）（完了）
+
 Scala.js 移植の前提として、**現行 v5 の振る舞いをテストで固定する**。
+
 - 目的は「正しさ」の検証ではなく **現行の実動作の写し取り**。
 - 重点範囲: dat フォーマット（`<>` 区切り・本文前後の半角スペース・第5フィールド）、ID / 識別ID / トリップ / キャップ生成、Shift_JIS 変換、投稿パイプラインの検証順序とエラー文言、Range / If-Modified-Since、規制判定、Board/Thread DO の状態遷移。
 
 ### Step 3. JS → Scala.js 移植 + HonoX 導入（完了）
+
 `ch3s-migration` を参照実装として、**バックエンドをリプレイス**する。
+
 - **仕様は step 2 で固定したものから変えない。**
 - フロントエンドは **`3chiko.html` のまま**（2026-09-25 に `ch3s` へ統合済み。本体は `public/3chiko.html`
   1本を Workers Static Assets(`env.ASSETS`)で配信する。ロジックは変更しない）。
@@ -152,7 +160,9 @@ Scala.js 移植の前提として、**現行 v5 の振る舞いをテストで�
 - 構成規約は `../ch3s-migration/GEMINI.md` に準拠（Scala 3 / Scala.js, HonoX, React 19, Vite, 単一 sbt プロジェクト, ルーティングは `RouteTable.scala` からの自動生成、Scala↔TS 境界型の制約）。
 
 #### 移植の順序
+
 純粋な部分から積み上げ、各層を step 2 のテストで検証してから次へ進む。
+
 1. `common` 相当（Shift_JIS 変換, MD5, crypt(3) DES, SHA ヘルパ）— 純粋関数のみで最も検証しやすい
 2. Durable Objects（`Board`, `Thread`）
 3. `moderation`
@@ -161,12 +171,16 @@ Scala.js 移植の前提として、**現行 v5 の振る舞いをテストで�
 6. `admin`
 
 #### 等価性の検証方式（移植時の記録）
+
 移植中は二段構えで v5 との等価性を示した。**この検証は完了し、v5 のソース（`src/`）とともに廃止した**（`v5-final` タグに残る）。
+
 - **単体レベル**: v5 で記録した入出力表を `tests/golden/*.json` に固定し、Scala 側の単体テストが同じ表を読んで照合する。**この表は現仕様の固定として残す**（再生成元の v5 は無いので手で編集しない）。
 - **HTTP レベル**: v5 と v6 を別ポートの `wrangler dev` で同時起動して突き合わせる差分テストを行った。**廃止済み。**
 
 #### 現仕様の固定（移植後）
+
 v6 の振る舞いは次で固定する。仕様変更時は、対応するアサーションを意図的に更新する。
+
 - **`sbt test`（Scala, munit）が主**: `bbs/src/test/scala/ch3s/bbs/`
   - `handler/PostingSuite`（投稿パイプライン）、`PublicRoutesSuite`（公開ルーティング）、`RangeSuite`（dat の Range / 304）、
     `ModerationSuite`、`AdminSuite`、`durable/ThreadSuite`・`BoardSuite`（DO）。
@@ -178,13 +192,16 @@ v6 の振る舞いは次で固定する。仕様変更時は、対応するア�
   `dist/index.js`（`npm run v6:build`）が無いと skip される。
 
 ### Step 4. フロントエンドを新仕様で Next.js 化
+
 - **新仕様は別途検討**（`3ch_ui/` のモックが起点）。
 - **DB 変更なし。**
 
 ### Step 5. バックエンドを新仕様へ移行
+
 - 新仕様バックエンド + **`bg`（バックグラウンドサービス）追加** + **DB 変更あり**。
 
 ### Step 6. データ移行・過去ログアップロード
+
 `kako-data` 等の既存データを新スキーマへ移行し、過去ログを投入する。
 
 ---
@@ -192,11 +209,13 @@ v6 の振る舞いは次で固定する。仕様変更時は、対応するア�
 ## 3. 作業規約（AI エージェント向け）
 
 ### 3.1 実装の委譲
+
 - **実装作業は Sonnet 5 サブエージェント、または Codex CLI に委譲する。**
   オーケストレーター（Opus）は計画・分解・レビュー統合・最終判断を担う。
 - サブエージェントへの指示は自己完結させる（ファイルパス・仕様の根拠・完了条件を明記）。
 
 ### 3.2 レビューチェーン（実装後、必ずこの順で実施）
+
 1. **セルフレビュー** — 仕様書との突き合わせ、差分の妥当性確認、テスト実行。
 2. **Codex CLI レビュー** — `codex` コマンドでレビューを依頼。
 3. **Gemini CLI レビュー** — `gemini` コマンドでレビューを依頼。
@@ -219,12 +238,14 @@ step 3 完了までは「v5 とバイト単位で同一の出力」を検証の�
 4. 仕様書の記述と実動作が食い違う場合は、**コードの実動作を正として**仕様書側を訂正する。
 
 ### 3.4 変更時の不変条件（壊してはいけないもの）
+
 - **専ブラ互換**: dat の `<>` 5 フィールド構造、本文フィールド前後の半角スペース、エラー時も HTTP 200 + `<!-- 2ch_X:error -->` マーカー、`Range` / `304` の挙動。
 - **Shift_JIS 出力**: 公開エンドポイントの文字コードを変えない。
 - **ID / トリップ / キャップの計算結果**: 同一入力に対し同一の値が出ること（ハッシュ仕様の変更は既存ユーザーの ID 変化＝互換性破壊）。
 - **ストレージスキーマ**: step 4 までは DO / R2 / KV のキーとフォーマットを変更しない。
 
 ### 3.5 コーディング規約
+
 - 既存コードのスタイルに合わせる。不要なコメント・過剰な抽象化を入れない。
 - TypeScript の `any`、Scala の未型付け構造型を避ける。コンパイル / Lint 警告は抑制せず解消する。
 - **Scala の Optional Braces（インデント構文）は原則使わない**（2026-09-08 ユーザー指示）: Scala 3 の
@@ -247,5 +268,6 @@ step 3 完了までは「v5 とバイト単位で同一の出力」を検証の�
 - テストは `npm test` で通ること。統合テストは実 Wrangler をローカルストレージで起動して検証する（本番ストレージは使わない）。
 
 ### 3.6 セキュリティ
+
 - `wrangler.jsonc` の `salt` や `ADMIN_PASSWORD` 等の秘匿値をログ・コミットメッセージ・外部 CLI への送信内容に含めない。
 - 管理画面は Basic 認証 + Origin 検証 + no-store + CSP 前提。この防御を弱めない。

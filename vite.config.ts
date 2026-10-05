@@ -7,12 +7,8 @@ import buildCloudflareWorkers, {
 import scalaJSPlugin from "@scala-js/vite-plugin-scalajs";
 import tailwindcss from "@tailwindcss/vite";
 
-// v6s ビルド骨格。参照実装 C:/project/3ch/ch3s-migration の
-// vite.config.ts をベースにする。参照実装には `sequentialBuildStart`（2つの scalaJSPlugin
-// インスタンスが同時に `sbt` を起動して `ServerAlreadyBootingException` になる問題への対策として
-// 定義された関数）が残っているが、実際にはどちらの config でも呼ばれておらず（grep で確認済み）、
-// 現在有効な対策は「client/serverを単一sbtプロジェクト(bbs)に統合し、@JSExportTopLevelの
-// moduleIDだけで振り分ける」方（build.sbt参照）。そちらだけを踏襲し、死んだコードは持ち込まない。
+// client/server は別々の sbt プロジェクトでリンクする（KB-27）。
+// npm run v6:build は両ビルドを直列に実行し、sbt の同時起動を避ける。
 
 // sbtビルドはこのVite/HonoXプロジェクトと同じルート（ch3s直下）にある。
 const scalaCwd = path.resolve(__dirname);
@@ -22,7 +18,7 @@ export default defineConfig(({ mode }) => {
     return {
       plugins: [
         tailwindcss(),
-        scalaJSPlugin({ cwd: scalaCwd, projectID: "bbs" }),
+        scalaJSPlugin({ cwd: scalaCwd, projectID: "bbsClient" }),
       ],
       build: {
         rollupOptions: {

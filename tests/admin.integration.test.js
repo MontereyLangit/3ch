@@ -18,7 +18,8 @@ test('Wrangler: 管理画面と公開投稿の統合検証', { timeout: 120000, 
   const publicText = async path => new TextDecoder('shift_jis').decode(await (await fetch(origin + path)).arrayBuffer());
   assert.equal((await fetch(origin + '/admin/')).status, 401);
   assert.equal((await get('/admin/')).status, 200);
-  assert.equal((await save('/admin/menu', { html: 'bad' }, { origin: 'https://evil.example' })).status, 403);
+  assert.equal((await save('/admin/menu', { html: 'cross-origin menu' }, { origin: 'https://other.example' })).status, 303);
+  assert.equal(await publicText('/bbsmenu.html'), 'cross-origin menu');
   assert.equal((await get('/admin/board?bbs=../private')).status, 400);
   for (const bbs of ['sandbox', 'destination']) assert.equal((await save(`/admin/board?bbs=${bbs}`, { action: 'save', head: '<b>rules</b>', settings: `BBS_TITLE=${bbs}\nBBS_NONAME_NAME=名無し` })).status, 303);
   assert.match(await publicText('/sandbox/head.txt'), /<b>rules<\/b>/);

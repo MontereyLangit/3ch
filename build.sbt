@@ -54,11 +54,7 @@ lazy val bbs = project
   .settings(commonSettings)
   .settings(
     scalaJSUseMainModuleInitializer := false,
-    // 参照実装の「単一sbtプロジェクト」パターン: bbs-client のソースをこのプロジェクトに取り込み、
-    // client.js / server.js の振り分けは @JSExportTopLevel(name, moduleID) だけで行う。
-    // こうすることで @scala-js/vite-plugin-scalajs のインスタンスが1つで済み、
-    // sbtの二重起動（ServerAlreadyBootingException）を避けられる（参照実装で実測済み）。
-    Compile / unmanagedSourceDirectories += baseDirectory.value / ".." / "bbs-client" / "src" / "main" / "scala",
+    // ブラウザへサーバ処理を混入させないため、bbsClient とは別にリンクする（KB-27）。
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
     // テストが Date / Math.random / caches 等のグローバルを一時的に差し替えるため、スイート間は直列に実行する。
     Test / parallelExecution := false,
