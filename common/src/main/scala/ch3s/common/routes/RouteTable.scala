@@ -195,17 +195,18 @@ object RouteTable {
 
   /**
    * `_middleware.ts` 1件分のファイル内容を生成する
-   * `createMiddleware`（`hono/factory`）は型推論の補助にすぎず実行時に必須ではないため入れない
-   * プレーン関数を配列に入れ default export する
+   * `createMiddleware`（`hono/factory`）は使わず、`(c: Context, next: Next)` を型注釈した
+   * プレーン関数を配列に入れ default export する（`noImplicitAny` 対策。型 import は実行時に消える）
    */
   def renderMiddlewareFile(entry: MiddlewareEntry): String = {
     val lines = ListBuffer.empty[String]
     lines ++= generatedBanner
+    lines += "import type { Context, Next } from \"hono\";"
     lines += "// @ts-expect-error scalajs:server.js は仮想モジュール（vite.config.ts参照）。"
     lines += s"""import { ${entry.exportName} } from "scalajs:server.js";"""
     lines += ""
     lines += "export default ["
-    lines += "  async (c, next) => {"
+    lines += "  async (c: Context, next: Next) => {"
     entry.excludePathPrefix.foreach { prefix =>
       lines += s"""    if (c.req.path.startsWith("$prefix")) return next();"""
     }
