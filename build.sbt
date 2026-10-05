@@ -6,8 +6,8 @@
 
 import org.scalajs.linker.interface.ModuleSplitStyle
 
-val scala3Version = "3.3.8" // Scala 3 LTS（参照実装から据え置き）
-val munitVersion  = "1.0.0" // JVM/JS両対応のテストフレームワーク
+val scala3Version = "3.3.8" // Scala 3 LTS
+val munitVersion  = "1.0.0"
 
 ThisBuild / scalaVersion := scala3Version
 ThisBuild / organization := "ch3s"
@@ -49,19 +49,20 @@ lazy val bbs = project
   .enablePlugins(ScalaJSPlugin)
   // "test->test" も繋いでおく: bbs の golden テスト（WebHashSuite 等）が、common 側で
   // 自己完結して用意した golden JSON パーサ/ローダ (ch3s.common.golden.{Json, GoldenFile})
-  // をテストだけ再利用できるようにする（実装コードには依存しない、テスト基盤の共有）。
+  // をテストだけ再利用できるようにするため
   .dependsOn(commonJS % "compile->compile;test->test")
   .settings(commonSettings)
   .settings(
     scalaJSUseMainModuleInitializer := false,
-    // ブラウザへサーバ処理を混入させないため、bbsClient とは別にリンクする（KB-27）。
+    libraryDependencies += "com.github.japgolly.scalajs-react" %%% "core" % "4.0.0",
+    // ブラウザへサーバ処理を混入させないため、bbsClient とは別にリンクする
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
-    // テストが Date / Math.random / caches 等のグローバルを一時的に差し替えるため、スイート間は直列に実行する。
+    // テストが Date / Math.random / caches 等のグローバルを一時的に差し替えるため、スイート間は直列に実行する
     Test / parallelExecution := false,
     // 参照実装からの既知の地雷: `@JSImport("cloudflare:workers", "DurableObject")` を extends した
     // クラスが常にexportされるため、Testのリンク成果物にも巻き込まれる。素の NodeJSEnv では
     // cloudflare: スキームを解決できず Test 全体が起動できないため、Node の Module customization
-    // hooks（--experimental-loader）で cloudflare:workers の解決だけをスタブへ差し替える。
+    // hooks（--experimental-loader）で cloudflare:workers の解決だけをスタブへ差し替える
     Test / jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv(
       org.scalajs.jsenv.nodejs.NodeJSEnv.Config()
         .withArgs(

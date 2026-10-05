@@ -381,7 +381,8 @@ class PublicRoutesSuite extends FunSuite {
     } yield {
       assertEquals(status(res), 200)
       assertEquals(header(res, "content-type"), Some("text/html;charset=Shift_JIS"))
-      assert(html.contains("専ブラ用"))
+      assert(html.contains("<title>board1＠3ch掲示板</title>"))
+      assert(html.contains("href=\"/admin/board?bbs=board1\""))
     }
   }
 

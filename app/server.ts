@@ -1,7 +1,5 @@
 import { createApp } from "honox/server";
-// @ts-expect-error scalajs:server.js は @scala-js/vite-plugin-scalajs が解決する仮想モジュール
-// （.d.ts無し）。bbs（Scala.js）が @JSExportTopLevel した DurableObject サブクラスをここで受け取り、
-// Workers のエントリポイントとして再exportする。
+// Scala.js が公開する DurableObject を Workers のエントリポイントとして再 export する。
 import { V6PlaceholderDurableObject, Board, Thread } from "scalajs:server.js";
 
 const app = createApp();

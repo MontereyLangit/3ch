@@ -2,8 +2,9 @@ package ch3s.bbs
 
 import ch3s.bbs.external.hono.HonoContextFacade
 import ch3s.bbs.external.web.Response
-import ch3s.bbs.handler.HealthHandler
+import ch3s.bbs.handler.{HealthHandler, RendererShell}
 import ch3s.bbs.util.SjisEncoding
+import japgolly.scalajs.react.facade.React
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSExportTopLevel
@@ -13,6 +14,11 @@ import external.web.Request
 import external.cloudflare.WorkerEnv
 
 object Main {
+
+  /** HonoX の renderer から HTML ドキュメント全体を組み立てる。 */
+  @JSExportTopLevel("renderShell", "server")
+  def renderShell(children: js.Any, title: js.UndefOr[String], clientScriptSrc: String): React.Element =
+    RendererShell.render(children, title, clientScriptSrc)
 
   @JSExportTopLevel("admin", "server")
   def admin(request: Request, env: WorkerEnv): js.Promise[Response] = handler.AdminHandler.handle(request, env)
