@@ -3,7 +3,7 @@ package ch3s.common.routes
 import scala.collection.mutable.ListBuffer
 
 /**
- * `app/routes/配下` を機械生成するためのルートテーブル．
+ * `app/routes/配下` を機械生成するためのルートテーブル
  *
  * TODO: BBS ロジック（dat / subject.txt / bbs.cgi 等）のルートは次タスク以降で追加する。
  * NOTE: 板top→認証画面→bbs.cgi→read.cgi→その他の順で追加予定
@@ -79,7 +79,7 @@ object RouteTable {
    * （`node_modules/honox/dist/server/server.js` の `middleware.default.map(...)`）
    *
    * @param dirPath           `app/routes` からの相対ディレクトリ（例: `"admin"`）
-   * @param exportName        Scala側（`bbs`, `scalajs:server.js`）がexportした関数名。
+   * @param exportName        Scala側（`bbs`, `scalajs:server.js`）がexportした関数名
    *                          シグネチャは `(c) => Promise<Response | undefined>`
    *                          （`undefined` なら通過＝`next()`、`Response` ならそれを即返す＝認可失敗）
    * @param excludePathPrefix 適用対象から除外するパスのprefix
@@ -103,7 +103,7 @@ object RouteTable {
     "// RouteTable: common/src/main/scala/ch3s/common/routes/RouteTable.scala"
   )
 
-  /** `filePath` のディレクトリ部分（末尾のファイル名を除いた部分。ルート直下なら空文字）。 */
+  /** `filePath` のディレクトリ部分（末尾のファイル名を除いた部分。ルート直下なら空文字） */
   private def directoryOf(filePath: String): String = {
     val idx = filePath.lastIndexOf('/')
     if (idx < 0) "" else filePath.substring(0, idx)
