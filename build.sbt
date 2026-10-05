@@ -5,6 +5,7 @@
 // bg（バックグラウンドサービス、http4s/tapir）は step 5 のスコープなのでこの骨格には含めない。
 
 import org.scalajs.linker.interface.ModuleSplitStyle
+import org.scalajs.jsenv.nodejs.NodeJSEnv
 
 val scala3Version = "3.3.8" // Scala 3 LTS
 val munitVersion  = "1.0.0"
@@ -63,8 +64,8 @@ lazy val bbs = project
     // クラスが常にexportされるため、Testのリンク成果物にも巻き込まれる。素の NodeJSEnv では
     // cloudflare: スキームを解決できず Test 全体が起動できないため、Node の Module customization
     // hooks（--experimental-loader）で cloudflare:workers の解決だけをスタブへ差し替える
-    Test / jsEnv := new org.scalajs.jsenv.nodejs.NodeJSEnv(
-      org.scalajs.jsenv.nodejs.NodeJSEnv.Config()
+    Test / jsEnv := new NodeJSEnv(
+      NodeJSEnv.Config()
         .withArgs(
           List(
             "--import",
