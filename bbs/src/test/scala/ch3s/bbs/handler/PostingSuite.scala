@@ -67,13 +67,31 @@ class PostingSuite extends FunSuite {
   }
 
   private def errorMessage(body: String): Option[String] = {
-    val open = "<font size=+1 color=#FF0000><b>ERROR: "
+    val open = "<b>ERROR: "
     val start = body.indexOf(open)
     if start < 0 then None
     else {
       val from = start + open.length
       val end = body.indexOf("</b></font>", from)
       if end < 0 then None else Some(body.substring(from, end))
+    }
+  }
+
+  test("React confirmation keeps the cookie marker, Shift_JIS and preescaped form fragments") {
+    val g = js.Dynamic.literal(form = js.Dynamic.literal(
+      subject = "題名 &lt;test&gt;", FROM = "名前 &amp;", mail = "a&amp;b", MESSAGE = "本文 &lt;script&gt;<br>次行"
+    ))
+    val res = RendererShell.legacyReact(PostingPages.respondConfirmationPhase(g, "Shift_JIS")).asInstanceOf[js.Dynamic]
+    sjisText(res).map { body =>
+      assertEquals(status(res), 200)
+      assertEquals(header(res, "content-type"), Some("text/html;charset=Shift_JIS"))
+      assert(body.contains("<!-- 2ch_X:cookie -->"))
+      assert(body.contains("題名 &lt;test&gt;"))
+      assert(body.contains("本文 &lt;script&gt;<br>次行"))
+      assert(!body.contains("&amp;lt;"))
+      assert(body.contains("投稿確認"))
+      assert(body.contains("各掲示板の規定が優先されることを承諾します。"))
+      assert(body.contains("<script type=\"module\" src=\"/static/client.js\"></script>"))
     }
   }
 
@@ -174,7 +192,7 @@ class PostingSuite extends FunSuite {
       assertEquals(status(p.res), 200)
       assertEquals(header(p.res, "content-type"), Some("text/html;charset=UTF-8"))
       assert(p.text.contains("<!-- 2ch_X:error -->"))
-      assert(p.text.contains("<font size=+1 color=#FF0000><b>ERROR: 本文がありません！</b></font>"))
+      assertEquals(errorMessage(p.text), Some("本文がありません！"))
     }
   }
 
@@ -188,8 +206,9 @@ class PostingSuite extends FunSuite {
       val key = threadKey(p)
       assert(key.nonEmpty && key.forall(_.isDigit), key)
       assertEquals(header(p.res, "x-resnum"), Some("1"))
-      // meta refresh のURLは bbs/key。テンプレート中は l50 の直後に2つの半角スペースが入る実装上の癖。
-      assert(p.text.contains(s"<meta content=5;URL=/test/read.cgi/sample/$key/l50  http-equiv=refresh>"))
+      // Preserve the refresh target and delay across React attribute formatting.
+      assert(p.text.contains(s"""content="5;URL=/test/read.cgi/sample/$key/l50""""))
+      assert(p.text.contains("http-equiv=\"refresh\""))
     }
   }
 

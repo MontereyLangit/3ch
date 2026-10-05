@@ -79,8 +79,8 @@ object Posting {
     val charset = if truth(g.isSJIS) then "Shift_JIS" else "UTF-8"
     val headers = g.headers.asInstanceOf[js.Dictionary[String]]
     if success then { headers("x-threadkey") = str(g.form.key); headers("x-resnum") = str(g.number) }
-    val html = if success then PostingText.respondEndHtml(g, charset) else PostingText.respondError(g, charset)
-    Responses.plain(html, "html", charset, extra = headers)
+    val html = if success then PostingPages.respondEndHtml(g, charset) else PostingPages.respondError(g, charset)
+    RendererShell.legacyReact(html, encoding = charset, extra = headers)
   }
 
   private def checkRequest(g: js.Dynamic, r: Request): Unit = {

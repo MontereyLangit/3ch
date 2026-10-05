@@ -24,11 +24,44 @@ test('Wrangler: 管理画面と公開投稿の統合検証', { timeout: 120000, 
   for (const bbs of ['sandbox', 'destination']) assert.equal((await save(`/admin/board?bbs=${bbs}`, { action: 'save', head: '<b>rules</b>', settings: `BBS_TITLE=${bbs}\nBBS_NONAME_NAME=名無し` })).status, 303);
   assert.match(await publicText('/sandbox/head.txt'), /<b>rules<\/b>/);
   assert.match(await publicText('/sandbox/SETTING.TXT'), /BBS_TITLE=sandbox/);
-  assert.equal((await save('/admin/menu', { html: '<html><body>custom menu</body></html>' })).status, 303);
-  assert.match(await publicText('/bbsmenu.html'), /custom menu/);
+  const legacyMenu = '<HTML><BODY><!-- menu -->板一覧 &amp; custom menu</BODY></HTML>';
+  assert.equal((await save('/admin/menu', { html: legacyMenu })).status, 303);
+  const menuResponse = await fetch(origin + '/bbsmenu.html');
+  assert.equal(menuResponse.headers.get('content-type'), 'text/html;charset=Shift_JIS');
+  assert.equal(new TextDecoder('shift_jis').decode(await menuResponse.arrayBuffer()), legacyMenu);
+  const boardResponse = await fetch(origin + '/sandbox/');
+  assert.equal(boardResponse.headers.get('content-type'), 'text/html;charset=Shift_JIS');
+  const boardHtml = new TextDecoder('shift_jis').decode(await boardResponse.arrayBuffer());
+  assert.match(boardHtml, /^<!DOCTYPE html>/);
+  assert.match(boardHtml, /<title>sandbox<\/title>/);
+  assert.match(boardHtml, /<script type="module" src="\/static\/client\.js"><\/script>/);
+  const clientScriptResponse = await fetch(origin + '/static/client.js');
+  assert.equal(clientScriptResponse.status, 200);
+  assert.match(clientScriptResponse.headers.get('content-type'), /javascript/);
   assert.equal((await save('/admin/access', { rules: '[<><><>deny' })).status, 400);
   assert.equal((await save('/admin/access', { rules: '^sandbox$<><><>deny' })).status, 303);
-  assert.match(await post('sandbox', '', 'hello', 'blocked'), /アクセス規制/);
+  const rejectedPost = await postResponse('sandbox', '', 'hello', 'blocked');
+  assert.equal(rejectedPost.status, 200);
+  assert.equal(rejectedPost.headers.get('content-type'), 'text/html;charset=UTF-8');
+  const rejectedHtml = await rejectedPost.text();
+  assert.match(rejectedHtml, /アクセス規制/);
+  assert.match(rejectedHtml, /<!-- 2ch_X:error -->/);
+  assert.match(rejectedHtml, /<script type="module" src="\/static\/client\.js"><\/script>/);
+  const monazillaResponse = await fetch(origin + '/test/bbs.cgi', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'user-agent': 'Monazilla/1.00 (IntegrationBrowser)',
+      referer: 'http://127.0.0.1:8787/',
+      'CF-Connecting-IP': '192.0.2.2',
+    },
+    body: 'bbs=sandbox&key=&MESSAGE=hello&FROM=&mail=&subject=blocked&time=1&submit=%8F%91%82%AB%8D%9E%82%DE',
+  });
+  assert.equal(monazillaResponse.status, 200);
+  assert.equal(monazillaResponse.headers.get('content-type'), 'text/html;charset=Shift_JIS');
+  const monazillaHtml = new TextDecoder('shift_jis').decode(await monazillaResponse.arrayBuffer());
+  assert.match(monazillaHtml, /<!-- 2ch_X:error -->/);
+  assert.match(monazillaHtml, /アクセス規制/);
   assert.equal(await publicText('/sandbox/subject.txt'), '');
   await save('/admin/access', { rules: '' });
   await save('/admin/ngwords', { rules: '<><>forbidden<>deny' });

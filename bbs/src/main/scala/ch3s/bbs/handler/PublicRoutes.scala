@@ -69,7 +69,7 @@ object PublicRoutes {
     else if path == "/auth.js" then Future.successful(Responses.response("/* test */", headers = js.Dictionary("content-type" -> "application/javascript;charset=UTF-8")))
     else if path == "/bbsmenu.html" then
       read(e, "bbsmenu.html").flatMap {
-        case Some(custom) => Future.successful(Responses.plain(custom, "html", "Shift_JIS", extra = js.Dictionary("cache-control" -> "no-store")))
+        case Some(custom) => Future.successful(RendererShell.legacyHtml(custom, extra = js.Dictionary("cache-control" -> "no-store")))
         case None => cached { guard("/bbsmenu.html") {
           // v5 captures `lastModified = new Date()` before the R2 fetch below (main.js); mirror that timing.
           val fallback = new js.Date()
@@ -78,9 +78,9 @@ object PublicRoutes {
             case Some(text) =>
               val rows = text.split("\n", -1)
               val modified = if rows.length > 1 then date(rows(0), true) else fallback
-              val links = if rows.length <= 1 then "" else rows.drop(1).map(row => trim(row).split("<>", -1)).filter(validHead).map(f => s"<A HREF=https://www.3chbbs.com/${f(0)}/>${f(1)}</A><br>\n").mkString
-              val html = PublicText.menuHead + links + PublicText.menuFoot(modified.asInstanceOf[js.Dynamic].toLocaleString("ja-JP").asInstanceOf[String])
-              Responses.plain(html, "html", "Shift_JIS", modified = modified, since = h("if-modified-since"), extra = js.Dictionary("max-age" -> "60", "s-maxage" -> "60"))
+              val boards = rows.drop(1).map(row => trim(row).split("<>", -1)).filter(validHead).map(f => f(0) -> f(1)).toSeq
+              val page = BbsMenuPage.render(boards, modified.asInstanceOf[js.Dynamic].toLocaleString("ja-JP").asInstanceOf[String])
+              RendererShell.legacyReact(page, modified = modified, since = h("if-modified-since"), extra = js.Dictionary("max-age" -> "60", "s-maxage" -> "60"))
           }
         }}
       } else if path == "/headline/subject.txt" then guard("headline.txt") {
@@ -153,7 +153,7 @@ object PublicRoutes {
                     val settings = if kind == "head" then text else text.replace("<DIR_NAME>", bbs)
                     if kind != "board" then Responses.plain(settings, "plain", "Shift_JIS") else {
                       val title = trim(settings).split("\n", -1).map(_.split("=", -1)).find(_(0) == "BBS_TITLE").map(f => trim(f.lift(1).getOrElse(""))).getOrElse(bbs + "＠3ch掲示板")
-                      Responses.plain(PublicText.board(title, bbs), "html", "Shift_JIS")
+                      RendererShell.legacyReact(BoardPage.render(title, bbs), doctype = true)
                     }
                   }
                 }
