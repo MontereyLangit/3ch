@@ -298,3 +298,10 @@ Scala.js 公式
 
 本PJでは adminClient を独立させ、common に API 型を置き、bbs に管理処理を残す構成を勧めます。Scala に実装言語を揃えられる一方、React 向けの外部 UI ライブ
 ラリを使う場合は Scala.js facade の用意が必要になる点と、画面変更にも Scala.js のコンパイルが入る点は、TypeScript 案との実務上の違いです。
+
+
+参考
+
+- scalajs-react付属のRouter: https://github.com/japgolly/scalajs-react/blob/main/doc/ROUTER.md
+- VDOM: https://github.com/japgolly/scalajs-react/blob/main/doc/VDOM.md
+- その他: https://github.com/japgolly/scalajs-react/tree/main/doc
