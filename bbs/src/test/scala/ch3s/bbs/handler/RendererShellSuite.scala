@@ -55,7 +55,7 @@ class RendererShellSuite extends munit.FunSuite {
   }
 
   test("legacyHtml retains UTF-8 posting responses without adding the modern shell") {
-    val html = "<html><head><meta content=5;URL=/test/read.cgi/sample/1700000000/l50  http-equiv=refresh></head><body><!-- 2ch_X:true -->書きこみました。</body></html>"
+    val html = "<html><head><meta content=5;URL=/test/read.cgi/sample/1700000000/  http-equiv=refresh></head><body><!-- 2ch_X:true -->書きこみました。</body></html>"
     val res = RendererShell.legacyHtml(html, encoding = "UTF-8", extra = js.Dictionary("X-Threadkey" -> "1700000000")).asInstanceOf[js.Dynamic]
     bytes(res).map { body =>
       assertEquals(status(res), 200)

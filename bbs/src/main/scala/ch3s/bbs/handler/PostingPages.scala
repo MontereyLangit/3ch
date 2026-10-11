@@ -139,7 +139,7 @@ object PostingPages {
         element("br")(),
         element("hr")(),
         "\nこちらでリロードしてください。",
-        element("a", js.Dictionary("href" -> ("/test/read.cgi/" + str(gb.form.bbs) + "/" + str(gb.form.key) + "/l50")))(" GO! "),
+        element("a", js.Dictionary("href" -> ("/test/read.cgi/" + str(gb.form.bbs) + "/" + str(gb.form.key) + "/")))(" GO! "),
         element("br")(),
         "\n自分で解決してみよう! ",
         element("a", js.Dictionary("href" -> "https://wiki.3chbbs.com/index.php/%E6%9B%B8%E3%81%8D%E8%BE%BC%E3%82%81%E3%81%AA%E3%81%84%E6%99%82%E3%81%AE%E6%97%A9%E8%A6%8B%E8%A1%A8"))("書き込めない時の早見表"),

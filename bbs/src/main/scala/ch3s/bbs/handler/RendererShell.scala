@@ -2,6 +2,7 @@ package ch3s.bbs.handler
 
 import japgolly.scalajs.react.facade.React
 import ch3s.bbs.external.web.Response
+import ch3s.bbs.util.SjisEncoding
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
@@ -14,6 +15,19 @@ private object renderToStaticMarkup extends js.Function1[React.Element, String] 
 
 /** 通常画面の React シェルと、専ブラ互換の既存 HTML 応答を画面側で選択する。 */
 object RendererShell {
+  /** 完成済み文字列または React 要素を Shift_JIS 応答にする。レイアウトは付けない。 */
+  def createSjisResponse(content: String, contentType: String): Response = {
+    val bytes = SjisEncoding.encode(content)
+    Responses.response(bytes, headers = js.Dictionary(
+      "Content-Type" -> s"$contentType;charset=Shift_JIS",
+      "Content-Length" -> bytes.length.toString
+    ))
+  }
+
+  def createSjisResponse(content: React.Element, contentType: String): Response = {
+    createSjisResponse("<!DOCTYPE html>" + renderToStaticMarkup(content), contentType)
+  }
+
   // wrangler dev も Vite のビルド済み Static Assets を使う。
   val ClientScriptSrc = "/static/client.js"
 

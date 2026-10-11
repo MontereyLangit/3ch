@@ -1,5 +1,5 @@
 import path from "node:path";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import honox from "honox/vite";
 import buildCloudflareWorkers, {
   defaultOptions as cloudflareWorkersDefaultOptions,
@@ -13,13 +13,23 @@ import tailwindcss from "@tailwindcss/vite";
 // sbtビルドはこのVite/HonoXプロジェクトと同じルート（ch3s直下）にある。
 const scalaCwd = path.resolve(__dirname);
 
+function scalaProject(projectID: string, uriPrefix?: string): Plugin {
+  const plugin = scalaJSPlugin({ cwd: scalaCwd, projectID, uriPrefix });
+  const buildStart = plugin.buildStart;
+  if (buildStart) {
+    plugin.buildStart = {
+      sequential: true,
+      handler:
+        typeof buildStart === "function" ? buildStart : buildStart.handler,
+    };
+  }
+  return plugin;
+}
+
 export default defineConfig(({ mode }) => {
   if (mode === "client") {
     return {
-      plugins: [
-        tailwindcss(),
-        scalaJSPlugin({ cwd: scalaCwd, projectID: "bbsClient" }),
-      ],
+      plugins: [tailwindcss(), scalaProject("bbsClient")],
       build: {
         rollupOptions: {
           input: ["./app/client.ts"],
@@ -56,13 +66,17 @@ export default defineConfig(({ mode }) => {
   ];
 
   return {
+    resolve: {
+      alias: { "scalajs:client.js": "scalajs-client:client.js" },
+    },
     plugins: [
       honox(),
       buildCloudflareWorkers({
         external: ["cloudflare:workers"],
         entryContentAfterHooks,
       }),
-      scalaJSPlugin({ cwd: scalaCwd, projectID: "bbs" }),
+      scalaProject("bbs"),
+      scalaProject("bbsClient", "scalajs-client"),
     ],
   };
 });

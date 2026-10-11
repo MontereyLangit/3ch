@@ -32,7 +32,13 @@ object GenerateAppFiles {
       path
     }
 
-    println(s"[codegen] RouteTableから ${routeFiles.size} 件のルートファイルを生成した")
+    val islandFiles = RouteTable.islands.map { entry =>
+      val path = resolveUnderApp(appRoot, "islands", entry.filePath)
+      writeFile(path, RouteTable.renderIslandFile(entry))
+      path
+    }
+
+    println(s"[codegen] RouteTableから ${routeFiles.size} 件のルートファイル、${islandFiles.size} 件のislandファイルを生成した")
   }
 
   /** `"_v6/health.ts"` のような `/` 区切りの相対パスを `appRoot/subDir/...` へ安全に解決する。 */
