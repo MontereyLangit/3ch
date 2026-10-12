@@ -31,7 +31,9 @@ export default Probe;
     await writeFile(path.join(fixture, 'entry.ts'), `import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import Probe from './app/islands/probe';
+import { Probe as RawProbe } from 'scalajs:client.js';
 export const html = renderToString(createElement(Probe, { label: 'from Scala' }));
+export const rawHtml = renderToString(createElement(RawProbe, { label: 'from Scala' }));
 `);
     await build({
       configFile: false,
@@ -47,11 +49,14 @@ export const html = renderToString(createElement(Probe, { label: 'from Scala' })
         rollupOptions: { output: { entryFileNames: 'entry.mjs' } },
       },
     });
-    const { html } = await import(pathToFileURL(path.join(fixture, 'out/entry.mjs')).href);
+    const { html, rawHtml } = await import(pathToFileURL(path.join(fixture, 'out/entry.mjs')).href);
     assert.match(html, /<honox-island/);
     assert.match(html, /component-name="\/app\/islands\/probe.tsx"/);
     assert.match(html, /data-serialized-props="\{&quot;label&quot;:&quot;from Scala&quot;\}"/);
     assert.match(html, /<button>from Scala<\/button>/);
+    // rawElement has the same React element shape, but bypasses HonoX's island transform.
+    assert.equal(rawHtml, '<button>from Scala</button>');
+    assert.doesNotMatch(rawHtml, /honox-island|component-name|data-serialized-props/);
   } finally {
     await rm(fixture, { recursive: true, force: true });
   }

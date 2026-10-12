@@ -14,11 +14,11 @@ project/project/
 dist/
 *.log
 
-# codegen（sbt codegen/run）が common/.../routes/RouteTable.scala から機械生成するファイル。
+# codegen（sbt codegen/run）が Main のアノテーションから機械生成するファイル。
 # 手書きしない。`npm run v6:generate` / `npm run v6:build` のたびに上書きされる。
 # server.ts / client.ts はcodegen対象外（画面が増えても変わらない一度きりの配管のため）。
 /app/routes/_v6/
-/app/routes/index.ts
+# app/routes/index.ts は既存 fetch の手書き配線として管理する。
 
 .vscode/
 .bloop

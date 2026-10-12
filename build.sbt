@@ -21,7 +21,7 @@ lazy val commonSettings = Seq(
 )
 
 // --- common: cross project (JVM + Scala.js) ---
-// 純粋関数のみ（I/O禁止）。RouteTable（ルーティング表の唯一の真実）をここに置く。
+// 純粋関数のみ（I/O禁止）。公開パスの互換パターンと配線生成用アノテーションをここに置く。
 lazy val common = crossProject(JSPlatform, JVMPlatform)
   .crossType(CrossType.Pure)
   .in(file("common"))
@@ -86,7 +86,7 @@ lazy val bbsClient = project
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) }
   )
 
-// --- codegen: JVM — RouteTable からルート、DO の Scala 宣言から TS 型を生成 ---
+// --- codegen: JVM — Main のアノテーションから配線、DO の Scala 宣言から TS 型を生成 ---
 lazy val codegen = project
   .in(file("codegen"))
   .dependsOn(commonJVM)

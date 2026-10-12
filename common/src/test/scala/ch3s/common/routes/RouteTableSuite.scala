@@ -4,12 +4,10 @@ import munit.FunSuite
 
 class RouteTableSuite extends FunSuite {
 
-  test("routes include the health route and the all-method legacy dispatcher") {
-    assertEquals(RouteTable.routes.map(_.filePath), List("_v6/health.ts", "index.ts"))
-  }
+  private val health = RouteTable.RouteEntry("_v6/health.ts", RouteTable.RouteKind.PassThrough("healthHandler"), Nil)
 
   test("renderRouteFile は PassThrough(GET) を export default createRoute(...) として生成する") {
-    val entry = RouteTable.routes.head
+    val entry = health
     val rendered = RouteTable.renderRouteFile(entry)
     assert(rendered.contains("""import { healthHandler } from "scalajs:server.js";"""))
     assert(rendered.contains("export default createRoute((c) => healthHandler(c));"))
@@ -72,17 +70,9 @@ class RouteTableSuite extends FunSuite {
     assertEquals(bodyAfterBanner(RouteTable.renderRouteFile(entry)), expected)
   }
 
-  test("renderRouteFile は LegacyDispatch で health 以外を publicHandler へ流す app を default export する") {
-    val rendered = RouteTable.renderRouteFile(RouteTable.RouteEntry("index.ts", RouteTable.RouteKind.LegacyDispatch, Nil))
-    assert(rendered.contains("""import { publicHandler, healthHandler } from "scalajs:server.js";"""))
-    assert(rendered.contains("app.all('*', (c) => c.req.path === '/_v6/health' ? healthHandler(c) : publicHandler(c));"))
-    assert(rendered.contains("export default app;"))
-  }
-
   test("生成ファイルはすべて自動生成バナーで始まり、改行で終わる") {
     val outputs = List(
-      RouteTable.renderRouteFile(RouteTable.routes.head),
-      RouteTable.renderRouteFile(RouteTable.routes.last),
+      RouteTable.renderRouteFile(health),
       RouteTable.renderIslandFile(RouteTable.IslandEntry("x.tsx", "X", "client.js"))
     )
     outputs.foreach { out =>

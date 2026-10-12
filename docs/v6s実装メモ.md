@@ -11,6 +11,27 @@ HonoX のルート（`app/routes` 配下、codegen 生成の TypeScript）から
 import されるエントリポイント関数群。TS 側はここで export した関数を1行呼ぶだけの薄い配線にする
 （参照実装 ch3s-migration の `ch3s.bbs.Main` と同じ方針）。
 
+生成対象は `bbs.Main` の `@route` と `bbsclient.Main` の `@islands` で指定し、
+同じ宣言の `@JSExportTopLevel` から export 名を取得する。既存 fetch の振り分けは
+`app/routes/index.ts` に手書きで保持する。SSR の `rawElement` と Islands の違いは
+[ルート・Islands アノテーション化レビュー](route-annotations-review.md)を参照。
+
+```scala
+// bbs.Main（ch3s.common.routes.route を import）
+@route("_v6/health.ts")
+@JSExportTopLevel("healthHandler", "server")
+def healthHandler(c: js.Any): js.Promise[Response] = { /* handler 呼び出し */ }
+
+// bbsclient.Main（ch3s.common.routes.islands を import）
+@islands("thread-view.tsx")
+@JSExportTopLevel("ThreadView", "client")
+val threadView = /* JS props を受ける React コンポーネント */
+```
+
+`@route` の第2引数は HTTP メソッド（省略時 `"GET"`）。同じファイルの GET / POST は
+別の export 宣言に付けてまとめて生成できる。引数は文字列リテラルとし、export 名を
+アノテーション側に重複して書かない。新しい Islands がない場合は `@islands` 宣言も不要。
+
 `extends DurableObject` した DO クラスはクラス自体が JS 向けクラスになるため、公開メソッドが
 `@JSExport` なしで素の名前のまま export される。`Main` のような独立関数にはこの仕組みが働かないため
 `@JSExportTopLevel` が必要。
