@@ -70,7 +70,7 @@ export default defineConfig(({ mode }) => {
       alias: { "scalajs:client.js": "scalajs-client:client.js" },
     },
     plugins: [
-      honox(),
+      honox({ islandComponents: { reactApiImportSource: "react" } }),
       buildCloudflareWorkers({
         external: ["cloudflare:workers"],
         entryContentAfterHooks,

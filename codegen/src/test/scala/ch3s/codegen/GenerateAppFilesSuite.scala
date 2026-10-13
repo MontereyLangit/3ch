@@ -47,4 +47,19 @@ class GenerateAppFilesSuite extends FunSuite {
       assert(Files.exists(stale))
     }
   }
+
+  test("Scala island bindings preserve handwritten files and replace former generated entries") {
+    withApp { root =>
+      val scalaFile = root.resolve("IslandComponents.scala")
+      val content = GenerateIslandComponents.render(Nil)
+      Files.writeString(scalaFile, "object Handwritten {}\n")
+      intercept[IllegalArgumentException](GenerateAppFiles.writeOutputs(root, List(scalaFile -> content)))
+      assertEquals(Files.readString(scalaFile), "object Handwritten {}\n")
+      Files.writeString(scalaFile, GenerateIslandComponents.render(List(
+        RouteTable.IslandEntry("old.tsx", "OldWidget", "client.js")
+      )))
+      GenerateAppFiles.writeOutputs(root, List(scalaFile -> content))
+      assertEquals(Files.readString(scalaFile), content)
+    }
+  }
 }

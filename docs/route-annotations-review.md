@@ -33,7 +33,9 @@ SSR 側から TSX の import をなくすこと自体は、`honox/vite/component
 Scala facade 経由で使用し、コンポーネント・props・生成ファイル名を渡す橋渡しを用意すれば可能。
 その場合もクライアント側の生成 TSX と識別子を一致させる必要があり、ネストした Islands や
 React 要素を含む props の取り扱いを保つ必要がある。単なる `rawElement` への置換としては採用しない。
-現時点では実利用する Islands がないため、今回の変更は生成方式の変更と比較検証までとする。
+2026-10-12 時点では実利用する Islands がないため、生成方式の変更と比較検証までとした。
+2026-10-13、利用者の指示により facade 方式を実装した。利用方法は [Scala からの Islands SSR](islands-ssr.md)、
+検証・判断は [SSR レビュー](islands-ssr-review.md)を参照。
 
 ## 検証
 

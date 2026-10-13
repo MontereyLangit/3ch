@@ -67,7 +67,7 @@ bbs/
   src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
   test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ
 bbs-client/            クライアント側（hydration）Scala
-codegen/               Main の @route / @islands から app/routes/・app/islands/ を生成
+codegen/               Main の @route / @islands から app/routes/・app/islands/・bbs の IslandComponents を生成
 app/                   HonoX（server.ts がエントリ。routes/index.ts と _renderer.tsx は手書き）
 public/
   3chiko.html          3chiko.html本体。Vite の publicDir として dist/ へコピーされ Workers Static Assets で配信
@@ -96,7 +96,7 @@ npm ci                 # 依存導入
 npm run v6:build       # sbt codegen/run → vite build（client / workers）→ dist/
 npm run dev            # v6:build 後に wrangler dev --config wrangler.jsonc → http://127.0.0.1:8787
 sbt test               # 単体テスト/現仕様固定テスト（munit。golden 照合を含む）
-npm test               # 実 workerd を使う統合テストのみ（要 dist/）
+npm test               # Scala テスト用リンク → workerd 統合・Islands SSR/hydration 検証（要 dist/）
 npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc --minify
 ```
 
@@ -188,8 +188,8 @@ v6 の振る舞いは次で固定する。仕様変更時は、対応するア�
     Date / Math.random / `caches` を差し替えるため、`bbs` は `Test / parallelExecution := false`。
   - 期待値は v5 から引き継いだもの。KB-nn コメント付きのアサーションは既知不具合の現挙動の固定。
   - `common/src/test` と `WebHashSuite` / `SjisEncodingSuite` は `tests/golden/*.json` と照合する。
-- **`npm test`（node:test）**: 実 workerd（`unstable_dev`）が要る `tests/admin.integration.test.js` のみ。
-  `dist/index.js`（`npm run v6:build`）が無いと skip される。
+- **`npm test`（node:test）**: 実 workerd（`unstable_dev`）の管理・投稿統合検証、クライアントバンドル分離、Islands の SSR / hydration 検証。
+  前処理で `bbs/Test/fastLinkJS` を実行する。workerd の検証は `dist/index.js`（`npm run v6:build`）が無いと skip される。
 
 ### Step 4. フロントエンドを新仕様で Next.js 化
 

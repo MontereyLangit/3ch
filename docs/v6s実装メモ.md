@@ -16,6 +16,10 @@ import されるエントリポイント関数群。TS 側はここで export �
 `app/routes/index.ts` に手書きで保持する。SSR の `rawElement` と Islands の違いは
 [ルート・Islands アノテーション化レビュー](route-annotations-review.md)を参照。
 
+`@islands` から SSR 用の `ch3s.bbs.generated.IslandComponents` も生成する。
+`IslandComponents.<export名>(props).rawElement` で HonoX の hydration 境界を付けた React 要素を取得できる。
+生成 TSX を SSR 側から import する必要はない。利用方法と制約は [Scala からの Islands SSR](islands-ssr.md)を参照。
+
 ```scala
 // bbs.Main（ch3s.common.routes.route を import）
 @route("_v6/health.ts")
