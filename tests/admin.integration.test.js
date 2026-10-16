@@ -71,6 +71,26 @@ test('Wrangler: 管理画面と公開投稿の統合検証', { timeout: 120000, 
   const subject = await publicText('/sandbox/subject.txt');
   const key = subject.match(/^(\d{10})\.dat/)[1];
   const path = `/admin/thread?bbs=sandbox&key=${key}`;
+  const creationSettings = {
+    action: 'saveCreationLimit', BBS_THREAD_TATESUGI: '3', BBS_THREAD_TATESUGI_RESET: '180000',
+    BBS_THREAD_JUNBAN: '1', BBS_THREAD_JUNBAN_RESET: '180000', BBS_THREAD_JUNBAN_AS_ONLY: 'AS2516, 4713',
+  };
+  assert.match(await (await get('/admin/board?bbs=sandbox')).text(), /saveCreationLimit/);
+  assert.equal((await save('/admin/board?bbs=sandbox', creationSettings)).status, 303);
+  assert.equal((await save('/admin/board?bbs=sandbox', { ...creationSettings, BBS_THREAD_JUNBAN_AS_ONLY: 'invalid' })).status, 400);
+  const savedCreationSettings = await publicText('/sandbox/SETTING.TXT');
+  assert.equal((await save('/admin/board?bbs=sandbox', { ...creationSettings, BBS_THREAD_JUNBAN_AS_ONLY: '2516\nBBS_TITLE=injected' })).status, 400);
+  assert.equal(await publicText('/sandbox/SETTING.TXT'), savedCreationSettings);
+  assert.match(await publicText('/sandbox/SETTING.TXT'), /BBS_TITLE=sandbox/);
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  const rateLimited = await postResponse('sandbox', '', 'another message', 'another title');
+  assert.equal(rateLimited.status, 200);
+  assert.equal(rateLimited.headers.get('x-threadkey'), null);
+  const rateLimitedHtml = await rateLimited.text();
+  assert.match(rateLimitedHtml, /スレッドを立てすぎ/);
+  assert.match(rateLimitedHtml, /<!-- 2ch_X:error -->/);
+  assert.doesNotMatch(rateLimitedHtml, /運用情報板|ログファイルに書けませんでした/);
+  assert.equal(await publicText('/sandbox/subject.txt'), subject);
   assert.match(await post('sandbox', key, 'second message'), /書きこみました/);
   assert.equal((await save(path, { action: 'stop' })).status, 303);
   assert.match(await post('sandbox', key), /停止/);

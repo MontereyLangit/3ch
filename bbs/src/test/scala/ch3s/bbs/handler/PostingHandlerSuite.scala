@@ -13,7 +13,7 @@ import scala.scalajs.js
  * 「現在の実際の動作」を凍結するものであり、正しさを検証するものではない。既知の不具合
  * （docs/現行システム仕様書.md 11章、docs/既知不具合台帳.md）もそのまま凍結し、修正しない。
  */
-class PostingSuite extends FunSuite {
+class PostingHandlerSuite extends FunSuite {
   import HandlerTestKit.*
 
   private final case class Posted(res: js.Dynamic, text: String)
@@ -52,7 +52,7 @@ class PostingSuite extends FunSuite {
     "FROM" -> "", "mail" -> "", "MESSAGE" -> "テスト本文", "subject" -> "テストスレ", "bbs" -> "sample", "key" -> "", "time" -> "9999999999"
   )
 
-  private def entry(env: Env, req: Request): Future[js.Dynamic] = fut[js.Dynamic](Posting.entry(req, env.worker))
+  private def entry(env: Env, req: Request): Future[js.Dynamic] = fut[js.Dynamic](PostingHandler.entry(req, env.worker))
 
   /** フィールドを与えて POST リクエストを投稿エントリへ渡す。submit は既定でWebブラウザ相当(UTF-8)。 */
   private def post(env: Env, fields: Seq[(String, String)] = Nil, headers: Seq[(String, String)] = Nil, cf: Seq[(String, String)] = Nil,
@@ -99,6 +99,226 @@ class PostingSuite extends FunSuite {
   private def dat(env: Env, bbs: String, key: String): Future[String] = env.thread(s"$bbs/$key").getDat().toFuture
   private def fieldsOf(dat: String): Array[String] = dat.split("\n", -1)(0).split("<>", -1)
   private def idOf(field: String): String = field.substring(field.indexOf("ID:"))
+
+  test("スレ立て: BoardIdの制約外の板名は新規作成を拒否し、datを作らない") {
+    val env = DurableTestKit.newEnv()
+    for {
+      posted <- withFixedTime(1700000000000d)(post(env, Seq("bbs" -> "foo_bar")))
+      created <- dat(env, "foo_bar", "1700000000")
+    } yield {
+      assertEquals(status(posted.res), 200)
+      assert(posted.text.contains("<!-- 2ch_X:error -->"))
+      assertEquals(errorMessage(posted.text), Some("板の指定が不正です。<br>\nThe board directory is incorrect..."))
+      assertEquals(created, "")
+    }
+  }
+
+  test("スレ立て設定: 旧形式・明示RESET・既定値・不正値を検証する") {
+    val parsed = ThreadCreationSettings.parse(Map("BBS_THREAD_TATESUGI" -> "3/86400", "BBS_THREAD_TATESUGI_RESET" -> "60", "BBS_THREAD_JUNBAN_AS_ONLY" -> "AS2516, 0123")).toOption.get
+    assertEquals(parsed.limits.threadTatesugi, 3)
+    assertEquals(parsed.limits.threadTatesugiResetSeconds, 60d)
+    assertEquals(parsed.asOnly, Set("2516", "123"))
+    assertEquals(ThreadCreationSettings.parse(Map.empty).toOption.get.limits.threadJunban, 1)
+    assertEquals(ThreadCreationSettings.parse(Map.empty).toOption.get.limits.threadTatesugi, 1)
+    assertEquals(ThreadCreationSettings.parse(Map.empty).toOption.get.limits.threadTatesugiResetSeconds, 3600d)
+    assertEquals(ThreadCreationSettings.parse(Map.empty).toOption.get.limits.threadJunbanResetSeconds, 3600d)
+    assertEquals(ThreadCreationSettings.parse(Map("BBS_THREAD_TATESUGI" -> "3/86400")).toOption.get.limits.threadTatesugiResetSeconds, 86400d)
+    List("-1", "1001", "3/no", "1/2/3", "NaN").foreach { value =>
+      assert(ThreadCreationSettings.parse(Map("BBS_THREAD_TATESUGI" -> value)).isLeft)
+    }
+    assert(ThreadCreationSettings.parseAsOnly("2516,garbage").isLeft)
+  }
+
+  private def atSecond(second: Double)(f: => Future[Posted]): Future[Posted] = withFixedTime(second * 1000)(f)
+
+  for ((label, secondHeaders, secondCf, sameTitle) <- Seq(
+    ("IP", Seq("user-agent" -> "Mozilla/5.0 Other"), Seq("region" -> "Osaka"), false),
+    ("タイトル", Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"), Seq("region" -> "Osaka"), true),
+    ("UA（Client Hints変更でも回避不可）", Seq("CF-Connecting-IP" -> "192.0.2.2", "sec-ch-ua" -> "changed"), Seq("region" -> "Osaka"), false),
+    ("AS＋県", Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"), Nil, false)
+  )) {
+    test(s"スレ立て規制: 同一$label を拒否し返信は許可する") {
+      val env = DurableTestKit.newEnv()
+      for {
+        first <- atSecond(1700000000d)(post(env, Seq("subject" -> "original")))
+        rejected <- atSecond(1700000001d)(post(env, Seq("subject" -> (if (sameTitle) "original" else "different")), secondHeaders, secondCf))
+        reply <- atSecond(1700000002d)(post(env, Seq("key" -> threadKey(first), "subject" -> "")))
+        rejectedDat <- dat(env, "sample", "1700000001")
+      } yield {
+        assertEquals(header(first.res, "x-resnum"), Some("1"))
+        assertEquals(status(rejected.res), 200)
+        assert(rejected.text.contains("<!-- 2ch_X:error -->"))
+        assert(!rejected.text.contains("運用情報板"))
+        assertEquals(header(rejected.res, "x-resnum"), None)
+        assertEquals(rejectedDat, "")
+        assertEquals(header(reply.res, "x-resnum"), Some("2"))
+      }
+    }
+  }
+
+  test("スレ立て規制: キャップ(★)は判定されない") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    for {
+      first <- atSecond(1700000000d)(post(env, Seq("subject" -> "original")))
+      capped <- atSecond(1700000001d)(post(env, Seq("subject" -> "original", "mail" -> "#!weakpass")))
+    } yield {
+      assertEquals(header(first.res, "x-resnum"), Some("1"))
+      assertEquals(header(capped.res, "x-resnum"), Some("1"))
+    }
+  }
+
+  test("スレ立て規制: キャップ(★)のスレ立ては履歴に残らず、後続の通常スレ立てを妨げない") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    for {
+      capped <- atSecond(1700000000d)(post(env, Seq("subject" -> "original", "mail" -> "#!weakpass")))
+      normal <- atSecond(1700000001d)(post(env, Seq("subject" -> "original")))
+    } yield {
+      assertEquals(header(capped.res, "x-resnum"), Some("1"))
+      assertEquals(header(normal.res, "x-resnum"), Some("1"))
+    }
+  }
+
+  test("スレ立て規制: 設定不正でも通常キャップ・強キャップは作成できる") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    env.putCap("strongpass", "つよいキャップ★")
+    env.putR2("sample/SETTING.TXT", "BBS_THREAD_TATESUGI=invalid\n")
+    for {
+      weak <- atSecond(1700000000d)(post(env, Seq("mail" -> "#!weakpass")))
+      strong <- atSecond(1700000001d)(post(env, Seq("mail" -> "#!strongpass")))
+      normal <- atSecond(1700000002d)(post(env))
+    } yield {
+      assertEquals(header(weak.res, "x-resnum"), Some("1"))
+      assertEquals(header(strong.res, "x-resnum"), Some("1"))
+      assert(normal.text.contains("<!-- 2ch_X:error -->"))
+    }
+  }
+
+  test("スレ立て規制: 名前欄の★や誤ったキャップパスワードでは回避できない") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    for {
+      first <- atSecond(1700000000d)(post(env, Seq("subject" -> "original")))
+      fakeName <- atSecond(1700000001d)(post(env, Seq("subject" -> "original", "FROM" -> "偽 ★")))
+      wrongPass <- atSecond(1700000002d)(post(env, Seq("subject" -> "original", "mail" -> "#!wrongpass")))
+    } yield {
+      assertEquals(header(first.res, "x-resnum"), Some("1"))
+      assert(fakeName.text.contains("<!-- 2ch_X:error -->"))
+      assert(wrongPass.text.contains("<!-- 2ch_X:error -->"))
+    }
+  }
+
+  test("スレ立て: キャップでもBoardIdの制約外の板名は新規作成を拒否する") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    for {
+      posted <- atSecond(1700000000d)(post(env, Seq("bbs" -> "foo_bar", "mail" -> "#!weakpass")))
+      created <- dat(env, "foo_bar", "1700000000")
+    } yield {
+      assertEquals(errorMessage(posted.text), Some("板の指定が不正です。<br>\nThe board directory is incorrect..."))
+      assertEquals(created, "")
+    }
+  }
+
+  test("スレ立て規制: RESET経過後は同一IPとUAでも再度作成できる") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("sample/SETTING.TXT", "BBS_THREAD_TATESUGI_RESET=2\nBBS_THREAD_JUNBAN_RESET=2\n")
+    for {
+      first <- atSecond(1700000000d)(post(env))
+      next <- atSecond(1700000003d)(post(env))
+    } yield {
+      assertEquals(header(first.res, "x-resnum"), Some("1"))
+      assertEquals(header(next.res, "x-resnum"), Some("1"))
+    }
+  }
+
+  test("スレ立て規制: 同じ国内ASでも県が異なり他の識別情報も異なれば許可する") {
+    val env = DurableTestKit.newEnv()
+    for {
+      first <- atSecond(1700000000d)(post(env))
+      next <- atSecond(1700000001d)(post(env, Seq("subject" -> "other"), Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"), Seq("region" -> "Osaka")))
+    } yield {
+      assertEquals(header(first.res, "x-resnum"), Some("1"))
+      assertEquals(header(next.res, "x-resnum"), Some("1"))
+    }
+  }
+
+  test("スレ立て規制: IPv6の圧縮・大文字表記を変えても同じIPとして拒否する") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("sample/SETTING.TXT", "BBS_THREAD_JUNBAN=0\n")
+    for {
+      first <- atSecond(1700000000d)(post(env, headers = Seq("CF-Connecting-IP" -> "2001:DB8:0:0:0:0:0:1")))
+      next <- atSecond(1700000001d)(post(env, Seq("subject" -> "other"), Seq("CF-Connecting-IP" -> "2001:db8::1")))
+    } yield {
+      assertEquals(header(first.res, "x-resnum"), Some("1"))
+      assert(next.text.contains("<!-- 2ch_X:error -->"))
+    }
+  }
+
+  test("スレ立て規制: 海外は国とASが異なっても同一広域グループ") {
+    val env = DurableTestKit.newEnv()
+    for {
+      first <- atSecond(1700000000d)(post(env, cf = Seq("country" -> "US")))
+      next <- atSecond(1700000001d)(post(env, Seq("subject" -> "other"), Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"), Seq("country" -> "GB", "asn" -> "123")))
+    } yield {
+      assertEquals(header(first.res, "x-resnum"), Some("1"))
+      assert(next.text.contains("<!-- 2ch_X:error -->"))
+    }
+  }
+
+  test("スレ立て規制: 指定ASは国内の県をまたいで拒否する") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("sample/SETTING.TXT", "BBS_THREAD_JUNBAN_AS_ONLY=2516\n")
+    for {
+      first <- atSecond(1700000000d)(post(env))
+      next <- atSecond(1700000001d)(post(env, Seq("subject" -> "other"), Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"), Seq("region" -> "Osaka")))
+    } yield {
+      assertEquals(header(first.res, "x-resnum"), Some("1"))
+      assert(next.text.contains("<!-- 2ch_X:error -->"))
+    }
+  }
+
+  test("スレ立て規制: 設定不正は作成を拒否するが既存スレへの返信は妨げない") {
+    val env = DurableTestKit.newEnv()
+    for {
+      first <- atSecond(1700000000d)(post(env))
+      _ = env.putR2("sample/SETTING.TXT", "BBS_THREAD_TATESUGI=invalid\n")
+      next <- atSecond(1700000001d)(post(env))
+      reply <- atSecond(1700000002d)(post(env, Seq("key" -> threadKey(first))))
+    } yield {
+      assert(next.text.contains("<!-- 2ch_X:error -->"))
+      assertEquals(header(reply.res, "x-resnum"), Some("2"))
+    }
+  }
+
+  test("スレ立て規制: 設定キーの前後空白は管理画面と同じく無視する") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("sample/SETTING.TXT", " BBS_THREAD_TATESUGI =0\n BBS_THREAD_JUNBAN =0\n")
+    for {
+      first <- atSecond(1700000000d)(post(env))
+      next <- atSecond(1700000001d)(post(env))
+    } yield {
+      assertEquals(header(first.res, "x-resnum"), Some("1"))
+      assertEquals(header(next.res, "x-resnum"), Some("1"))
+    }
+  }
+
+  test("スレ立て設定: 値は最初の=以降の全体、重複キーは前後空白によらず後勝ちで読む") {
+    assert(ThreadCreationSettings.parseText("BBS_THREAD_TATESUGI=0=invalid\n").isLeft)
+    assertEquals(ThreadCreationSettings.parseText("BBS_THREAD_TATESUGI=invalid\r\n BBS_THREAD_TATESUGI =0\r\n").map(_.limits.threadTatesugi), Right(0))
+    assert(ThreadCreationSettings.parseText(" BBS_THREAD_TATESUGI =0\nBBS_THREAD_TATESUGI=invalid\n").isLeft)
+  }
+
+  test("スレ立て規制: 値に=を含む不正設定は管理画面と同じく作成を拒否する") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("sample/SETTING.TXT", "BBS_THREAD_TATESUGI=0=invalid\n")
+    atSecond(1700000000d)(post(env)).map { posted =>
+      assert(posted.text.contains("<!-- 2ch_X:error -->"))
+      assertEquals(header(posted.res, "x-resnum"), None)
+    }
+  }
 
   /** スレ立て（既定フィールド＋`fields`）を投稿し、`sample` 板の先頭行の `<>` 区切りフィールドを返す。 */
   private def firstRow(env: Env, fields: (String, String)*): Future[Array[String]] =
@@ -570,21 +790,22 @@ class PostingSuite extends FunSuite {
   test("makeIdAndShikibetuId: BBS_ID_RESETの日付境界(JST)を1秒跨ぐとID・識別IDが変わる") {
     // BBS_ID_RESET(既定86400秒)による時刻窓は Math.floor((unixtime+32400)/BBS_ID_RESET) で計算され、
     // 32400(=9時間, JSTオフセット)が加算されるためJST日付境界で切り替わる。
-    // unixtime ≡ 54000 (mod 86400) が窓の切り替わり瞬間で、その1秒前(53999)と(54000)を比較する。
-    def at(t: Int): Future[Array[String]] =
+    // unixtime ≡ 54000 (mod 86400) が窓の切り替わり瞬間で、その1秒前(1699973999)と(1699974000)を比較する。
+    // 板名・スレキーは BoardId（英数字16文字以内）・ThreadKey（9〜10桁）の制約内に収める。
+    def at(t: Long): Future[Array[String]] =
       withFixedTime(t.toDouble * 1000) {
-        val bbs = "boardboundary" + t
+        val bbs = "bb" + t
         firstRowWith(DurableTestKit.newEnv(), Seq("FROM" -> "boundary", "subject" -> "boundarytest", "bbs" -> bbs), Nil, Nil, bbs)
       }
     for {
-      before <- at(53999)
-      after <- at(54000)
+      before <- at(1699973999L)
+      after <- at(1699974000L)
     } yield {
       // 実測値。窓が変わるため、識別ID(地域/AS由来ハッシュ)・ID(IP由来ハッシュ)ともに変化する。
-      assertEquals(before(0), "boundary </b>(JP.yb.YR 67-ff3061e72f92f8bb)<b>")
-      assertEquals(idOf(before(2)), "ID:QVHSvTOt")
-      assertEquals(after(0), "boundary </b>(JP.8T.pU V0-4f59499349177794)<b>")
-      assertEquals(idOf(after(2)), "ID:Qzj1oBxa")
+      assertEquals(before(0), "boundary </b>(JP.ZV.ca L0-b48da058688f6871)<b>")
+      assertEquals(idOf(before(2)), "ID:tK/9evqe")
+      assertEquals(after(0), "boundary </b>(JP.bR.9p tP-18b8714acc8fa8e6)<b>")
+      assertEquals(idOf(after(2)), "ID:vdth2D4W")
       assertNotEquals(before(0), after(0))
       assertNotEquals(before(2), after(2))
     }
@@ -708,6 +929,7 @@ class PostingSuite extends FunSuite {
 
   test("updateSubback: onlyIf.etagMatchesの競合注入時は実際にエラーになる（コンディショナルputが機能していることの検証）") {
     val env = DurableTestKit.newEnv()
+    env.putR2("sample/SETTING.TXT", "BBS_THREAD_TATESUGI=0\nBBS_THREAD_JUNBAN=0\n")
     for {
       // 1本目のスレ立て。同一4桁key帯のsubbackFileが作成される。
       p1 <- post(env, Seq("subject" -> "conflict1"))
@@ -757,7 +979,7 @@ class PostingSuite extends FunSuite {
   test("preparePosting: BBS_LIVEのランダムsage分岐をMath.randomを固定して両側とも検証する") {
     withFixedTime(1700000000d * 1000) {
       val env = DurableTestKit.newEnv()
-      env.putR2("livetest/SETTING.TXT", "BBS_LIVE=checked\n")
+      env.putR2("livetest/SETTING.TXT", "BBS_LIVE=checked\nBBS_THREAD_TATESUGI=0\nBBS_THREAD_JUNBAN=0\n")
       def subject(): Future[String] = env.board("livetest").getSubject().toFuture
       def reply(ms: Double, random: Double, key: String, message: String): Future[Posted] =
         withFixedTime(ms * 1000) {

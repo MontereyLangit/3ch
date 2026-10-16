@@ -186,6 +186,9 @@ object DurableTestKit {
 
     /** 直接 storage を触りたいテスト用に、生の `Thread` インスタンス（`state`フィールド公開）を返す。 */
     def threadInstance(name: String): Thread = threadInstances.getOrElseUpdate(name, new Thread(fakeState(), worker))
+
+    /** 直接 storage を触りたいテスト用に、生の `Board` インスタンスを返す。 */
+    def boardInstance(name: String): Board = boardInstances.getOrElseUpdate(name, new Board(fakeState(), worker.asInstanceOf[js.Any]))
   }
 
   def newEnv(): Env = new Env()
