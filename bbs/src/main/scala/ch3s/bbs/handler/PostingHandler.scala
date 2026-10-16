@@ -3,6 +3,9 @@ package ch3s.bbs.handler
 import ch3s.bbs.external.cloudflare.*
 import ch3s.bbs.external.web.{Request, Response}
 import ch3s.bbs.hash.WebHash
+import ch3s.bbs.domain.posting.{ClientIdentity, PostingContext}
+import ch3s.bbs.domain.posting.moderation.ThreadCreationRejection
+import ch3s.common.domain.{BoardId, ThreadKey}
 import ch3s.common.hash.{Md5, HexToBinary}
 import ch3s.common.crypt.UnixCrypt
 import ch3s.bbs.util.SjisEncoding
@@ -12,7 +15,10 @@ import scala.scalajs.js.typedarray.Uint8Array
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 
-object Posting {
+/**
+  * bbs.cgi書き込み処理ハンドラ
+  */
+object PostingHandler {
   private case object Rejected extends RuntimeException
   private def str(v: js.Any): String = js.Dynamic.global.String(v).asInstanceOf[String]
   private def truth(v: js.Any): Boolean = js.Dynamic.global.Boolean(v).asInstanceOf[Boolean]
@@ -52,7 +58,7 @@ object Posting {
       uid = "", userInfo = "", shikibetsuId = "", id = "", isIPv6 = 0, isMonazilla = 0, isSJIS = 0, idnotane = "",
       md5Salt = md5(str(rawEnv.salt)), tripKey = "", tripString = "", cap = 0, strongCap = 0, sage = 0,
       path = "PATH", logPath = "LOGPATH", logFile = "LOGDAT", logData = "", subject = "", number = 0,
-      settings = js.Dynamic.literal(), boardSettings = js.Dynamic.literal(), headers = js.Dictionary.empty[String]
+      settings = js.Dynamic.literal(), boardSettings = js.Dynamic.literal(), boardSettingsText = "", headers = js.Dictionary.empty[String]
     )
     (for {
       _ <- Future { checkRequest(g, request) }
@@ -67,9 +73,10 @@ object Posting {
       allowed <- Moderation.check(g, env).toFuture
       _ = if allowed == 0 then throw Rejected
       _ = checkSizes(g)
+      creationLimit <- threadCreationLimit(g, request)
       _ <- makeId(g)
       _ = prepare(g)
-      _ <- updateThread(g, env)
+      _ <- updateThread(g, env, creationLimit)
       _ <- updateSubback(g, env)
       _ <- updateHeadline(g, env)
     } yield respond(g, success = true)).recover { case Rejected => respond(g, success = false) }.toJSPromise
@@ -204,6 +211,7 @@ object Posting {
     e.ch3www.get(str(g.form.bbs) + "/SETTING.TXT").toFuture.flatMap(o => if o == null then Future.successful(PostingText.settingTxtDefault) else o.text().toFuture).map { text =>
       parseSettings(g.settings, replace(text, "<DIR_NAME>", str(g.form.bbs)), "\n")
       g.boardSettings = g.settings
+      g.boardSettingsText = text
     }
   }
   private def threadSettings(g: js.Dynamic, e: WorkerEnv): Future[Unit] = {
@@ -301,7 +309,54 @@ object Posting {
       if eq(g.settings.BBS_LIVE, "checked") && js.Math.random() * 10 >= 1 then g.sage = 1
     }
 
-  private def updateThread(g: js.Dynamic, e: WorkerEnv): Future[Unit] = {
+  private def threadCreationLimit(g: js.Dynamic, request: Request): Future[js.UndefOr[js.Dynamic]] = {
+    if (number(g.number) != 1) Future.successful(js.undefined)
+    else {
+      val board = BoardId.create(str(g.form.bbs)).fold(_ => deny(g, "板の指定が不正です。<br>\nThe board directory is incorrect..."), identity)
+      val key = str(g.form.key).toLongOption.toRight("").flatMap(ThreadKey.create).fold(_ => deny(g, "キー情報が不正です。"), identity)
+      if (truth(g.cap)) return Future.successful(js.undefined)
+      val settings = ThreadCreationSettings.parseText(str(g.boardSettingsText)).fold(message => deny(g, message), identity)
+      val cf = request.cf.getOrElse(js.Dynamic.literal())
+      def metadata(name: String): String = {
+        val value = cf.selectDynamic(name)
+        if (value == null || js.isUndefined(value)) "" else str(value).trim
+      }
+      val country = metadata("country").toUpperCase
+      val asn = metadata("asn").toLongOption.filter(n => n > 0 && n <= 4294967295L).map(_.toString).getOrElse("")
+      val region = metadata("region")
+      val network = if (country.matches("[A-Z]{2}") && country != "JP" && country != "XX" && country != "T1") "overseas"
+        else if (country == "JP" && asn.nonEmpty && settings.asOnly(asn)) s"AS:$asn"
+        else if (country == "JP" && asn.nonEmpty && region.nonEmpty) s"AS:$asn:JP:$region"
+        else ""
+      val rawIp = Option(request.headers.get("CF-Connecting-IP")).getOrElse("")
+      val ip = if (rawIp.contains(":")) {
+        try js.Dynamic.newInstance(js.Dynamic.global.URL)(s"http://[$rawIp]/").hostname.asInstanceOf[String]
+        catch { case _: Throwable => rawIp.toLowerCase }
+      } else rawIp
+      val context = PostingContext(board, key, true, str(g.form.subject),
+        ClientIdentity(ip, Option(request.headers.get("user-agent")).getOrElse(""), network))
+      def digest(value: String): Future[String] = if (value.isEmpty) Future.successful("") else hash(value + ":" + str(g.md5Salt))
+      for {
+        ipHash <- digest(context.identity.ip)
+        uaHash <- digest(context.identity.userAgent)
+        networkHash <- digest(context.identity.networkGroup)
+        titleHash <- digest(context.title)
+      } yield js.Dynamic.literal(ip = ipHash, userAgent = uaHash, networkGroup = networkHash, title = titleHash,
+        tatesugi = settings.limits.threadTatesugi, tatesugiResetSeconds = settings.limits.threadTatesugiResetSeconds,
+        junban = settings.limits.threadJunban, junbanResetSeconds = settings.limits.threadJunbanResetSeconds)
+    }
+  }
+
+  private object CreationRejected {
+    def unapply(error: Throwable): Option[ThreadCreationRejection] = ThreadCreationRejection.fromCode(errorText(error).stripPrefix("Error: "))
+  }
+
+  private def creationRejectionText(rejection: ThreadCreationRejection): String = rejection match {
+    case ThreadCreationRejection.Broad(_) => PostingText.threadCreationBroad
+    case _ => PostingText.threadCreationNarrow
+  }
+
+  private def updateThread(g: js.Dynamic, e: WorkerEnv, creationLimit: js.UndefOr[js.Dynamic]): Future[Unit] = {
     val stub = thread(g, e)
     guarded(g, "updateThreadFile", "ログファイルに書けませんでした。", "unixtime") {
       val initial: js.UndefOr[String] = if number(g.number) == 1 then js.Object.keys(g.settings.asInstanceOf[js.Object]).map(k => k + "=" + str(g.settings.selectDynamic(k)) + "<>").mkString else js.undefined
@@ -309,7 +364,9 @@ object Posting {
       val date = formatter.format(new js.Date(int(g.unixtime) * 1000)).asInstanceOf[String]
       g.form.MESSAGE = str(g.form.MESSAGE).asInstanceOf[js.Dynamic].replace("<br>", " <br> ")
       val dat = s"${str(g.form.FROM)}<><>$date ${str(g.id)}<> ${str(g.form.MESSAGE)} <>${if number(g.number) == 1 then str(g.subject) else ""}"
-      stub.addRes(dat, s"${str(g.number)}<>${str(g.userInfo)}", js.Dynamic.literal(bbs = g.form.bbs, key = g.form.key, title = g.subject, sage = truth(g.sage), maxThreads = int(or(g.boardSettings.BBS_MAX_MENU_THREAD, "700")), create = (number(g.number) == 1), initialSettings = initial)).toFuture.map(n => g.number = n)
+      stub.addRes(dat, s"${str(g.number)}<>${str(g.userInfo)}", js.Dynamic.literal(bbs = g.form.bbs, key = g.form.key, title = g.subject, sage = truth(g.sage), maxThreads = int(or(g.boardSettings.BBS_MAX_MENU_THREAD, "700")), create = number(g.number) == 1, initialSettings = initial, creationLimit = creationLimit)).toFuture.map(n => g.number = n).recover {
+        case CreationRejected(rejection) => deny(g, creationRejectionText(rejection))
+      }
     }
   }
 
@@ -348,11 +405,11 @@ object Posting {
         obj <- bucket.get("headline.txt").asInstanceOf[js.Promise[js.Dynamic]].toFuture
         old <- if obj == null then Future.successful("") else obj.text().asInstanceOf[js.Promise[String]].toFuture
         text = new StringBuilder(s"${str(g.unixtime)}\n${str(g.form.bbs)}<>${str(g.boardSettings.BBS_TITLE)}<>${str(g.unixtime)}<>${str(g.form.key)}<>${str(g.form.MESSAGE).take(30)}\n")
-        _ = if obj != null then old.split("\n", -1).drop(1).take(300).foreach { line =>
+        _ = if obj != null then old.split("\n", -1).slice(1, 301).foreach { line =>
           val f = trim(line).split("<>", -1)
           if f.length >= 5 && matches(f(0), "^[a-zA-Z0-9\\-_]+$") && f(1).nonEmpty && !eq(g.form.bbs, f(0)) then text.append(f.take(5).mkString("<>")).append('\n')
         }
-        _ <- bucket.put("headline.txt", text.toString, js.Dynamic.literal(onlyIf = js.Dynamic.literal(etagMatches = (if obj == null then js.undefined else obj.etag)))).asInstanceOf[js.Promise[js.Any]].toFuture
+        _ <- bucket.put("headline.txt", text.toString, js.Dynamic.literal(onlyIf = js.Dynamic.literal(etagMatches = if obj == null then js.undefined else obj.etag))).asInstanceOf[js.Promise[js.Any]].toFuture
       } yield ()
     }
 }

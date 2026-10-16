@@ -1,12 +1,14 @@
 package ch3s.bbs.durable
 
 import ch3s.bbs.external.cloudflare.*
-import scala.scalajs.js
-import scala.scalajs.js.annotation.JSExportTopLevel
-import scala.scalajs.js.JSConverters.*
-import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
+import ch3s.bbs.durable.support.DurableLock
+
+import scala.collection.mutable
 import scala.concurrent.Future
-import scala.collection.mutable.Map
+import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
+import scala.scalajs.js
+import scala.scalajs.js.JSConverters.*
+import scala.scalajs.js.annotation.JSExportTopLevel
 
 /**
  * スレッドデータを管理するDurable Object (Thread)
@@ -29,17 +31,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
     s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replaceAll("\r?\n", " <br> ")
   }
 
-  // Catch inside the concurrency gate: rejecting the gate would reset the DO.
-  private def locked[A](f: => Future[A]): Future[A] =
-    state.blockConcurrencyWhile[js.Dynamic](() =>
-      Future.unit.flatMap(_ => f).map(v => js.Dynamic.literal(value = v.asInstanceOf[js.Any])).recover {
-        case e: js.JavaScriptException => js.Dynamic.literal(error = e.exception.asInstanceOf[js.Dynamic].message)
-        case e => js.Dynamic.literal(error = e.getMessage)
-      }.toJSPromise
-    ).toFuture.map { result =>
-      if truth(result.error) then fail(str(result.error))
-      result.value.asInstanceOf[A]
-    }
+  private def locked[A](f: => Future[A]): Future[A] = DurableLock.serialized(state)(f)
 
   /**
    * dat形式の全スレッドデータを文字列として返します。
@@ -88,7 +80,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
 
   private def convertLegacy(rows: Array[String]): String = {
     /* スレ設定を取得。ログの二行目に入っている。NAME=VALUE<>NAME2=VALUE2 */
-    val settings = Map.empty[String, String]
+    val settings = mutable.Map.empty[String, String]
     trim(rows(1)).split("<>", -1).foreach { s =>
       val parts = s.split("=", -1)
       if parts(0).nonEmpty then settings(parts(0)) = trim(parts.lift(1).getOrElse(""))
@@ -178,8 +170,16 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
       _ = if count >= 1000 then fail("このスレッドは1000を超えたのでもう書けません。")
       log <- text("log")
       update = js.Dictionary[js.Any]("dat" -> (dat + datLine + "\n"), "log" -> (log + logLine.replaceFirst("^\\d+<>", s"$count<>") + "\n"), "modifiedAt" -> js.Date.now())
-      _ = if truth(p.create) then update("settings") = (if truth(p.initialSettings) then p.initialSettings else "")
-      _ <- state.storage.put(update).toFuture
+      _ = if truth(p.create) then update("settings") = if truth(p.initialSettings) then p.initialSettings else ""
+      creationLimit = truth(p.create) && truth(p.creationLimit)
+      _ <- if creationLimit then board(str(p.bbs)).reserveThreadCreation(str(p.key), p.creationLimit).toFuture.map { error =>
+        if error.nonEmpty then fail(error)
+      } else Future.unit
+      _ <- state.storage.put(update).toFuture.recoverWith { case error =>
+        if creationLimit then board(str(p.bbs)).cancelThreadCreation(str(p.key)).toFuture.transformWith(_ => Future.failed(error))
+        else Future.failed(error)
+      }
+      _ <- if creationLimit then board(str(p.bbs)).completeThreadCreation(str(p.key)).toFuture.recover { case _ => () } else Future.unit
       _ <- if hasPosting then board(str(p.bbs)).updateThread(js.Dynamic.literal(key = p.key, title = p.title, resNum = count), p.sage.asInstanceOf[js.UndefOr[Boolean]], p.maxThreads.asInstanceOf[js.UndefOr[Double]]).toFuture else Future.unit
     } yield count
   }.toJSPromise
@@ -200,7 +200,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
     val preflight = if action == "move" then Future.unit.flatMap { _ =>
       if source == target then fail("移動元と移動先が同じです。")
       thread(target).inspect(str(input.targetBoard), str(input.targetKey)).toFuture.map { dest =>
-        if (dest.dat.exists(_.nonEmpty) || dest.hidden.getOrElse(false)) && dest.importedFrom.toOption != Some(source) then fail("移動先のkeyは使用済みです。")
+        if (dest.dat.exists(_.nonEmpty) || dest.hidden.getOrElse(false)) && !dest.importedFrom.toOption.contains(source) then fail("移動先のkeyは使用済みです。")
       }
     } else Future.unit
     preflight.flatMap { _ => locked {

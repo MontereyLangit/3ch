@@ -7,6 +7,9 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 import ch3s.common.text.Utf8
+import ch3s.bbs.domain.posting.moderation.ThreadCreationHistory
+import ch3s.bbs.durable.codec.ThreadCreationCodec
+import ch3s.bbs.durable.support.DurableLock
 
 /**
  * 板のスレッド一覧を管理するDurable Object (Board)
@@ -14,6 +17,57 @@ import ch3s.common.text.Utf8
  */
 @JSExportTopLevel("Board", "server")
 class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(state, env) {
+
+  private val creationPageSize = 64
+  private val creationHistoryLimit = 8000
+  private val creationPageCountKey = "threadCreationPageCount"
+  private def creationPageKey(index: Int): String = s"threadCreationHistory:$index"
+
+  private def creationHistory(): Future[ThreadCreationHistory] = {
+    state.storage.get[Int](creationPageCountKey).toFuture.flatMap { count =>
+      val keys = (0 until count.getOrElse(0)).map(creationPageKey)
+      Future.sequence(keys.grouped(128).map { batch =>
+        state.storage.get(batch.toJSArray).toFuture.map { values =>
+          batch.flatMap(key => values.get(key).toSeq.flatMap(_.asInstanceOf[js.Array[js.Dynamic]].toSeq))
+        }
+      }.toVector).map(pages => ThreadCreationHistory(pages.flatten.map(ThreadCreationCodec.decodeRecord)))
+    }
+  }
+
+  private def saveCreationHistory(history: ThreadCreationHistory): Future[Unit] = {
+    val pages = history.records.map(ThreadCreationCodec.encodeRecord).grouped(creationPageSize).toVector
+    state.storage.get[Int](creationPageCountKey).toFuture.flatMap { previousCount =>
+      val values = js.Dictionary[js.Any](creationPageCountKey -> pages.size)
+      pages.zipWithIndex.foreach { case (page, index) => values(creationPageKey(index)) = page.toJSArray }
+      state.storage.put(values).toFuture.flatMap { _ =>
+        Future.sequence((pages.size until previousCount.getOrElse(0)).map(index => state.storage.delete(creationPageKey(index)).toFuture)).map(_ => ())
+      }
+    }
+  }
+
+  private def nowSeconds(): Double = js.Date.now() / 1000
+
+  /** スレ立て履歴の判定と予約を直列化する。成功は空文字、拒否は [[ThreadCreationRejection.code]] を返す。 */
+  def reserveThreadCreation(key: String, limit: js.Dynamic): js.Promise[String] = DurableLock.serialized(state) {
+    val now = nowSeconds()
+    val (settings, request) = ThreadCreationCodec.decodeRequest(limit)
+    creationHistory().flatMap { history =>
+      history.reserve(key, request, settings, now, creationHistoryLimit) match {
+        case Left(rejection) => Future.successful(rejection.code)
+        case Right(reserved) => saveCreationHistory(reserved).map(_ => "")
+      }
+    }
+  }.toJSPromise
+
+  def completeThreadCreation(key: String): js.Promise[Unit] = DurableLock.serialized(state) {
+    val now = nowSeconds()
+    creationHistory().flatMap(history => saveCreationHistory(history.complete(key, now)))
+  }.toJSPromise
+
+  def cancelThreadCreation(key: String): js.Promise[Unit] = DurableLock.serialized(state) {
+    val now = nowSeconds()
+    creationHistory().flatMap(history => saveCreationHistory(history.cancel(key, now)))
+  }.toJSPromise
 
   /**
    * subject.txt形式の文字列を返します。
@@ -44,7 +98,7 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
   def updateThread(data: js.Dynamic, sage: js.Any = js.undefined, maxThreads: js.UndefOr[Double] = js.undefined): js.Promise[Unit] =
     state.blockConcurrencyWhile(() => updateThreadUnlocked(data, sage, maxThreads))
 
-  def updateThreadUnlocked(data: js.Dynamic, sage: js.Any = js.undefined, maxThreads: js.UndefOr[Double] = js.undefined): js.Promise[Unit] =
+  private def updateThreadUnlocked(data: js.Dynamic, sage: js.Any = js.undefined, maxThreads: js.UndefOr[Double] = js.undefined): js.Promise[Unit] =
     getSubject().toFuture.flatMap { subject =>
       var lines = if subject.isEmpty then Vector.empty[String] else subject.split("\n", -1).toVector
       if lines.lastOption.contains("") then lines = lines.dropRight(1) // 最後の空行を除外

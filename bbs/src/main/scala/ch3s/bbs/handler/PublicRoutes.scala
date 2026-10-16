@@ -65,7 +65,7 @@ object PublicRoutes {
     else if new js.RegExp("^/test/read\\.cgi/[a-zA-Z0-9\\-_]+/[0-9]{10}/$").test(path) then view3chiko(e, url, r)
     // 過去ログ倉庫 (3chiko.html)。subject.txt系APIはRouteTable経由で別途下(archive/archives)で処理する
     else if new js.RegExp("^/[a-zA-Z0-9\\-_]+/kako(/.*)?$").test(path) && !path.endsWith("/subject.txt") then view3chiko(e, url, r)
-    else if new js.RegExp("^/test/(sub)?bbs.cgi").test(path) then Posting.entry(r, e).toFuture
+    else if new js.RegExp("^/test/(sub)?bbs.cgi").test(path) then PostingHandler.entry(r, e).toFuture
     else if path == "/auth.js" then Future.successful(Responses.response("/* test */", headers = js.Dictionary("content-type" -> "application/javascript;charset=UTF-8")))
     else if path == "/bbsmenu.html" then
       read(e, "bbsmenu.html").flatMap {
