@@ -1,8 +1,16 @@
 import { createApp } from "honox/server";
 // Scala.js が公開する DurableObject を Workers のエントリポイントとして再 export する。
-import { V6PlaceholderDurableObject, Board, Thread } from "scalajs:server.js";
+import {
+  V6PlaceholderDurableObject,
+  Board,
+  Thread,
+  // @ts-expect-error scalajs:server.js is resolved by the Scala.js Vite plugin.
+  publicHandler,
+} from "scalajs:server.js";
 
 const app = createApp();
+// ファイルルートに一致しないリクエストは既存の公開ハンドラで処理する(LegacyDispatch)
+app.all("*", (c) => publicHandler(c));
 
 export default app;
 

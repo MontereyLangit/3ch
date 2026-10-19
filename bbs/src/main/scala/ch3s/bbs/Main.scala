@@ -2,7 +2,7 @@ package ch3s.bbs
 
 import ch3s.bbs.external.hono.HonoContextFacade
 import ch3s.bbs.external.web.Response
-import ch3s.bbs.handler.{HealthHandler, RendererShell}
+import ch3s.bbs.handler.RendererShell
 import ch3s.bbs.util.SjisEncoding
 import ch3s.common.routes.route
 import japgolly.scalajs.react.facade.React
@@ -13,6 +13,7 @@ import scala.scalajs.js.typedarray.Uint8Array
 
 import external.web.Request
 import external.cloudflare.WorkerEnv
+import ch3s.bbs.handler.BoardHandler
 
 object Main {
 
@@ -43,10 +44,10 @@ object Main {
   @JSExportTopLevel("checkModeration", "server")
   def checkModeration(gb: js.Dynamic, env: WorkerEnv): js.Promise[Int] = handler.Moderation.check(gb, env)
 
-  @route("_v6/health.ts")
-  @JSExportTopLevel("healthHandler", "server")
-  def healthHandler(c: js.Any): js.Promise[Response] =
-    HealthHandler.health(c.asInstanceOf[HonoContextFacade])
+  @route("[bbs]/index.ts")
+  @JSExportTopLevel("boardIndexHandler", "server")
+  def boardIndexHandler(c: js.Any): js.Promise[Response] =
+  BoardHandler.index(c.asInstanceOf[HonoContextFacade])
 
   // SjisEncoding（R-01案A）の実装そのものを exhaustive に検証するための診断用export。
   // HTTPルーティングからは呼ばれない（@route を付けていない）。
