@@ -11,6 +11,7 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.typedarray.Uint8Array
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
+import ch3s.bbs.repository.BoardRepository
 
 object Posting {
   private case object Rejected extends RuntimeException
@@ -195,13 +196,16 @@ object Posting {
       trip.map(t => { g.tripString = t; g.form.FROM = str(g.form.FROM) + s" </b>◆$t</b>" })
     }
 
+  // TODO: ほかでも使うので切り出す
+  // BbsSettingsのMapからmap.toJSDictionary.asInstanceOf[js.Dynamic]でjsオブジェクトに変換できる
   private def parseSettings(target: js.Dynamic, text: String, separator: String): Unit =
     trim(text).split(separator, -1).foreach { pair =>
       val parts = pair.split("=", -1)
       if parts(0).nonEmpty then target.updateDynamic(parts(0))(trim(parts.lift(1).getOrElse("")))
     }
+
   private def boardSettings(g: js.Dynamic, e: WorkerEnv): Future[Unit] = guarded(g, "getBoardSettings", "不明なエラーが発生しました。", "time") {
-    e.ch3www.get(str(g.form.bbs) + "/SETTING.TXT").toFuture.flatMap(o => if o == null then Future.successful(PostingText.settingTxtDefault) else o.text().toFuture).map { text =>
+    BoardRepository.getBoardSettings(str(g.form.bbs), e).map { text =>
       parseSettings(g.settings, replace(text, "<DIR_NAME>", str(g.form.bbs)), "\n")
       g.boardSettings = g.settings
     }
