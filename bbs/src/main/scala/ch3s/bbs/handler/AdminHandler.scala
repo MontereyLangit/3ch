@@ -49,7 +49,7 @@ object AdminHandler {
       } else if r.method != "GET" && r.method != "POST" then Future.successful(Responses.response("Method not allowed", 405, headers))
       else {
         val url = js.Dynamic.newInstance(js.Dynamic.global.URL)(r.url)
-        val path = str(url.pathname)
+        val path = str(url.pathname).stripSuffix("/")
         def page(content: String, status: Int = 200): Response = Responses.response(AdminText.page(content), status, headers)
         val action = Future.unit.flatMap { _ =>
           if r.method == "POST" then {

@@ -16,6 +16,17 @@ test('Wrangler: 管理画面と公開投稿の統合検証', { timeout: 120000, 
   const postResponse = (bbs, key = '', message = 'hello', subject = '') => fetch(origin + '/test/bbs.cgi', { method: 'POST', headers: { 'user-agent': 'IntegrationBrowser/1.0', referer: 'http://127.0.0.1:8787/', 'CF-Connecting-IP': '192.0.2.1' }, body: new URLSearchParams({ bbs, key, MESSAGE: message, FROM: 'tester', mail: '', subject, time: '1', submit: '書き込む' }) });
   const post = (...args) => postResponse(...args).then(r => r.text());
   const publicText = async path => new TextDecoder('shift_jis').decode(await (await fetch(origin + path)).arrayBuffer());
+  for (const method of ['GET', 'HEAD']) {
+    const redirect = await fetch(origin + '/sandbox?view=all', { method, redirect: 'manual' });
+    assert.equal(redirect.status, 301);
+    assert.equal(redirect.headers.get('location'), origin + '/sandbox/?view=all');
+  }
+  const adminRedirect = await fetch(origin + '/admin', { redirect: 'manual' });
+  assert.equal(adminRedirect.status, 301);
+  assert.equal(adminRedirect.headers.get('location'), origin + '/admin/');
+  for (const path of ['/auth.js', '/missing.dat', '/missing.txt', '/test/bbs.cgi']) {
+    assert.notEqual((await fetch(origin + path, { redirect: 'manual' })).status, 301);
+  }
   assert.equal((await fetch(origin + '/admin/')).status, 401);
   assert.equal((await get('/admin/')).status, 200);
   assert.equal((await save('/admin/menu', { html: 'cross-origin menu' }, { origin: 'https://other.example' })).status, 303);
@@ -25,15 +36,16 @@ test('Wrangler: 管理画面と公開投稿の統合検証', { timeout: 120000, 
   assert.match(await publicText('/sandbox/head.txt'), /<b>rules<\/b>/);
   assert.match(await publicText('/sandbox/SETTING.TXT'), /BBS_TITLE=sandbox/);
   const legacyMenu = '<HTML><BODY><!-- menu -->板一覧 &amp; custom menu</BODY></HTML>';
-  assert.equal((await save('/admin/menu', { html: legacyMenu })).status, 303);
+  assert.equal((await save('/admin/menu/', { html: legacyMenu })).status, 303);
   const menuResponse = await fetch(origin + '/bbsmenu.html');
   assert.equal(menuResponse.headers.get('content-type'), 'text/html;charset=Shift_JIS');
   assert.equal(new TextDecoder('shift_jis').decode(await menuResponse.arrayBuffer()), legacyMenu);
   const boardResponse = await fetch(origin + '/sandbox/');
-  assert.equal(boardResponse.headers.get('content-type'), 'text/html;charset=Shift_JIS');
-  const boardHtml = new TextDecoder('shift_jis').decode(await boardResponse.arrayBuffer());
+  assert.equal(boardResponse.status, 200);
+  assert.match(boardResponse.headers.get('content-type'), /text\/html;?\s*charset=UTF-8/i);
+  const boardHtml = await boardResponse.text();
   assert.match(boardHtml, /^<!DOCTYPE html>/);
-  assert.match(boardHtml, /<title>sandbox<\/title>/);
+  assert.match(boardHtml, /<title>板top<\/title>/);
   assert.match(boardHtml, /<script type="module" src="\/static\/client\.js"><\/script>/);
   const clientScriptResponse = await fetch(origin + '/static/client.js');
   assert.equal(clientScriptResponse.status, 200);
