@@ -77,7 +77,7 @@ class PostingSuite extends FunSuite {
     }
   }
 
-  test("React confirmation keeps the cookie marker, Shift_JIS and preescaped form fragments") {
+  test("React版確認画面はcookieマーカー・Shift_JIS・エスケープ済みフォーム断片を保持する") {
     val g = js.Dynamic.literal(form = js.Dynamic.literal(
       subject = "題名 &lt;test&gt;", FROM = "名前 &amp;", mail = "a&amp;b", MESSAGE = "本文 &lt;script&gt;<br>次行"
     ))

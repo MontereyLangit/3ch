@@ -25,7 +25,7 @@ class RouteTableSuite extends FunSuite {
 
   private val bodyAfterBanner: String => String = _.linesIterator.drop(3).mkString("\n") + "\n"
 
-  test("page routes delegate rendering and request parameters to the Scala handler") {
+  test("ページルートは描画とリクエストパラメータをScalaハンドラへ委譲する") {
     val entry = RouteTable.RouteEntry(
       filePath = "read/[key]/[range].ts",
       kind = RouteTable.RouteKind.PassThrough("threadHandler"),

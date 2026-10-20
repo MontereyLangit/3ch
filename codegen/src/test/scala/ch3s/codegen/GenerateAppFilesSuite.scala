@@ -20,7 +20,7 @@ class GenerateAppFilesSuite extends FunSuite {
     RouteTable.RouteEntry("probe.ts", RouteTable.RouteKind.PassThrough("probe"), Nil)
   )
 
-  test("regeneration removes stale owned files and preserves handwritten routes") {
+  test("再生成は古い生成ファイルを削除し、手書きルートは残す") {
     withApp { root =>
       val routes = Files.createDirectories(root.resolve("routes"))
       val stale = routes.resolve("stale.ts")
@@ -35,7 +35,7 @@ class GenerateAppFilesSuite extends FunSuite {
     }
   }
 
-  test("handwritten collisions fail before cleanup or writes") {
+  test("手書きファイルとの衝突は削除・書き込みの前に失敗する") {
     withApp { root =>
       val routes = Files.createDirectories(root.resolve("routes"))
       val stale = routes.resolve("stale.ts")
@@ -48,7 +48,7 @@ class GenerateAppFilesSuite extends FunSuite {
     }
   }
 
-  test("Scala island bindings preserve handwritten files and replace former generated entries") {
+  test("Scala islandの配線は手書きファイルを残し、以前の生成エントリを置き換える") {
     withApp { root =>
       val scalaFile = root.resolve("IslandComponents.scala")
       val content = GenerateIslandComponents.render(Nil)

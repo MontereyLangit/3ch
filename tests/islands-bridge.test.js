@@ -8,7 +8,7 @@ import { islandComponents } from 'honox/vite';
 
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
-test('Workers resolve Scala client exports separately and link projects sequentially', async () => {
+test('WorkersはScalaクライアントのexportを別に解決し、プロジェクトを順にリンクする', async () => {
   const loaded = await loadConfigFromFile({ command: 'build', mode: 'workers' }, path.join(root, 'vite.config.ts'));
   assert.equal(loaded.config.resolve.alias['scalajs:client.js'], 'scalajs-client:client.js');
   const plugins = loaded.config.plugins.flat(Infinity);
@@ -17,7 +17,7 @@ test('Workers resolve Scala client exports separately and link projects sequenti
   for (const plugin of scalaPlugins) assert.equal(plugin.buildStart.sequential, true);
 });
 
-test('HonoX wraps a generated island in React SSR and serializes its props', async () => {
+test('HonoXは生成islandをReact SSRで包み、propsをシリアライズする', async () => {
   const fixture = await mkdtemp(path.join(root, 'tests', '.islands-bridge-'));
   try {
     await mkdir(path.join(fixture, 'app/islands'), { recursive: true });

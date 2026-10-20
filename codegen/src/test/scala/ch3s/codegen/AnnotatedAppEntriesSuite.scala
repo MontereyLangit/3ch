@@ -7,7 +7,7 @@ class AnnotatedAppEntriesSuite extends FunSuite {
   private def parse(members: String, module: String = "server") =
     AnnotatedAppEntries.parse("Main.scala", s"object Main { $members }", module)
 
-  test("exports determine handler names and same-file methods are combined") {
+  test("exportがハンドラ名を決め、同一ファイルのメソッドはまとめられる") {
     val entries = parse("""
       @route("probe.ts") @JSExportTopLevel("readProbe", "server") def read(c: Any) = c
       @route(filePath = "probe.ts", method = "POST")
@@ -21,12 +21,12 @@ class AnnotatedAppEntriesSuite extends FunSuite {
     assert(!rendered.contains("unrouted"))
   }
 
-  test("islands derive export and source module from the adjacent declaration") {
+  test("islandは隣接する宣言からexportとソースモジュールを導出する") {
     val entries = parse("""@islands("thread/view.tsx") @JSExportTopLevel("ThreadView", "client") val view = 1""", "client")
     assertEquals(entries.islands, List(RouteTable.IslandEntry("thread/view.tsx", "ThreadView", "client.js")))
   }
 
-  test("literal metadata and correct modules are required") {
+  test("メタデータはリテラル、モジュールは正しいものが必須") {
     List(
       """@route(path) @JSExportTopLevel("x", "server") def x() = 1""",
       """@route("x.ts") def x() = 1""",
@@ -37,14 +37,14 @@ class AnnotatedAppEntriesSuite extends FunSuite {
     ).foreach(source => intercept[IllegalArgumentException](parse(source)))
   }
 
-  test("unsafe paths cannot escape the generation directory") {
+  test("危険なパスは生成ディレクトリの外へ出られない") {
     List("../x.ts", "/x.ts", "C:/x.ts", "a//x.ts", "a/./x.ts", "x.tsx", "a\\x.ts", "x\".ts").foreach { path =>
       val literal = "\"" + path.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
       intercept[IllegalArgumentException](parse(s"@route($literal) @JSExportTopLevel(\"x\", \"server\") def x() = 1"))
     }
   }
 
-  test("duplicate route methods and island filenames are rejected") {
+  test("ルートメソッドとislandファイル名の重複は拒否される") {
     intercept[IllegalArgumentException](parse("""
       @route("x.ts") @JSExportTopLevel("x", "server") def x() = 1
       @route("X.ts", "POST") @JSExportTopLevel("y", "server") def y() = 1
@@ -59,7 +59,7 @@ class AnnotatedAppEntriesSuite extends FunSuite {
     """, "client"))
   }
 
-  test("island basenames must be discoverable by HonoX") {
+  test("islandのファイル名はHonoXが検出できるものでなければならない") {
     List("_hidden.tsx", "thread.view.tsx", "[id].tsx").foreach { path =>
       intercept[IllegalArgumentException](parse(s"@islands(\"$path\") @JSExportTopLevel(\"X\", \"client\") val x = 1", "client"))
     }

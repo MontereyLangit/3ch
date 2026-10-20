@@ -44,7 +44,7 @@ private class RenderApp() extends js.Object {
 class HonoRenderSuite extends munit.FunSuite {
   import HandlerTestKit.*
 
-  test("Scala Vdom rawElement and props reach a synchronous Hono renderer") {
+  test("Scala VdomのrawElementとpropsが同期Honoレンダラへそのまま渡る") {
     val context = new RenderContext(request("https://example.test/"))
     val page = <.main("日本語 <&>").rawElement
     val props = new RenderProps { title = "題名" }
@@ -63,7 +63,7 @@ class HonoRenderSuite extends munit.FunSuite {
     }
   }
 
-  test("asynchronous Hono renderer accepts omitted props and resolves its response") {
+  test("非同期Honoレンダラはprops省略を受け付け、応答を解決する") {
     val context = new RenderContext(request("https://example.test/"))
     val expected = Responses.response("async")
     context.setRenderer((_, props) => {
@@ -75,7 +75,7 @@ class HonoRenderSuite extends munit.FunSuite {
     }
   }
 
-  test("Scala handler renders a UTF-8 layout through the installed React renderer middleware") {
+  test("Scalaハンドラは導入済みReactレンダラミドルウェア経由でUTF-8レイアウトを描画する") {
     val app = new RenderApp()
     app.use("*", ReactRendererMiddleware(props => Main.renderShell(props.children, props.title, "/static/client.js")))
     app.get("/", context => {
@@ -96,7 +96,7 @@ class HonoRenderSuite extends munit.FunSuite {
     }
   }
 
-  test("renderPromise propagates an asynchronous renderer rejection") {
+  test("renderPromiseは非同期レンダラのrejectを伝播する") {
     val context = new RenderContext(request("https://example.test/"))
     val failure = new js.Error("render failed")
     context.setRenderer((_, _) => js.Promise.reject(failure))
@@ -106,7 +106,7 @@ class HonoRenderSuite extends munit.FunSuite {
     }
   }
 
-  test("createSjisResponse preserves raw strings and accepts a full MIME type") {
+  test("createSjisResponseは生文字列を保持し、完全なMIMEタイプを受け付ける") {
     val content = "<!-- 2ch_X:error -->本文 <&>"
     val res = RendererShell.createSjisResponse(content, "application/x-example").asInstanceOf[js.Dynamic]
     bytes(res).map { body =>

@@ -11,7 +11,7 @@ import { act } from 'react';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const bridge = path.join(root, 'bbs/target/scala-3.3.8/bbs-test-fastopt/island-test.js');
 
-test('Scala Island rawElement supports HonoX discovery, nested islands and element props', async (t) => {
+test('Scala IslandのrawElementはHonoXの検出・入れ子island・要素propsに対応する', async (t) => {
   // npm pretest links the real Scala bridge; do not silently substitute a JS implementation.
   await access(bridge);
   // Keep external React and React DOM in the same mode when Vite runs inside this process.

@@ -10,7 +10,7 @@ import munit.FunSuite
  */
 class UnixCryptSuite extends FunSuite {
 
-  test("golden: cryptBytes preserves undefined salt elements (KB-26)") {
+  test("golden: cryptBytesはundefinedのsalt要素を保持する (KB-26)") {
     for (c <- Json.parse(GoldenFile.readText("crypt-bytes.json")).asArr) {
       val expected = c.field("output").asArr.map(v => if (v.isUndefinedMarker) None else Some(v.asInt))
       assertEquals(UnixCrypt.cryptBytes(c.field("password").asString, c.field("salt").asString).toList, expected)

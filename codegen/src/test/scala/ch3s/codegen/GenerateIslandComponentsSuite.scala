@@ -5,7 +5,7 @@ import munit.FunSuite
 import scala.meta.*
 
 class GenerateIslandComponentsSuite extends FunSuite {
-  test("annotation-derived SSR bindings and client entries share exports and HonoX identifiers") {
+  test("アノテーション由来のSSR配線とクライアントエントリはexportとHonoX識別子を共有する") {
     val entries = AnnotatedAppEntries.parse("Main.scala", """
       object Main {
         @islands("thread/counter.tsx")
@@ -31,14 +31,14 @@ class GenerateIslandComponentsSuite extends FunSuite {
     assert(!source.contains("@JSImport(\"/app/islands"))
   }
 
-  test("empty annotations clear all former server imports and bindings") {
+  test("アノテーションが空なら以前のサーバimportと配線をすべて消す") {
     val source = GenerateIslandComponents.render(Nil)
     val tree = dialects.Scala3(source).parse[Source].get
     assertEquals(tree.collect { case obj: Defn.Object => obj.name.value }, List("IslandComponents"))
     assert(!source.contains("@JSImport"))
   }
 
-  test("ambiguous multiple island files for one server method fail") {
+  test("1つのサーバメソッドに複数のislandファイルが曖昧に対応すると失敗する") {
     intercept[IllegalArgumentException] {
       GenerateIslandComponents.render(List(
         RouteTable.IslandEntry("first.tsx", "Widget", "client.js"),
