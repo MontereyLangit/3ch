@@ -198,17 +198,10 @@ object Posting {
       trip.map(t => { g.tripString = t; g.form.FROM = str(g.form.FROM) + s" </b>◆$t</b>" })
     }
 
-  // TODO: ほかでも使うので切り出す
-  // BbsSettingsのMapからmap.toJSDictionary.asInstanceOf[js.Dynamic]でjsオブジェクトに変換できる
-  private def parseSettings(target: js.Dynamic, text: String, separator: String): Unit =
-    trim(text).split(separator, -1).foreach { pair =>
-      val parts = pair.split("=", -1)
-      if parts(0).nonEmpty then target.updateDynamic(parts(0))(trim(parts.lift(1).getOrElse("")))
-    }
-
   private def boardSettings(g: js.Dynamic, e: WorkerEnv): Future[Unit] = guarded(g, "getBoardSettings", "不明なエラーが発生しました。", "time") {
     BoardRepository.getBoardSettings(str(g.form.bbs), e).map { text =>
-      g.boardSettings = g.settings = BbsSettings.create(text, str(g.form.bbs)).value.toJSDictionary.asInstanceOf[js.Dynamic]
+      g.settings = BbsSettings.create(text, str(g.form.bbs)).value.toJSDictionary.asInstanceOf[js.Dynamic]
+      g.boardSettings = g.settings
     }
   }
   private def threadSettings(g: js.Dynamic, e: WorkerEnv): Future[Unit] = {
@@ -228,7 +221,7 @@ object Posting {
           g.subject = lines(0).split("<>", -1).last
           if !truth(g.subject) then deny(g, "スレッドのログファイルが壊れています。(タイトル取得失敗)")
           g.number = lines.length
-          if settings.nonEmpty then parseSettings(g.settings, settings, "<>")
+          BbsSettings.parse(settings, "<>").value.foreach((k, v) => g.settings.updateDynamic(k)(v))
           if lines.length >= 1000 then deny(g, "このスレッドは1000を超えたのでもう書けません。")
           if eq(g.settings.BBS_HEISA, "checked") then deny(g, "この板・スレッドは停止されています。")
         }

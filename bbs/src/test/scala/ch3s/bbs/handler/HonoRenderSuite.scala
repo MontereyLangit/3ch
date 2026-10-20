@@ -55,7 +55,7 @@ class HonoRenderSuite extends munit.FunSuite {
     context.renderPromise(page, props).toFuture.flatMap { response =>
       val res = response.asInstanceOf[js.Dynamic]
       bytes(res).map { body =>
-        assertEquals(body, sjisBytes("<main>日本語 &lt;&amp;&gt;</main>"))
+        assertEquals(body, sjisBytes("<!DOCTYPE html><main>日本語 &lt;&amp;&gt;</main>"))
         assertEquals(header(res, "content-type"), Some("text/html;charset=Shift_JIS"))
         assertEquals(header(res, "content-length"), Some(body.length.toString))
       }

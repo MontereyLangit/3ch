@@ -801,4 +801,60 @@ class PostingSuite extends FunSuite {
       )
     }
   }
+
+  // ==================== 15. 板のSETTING.TXTが boardSettings / スレ初期設定に効く ====================
+
+  test("boardSettings: 板のBBS_TITLEがheadlineに反映される") {
+    withFixedTime(1700000000d * 1000) {
+      val env = DurableTestKit.newEnv()
+      env.putR2("titletest/SETTING.TXT", "BBS_TITLE=<DIR_NAME>の看板\n")
+      post(env, Seq("bbs" -> "titletest", "subject" -> "T", "MESSAGE" -> "first")).map { p =>
+        assertEquals(header(p.res, "x-resnum"), Some("1"))
+        assert(env.r2Text("headline.txt").exists(_.contains("\ntitletest<>titletestの看板<>")), env.r2Text("headline.txt").toString)
+      }
+    }
+  }
+
+  test("boardSettings: 板のBBS_MAX_MENU_THREADがsubjectの最大スレッド数に効く") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("maxtest/SETTING.TXT", "BBS_MAX_MENU_THREAD=2\n")
+    def create(ms: Double, subject: String): Future[Posted] =
+      withFixedTime(ms * 1000)(post(env, Seq("bbs" -> "maxtest", "subject" -> subject)))
+    for {
+      _ <- create(1700000000d, "S1")
+      _ <- create(1700000001d, "S2")
+      _ <- create(1700000002d, "S3")
+      subject <- env.board("maxtest").getSubject().toFuture
+    } yield {
+      assertEquals(subject.split("\n").length, 2)
+      assert(subject.contains("S3") && subject.contains("S2") && !subject.contains("S1"), subject)
+    }
+  }
+
+  test("updateThread: スレ初期設定のキー順はSETTING.TXTの記載順") {
+    withFixedTime(1700000000d * 1000) {
+      val env = DurableTestKit.newEnv()
+      env.putR2("ordertest/SETTING.TXT", "Z_LAST=1\nA_FIRST=2\nMID=3\nBBS_TITLE=t\nB_KEY=4\nY_KEY=5\n")
+      for {
+        p <- post(env, Seq("bbs" -> "ordertest", "subject" -> "O"))
+        settings <- env.thread(s"ordertest/${threadKey(p)}").getSettings().toFuture
+      } yield assertEquals(settings, "Z_LAST=1<>A_FIRST=2<>MID=3<>BBS_TITLE=t<>B_KEY=4<>Y_KEY=5<>BBS_SHIKIBETSU=off<>") // 末尾のBBS_SHIKIBETSUは投稿処理が未設定時に補う値
+    }
+  }
+
+  test("threadSettings: 返信時はスレ初期設定を板設定と同じ規則で読む（値の = を保持）") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("eqtest/SETTING.TXT", "BBS_NONAME_NAME=a=b\n")
+    for {
+      p <- post(env, Seq("bbs" -> "eqtest", "FROM" -> "", "subject" -> "EQ"))
+      _ = env.putR2("eqtest/SETTING.TXT", "BBS_NONAME_NAME=板側\n")
+      r <- post(env, Seq("bbs" -> "eqtest", "key" -> threadKey(p), "FROM" -> "", "subject" -> ""))
+      d <- dat(env, "eqtest", threadKey(p))
+    } yield {
+      assertEquals(header(r.res, "x-resnum"), Some("2"))
+      assert(fieldsOf(d)(0).startsWith("a=b "), fieldsOf(d)(0))
+      val reply = d.split("\n", -1)(1).split("<>", -1)(0)
+      assert(reply.startsWith("a=b "), reply)
+    }
+  }
 }
