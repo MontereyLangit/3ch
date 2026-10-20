@@ -3,15 +3,17 @@ package ch3s.bbs.handler
 import ch3s.bbs.external.cloudflare.*
 import ch3s.bbs.external.web.{Request, Response}
 import ch3s.bbs.hash.WebHash
-import ch3s.common.hash.{Md5, HexToBinary}
-import ch3s.common.crypt.UnixCrypt
+import ch3s.bbs.repository.BoardRepository
 import ch3s.bbs.util.SjisEncoding
+import ch3s.common.crypt.UnixCrypt
+import ch3s.common.domain.BbsSettings
+import ch3s.common.hash.{HexToBinary, Md5}
+
+import scala.concurrent.Future
+import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.typedarray.Uint8Array
-import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
-import scala.concurrent.Future
-import ch3s.bbs.repository.BoardRepository
 
 object Posting {
   private case object Rejected extends RuntimeException
@@ -206,8 +208,7 @@ object Posting {
 
   private def boardSettings(g: js.Dynamic, e: WorkerEnv): Future[Unit] = guarded(g, "getBoardSettings", "不明なエラーが発生しました。", "time") {
     BoardRepository.getBoardSettings(str(g.form.bbs), e).map { text =>
-      parseSettings(g.settings, replace(text, "<DIR_NAME>", str(g.form.bbs)), "\n")
-      g.boardSettings = g.settings
+      g.boardSettings = g.settings = BbsSettings.create(text, str(g.form.bbs)).value.toJSDictionary.asInstanceOf[js.Dynamic]
     }
   }
   private def threadSettings(g: js.Dynamic, e: WorkerEnv): Future[Unit] = {

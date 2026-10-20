@@ -63,7 +63,7 @@ object BoardPage {
       element("center")(element("br")(), element("b")("どのような形の削除依頼であれ公開させていただきます。")),
       element("br")(),
       element("p", js.Dictionary[js.Any]("style" -> js.Dictionary("margin" -> "0", "padding" -> "0.25em 0", "textAlign" -> "center", "color" -> "#333")))(
-        link("//3ch.shop/", "３ちゃんねる"), " BBS.CGI ver 1.07.427 - 2022/04/27 22:56 JST", element("br")(), link("./SETTING.TXT", "SETTING.TXT")
+        link("//3ch.shop/", "３ちゃんねる"), " BBS.CGI ver 1.07.428 - 2022/04/27 22:56 JST", element("br")(), link("./SETTING.TXT", "SETTING.TXT")
       ),
       element("div", js.Dictionary[js.Any]("align" -> "right", "id" -> "kanri"))(
         element("a", js.Dictionary[js.Any]("href" -> s"/admin/board?bbs=$bbs"))(

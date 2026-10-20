@@ -1,11 +1,12 @@
 package ch3s.bbs.repository
 
-import scala.concurrent.Future
-import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import ch3s.bbs.external.cloudflare.WorkerEnv
 import ch3s.bbs.handler.PostingText
 
-object BoardRepository {  
+import scala.concurrent.Future
+import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
+
+object BoardRepository {
 
   /**
     * R2から該当板のSETTING.TXTを取得する
@@ -18,9 +19,26 @@ object BoardRepository {
   def getBoardSettings(bbs: String, e: WorkerEnv): Future[String] = {
     e.ch3www.get(bbs + "/SETTING.TXT")
         .toFuture
-        .flatMap(o => 
+        .flatMap(o =>
             if o == null then Future.successful(PostingText.settingTxtDefault)
             else o.text().toFuture
+        )
+  }
+
+  /**
+   * R2から該当板のhead.txtを取得する
+   * 無い場合は空文字列
+   *
+   * @param bbs 板ディレクトリ名 TODO: BoardId domain objectにする
+   * @param e WorkerEnv
+   * @return head.txt
+   */
+  def getHeadText(bbs: String, e: WorkerEnv): Future[String] = {
+    e.ch3www.get(bbs + "/head.txt")
+        .toFuture
+        .flatMap(o =>
+          if o == null then Future.successful("")
+          else o.text().toFuture
         )
   }
 }

@@ -1,11 +1,14 @@
 package ch3s.bbs.handler
 
-import ch3s.bbs.external.cloudflare.{V6PlaceholderDoStub, WorkerEnv}
 import ch3s.bbs.external.hono.{HonoContextFacade, RenderProps}
-import ch3s.bbs.external.hono.HonoContextFacade
-import ch3s.bbs.external.web.{Response, ResponseInit}
+import ch3s.bbs.external.web.Response
+import ch3s.bbs.repository.BoardRepository
+import ch3s.common.domain.BbsSettings
 import japgolly.scalajs.react.vdom.html_<^.*
+
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.scalajs.js
+import scala.scalajs.js.JSConverters.JSRichFutureNonThenable
 
 /**
   * 板topハンドラ
@@ -19,12 +22,25 @@ object BoardHandler {
     * @return レンダリング結果(Promise)
     */
   def index(c: HonoContextFacade): js.Promise[Response] = {
-    // TODO: 板名取得
-    // head.txt取得
-    // TODO: スレ一覧取得 -> 組立
-    val props = new RenderProps {}
-    props.title = "板top"
-    val page = <.main(<.h1("板top"))
-    c.renderPromise(page.rawElement, props)
+    // TODO: bbsが[a-zA-Z0-9]{1,16}でなければ404にする ここもBoardIdにする
+    val bbs = c.req.param("bbs").toString
+    val settingF = BoardRepository.getBoardSettings(bbs, c.env)
+    val headF = BoardRepository.getHeadText(bbs, c.env)
+
+    (for {
+      settingText <- settingF
+      headText <- headF
+      res <- {
+        val title = BbsSettings.create(settingText, bbs).value.getOrElse("BBS_TITLE", "???＠3ch掲示板")
+        val props = new RenderProps {}
+        props.title = title
+        val page = <.main(
+          <.h1(title),
+          <.hr,
+          <.div(^.dangerouslySetInnerHtml := headText)
+        )
+        c.renderPromise(page.rawElement, props).toFuture
+      }
+    } yield res).toJSPromise
   }
 }
