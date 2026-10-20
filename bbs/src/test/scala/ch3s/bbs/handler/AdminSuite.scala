@@ -62,4 +62,32 @@ class AdminSuite extends FunSuite {
       _ = assertEquals(writes.toList, List.fill(6)("bbsmenu.html"))
     } yield ()
   }
+
+  test("末尾スラッシュ付きパスは付かないパスと同じ画面・処理になる") {
+    val kit = ch3s.bbs.durable.DurableTestKit.newEnv()
+    val env = kit.worker.asInstanceOf[js.Dynamic]
+    env.updateDynamic("ADMIN_PASSWORD")("test")
+    val authorization = basic("admin:test")
+    def get(path: String): Future[(Int, String)] =
+      admin(request("https://example.test" + path, Seq("authorization" -> authorization)), env).flatMap(res => text(res).map(status(res) -> _))
+    def check(plain: String, slashed: String): Future[Unit] =
+      for {
+        a <- get(plain)
+        b <- get(slashed)
+      } yield {
+        assertEquals(a._1, 200, plain)
+        assertEquals(b, a, slashed)
+      }
+    for {
+      _ <- check("/admin", "/admin/")
+      _ <- check("/admin/menu", "/admin/menu/")
+      _ <- check("/admin/access", "/admin/access/")
+      _ <- check("/admin/ngwords", "/admin/ngwords/")
+      _ <- check("/admin/board?bbs=sample", "/admin/board/?bbs=sample")
+      post <- admin(request("https://example.test/admin/menu/?x=1", Seq("authorization" -> authorization), method = "POST", body = "html=slash"), env)
+      _ = assertEquals(status(post), 303)
+      _ = assertEquals(header(post, "location"), Some("/admin/menu?x=1"))
+      _ = assertEquals(kit.r2Text("bbsmenu.html"), Some("slash"))
+    } yield ()
+  }
 }

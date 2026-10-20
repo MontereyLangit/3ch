@@ -1,0 +1,69 @@
+package ch3s.bbs.handler
+
+import ch3s.bbs.Main
+import ch3s.bbs.durable.DurableTestKit
+import ch3s.bbs.repository.BoardRepository
+import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
+import scala.scalajs.js
+
+/** 板top (`BoardHandler.index`) と `BoardRepository` のテスト。 */
+class BoardHandlerSuite extends munit.FunSuite {
+  import HandlerTestKit.*
+
+  private def render(env: DurableTestKit.Env, path: String) = {
+    val app = new RenderApp()
+    app.use("*", ReactRendererMiddleware(props => Main.renderShell(props.children, props.title, "/static/client.js")))
+    app.get("/:bbs/", context => BoardHandler.index(context))
+    app.request(path, js.Dynamic.literal().asInstanceOf[js.Object], env.worker.asInstanceOf[js.Object]).toFuture.flatMap(res => text(res.asInstanceOf[js.Dynamic]))
+  }
+
+  test("getBoardSettings: 板のSETTING.TXTを返し、無ければ既定値を返す") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("news/SETTING.TXT", "BBS_TITLE=ニュース\n")
+    for {
+      found <- BoardRepository.getBoardSettings("news", env.worker)
+      missing <- BoardRepository.getBoardSettings("other", env.worker)
+    } yield {
+      assertEquals(found, "BBS_TITLE=ニュース\n")
+      assertEquals(missing, PostingText.settingTxtDefault)
+    }
+  }
+
+  test("getHeadText: 板のhead.txtを返し、無ければ空文字列を返す") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("news/head.txt", "<b>ルール</b>")
+    for {
+      found <- BoardRepository.getHeadText("news", env.worker)
+      missing <- BoardRepository.getHeadText("other", env.worker)
+    } yield {
+      assertEquals(found, "<b>ルール</b>")
+      assertEquals(missing, "")
+    }
+  }
+
+  test("板top: BBS_TITLEをtitleとh1に出し、head.txtはエスケープせず埋め込む") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("news/SETTING.TXT", "BBS_NONAME_NAME=x\nBBS_TITLE=ニュース <板>\n")
+    env.putR2("news/head.txt", "<b>rules</b> & <a href=\"/x\">link</a>")
+    render(env, "/news/").map { html =>
+      assert(html.startsWith("<!DOCTYPE html>"), html)
+      assert(html.contains("<title>ニュース &lt;板&gt;</title>"), html)
+      assert(html.contains("<h1>ニュース &lt;板&gt;</h1>"), html)
+      assert(html.contains("<b>rules</b> & <a href=\"/x\">link</a>"), html)
+    }
+  }
+
+  test("板top: SETTING.TXTが無ければ既定のタイトルになる") {
+    val env = DurableTestKit.newEnv()
+    render(env, "/sample/").map { html =>
+      assert(html.contains("<title>sample＠3ch掲示板</title>"), html)
+      assert(html.contains("<h1>sample＠3ch掲示板</h1>"), html)
+    }
+  }
+
+  test("板top: BBS_TITLE内の<DIR_NAME>を板ディレクトリ名に置換する") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("abc/SETTING.TXT", "BBS_TITLE=<DIR_NAME>の板\n")
+    render(env, "/abc/").map(html => assert(html.contains("<title>abcの板</title>"), html))
+  }
+}

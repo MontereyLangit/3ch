@@ -45,7 +45,10 @@ test('Wrangler: 管理画面と公開投稿の統合検証', { timeout: 120000, 
   assert.match(boardResponse.headers.get('content-type'), /text\/html;?\s*charset=UTF-8/i);
   const boardHtml = await boardResponse.text();
   assert.match(boardHtml, /^<!DOCTYPE html>/);
-  assert.match(boardHtml, /<title>板top<\/title>/);
+  assert.match(boardHtml, /<title>sandbox<\/title>/);
+  assert.match(boardHtml, /<h1>sandbox<\/h1>/);
+  assert.ok(boardHtml.includes('<b>rules</b>'), 'head.txt は無エスケープで埋め込まれる');
+  assert.ok(!boardHtml.includes('&lt;b&gt;rules'));
   assert.match(boardHtml, /<script type="module" src="\/static\/client\.js"><\/script>/);
   const clientScriptResponse = await fetch(origin + '/static/client.js');
   assert.equal(clientScriptResponse.status, 200);

@@ -38,6 +38,7 @@ private class RenderApp() extends js.Object {
   def use(path: String, middleware: RenderMiddleware): RenderApp = js.native
   def get(path: String, handler: js.Function1[HonoContextFacade, js.Promise[Response]]): RenderApp = js.native
   def request(path: String): js.Promise[Response] = js.native
+  def request(path: String, init: js.Object, env: js.Object): js.Promise[Response] = js.native
 }
 
 class HonoRenderSuite extends munit.FunSuite {
