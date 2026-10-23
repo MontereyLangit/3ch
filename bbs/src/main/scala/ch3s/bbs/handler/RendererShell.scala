@@ -29,7 +29,7 @@ object RendererShell {
   }
 
   // wrangler dev も Vite のビルド済み Static Assets を使う。
-  val ClientScriptSrc = "/static/client.js"
+  private val ClientScriptSrc = "/static/client.js"
 
   def clientScript(src: String = ClientScriptSrc): React.Element = {
     React.createElement("script", js.Dictionary("type" -> "module", "src" -> src).asInstanceOf[js.Object])

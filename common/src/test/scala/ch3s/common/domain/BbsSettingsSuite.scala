@@ -1,5 +1,7 @@
 package ch3s.common.domain
 
+import scala.collection.immutable.ListMap
+
 class BbsSettingsSuite extends munit.FunSuite {
 
   private def parse(text: String, bbs: String = "sample"): BbsSettings = BbsSettings.create(text, bbs)
@@ -41,15 +43,9 @@ class BbsSettingsSuite extends munit.FunSuite {
 
   test("convertToText は k=v を改行で連結し、再パースで元に戻る") {
     val s = parse("Z=1\nA=2\nM=\nB=4\nY=5\n")
-    val text = s.convertToText()
+    val text = s.toString()
     assertEquals(text, "Z=1\nA=2\nM=\nB=4\nY=5")
     assertEquals(parse(text).value, s.value)
     assertEquals(parse(text).value.keys.toList, s.value.keys.toList)
-  }
-
-  test("create(Map) は渡したマップをそのまま保持する") {
-    val s = BbsSettings.create(Map("A" -> "1"))
-    assertEquals(s.value, Map("A" -> "1"))
-    assertEquals(s.convertToText(), "A=1")
   }
 }

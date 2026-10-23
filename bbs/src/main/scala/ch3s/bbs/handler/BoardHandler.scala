@@ -1,9 +1,10 @@
 package ch3s.bbs.handler
 
+import ch3s.bbs.components.{BoardIndexComponent, BoardIndexProps}
 import ch3s.bbs.external.hono.{HonoContextFacade, RenderProps}
 import ch3s.bbs.external.web.Response
 import ch3s.bbs.repository.BoardRepository
-import ch3s.common.domain.BbsSettings
+import japgolly.scalajs.react.React
 import japgolly.scalajs.react.vdom.html_<^.*
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -24,22 +25,27 @@ object BoardHandler {
   def index(c: HonoContextFacade): js.Promise[Response] = {
     // TODO: bbsが[a-zA-Z0-9]{1,16}でなければ404にする ここもBoardIdにする
     val bbs = c.req.param("bbs").toString
-    val settingF = BoardRepository.getBoardSettings(bbs, c.env)
-    val headF = BoardRepository.getHeadText(bbs, c.env)
+    val boardSettingsF = BoardRepository.getBoardSettings(bbs, c.env)
+    val headTextF = BoardRepository.getHeadText(bbs, c.env)
+    val subjectsF = BoardRepository.getSubjects(bbs, c.env)
 
     (for {
-      settingText <- settingF
-      headText <- headF
+      boardSettings <- boardSettingsF
+      headText <- headTextF
+      subjects <- subjectsF
       res <- {
-        val title = BbsSettings.create(settingText, bbs).value.getOrElse("BBS_TITLE", "???＠3ch掲示板")
+        val title = boardSettings.value.getOrElse("BBS_TITLE", "???＠3ch掲示板")
+
         val props = new RenderProps {}
         props.title = title
-        val page = <.main(
-          <.h1(title),
-          <.hr,
-          <.div(^.dangerouslySetInnerHtml := headText)
-        )
-        c.renderPromise(page.rawElement, props).toFuture
+
+        c.renderPromise(
+          <.div(
+            // TODO: ヘッダー
+            BoardIndexComponent.Component(BoardIndexProps(title, headText))
+            // TODO: サイドバー
+            // TODO: フッター
+          ).rawElement, props).toFuture
       }
     } yield res).toJSPromise
   }

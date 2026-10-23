@@ -199,8 +199,8 @@ object Posting {
     }
 
   private def boardSettings(g: js.Dynamic, e: WorkerEnv): Future[Unit] = guarded(g, "getBoardSettings", "不明なエラーが発生しました。", "time") {
-    BoardRepository.getBoardSettings(str(g.form.bbs), e).map { text =>
-      g.settings = BbsSettings.create(text, str(g.form.bbs)).value.toJSDictionary.asInstanceOf[js.Dynamic]
+    BoardRepository.getBoardSettings(str(g.form.bbs), e).map { boardSettings =>
+      g.settings = boardSettings.value.toJSDictionary.asInstanceOf[js.Dynamic]
       g.boardSettings = g.settings
     }
   }
