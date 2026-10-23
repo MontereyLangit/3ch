@@ -1,6 +1,6 @@
 package ch3s.common.domain
 
-import scala.collection.immutable.{ListMap, VectorMap}
+import scala.collection.immutable.ListMap
 
 /**
  * 板やスレの設定
