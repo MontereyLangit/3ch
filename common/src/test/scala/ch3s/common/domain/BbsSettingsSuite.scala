@@ -41,10 +41,10 @@ class BbsSettingsSuite extends munit.FunSuite {
     assertEquals(s.value.toList, List("A" -> "1", "B" -> "x=y", "EMPTY" -> ""))
   }
 
-  test("convertToText は k=v を改行で連結し、再パースで元に戻る") {
+  test("toString は k=v を改行で連結し（末尾改行あり）、再パースで元に戻る") {
     val s = parse("Z=1\nA=2\nM=\nB=4\nY=5\n")
     val text = s.toString()
-    assertEquals(text, "Z=1\nA=2\nM=\nB=4\nY=5")
+    assertEquals(text, "Z=1\nA=2\nM=\nB=4\nY=5\n")
     assertEquals(parse(text).value, s.value)
     assertEquals(parse(text).value.keys.toList, s.value.keys.toList)
   }

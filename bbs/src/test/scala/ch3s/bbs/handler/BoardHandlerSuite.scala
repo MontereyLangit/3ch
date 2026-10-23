@@ -3,6 +3,7 @@ package ch3s.bbs.handler
 import ch3s.bbs.Main
 import ch3s.bbs.durable.DurableTestKit
 import ch3s.bbs.repository.BoardRepository
+import ch3s.common.domain.BbsSettings
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
@@ -24,8 +25,8 @@ class BoardHandlerSuite extends munit.FunSuite {
       found <- BoardRepository.getBoardSettings("news", env.worker)
       missing <- BoardRepository.getBoardSettings("other", env.worker)
     } yield {
-      assertEquals(found, "BBS_TITLE=ニュース\n")
-      assertEquals(missing, PostingText.settingTxtDefault)
+      assertEquals(found, BbsSettings.create("BBS_TITLE=ニュース\n", "news"))
+      assertEquals(missing, BbsSettings.create(PostingText.settingTxtDefault, "other"))
     }
   }
 
