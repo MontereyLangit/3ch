@@ -4,7 +4,6 @@ import ch3s.bbs.components.{BoardIndexComponent, BoardIndexProps}
 import ch3s.bbs.external.hono.{HonoContextFacade, RenderProps}
 import ch3s.bbs.external.web.Response
 import ch3s.bbs.repository.BoardRepository
-import japgolly.scalajs.react.React
 import japgolly.scalajs.react.vdom.html_<^.*
 
 import scala.concurrent.ExecutionContext.Implicits.global
