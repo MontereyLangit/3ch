@@ -25,18 +25,21 @@ object BbsSubjects {
    * @return スレッド一覧
    */
   def create(text: String): BbsSubjects = {
-    val pattern = """(\d+),\s*"([^"]+)",\s*(\d+)""".r
+    val pattern = """(\d+)\.dat<>(.*) \((\d+)\)""".r
     val bbsSubjects = text
       .split("\n")
       .map(_.trim())
       .filter(_.nonEmpty)
-      .map({
+      .flatMap({
         case pattern(key, title, resNum) =>
-          ThreadTitle.create(title).flatMap({
-            BbsSubject.create(key.toLong, _, resNum.toInt)
-          })
+          for {
+            parsedKey <- key.toLongOption
+            parsedCount <- resNum.toIntOption
+            parsedTitle <- ThreadTitle.create(title).toOption
+            subject <- BbsSubject.create(parsedKey, parsedTitle, parsedCount).toOption
+          } yield subject
+        case _ => None
       })
-      .flatMap(_.toOption)
 
     BbsSubjects(bbsSubjects.toList)
   }
@@ -59,7 +62,7 @@ case class BbsSubject private (
    *
    * @return `"1792588031.dat<>PHPというのが大変らしい (5)"` …
    */
-  override def toString: String = s"$key.dat<>${title.toString} ($resNum)"
+  override def toString: String = s"$key.dat<>${title.value} ($resNum)"
 }
 
 object BbsSubject {
