@@ -1,10 +1,11 @@
 package ch3s.bbs.external.hono
 
-import scala.scalajs.js
-import scala.scalajs.js.|
+import ch3s.bbs.external.cloudflare.WorkerEnv
 import ch3s.bbs.external.web.Response
 import japgolly.scalajs.react.facade.React
-import ch3s.bbs.external.cloudflare.WorkerEnv
+
+import scala.scalajs.js
+import scala.scalajs.js.|
 
 trait RenderProps extends js.Object {
   var title: js.UndefOr[String] = js.undefined
@@ -14,6 +15,8 @@ trait RenderProps extends js.Object {
 @js.native
 trait HonoRequestFacade extends js.Object {
   def param(name: String): js.UndefOr[String] = js.native
+
+  def query(name: String): js.UndefOr[String] = js.native
   def header(name: String): js.UndefOr[String] = js.native
 }
 

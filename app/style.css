@@ -4,3 +4,8 @@
 @source "../bbs/src/main/scala";
 @source "../bbs-client/src/main/scala";
 @source "../common/src/main/scala";
+
+body {
+    font-family: ArialMT, "hiragino kaku gothic pron", "ヒラギノ角ゴ pron w3" !important;
+    background: #fafafa;
+}

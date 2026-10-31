@@ -4,12 +4,13 @@ import ch3s.bbs.Main
 import ch3s.bbs.durable.DurableTestKit
 import ch3s.bbs.repository.BoardRepository
 import ch3s.common.domain.BbsSettings
+import ch3s.bbs.handler.HandlerTestKit.*
+
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
 /** 板top (`BoardHandler.index`) と `BoardRepository` のテスト。 */
 class BoardHandlerSuite extends munit.FunSuite {
-  import HandlerTestKit.*
 
   private def render(env: DurableTestKit.Env, path: String) = {
     val app = new RenderApp()
@@ -49,7 +50,7 @@ class BoardHandlerSuite extends munit.FunSuite {
     render(env, "/news/").map { html =>
       assert(html.startsWith("<!DOCTYPE html>"), html)
       assert(html.contains("<title>ニュース &lt;板&gt;</title>"), html)
-      assert(html.contains("<h1>ニュース &lt;板&gt;</h1>"), html)
+      assert("<h1[^>]*>ニュース &lt;板&gt;</h1>".r.findFirstIn(html).isDefined, html)
       assert(html.contains("<b>rules</b> & <a href=\"/x\">link</a>"), html)
     }
   }
@@ -58,7 +59,7 @@ class BoardHandlerSuite extends munit.FunSuite {
     val env = DurableTestKit.newEnv()
     render(env, "/sample/").map { html =>
       assert(html.contains("<title>sample＠3ch掲示板</title>"), html)
-      assert(html.contains("<h1>sample＠3ch掲示板</h1>"), html)
+      assert("<h1[^>]*>sample＠3ch掲示板</h1>".r.findFirstIn(html).isDefined, html)
     }
   }
 

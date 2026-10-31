@@ -1,8 +1,8 @@
 package ch3s.bbs.handler
 
-import japgolly.scalajs.react.facade.React
 import ch3s.bbs.external.web.Response
 import ch3s.bbs.util.SjisEncoding
+import japgolly.scalajs.react.facade.React
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
@@ -25,7 +25,7 @@ object RendererShell {
   }
 
   def createSjisResponse(content: React.Element, contentType: String): Response = {
-    createSjisResponse("<!DOCTYPE html>" + renderToStaticMarkup(content), contentType)
+    createSjisResponse(s"<!DOCTYPE html>${renderToStaticMarkup(content)}", contentType)
   }
 
   // wrangler dev も Vite のビルド済み Static Assets を使う。
@@ -45,7 +45,7 @@ object RendererShell {
     doctype: Boolean = false
   ): Response = {
     val prefix = if doctype then "<!DOCTYPE html>" else ""
-    legacyHtml(prefix + renderToStaticMarkup(page), encoding, modified, since, extra)
+    legacyHtml(s"$prefix${renderToStaticMarkup(page)}", encoding, modified, since, extra)
   }
 
   /** 完成済み HTML のタグ・コメントを維持して応答する。投稿画面は既存の文字コード判定を渡す。 */
@@ -68,7 +68,9 @@ object RendererShell {
     )
     val script = clientScript(clientScriptSrc)
     val headChildren: Seq[React.Node] =
-      Seq[React.Node](meta.asInstanceOf[React.Node], viewport.asInstanceOf[React.Node], script.asInstanceOf[React.Node]) ++
+      Seq[React.Node](meta.asInstanceOf[React.Node], viewport.asInstanceOf[React.Node],
+        React.createElement("link", js.Dictionary("rel" -> "stylesheet", "href" -> "/static/assets/client.css").asInstanceOf[js.Object]).asInstanceOf[React.Node],
+        script.asInstanceOf[React.Node]) ++
         title.toOption.map(t => React.createElement("title", new js.Object(), t).asInstanceOf[React.Node]).toSeq
 
     val head = React.createElement("head", new js.Object(), headChildren*)

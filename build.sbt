@@ -4,7 +4,6 @@
 //   codegen: JVM-only ファイルI/O）。BBSロジックはbbs、純粋な暗号・文字コード処理はcommon。
 // bg（バックグラウンドサービス、http4s/tapir）は step 5 のスコープなのでこの骨格には含めない。
 
-import org.scalajs.linker.interface.ModuleSplitStyle
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 
 val scala3Version = "3.3.8" // Scala 3 LTS
@@ -54,6 +53,17 @@ lazy val bbs = project
   .dependsOn(commonJS % "compile->compile;test->test")
   .settings(commonSettings)
   .settings(
+    Compile / sourceGenerators += Def.task {
+      val output = (Compile / sourceManaged).value / "ch3s" / "bbs" / "BuildInfo.scala"
+      val updatedDate = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Tokyo")).toString
+      IO.write(output, s"""package ch3s.bbs
+                         |object BuildInfo {
+                         |  val version = "${version.value}"
+                         |  val updatedDate = "$updatedDate"
+                         |}
+                         |""".stripMargin)
+      Seq(output)
+    }.taskValue,
     scalaJSUseMainModuleInitializer := false,
     libraryDependencies += "com.github.japgolly.scalajs-react" %%% "core" % "4.0.0",
     // ブラウザへサーバ処理を混入させないため、bbsClient とは別にリンクする
@@ -63,7 +73,7 @@ lazy val bbs = project
     // 参照実装からの既知の地雷: `@JSImport("cloudflare:workers", "DurableObject")` を extends した
     // クラスが常にexportされるため、Testのリンク成果物にも巻き込まれる。素の NodeJSEnv では
     // cloudflare: スキームを解決できず Test 全体が起動できないため、Node の Module customization
-    // hooks（--experimental-loader）で cloudflare:workers の解決だけをスタブへ差し替える
+    // hooks（--import で module.register）で cloudflare:workers の解決だけをスタブへ差し替える
     Test / jsEnv := new NodeJSEnv(
       NodeJSEnv.Config()
         .withArgs(

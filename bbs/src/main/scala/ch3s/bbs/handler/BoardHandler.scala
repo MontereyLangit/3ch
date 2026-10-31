@@ -38,13 +38,13 @@ object BoardHandler {
         val props = new RenderProps {}
         props.title = title
 
+        val viewType = if c.req.query("type").contains("feed") then "feed" else "subback"
+        val sort = c.req.query("sort").filter(Set("new", "speed", "res")).getOrElse("new")
         c.renderPromise(
-          <.div(
-            // TODO: ヘッダー
-            BoardIndexComponent.Component(BoardIndexProps(title, headText))
-            // TODO: サイドバー
-            // TODO: フッター
-          ).rawElement, props).toFuture
+          BoardIndexComponent.Component(BoardIndexProps(
+            title, headText, bbs, viewType, subjects, boardSettings.value,
+            c.req.query("q").getOrElse(""), sort, math.floor(js.Date.now() / 1000).toLong.toString
+          )).rawElement, props).toFuture
       }
     } yield res).toJSPromise
   }
