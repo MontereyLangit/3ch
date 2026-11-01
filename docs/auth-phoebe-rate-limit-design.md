@@ -526,7 +526,7 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 
 ## 12. 実装順序とテスト
 
-作業メモの順序（連投規制 → デプロイ → 認証ほか）に合わせる。各段で `sbt test`・`npm test`・`npm run v6:build` を通し、レビュー連鎖（AGENTS.md 3.2）を行う。
+作業メモの順序（連投規制 → デプロイ → 認証ほか）に合わせる。段 A の前に [bbs.cgi DDD 化リファクタリング計画](bbs-cgi-ddd-refactoring-plan.md) の段 0〜7 を終える。各段で `sbt test`・`npm test`・`npm run v6:build` を通し、レビュー連鎖（AGENTS.md 3.2）を行う。
 
 | 段 | 内容 | 主なテスト |
 | --- | --- | --- |
