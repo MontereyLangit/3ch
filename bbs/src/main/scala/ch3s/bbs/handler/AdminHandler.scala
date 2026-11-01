@@ -122,7 +122,7 @@ object AdminHandler {
                 case "/admin/thread" =>
                   val bbs = board(url.searchParams.get("bbs")); val k = key(url.searchParams.get("key"))
                   if str(data.action) == "move" then { board(data.targetBoard); key(data.targetKey) }
-                  val stub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$k")).asInstanceOf[ThreadDoStub]
+                  val stub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$k"))
                   stub.inspect(bbs, k).toFuture.flatMap(_ => stub.moderate(str(data.action), js.Dynamic.global.Object.assign(js.Dynamic.literal(), data, js.Dynamic.literal(bbs = bbs, key = k))).toFuture)
                 case _ => fail("操作先が不正です。")
               }
@@ -152,7 +152,7 @@ object AdminHandler {
         } yield s"<h1>板管理: ${escape(bbs)}</h1>" + creationForm(settings) + form(area("head", head, "head.txt") + area("settings", settings, "SETTING.TXT"), "save")
       case "/admin/threads" =>
         val bbs = board(url.searchParams.get("bbs"))
-        val stub = e.BOARD_DO.get(e.BOARD_DO.idFromName(bbs)).asInstanceOf[BoardDoStub]
+        val stub = e.BOARD_DO.get(e.BOARD_DO.idFromName(bbs))
         for {
           subject <- stub.getSubject().toFuture
           removed <- stub.getRemoved().toFuture
@@ -165,7 +165,7 @@ object AdminHandler {
         }
       case "/admin/thread" =>
         val bbs = board(url.searchParams.get("bbs")); val k = key(url.searchParams.get("key"))
-        e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$k")).asInstanceOf[ThreadDoStub].inspect(bbs, k).toFuture.map { data =>
+        e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$k")).inspect(bbs, k).toFuture.map { data =>
           val dat = data.dat.getOrElse("")
           if dat.isEmpty then fail("スレッドがありません。")
           val stopped = data.stopped.getOrElse(false)

@@ -4,11 +4,11 @@ import ch3s.common.routes.RouteTable
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
-import scala.jdk.CollectionConverters.*
 
 /** 
  * RouteTable からルートを、DO の Scala 宣言から TS 型を生成する。
  * リポジトリルートで `sbt codegen/run` を実行する。
+ * DO の Scala RPC スタブは `bbs` のコンパイル時に GenerateDurableObjectStubsMain が生成する。
  */
 object GenerateAppFiles {
 
@@ -16,14 +16,7 @@ object GenerateAppFiles {
     val projectRoot = Paths.get(System.getProperty("user.dir")).toAbsolutePath
     val appRoot = projectRoot.resolve("app")
     val durableRoot = projectRoot.resolve("bbs/src/main/scala/ch3s/bbs/durable")
-    val files = Files.walk(durableRoot)
-    val sources = try {
-      files.iterator().asScala.filter(_.toString.endsWith(".scala")).toList.sortBy(_.toString).map { path =>
-        path.toString -> Files.readString(path, StandardCharsets.UTF_8)
-      }
-    } finally {
-      files.close()
-    }
+    val sources = DurableObjectSources.read(durableRoot)
     writeFile(appRoot.resolve("scalajs-durable-objects.generated.d.ts"), GenerateDurableObjectTypes.render(sources))
 
     val routeFiles = RouteTable.routes.map { entry =>

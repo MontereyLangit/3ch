@@ -1,0 +1,14 @@
+// tests/rpc.integration.test.js 用。DO バインディングは wrangler.jsonc と同じ class_name を使う。
+{
+  "name": "ch3s-rpc-test",
+  "main": "rpc-worker.mjs",
+  "compatibility_date": "2026-10-02",
+  "durable_objects": {
+    "bindings": [
+      { "name": "THREAD_DO", "class_name": "Thread" },
+      { "name": "BOARD_DO", "class_name": "Board" },
+    ],
+  },
+  "r2_buckets": [{ "binding": "ch3www", "bucket_name": "3ch" }],
+  "migrations": [{ "tag": "v1", "new_classes": ["Thread", "Board"] }],
+}

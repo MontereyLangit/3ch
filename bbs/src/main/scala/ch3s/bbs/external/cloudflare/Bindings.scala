@@ -37,35 +37,14 @@ trait DurableObjectState extends js.Object {
 @js.native
 trait DurableObjectStub extends js.Object
 
-@js.native
-trait DurableObjectNamespace extends js.Object {
-  def idFromName(name: String): DurableObjectId = js.native
-  def get(id: DurableObjectId): DurableObjectStub = js.native
-}
-
 /**
- * `V6PlaceholderDurableObject` の型付きRPCスタブ
- * （DO毎に必要なメンバだけを宣言するサブトレイト）
- * `/_v6/health` が`blockConcurrencyWhile` 経由のRPCを実際に呼べることの検証用
+ * DO の Namespace。`S` はその DO の RPC スタブ（`BoardDoStub` 等。DO クラスの公開メソッドから
+ * `bbs` のコンパイル時に生成される。docs/durable-object-stubs.md）。
  */
 @js.native
-trait V6PlaceholderDoStub extends DurableObjectStub {
-  def ping(): js.Promise[String] = js.native
-}
-
-/** スレDO の型付きRPCスタブ */
-@js.native
-trait ThreadDoStub extends DurableObjectStub {
-  def getDat(bbs: js.UndefOr[String] = js.native, key: js.UndefOr[String] = js.native): js.Promise[String] = js.native
-  def getLog(): js.Promise[String] = js.native
-  def getSettings(): js.Promise[String] = js.native
-  def setSettings(newSettings: String): js.Promise[Unit] = js.native
-  def addRes(datLine: String, logLine: String, posting: js.UndefOr[js.Dynamic] = js.native): js.Promise[Int] = js.native
-  def inspect(bbs: js.UndefOr[String] = js.native, key: js.UndefOr[String] = js.native): js.Promise[ThreadInspectResult] = js.native
-  def moderate(action: String, input: js.Dynamic): js.Promise[Unit] = js.native
-  def receiveMove(data: js.Dynamic, source: String): js.Promise[Unit] = js.native
-  def publishMove(source: String, bbs: String, key: String): js.Promise[Unit] = js.native
-  def setDat(dat: String): js.Promise[Unit] = js.native
+trait DurableObjectNamespace[S <: DurableObjectStub] extends js.Object {
+  def idFromName(name: String): DurableObjectId = js.native
+  def get(id: DurableObjectId): S = js.native
 }
 
 /**
@@ -85,23 +64,6 @@ trait ThreadInspectResult extends js.Object {
   val movedTo: js.UndefOr[String] = js.native
   val movingTo: js.UndefOr[String] = js.native
   val importedFrom: js.UndefOr[String] = js.native
-}
-
-/**
- * 板DOの型付きRPCスタブ
- * `updateThread` の `threadData` は `{key, title?, resNum}` という
- * ゆるい形（`title` 省略時は既存行から抽出する `??` フォールバックがJS側にある）なので、
- * 素直に `js.Dynamic` で渡す
- */
-@js.native
-trait BoardDoStub extends DurableObjectStub {
-  def reserveThreadCreation(key: String, limit: js.Dynamic): js.Promise[String] = js.native
-  def completeThreadCreation(key: String): js.Promise[Unit] = js.native
-  def cancelThreadCreation(key: String): js.Promise[Unit] = js.native
-  def getSubject(): js.Promise[String] = js.native
-  def getRemoved(): js.Promise[js.Array[String]] = js.native
-  def removeThread(key: String): js.Promise[Unit] = js.native
-  def updateThread(threadData: js.Dynamic, isSage: js.UndefOr[Boolean] = js.native, maxThreads: js.UndefOr[Double] = js.native): js.Promise[Unit] = js.native
 }
 
 /** 
@@ -142,10 +104,10 @@ trait Fetcher extends js.Object {
  */
 @js.native
 trait WorkerEnv extends js.Object {
-  val V6_PLACEHOLDER_DO: DurableObjectNamespace = js.native
+  val V6_PLACEHOLDER_DO: DurableObjectNamespace[V6PlaceholderDoStub] = js.native
   /** v5 `thread.js` / `board.js` 移植分のバインディング（`wrangler.jsonc` 参照）。 */
-  val THREAD_DO: DurableObjectNamespace = js.native
-  val BOARD_DO: DurableObjectNamespace = js.native
+  val THREAD_DO: DurableObjectNamespace[ThreadDoStub] = js.native
+  val BOARD_DO: DurableObjectNamespace[BoardDoStub] = js.native
   val ch3www: R2Bucket = js.native
   val CAP: KVNamespace = js.native
   val ASSETS: Fetcher = js.native

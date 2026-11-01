@@ -62,16 +62,16 @@ bbs/
     handler/           PublicRoutes（dat, subject.txt, SETTING.TXT, bbsmenu 等）, Posting（投稿パイプライン）,
                        Moderation, AdminHandler（/admin/*）, Responses
     durable/           Board DO, Thread DO（V6PlaceholderDurableObject は骨格確認用の残り）
-    external/cloudflare/  Workers / DO / R2 / KV の facade
+    external/cloudflare/  Workers / DO / R2 / KV の facade（DO の RPC スタブ `*DoStub` はコンパイル時に codegen が生成。docs/durable-object-stubs.md）
     hash/, util/       Web Crypto ハッシュ, Shift_JIS 変換
   src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
   test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ
 bbs-client/            クライアント側（hydration）Scala
-codegen/               RouteTable.scala から app/routes/ を生成
+codegen/               RouteTable.scala から app/routes/ を、DO から TS 型と Scala RPC スタブを生成
 app/                   HonoX（server.ts がエントリ。routes/ は生成物）
 public/
   3chiko.html          3chiko.html本体。Vite の publicDir として dist/ へコピーされ Workers Static Assets で配信
-tests/                 実workerdを使う統合テスト（要 dist/）用ディレクトリ。admin.integration.test.js（実 workerd）。golden/ は言語中立の入出力表（Scala 側が読む）
+tests/                 実workerdを使う統合テスト（要 dist/）用ディレクトリ。admin.integration.test.js・rpc.integration.test.js（実 workerd。support/ はテスト専用 Worker）。golden/ は言語中立の入出力表（Scala 側が読む）
 docs/                  仕様書・設計メモ（後述）
 wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 ```
@@ -84,6 +84,7 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 | **`docs/既知不具合台帳.md`**                                                           | **既知不具合の一覧（KB-nn）。** 新たに見つけた不具合もここに追記する。修正方針は 3.3                                                                                                  |
 | `docs/v6s実装メモ.md`                                                                  | Scala.js 実装（`bbs/`）の設計背景。doc コメントから参照される（3.5）                                                                                                                  |
 | `docs/admin.md`                                                                        | 管理画面の利用手順・規制ルール書式                                                                                                                                                    |
+| `docs/durable-object-stubs.md`                                                         | DO の RPC スタブ（`*DoStub`）のコンパイル時生成の仕様・対応範囲・運用手順                                                                                                            |
 | `docs/admin-review.md`                                                                 | 管理画面追加時のレビュー記録（セルフ / Gemini CLI）                                                                                                                                   |
 | `docs/実装方針251030v1_ストレージ改修.md`                                              | ストレージ改修の実装方針                                                                                                                                                              |
 | `docs/詳細設計たたき台_ストレージ改修.md` / `docs/詳細設計仮案(AI)1_ストレージ改修.md` | 同上の設計案                                                                                                                                                                          |
@@ -188,8 +189,9 @@ v6 の振る舞いは次で固定する。仕様変更時は、対応するア�
     Date / Math.random / `caches` を差し替えるため、`bbs` は `Test / parallelExecution := false`。
   - 期待値は v5 から引き継いだもの。KB-nn コメント付きのアサーションは既知不具合の現挙動の固定。
   - `common/src/test` と `WebHashSuite` / `SjisEncodingSuite` は `tests/golden/*.json` と照合する。
-- **`npm test`（node:test）**: 実 workerd（`unstable_dev`）が要る `tests/admin.integration.test.js` のみ。
-  `dist/index.js`（`npm run v6:build`）が無いと skip される。
+- **`npm test`（node:test）**: 実 workerd（`unstable_dev`）が要る `tests/admin.integration.test.js` と
+  `tests/rpc.integration.test.js`（DO RPC の省略引数）、および `tests/client-bundle.test.js`（KB-27）。
+  workerd を使うものは `dist/index.js`（`npm run v6:build`）が無いと skip される。
 
 ### Step 4. フロントエンドを新仕様で Next.js 化
 

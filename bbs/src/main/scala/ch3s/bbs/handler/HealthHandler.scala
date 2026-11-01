@@ -1,6 +1,6 @@
 package ch3s.bbs.handler
 
-import ch3s.bbs.external.cloudflare.{V6PlaceholderDoStub, WorkerEnv}
+import ch3s.bbs.external.cloudflare.WorkerEnv
 import ch3s.bbs.external.hono.HonoContextFacade
 import ch3s.bbs.external.web.{Response, ResponseInit}
 
@@ -13,9 +13,7 @@ object HealthHandler {
 
   def health(c: HonoContextFacade): js.Promise[Response] = {
     val env = c.env.asInstanceOf[WorkerEnv]
-    val stub = env.V6_PLACEHOLDER_DO
-      .get(env.V6_PLACEHOLDER_DO.idFromName("v6-health-check"))
-      .asInstanceOf[V6PlaceholderDoStub]
+    val stub = env.V6_PLACEHOLDER_DO.get(env.V6_PLACEHOLDER_DO.idFromName("v6-health-check"))
 
     stub.ping().`then` { pong =>
       val init = new ResponseInit {}

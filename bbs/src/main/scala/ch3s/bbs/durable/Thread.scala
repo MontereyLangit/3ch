@@ -21,8 +21,8 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
   private def str(value: js.Any): String = js.Dynamic.global.String(value).asInstanceOf[String]
   private def text(key: String): Future[String] = read(key).map(v => if truth(v) then str(v) else "")
   private def put(values: (String, js.Any)*): Future[Unit] = state.storage.put(js.Dictionary(values*)).toFuture
-  private def board(name: String): BoardDoStub = env.BOARD_DO.get(env.BOARD_DO.idFromName(name)).asInstanceOf[BoardDoStub]
-  private def thread(name: String): ThreadDoStub = env.THREAD_DO.get(env.THREAD_DO.idFromName(name)).asInstanceOf[ThreadDoStub]
+  private def board(name: String): BoardDoStub = env.BOARD_DO.get(env.BOARD_DO.idFromName(name))
+  private def thread(name: String): ThreadDoStub = env.THREAD_DO.get(env.THREAD_DO.idFromName(name))
   private def fail(message: String): Nothing = throw js.JavaScriptException(new js.Error(message))
   private def trimEnd(s: String): String = s.asInstanceOf[js.Dynamic].trimEnd().asInstanceOf[String]
   private def trim(s: String): String = s.asInstanceOf[js.Dynamic].trim().asInstanceOf[String]
@@ -184,7 +184,8 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
     } yield count
   }.toJSPromise
 
-  def inspect(bbs: js.UndefOr[String] = js.undefined, key: js.UndefOr[String] = js.undefined): js.Promise[js.Dynamic] =
+  /** 管理画面向けの一括状態。結果は `Object.fromEntries` のプレーンオブジェクト（[[ThreadInspectResult]]）。 */
+  def inspect(bbs: js.UndefOr[String] = js.undefined, key: js.UndefOr[String] = js.undefined): js.Promise[ThreadInspectResult] =
     (for {
       _ <- getDat(bbs.getOrElse(""), key.getOrElse("0")).toFuture
       data <- state.storage.get(js.Array("dat", "log", "legacyLog", "settings", "hidden", "stopped", "movedTo", "movingTo", "importedFrom")).toFuture
@@ -192,7 +193,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
         env.ch3www.get(s"${bbs.get}/thread/${key.get.take(4)}/${key.get}.cgi").toFuture.flatMap { obj =>
           if obj == null then Future.unit else obj.text().toFuture.flatMap { log => data.update("legacyLog", log); put("legacyLog" -> log) }
         } else Future.unit
-    } yield js.Dynamic.global.Object.fromEntries(data)).toJSPromise
+    } yield js.Dynamic.global.Object.fromEntries(data).asInstanceOf[ThreadInspectResult]).toJSPromise
 
   def moderate(action: String, input: js.Dynamic): js.Promise[Unit] = {
     val source = s"${str(input.bbs)}/${str(input.key)}"
