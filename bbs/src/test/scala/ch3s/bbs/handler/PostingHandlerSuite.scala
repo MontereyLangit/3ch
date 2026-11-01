@@ -426,8 +426,8 @@ class PostingHandlerSuite extends FunSuite {
       val key = threadKey(p)
       assert(key.nonEmpty && key.forall(_.isDigit), key)
       assertEquals(header(p.res, "x-resnum"), Some("1"))
-      // Preserve the refresh target and delay across React attribute formatting.
-      assert(p.text.contains(s"""content="5;URL=/test/read.cgi/sample/$key/l50""""))
+      // Preserve the refresh target and delay across React attribute formatting (55689ca で遷移先から /l50 を外した)。
+      assert(p.text.contains(s"""content="5;URL=/test/read.cgi/sample/$key/""""))
       assert(p.text.contains("http-equiv=\"refresh\""))
     }
   }
