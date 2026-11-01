@@ -6,4 +6,7 @@ object PostingText {
 
   val threadCreationNarrow: String = "スレッドを立てすぎです。しばらく待ってから投稿してください。"
   val threadCreationBroad: String = "この接続環境ではスレッドを立てすぎです。しばらく待ってから投稿してください。"
+
+  val globalThreadCreateCapOnly: String = "全板共通スレッド(!924 / !900)は★(キャップ)のみ立てられます。"
+  val globalThreadCapOnly: String = "このスレッドは★(キャップ)のみ書き込めます。"
 }

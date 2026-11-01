@@ -3,7 +3,7 @@ package ch3s.bbs.handler
 import ch3s.bbs.external.cloudflare.*
 import ch3s.bbs.external.web.{Request, Response}
 import ch3s.bbs.hash.WebHash
-import ch3s.bbs.domain.posting.{ClientIdentity, PostingContext}
+import ch3s.bbs.domain.posting.{ClientIdentity, GlobalThread, PostingContext}
 import ch3s.bbs.domain.posting.moderation.ThreadCreationRejection
 import ch3s.common.domain.{BoardId, ThreadKey}
 import ch3s.common.hash.{Md5, HexToBinary}
@@ -64,6 +64,7 @@ object PostingHandler {
       _ <- Future { checkRequest(g, request) }
       _ <- readForm(g, request)
       _ <- processCap(g, env)
+      _ = checkGlobalThread(g)
       _ <- processTrip(g)
       _ = { g.path = str(g.form.bbs) + "/"; g.logPath = str(g.path) + "thread/" + str(g.form.key).take(4) + "/"; g.logFile = str(g.logPath) + str(g.form.key) + ".cgi" }
       _ <- boardSettings(g, env)
@@ -141,13 +142,25 @@ object PostingHandler {
     for name <- List("subject", "FROM", "mail", "submit") do g.form.updateDynamic(name)(replace(str(g.form.selectDynamic(name)), " ?<br> ?", ""))
     g.form.bbs = replace(str(g.form.bbs), "[^a-zA-Z0-9_-]", "")
     for name <- List("key", "time") do g.form.updateDynamic(name)(replace(str(g.form.selectDynamic(name)), "\\D", ""))
-    if matches(str(g.form.key), "^(924|900)") then g.form.bbs = "924"
+    if GlobalThread.kindOf(str(g.form.key)).isDefined then g.form.bbs = GlobalThread.board
     if Set("", "test", "js", "css", "html", "images").contains(str(g.form.bbs)) then deny(g, "板の指定が不正です。<br>\nThe board directory is incorrect...")
     if eq(g.form.MESSAGE, "") then deny(g, "本文がありません！")
     if (eq(g.form.key, "") || !matches(str(g.form.key), "^[0-9]+$")) && eq(g.form.subject, "") then deny(g, "subjectが存在しないかキー情報が不正です。key=" + str(g.form.key) + "<br>\nThe subject is empty and key is wrong.")
     if eq(g.form.time, "") || !matches(str(g.form.time), "^[0-9]+$") then deny(g, "ブラウザ変ですよん。(time)<br>\ntime is empty. time=" + str(g.form.time))
     if !eq(g.form.key, "") then g.form.subject = ""
     if truth(g.form.subject) then g.form.key = g.unixtime
+    // 全板共通スレ: 本文先頭の !924 / !900 でスレキーの先頭3桁を置き換え、板924に保存する。★の確認は checkGlobalThread。
+    if truth(g.form.subject) then GlobalThread.command(str(g.form.MESSAGE)).foreach { (kind, rest) =>
+      if rest.isEmpty then deny(g, "本文がありません！")
+      g.form.MESSAGE = rest; g.form.key = GlobalThread.key(kind, str(g.unixtime)); g.form.bbs = GlobalThread.board
+    }
+  }
+
+  /** 全板共通スレの★制限。スレ立ては924・900とも★のみ、書き込みは924のみ★に限る（docs/global-thread.md）。 */
+  private def checkGlobalThread(g: js.Dynamic): Unit = GlobalThread.kindOf(str(g.form.key)).foreach { kind =>
+    val cap = truth(g.cap)
+    if truth(g.form.subject) && !cap then deny(g, PostingText.globalThreadCreateCapOnly)
+    if !GlobalThread.canPost(kind, cap) then deny(g, PostingText.globalThreadCapOnly)
   }
 
   private def decodeSjis(s: String): String = {

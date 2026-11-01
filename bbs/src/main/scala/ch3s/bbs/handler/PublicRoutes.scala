@@ -2,6 +2,7 @@ package ch3s.bbs.handler
 
 import ch3s.bbs.external.cloudflare.*
 import ch3s.bbs.external.web.{Request, Response}
+import ch3s.bbs.domain.posting.GlobalThread
 import ch3s.common.routes.RouteTable
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -102,9 +103,11 @@ object PublicRoutes {
             case "dat" =>
               val key = matched(2).get
               val canonical = s"/$bbs/dat/$key.dat"
+              // 全板共通スレ(924/900始まり)はどの板のURLからでも板924のThread DOを読む。
+              val owner = if GlobalThread.kindOf(key).isDefined then GlobalThread.board else bbs
               guard(canonical) {
-                val stub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$key")).asInstanceOf[js.Dynamic]
-                stub.getPublicData(bbs, key).asInstanceOf[js.Promise[js.Dynamic]].toFuture.map { data =>
+                val stub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$owner/$key")).asInstanceOf[js.Dynamic]
+                stub.getPublicData(owner, key).asInstanceOf[js.Promise[js.Dynamic]].toFuture.map { data =>
                   val dat = str(data.dat)
                   if !truth(data.dat) then notFound(canonical) else {
                     var modified: js.Date = if truth(data.modifiedAt) then new js.Date(data.modifiedAt.asInstanceOf[Double]) else null
@@ -117,9 +120,13 @@ object PublicRoutes {
                 }
               }
             case "subject" => guard(s"/$bbs/subject.txt") {
-              board(e, bbs).getSubject().toFuture.map { text =>
-                val rows = text.split("\n", -1).map(trim).filter(_.nonEmpty)
-                Responses.plain(rows.map(_ + "\n").mkString, "plain", "Shift_JIS", since = h("if-modified-since"), extra = js.Dictionary("max-age" -> "5", "s-maxage" -> "1"))
+              // 全板共通スレ(板924の一覧)を 924 → 900 の順で先頭に置き、板固有のスレを続ける。
+              def rows(text: String): Seq[String] = text.split("\n", -1).map(trim).filter(_.nonEmpty).toSeq
+              val ownF = board(e, bbs).getSubject().toFuture
+              val globalF = if bbs == GlobalThread.board then ownF else board(e, GlobalThread.board).getSubject().toFuture
+              ownF.zip(globalF).map { (own, global) =>
+                val merged = GlobalThread.mergeSubject(rows(global), if bbs == GlobalThread.board then Nil else rows(own))
+                Responses.plain(merged.map(_ + "\n").mkString, "plain", "Shift_JIS", since = h("if-modified-since"), extra = js.Dictionary("max-age" -> "5", "s-maxage" -> "1"))
               }
             }
             case "archive" | "archives" =>
