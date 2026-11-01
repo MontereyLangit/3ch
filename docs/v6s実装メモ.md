@@ -103,6 +103,23 @@ step 3 方針から外れる。
 本家 2ch と異なる 3ch 独自のトリップ値を生む既知の挙動なので、元の JS と同じく無条件に `TextEncoder` へ
 委譲して保持する（「正しい」変換に直してはいけない。[移植方針_step3_ScalaJS.md](移植方針_step3_ScalaJS.md) R-02）。
 
+### 3.3 MD5 / crypt(3) は npm ライブラリに委譲する（`hash/Md5.scala`, `hash/UnixCrypt.scala`）
+
+2026-11-01 に、`common/` にあった自作の MD5（`Md5.scala`）と Unix crypt(3) DES（`UnixCrypt.scala`）を
+npm ライブラリへの薄い facade に置き換えた。自作実装は v5 の JS をビット演算まで 1:1 で写したもので、
+保守の対象として残す価値が無い。
+
+- MD5: `@noble/hashes`（`@noble/hashes/legacy.js` の `md5`, `utils.js` の `bytesToHex`）。
+  v2 系は文字列入力を受け付けないので、v5 と同じく `TextEncoder` で UTF-8 化してから渡す
+  （孤立サロゲートが U+FFFD になる挙動はこれで保たれる）。
+- crypt(3): `unix-crypt-td-js`（Tim Dumol 版）。v5 の `src/common.js` に同梱されていたのは同じ実装なので、
+  KB-26（2文字未満の salt で NUL が混じる）を含めて出力は同一。
+- 置き場所は `common/` ではなく `bbs/`: npm モジュールは Scala.js からしか呼べず、cross project の JVM 側では
+  リンクできない。`bbs/` の他の `@JSImport` facade（`react-dom/server` 等）と同じ扱い。
+- 検証: `tests/golden/md5.json`・`crypt.json`・`crypt-bytes.json` の全ケースが一致することを
+  `bbs/src/test/.../hash/Md5Suite`・`UnixCryptSuite` で固定している（`common` から移した）。
+  `common/text/Utf8.scala` は `AdminHandler` / `Responses` / `Board` が使うので残す。
+
 ## 4. テストスイート（`bbs/src/test/`）
 
 ### 4.1 `DurableTestKit`

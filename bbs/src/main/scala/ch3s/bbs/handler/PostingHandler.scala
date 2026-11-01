@@ -6,8 +6,8 @@ import ch3s.bbs.hash.WebHash
 import ch3s.bbs.domain.posting.{ClientIdentity, PostingContext}
 import ch3s.bbs.domain.posting.moderation.ThreadCreationRejection
 import ch3s.common.domain.{BoardId, ThreadKey}
-import ch3s.common.hash.{Md5, HexToBinary}
-import ch3s.common.crypt.UnixCrypt
+import ch3s.common.hash.HexToBinary
+import ch3s.bbs.hash.{Md5, UnixCrypt}
 import ch3s.bbs.util.SjisEncoding
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*

@@ -1,11 +1,10 @@
-package ch3s.common.crypt
+package ch3s.bbs.hash
 
 import ch3s.common.golden.{GoldenFile, Json}
 import munit.FunSuite
 
 /**
- * `tests/golden/crypt.json` を読み、`src/common.js` の Unix crypt(3) DES 実装と
- * Scala版 [[UnixCrypt]] の出力が一致することを確認する
+ * [[UnixCrypt]] を `tests/golden/crypt.json` / `crypt-bytes.json`（v5 `src/common.js` の crypt(3) 実測値）と照合する
  * （8バイト超のパスワードの切り詰め、ソルト文字の内部補正、2文字未満のソルトの実測挙動を含む）。
  */
 class UnixCryptSuite extends FunSuite {
@@ -13,7 +12,7 @@ class UnixCryptSuite extends FunSuite {
   test("golden: cryptBytes preserves undefined salt elements (KB-26)") {
     for (c <- Json.parse(GoldenFile.readText("crypt-bytes.json")).asArr) {
       val expected = c.field("output").asArr.map(v => if (v.isUndefinedMarker) None else Some(v.asInt))
-      assertEquals(UnixCrypt.cryptBytes(c.field("password").asString, c.field("salt").asString).toList, expected)
+      assertEquals(UnixCrypt.cryptBytes(c.field("password").asString, c.field("salt").asString), expected)
     }
   }
 

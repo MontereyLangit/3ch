@@ -49,13 +49,13 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 - **状態管理**: Durable Objects — `Board`（板: スレ一覧 / 削除済み一覧）, `Thread`（スレ: dat / log / settings / hidden / stopped / movedTo）
 - **オブジェクトストレージ**: R2 `ch3www`（`SETTING.TXT`, `head.txt`, `bbsmenu.html`, `headline.txt`, `deny.cgi`, `ngwords.cgi`, 過去ログ `.cgi`）
 - **KV**: `CAP`（キャップ: パスワードハッシュ → 表示名）, `TEST`
-- **暗号**: Web Crypto (SHA-1 / SHA-256) + 自前 MD5 / Unix crypt(3) DES（トリップ用。`common/`）
+- **暗号**: Web Crypto (SHA-1 / SHA-256) + npm ライブラリの MD5（`@noble/hashes`）/ Unix crypt(3) DES（`unix-crypt-td-js`。トリップ用）。facade は `bbs/.../hash/`（背景は `docs/v6s実装メモ.md` §3.3）
 - **文字コード**: 自前 Shift_JIS (JIS X 0208) エンコーダ/デコーダ（`bbs/.../util/SjisEncoding.scala`、背景は `docs/sjis差異一覧.md`）
 
 ### 1.4 ディレクトリ構成
 
 ```
-common/                Scala (JVM/JS cross)。Shift_JIS 以外の純粋ロジック（MD5, crypt(3), ルート表 RouteTable.scala 等）
+common/                Scala (JVM/JS cross)。Shift_JIS 以外の純粋ロジック（UTF-8 変換, ルート表 RouteTable.scala, トリップ補助 等）
 bbs/
   src/main/scala/ch3s/bbs/
     Main.scala         Worker エントリ（JSExportTopLevel）
@@ -63,7 +63,7 @@ bbs/
                        Moderation, AdminHandler（/admin/*）, Responses
     durable/           Board DO, Thread DO（V6PlaceholderDurableObject は骨格確認用の残り）
     external/cloudflare/  Workers / DO / R2 / KV の facade
-    hash/, util/       Web Crypto ハッシュ, Shift_JIS 変換
+    hash/, util/       Web Crypto ハッシュ・MD5 / crypt(3) の npm facade, Shift_JIS 変換
   src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
   test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ
 bbs-client/            クライアント側（hydration）Scala
@@ -124,8 +124,8 @@ npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc
 
 - **ストレージスキーマが v5 と異なる**: DO は `Bbs` / `Thread` / `User`（v5 は `Board` / `Thread`）。`SETTING.TXT`・`head.txt`・
   `subject.txt` を `Bbs` DO のストレージに持ち、R2 バインディングがない。
-- Shift_JIS 変換は `encoding-japanese`、crypt(3) は `unix-crypt-td-js` を使う。v5 とのバイト単位の一致は検証されていない
-  （Shift_JIS の差異は `docs/移植方針_step3_ScalaJS.md` R-01 参照）。
+- Shift_JIS 変換は `encoding-japanese`、crypt(3) は `unix-crypt-td-js` を使う。Shift_JIS は v5 とのバイト単位の一致が検証されていない
+  （差異は `docs/移植方針_step3_ScalaJS.md` R-01 参照）。`unix-crypt-td-js` は v6 でも採用した（`docs/v6s実装メモ.md` §3.3）。
 - 以上から **step 3（仕様・スキーマ不変の移植）の手本にはしない**。新仕様を扱う step 4 / 5（UI・`User` 相当の認証・
   規制の設計）の参考として使う。
 - `src/index.tsx` は `@/durable_objects/Bbs` 等を大文字で import しているが、実ファイルは小文字（`bbs.ts`）。
@@ -187,7 +187,7 @@ v6 の振る舞いは次で固定する。仕様変更時は、対応するア�
   - R2 / KV / `caches.default` / ASSETS / 時刻・乱数のフェイクは `durable/DurableTestKit` と `handler/HandlerTestKit`。
     Date / Math.random / `caches` を差し替えるため、`bbs` は `Test / parallelExecution := false`。
   - 期待値は v5 から引き継いだもの。KB-nn コメント付きのアサーションは既知不具合の現挙動の固定。
-  - `common/src/test` と `WebHashSuite` / `SjisEncodingSuite` は `tests/golden/*.json` と照合する。
+  - `common/src/test` と `hash/WebHashSuite`・`Md5Suite`・`UnixCryptSuite` / `SjisEncodingSuite` は `tests/golden/*.json` と照合する。
 - **`npm test`（node:test）**: 実 workerd（`unstable_dev`）が要る `tests/admin.integration.test.js` のみ。
   `dist/index.js`（`npm run v6:build`）が無いと skip される。
 
