@@ -46,6 +46,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 | 用語 | 意味 |
 | --- | --- |
 | アカウント | `Account` DO 1 件。公開 ID `uid` を持つ。種別は未ログイン以外の 3 つ（§3.1） |
+| `aid` | 内部 ID。`Account` DO の名前（`idFromName(aid)`）。作成時に 16 文字 `[a-z0-9]` で採番し、以後変えない。Cookie・索引・ログの内部参照はこれを使う |
 | `uid` | 公開 ID。ID/Password は利用者が決めたログイン ID、クライアント ID・Google は自動採番 8 文字 `[a-z0-9]`。永久に再利用しない |
 | Lv | PHOEBE レベル 0〜10。アカウントに 1 つ。板・スレをまたいで共通 |
 | 認証済 | 有効なセッション Cookie（§3.3）または有効な専ブラ認証キー・キャップで投稿していること。未ログインは L0 固定 |
@@ -65,10 +66,8 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 | ID/Password | Turnstile ＋ 法的投稿確認 ＋ ID・パスワード登録 | 1（メール認証済なら 3） | 10 | 可 | なし | クライアント ID からの移行先になれる |
 | Google 連携 | Google OAuth（Turnstile なし） | 10 固定 | 10 | 可 | なし | 1 つの Google アカウント（`sub`）につき 1 アカウント |
 
-- **移行**: クライアント ID → ID/Password または Google へ移行できる。移行時は `uid` を付け替えず（ログイン ID を新たに登録した場合は、その ID を新しい `uid` とし旧 `uid` は別名として残す）、Lv・端末履歴・ログを引き継ぐ。ID/Password・Google からクライアント ID への移行、ID/Password ⇄ Google の相互移行はしない。
-- **ID/Password の規則**: ログイン ID `[a-z0-9_]{3,16}`、パスワード 8〜128 文字。保存は PBKDF2-HMAC-SHA256（Web Crypto、反復 100,000、ソルト 16 バイト）。ログイン失敗は `uid` ごとに 10 回/時でロック。
-- **メール認証**: 登録時任意。認証メールのリンク（有効 24 時間、1 回限り）を踏むと `emailVerifiedAt` を記録し、Lv が 3 未満なら 3 に引き上げる。送信手段（Cloudflare Email Routing では送信できないため外部 API）は §13。
-- **Google 連携**: OpenID Connect の `id_token` を検証し `sub` と `email_verified` を見る。`email_verified=false` は拒否。
+- **移行**: クライアント ID → ID/Password または Google へ移行できる。移行しても `aid`（DO）は同じで、Lv・端末履歴・ログを引き継ぐ。ログイン ID を新たに登録した場合はその ID を新しい `uid` とし、旧 `uid` は `aliases` に残して `AccountIndex("alias")` から引けるようにする（名前欄 `@旧uid` の投稿を辿れるようにするため）。手順は §3.9・§3.10。ID/Password・Google からクライアント ID への移行、ID/Password ⇄ Google の相互移行はしない。
+- **ID/Password** の詳細は §3.9、**Google 連携**の詳細は §3.10。
 - **法的投稿確認**: 認証画面で利用規約・投稿の法的責任への同意チェックを必須にし、`agreedAt` と同意文書の版を保存する。版を上げたら次回投稿前に再同意させる。
 
 ### 3.2 認証フロー
@@ -89,9 +88,9 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 | 項目 | 値 |
 | --- | --- |
 | 名前 | `ch3s_sid` |
-| 値 | `1.{uid}.{gen}.{exp}.{lv}.{dev}.{sig}`。`gen` はアカウントの世代番号、`exp` は失効 UNIX 秒、`lv` は発行時点の Lv（表示用の写し）、`dev` は端末ハッシュ（粒度 1 字＋18 hex。無ければ空）、`sig` は `AUTH_SECRET` による HMAC-SHA256 の先頭 128 bit（base64url） |
+| 値 | `1.{aid}.{uid}.{gen}.{exp}.{lv}.{dev}.{sig}`。`gen` はアカウントの世代番号、`exp` は失効 UNIX 秒、`lv` は発行時点の Lv（表示用の写し）、`dev` は端末ハッシュ（粒度 1 字＋18 hex。無ければ空）、`sig` は `AUTH_SECRET` による HMAC-SHA256 の先頭 128 bit（base64url） |
 | 属性 | `Domain=.3chbbs.com; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax`。`Secure` は現行 `PON` と同じく専ブラ（`Monazilla/`）以外に付ける |
-| 検証 | bbs.cgi: 署名 → `exp` → `Account.describeForPosting(uid)` で `gen` 一致・状態（active / frozen / banned）・Lv・権限を得る。DO 呼び出しは投稿 1 回につき 1 回。DO の Lv が Cookie の `lv` と違えば応答で Cookie を発行し直す。SSR 画面（板 top・read.cgi）: 署名と `exp` だけ見て `uid` と `lv` を表示に使い、DO は呼ばない（`SessionReader`、§3.8） |
+| 検証 | bbs.cgi: 署名 → `exp` → `Account.describeForPosting(aid)` で `gen` 一致・状態（active / frozen / banned）・Lv・権限を得る。DO 呼び出しは投稿 1 回につき 1 回。DO の Lv が Cookie の `lv` と違えば応答で Cookie を発行し直す。SSR 画面（板 top・read.cgi）: 署名と `exp` だけ見て `uid` と `lv` を表示に使い、DO は呼ばない（`SessionReader`、§3.8） |
 | 失効 | ログアウトは `gen` を進める（全端末のセッションが無効になる）。クライアント ID は `exp` ＝発行＋365 日 |
 
 既存の `PON` 等の Cookie は現行どおり発行し、意味は変えない。
@@ -155,7 +154,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 
 **SSR 側（`SessionReader`）**
 
-- 全画面ハンドラは `SessionReader.fromRequest(c)` で Cookie（§3.3）を署名と `exp` だけ検証し、`Option[SessionSnapshot(uid, lv)]` を得る。
+- 全画面ハンドラは `SessionReader.fromRequest(c)` で Cookie（§3.3）を署名と `exp` だけ検証し、`Option[SessionSnapshot(aid, uid, lv)]` を得る。
   DO は呼ばない。失効・改竄は未ログインとして描画する。
 - `HeaderComponent` のアカウント領域（現在「準備中」の仮置き）は snapshot で出し分ける。
   - 未ログイン: 「認証・登録」→ `/auth/?return={現在のパス}`、「ログイン」→ `/auth/?mode=login&return={現在のパス}`。
@@ -191,7 +190,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 - `embed=1` では共通ヘッダー・フッターを出さず、完了時に `window.parent.postMessage` して自分では遷移しない。
   通常表示（B）では完了後に `return` へ遷移する。同じハンドラ・同じコンポーネントで `embed` の有無だけ変える。
 - Turnstile は同一オリジンの iframe 内で動く。Google OAuth は iframe 内で始められないため、`embed=1` のときは
-  ボタンで `window.open("/auth/google?popup=1")` を開き、callback 画面が `window.opener` へ `postMessage` して自分を閉じる。
+  ボタンが `POST /auth/google/start`（`popup=1`）をポップアップへ送り、callback 画面が `window.opener` へ `postMessage` して自分を閉じる（§3.10）。
 - CSP は `frame-ancestors 'self'`、`script-src` に `challenges.cloudflare.com` を足す。Turnstile のスクリプトは `/auth/` だけが読む。
 - `SameSite=Lax` の Cookie は同一オリジンの iframe・`fetch`・ポップアップの top-level 遷移のいずれでも送受信できる。
 
@@ -204,6 +203,107 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 
 スレ表示の新 UI も同じ `SessionReader`・`PostingFormComponent`・`AuthModal` を使う。画面固有の差はない。
 現行 `3chiko.html` の read.cgi は §3.2 のとおりエラー画面のリンクだけで誘導する。
+
+### 3.9 ID/Password 方式
+
+**ログイン ID とパスワードの規則**（`common/domain/account/{LoginId, Password}`）
+
+| 項目 | 規則 |
+| --- | --- |
+| ログイン ID | `[a-z0-9_]{3,16}`。入力は小文字化してから検証。予約語（`admin`・`root`・`test`・`3ch`・`saku`・板名と同じ文字列・`noname` 等。R2 `reserved-ids.txt`）は拒否。登録後は変更不可。これが `uid` になる |
+| パスワード | 8〜128 文字。NFC 正規化後に UTF-8 で数える。ログイン ID と同一・ログイン ID を含むものは拒否。文字種の強制はしない |
+| 保存 | PBKDF2-HMAC-SHA256、反復 100,000、ソルト 16 バイト（`crypto.getRandomValues`）。`credential` に `{algo, iterations, salt, hash}` で持ち、`algo`・`iterations` を保存するので将来の強化（反復増・別アルゴリズム）はログイン成功時に再ハッシュして移行する |
+| 照合 | `Account.verifyPassword(password, now)` が DO 内で PBKDF2 を計算し定数時間比較する。失敗回数・ロックも同じ RPC で直列化して更新する（Worker 側で照合すると失敗計数が競合する） |
+| ロック | アカウント: 直近 1 時間に 10 回失敗で 1 時間ロック。`keyIp`: 30 回/時（KV `AUTH_RATE`）。ロック中も応答は失敗時と同じ文言・同じ所要時間（ダミーで PBKDF2 を 1 回計算） |
+| 文言 | 存在しない ID・パスワード不一致・ロック中のいずれも「ID またはパスワードが違います」。ID の存在を推測させない |
+
+**登録**（`POST /auth/register`。`/auth/?mode=register`）
+
+1. 入力: ログイン ID・パスワード（2 回）・メール（任意）・法的投稿確認の同意・Turnstile トークン・端末申告（§3.7）。
+2. Turnstile 検証 → 突合（`declaration_mismatch` / `fingerprint`）→ 乱造検知 → 入力規則。登録は `keyIp` ごとに 5 件/日。
+3. `AccountIndex("login").register(hash(loginId), aid)`。衝突なら「この ID は使えません」。`aid` は Worker 側で先に採番する。
+4. メールがあれば `AccountIndex("email").register(hash(正規化メール), aid)`。衝突ならメール欄だけエラーにし、登録を続けない（§13-19）。
+5. `Account.create(profile, credential)` → `bindDevice`。失敗したら 3・4 の索引を `remove` して戻す（索引が先、本体が後。本体が無い索引は `lookup` 後の `describe` 失敗で検出して掃除する）。
+6. メールがあれば認証メール送信（下記）。`Set-Cookie`。初期 Lv は 1（メール認証完了で 3）。
+
+**ログイン**（`POST /auth/login`。`/auth/?mode=login`）
+
+1. 入力: ログイン ID・パスワード・Turnstile トークン・端末申告。Turnstile は毎回（§13-20）。
+2. Turnstile 検証 → 突合 → `AccountIndex("login").lookup` → `Account.verifyPassword`。存在しない ID でもダミーの PBKDF2 を 1 回計算して所要時間を揃える。
+3. 成功: 状態（`frozen` / `banned` / `deleted` は拒否）→ `bindDevice` → `Set-Cookie`（`gen`・`lv`・`dev` 入り）→ `return` へ遷移、`embed=1` なら `postMessage`。
+4. 「他の端末からもログアウト」は `POST /auth/logout?all=1` で `gen` を進める。通常のログアウトは Cookie を消すだけ（他端末は残す）。
+
+**クライアント ID からの移行**（`/auth/account?upgrade=1` → `POST /auth/register` に `upgrade=1`）
+
+- 有効なセッション（クライアント ID）がある状態で登録手順 1〜4 を行い、5 の代わりに `Account.convert("password", loginId)` で同じ `aid` の種別を変える。
+  `profile.uid` をログイン ID に、旧 `uid` を `aliases` に入れ `AccountIndex("alias").register(hash(旧uid), aid)`。
+  Lv・`lvSince`・`lvPosts`・端末履歴・ログはそのまま。`expiresAt` を外す。`gen` を進めて Cookie を発行し直す。
+- 移行後のクライアント ID としての Cookie は `gen` 不一致で無効になる（他端末を含む）。
+
+**パスワード変更**（`POST /auth/password`。ログイン済）
+
+現在のパスワードで `verifyPassword` → `setPassword` → `gen` を進めて現在の端末だけ Cookie を発行し直す（他端末はログアウト）。
+
+**メール認証**（`POST /auth/email` で登録・変更、`GET /auth/email/verify?token=`）
+
+- トークンは 32 バイト乱数の base64url。`Account.issuePending("email", SHA-256(token), now + 24h, email)` に保存し、平文はメール本文のリンクにだけ載せる。
+- リンクを開くと `consumePending`（1 回限り・期限内）→ `profile.email` 確定・`emailVerifiedAt` 記録・`AccountIndex("email")` 更新 → Lv が 3 未満なら 3 へ（§4.2 の `lvSince` も更新）。
+- 変更時は新アドレスで再認証し、認証完了まで旧アドレスを有効のまま残す。Lv は下げない。
+- 送信は外部 API（§13-12）。本文は固定文面でユーザー入力を含めない。送信失敗は「しばらくして再送」で `POST /auth/email`（再送は 3 回/日）。
+
+**パスワード再設定**（`POST /auth/reset/request` → メール → `GET/POST /auth/reset?token=`）
+
+- 申請は常に「送信しました」を返す（ID・メールの存在を漏らさない）。メール認証済みのアカウントだけに実際に送る（§13-21）。3 回/日。
+- トークンはメール認証と同じ形式で `issuePending("reset", …, now + 1h)`。消費時に `setPassword` → `gen` を進める → ログイン画面へ。
+- メール未登録のアカウントは再設定できない。登録時にその旨を表示し、管理者による手動対応（本人確認は管理画面の裁量）を案内する。
+
+**退会**（`POST /auth/account?action=delete`）
+
+`status=deleted`、`login` / `email` / `google` / `token` の索引を削除、キャップを失効、`gen` を進める。`alias` と `uid` の予約は残す（名前欄 `@uid` の再利用防止）。投稿・ログは消さない。
+
+### 3.10 Google OAuth 方式
+
+OpenID Connect の Authorization Code Flow ＋ PKCE を使う。スコープは `openid email` だけ。アクセストークン・リフレッシュトークンは使わず保存もしない。
+Turnstile は要求しない（原案「作成時の認証なし」）が、端末申告の取得と突合（§3.7）は行う。
+
+**開始**（`POST /auth/google/start`。`/auth/` の「Google で続ける」ボタン。フォーム POST）
+
+1. 入力: 端末申告・法的投稿確認の同意・`return`・`popup`・（移行なら有効なクライアント ID セッション）。
+2. 突合（`declaration_mismatch` / `fingerprint`）。拒否は §3.7 の文言。
+3. `state`（32 バイト乱数）・`nonce`（32 バイト乱数）・PKCE `code_verifier`（43〜128 文字）を生成し、
+   Cookie `ch3s_oauth`＝`{state, nonce, verifier, dev, return, popup, link: aid?, agreedAt}` を `AUTH_SECRET` で署名して保存
+   （`Path=/auth/google; Max-Age=600; HttpOnly; Secure; SameSite=Lax`）。
+4. `https://accounts.google.com/o/oauth2/v2/auth` へ 302:
+   `client_id`・`redirect_uri=https://www.3chbbs.com/auth/google/callback`・`response_type=code`・`scope=openid email`・
+   `state`・`nonce`・`code_challenge=S256(verifier)`・`code_challenge_method=S256`・`prompt=select_account`。
+
+**コールバック**（`GET /auth/google/callback?code=&state=`）
+
+1. `ch3s_oauth` の署名・期限を検証し、`state` が一致しなければ拒否（`reason=oauth_state`）。Cookie はここで消す（1 回限り）。
+   `error=access_denied` は `/auth/?mode=login&error=google_denied` へ戻す。
+2. `https://oauth2.googleapis.com/token` へ `code`・`client_id`・`client_secret`・`redirect_uri`・`grant_type=authorization_code`・`code_verifier` を POST。
+3. `id_token` を検証する（`bbs/application/auth/GoogleIdToken`。署名以外のクレーム検証は `common` の純粋関数）:
+   - 署名: `https://www.googleapis.com/oauth2/v3/certs` の JWKS（`kid` で選ぶ RS256）。JWKS は応答の `Cache-Control` に従い `caches.default` に保存し、`kid` 不明なら 1 回だけ再取得。
+   - `iss` ∈ {`https://accounts.google.com`, `accounts.google.com`}、`aud` = `GOOGLE_CLIENT_ID`、`exp` > now、`iat` ≤ now + 300s、`nonce` = Cookie の `nonce`。
+   - `email_verified` が `true` でなければ拒否（`reason=google_email`）。`hd` は見ない。
+4. `subHash = SHA-256(sub + ":google:" + salt)` で `AccountIndex("google").lookup`。
+   - **既存**: そのアカウントでログイン。状態が `frozen` / `banned` / `deleted` なら拒否。`bindDevice` → `Set-Cookie`。
+   - **未登録かつ `link` あり**（クライアント ID からの移行）: `Account.convert("google")` で同じ `aid` を Google 種別にし、Lv を 10 固定（`lvOverride` ではなく種別の規則として）。
+     `uid` は変えない。`AccountIndex("google").register(subHash, aid)`。`gen` を進める。
+   - **未登録かつ `link` なし**: `aid` を採番し `AccountIndex("google").register` → `Account.create`（`kind=google`、`lv=10`、`email` は参考情報として保存し `emailVerifiedAt=now`。`email` 索引には載せない — §13-19）→ `bindDevice` → `Set-Cookie`。
+   - `link` ありで `sub` が**別のアカウント**に既に紐づく: 拒否「この Google アカウントは既に別のアカウントに連携されています」。移行は行わない。
+5. 応答: `popup=1` なら `postMessage({type:"ch3s-auth", status:"ok", uid, lv})` して `window.close()` する最小の HTML（CSP は `script-src 'nonce-…'`）。
+   そうでなければ `return` へ 302。`return` の検証は §3.8 と同じ。
+
+**その他**
+
+- Google アカウント 1 つ（`sub`）につき 3ch アカウント 1 つ。同じ人が ID/Password アカウントも別に持つことは許す（相互移行はしない）。
+- 連携解除・Google → 他方式の移行はしない（§13-23）。退会は §3.9 と同じ。
+- Google 側でアカウントが消えた・取り消された場合はログインできなくなるだけで、3ch 側のデータは残す。
+- `redirect_uri` は本番 `https://www.3chbbs.com/auth/google/callback` と開発 `http://127.0.0.1:8787/auth/google/callback` を Google Cloud Console に登録する。
+  `GOOGLE_CLIENT_ID` は `vars`、`GOOGLE_CLIENT_SECRET` は secret（§9.3）。
+- エッジ防御（§3.6）のデータセンター ASN 拒否は `start` にも適用する。
+- テスト: `GoogleIdToken.verifyClaims(claims, now, nonce, clientId)` を `common` の純粋関数にして JVM でも検証。署名検証・トークン交換・JWKS は `AuthHandlerSuite` で `fetch` を差し替えて確認。
 
 ## 4. PHOEBE（Lv）
 
@@ -296,7 +396,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 
 - 発行は権限を 1 つ以上持つアカウントが自分宛に 1 個まで。`admin` は無制限で他アカウント宛にも発行できる。
 - 保存: `Account.caps[]`＝`{capId, name, hash, strong, issuedBy, issuedAt, revokedAt}`。`hash` は現行の照合値 `SHA-1(SHA-256(MD5(pass)+salt))` 先頭 27 文字をそのまま使う。
-- 互換: KV `CAP`（hash → 表示名）は現行どおり読み書きし、所有者は `AccountIndex("cap")`（hash → `uid`）で引く。所有者のない既存エントリは「旧キャップ」として動き続ける（ログ無し・Lv 無し）。管理画面から既存キャップをアカウントに紐づけられる。
+- 互換: KV `CAP`（hash → 表示名）は現行どおり読み書きし、所有者は `AccountIndex("cap")`（hash → `aid`）で引く。所有者のない既存エントリは「旧キャップ」として動き続ける（ログ無し・Lv 無し）。管理画面から既存キャップをアカウントに紐づけられる。
 - 強キャップ（表示名末尾 `★`、サイズ検証スキップ）は `admin` だけが発行できる。
 - 利用ログ: `Account.log` に `{t, kind: "cap", capId, ipHash, uaHash, bbs, key}` を追記（最大 1,000 件、古い順に切り捨て）。所有者と `admin` が閲覧でき、失効（`revokedAt`）と再発行（新 hash）ができる。失効時は KV `CAP` からも削除する。
 - キャップ投稿は所有アカウントとしてログイン扱い（§3.4）。dat 上の表示（`名前＠ハンドル ★`、`ID:???`、識別子 `★`）は現行のまま。
@@ -304,7 +404,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 ### 6.3 専ブラ用認証キー
 
 - 形式: `!#` ＋ 20 文字 `[a-z2-7]`（100 bit）。アカウントにつき有効なキーは 1 つ。再発行で旧キーは失効。
-- 保存は `AccountIndex("token")`（`SHA-256(キー + salt)` → `uid`）と `Account.token`＝`{hash, issuedAt, revokedAt}`。平文は発行画面で 1 度だけ表示する。
+- 保存は `AccountIndex("token")`（`SHA-256(キー + salt)` → `aid`）と `Account.token`＝`{hash, issuedAt, revokedAt}`。平文は発行画面で 1 度だけ表示する。
 - 専ブラの初回投稿でメール欄に入れる。一致したら `Set-Cookie` を返し、以後は Cookie（§3.3）で認証する。利用ログは §6.2 と同じ形で `kind: "token"`。
 - キャップ利用者は不要（キャップでログイン扱いになるため）。
 
@@ -341,7 +441,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 ### 8.1 共通
 
 - **適用除外**: `BBS_LIVE` が `1` または `checked` の板・スレ（4 種すべて）。`BBS_RENTOU_PASS` で免除される投稿者。`saku` 板。
-- **照合キー**: 同一 IP（IPv6 は URL 正規化、スレ立て規制と同じ）、同一 ID（`ID:` の値。`ID:???` と空は照合しない）、同一識別子（`D` を除いた `JP.AA CC-EEEFFFGGGZZZXXX`。`★` は照合しない）。いずれか 1 つでも一致すれば「同一」。認証済は `uid` も照合キーに加える（§13）。
+- **照合キー**: 同一 IP（IPv6 は URL 正規化、スレ立て規制と同じ）、同一 ID（`ID:` の値。`ID:???` と空は照合しない）、同一識別子（`D` を除いた `JP.AA CC-EEEFFFGGGZZZXXX`。`★` は照合しない）。いずれか 1 つでも一致すれば「同一」。認証済は `aid`（移行しても変わらない内部 ID）も照合キーに加える（§13）。
 - **保存値**: 全てソルト付き SHA-256（`hash(value + ":" + md5Salt)`。スレ立て規制と同じ `digest`）。空値は空のまま保存し照合しない。
 - **判定主体**: 板単位（§8.2・8.3）は Board DO、スレ単位（§8.4・8.5）は Thread DO。純粋判定は `domain/posting/moderation/PostRateLimit.scala`。
 - **拒否**: HTTP 200 ＋ `<!-- 2ch_X:error -->`。dat・履歴・Lv を進めない。拒否コードは `post-rate:board:gontakure` / `post-rate:board:samba24` / `post-rate:thread:rentou` / `post-rate:thread:copipe`。
@@ -400,7 +500,7 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | キー | 内容 |
 | --- | --- |
 | `postRatePageCount` | ページ数 |
-| `postRateHistory:<n>` | 64 件ごとのページ。各件 `{key, t, ip, id, shiki, uid, status}`（`key` は予約 ID＝`{threadKey}:{nonce}`、`status` は `pending` / `completed`） |
+| `postRateHistory:<n>` | 64 件ごとのページ。各件 `{key, t, ip, id, shiki, aid, status}`（`key` は予約 ID＝`{threadKey}:{nonce}`、`status` は `pending` / `completed`） |
 
 - RPC: `reservePost(key, entry, settings): String`（空＝許可、それ以外＝拒否コード）、`completePost(key)`、`cancelPost(key)`。いずれも `DurableLock.serialized`。
 - 判定はスレ立て規制と同じく「確定済みは件数窓で、有効な予約は 1 件ずつ別枠で」行う。予約の有効期限は 120 秒。期限切れの予約は確定済みと同じ扱い（保守的）。
@@ -451,11 +551,12 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 
 いずれも `new_sqlite_classes` で作る（`wrangler.jsonc` の TODO どおり SQLite バックエンド）。保存 API は既存と同じ KV 形式のストレージ API を使う。
 
-**`Account`**（`idFromName(uid)`）
+**`Account`**（`idFromName(aid)`）
 
 | キー | 内容 |
 | --- | --- |
-| `profile` | `{uid, kind: client\|password\|google, createdAt, expiresAt?, loginId?, passwordHash?, email?, emailVerifiedAt?, googleSub?, agreedAt, agreementVersion, status, generation, aliases[]}` |
+| `profile` | `{aid, uid, kind: client\|password\|google, createdAt, expiresAt?, loginId?, email?, emailVerifiedAt?, googleSubHash?, agreedAt, agreementVersion, status, generation, aliases[]}` |
+| `credential` | ID/Password: `{algo: "pbkdf2-sha256", iterations, salt, hash, updatedAt, failures: [t…], lockedUntil?}`。メール認証・パスワード再設定の保留トークンは `pending: {kind, hash, expiresAt, email?}`（§3.9） |
 | `level` | `{lv, lvSince, lvPosts, lvOverride?}` |
 | `roles` | `["admin", ...]` |
 | `caps` | §6.2 |
@@ -463,12 +564,12 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | `devices` | `[{hash, firstSeen, lastSeen, keyIpHash}]` 最大 10 件 |
 | `log:<n>` | 利用ログ 64 件ページ（§6.2） |
 
-RPC: `create`, `describeForPosting(gen)`, `recordPost(now)`, `login(passwordHash)`, `issueCap` / `revokeCap`, `issueToken` / `revokeToken`, `bindDevice`, `setLevel`, `setRoles`, `setStatus`, `bumpGeneration`, `appendLog`, `inspect`。
+RPC: `create`, `describeForPosting(gen)`, `recordPost(now)`, `verifyPassword(password, now)`, `setPassword`, `issuePending(kind, hash, expiresAt, email?)` / `consumePending(kind, hash, now)`, `bindGoogle(subHash)`, `convert(kind, uid)`, `issueCap` / `revokeCap`, `issueToken` / `revokeToken`, `bindDevice`, `setLevel`, `setRoles`, `setStatus`, `bumpGeneration`, `appendLog`, `inspect`。
 状態遷移（昇格・失効・移行）は `domain/account/` の純粋関数。
 
 **`AccountIndex`**（`idFromName(kind)`。`kind` ∈ `login` / `email` / `google` / `cap` / `token` / `alias`）
 
-- キー `=` 正規化した値のハッシュ、値 `=` `uid`。`register(hash, uid)` は既存なら失敗、`lookup(hash)`、`remove(hash)`。`blockConcurrencyWhile` で直列化。
+- キー `=` 正規化した値のハッシュ（`SHA-256(値 + ":" + 種別 + ":" + salt)`）、値 `=` `aid`。`register(hash, uid)` は既存なら失敗、`lookup(hash)`、`remove(hash)`。`blockConcurrencyWhile` で直列化。
 - 1 種別 1 DO にするのは一意性を単一の直列化点で保証するため。件数は数万件規模を想定し、ページ分割は不要。
 
 ### 9.2 既存 DO への追加キー
@@ -502,9 +603,11 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | --- | --- | --- |
 | `/auth/` | GET | 認証・登録ページ（SSR ＋ `AuthForm` island）。`embed=1` でモーダル用レイアウト、`mode=login`、`return` で戻り先 |
 | `/auth/verify` | POST | Turnstile 検証・端末ハッシュ算出・突合・クライアント ID 作成または既存アカウントへの端末登録。JSON 応答 |
-| `/auth/register` / `/auth/login` / `/auth/logout` | POST | ID/Password。`logout` は `gen` を進めて Cookie を消す |
-| `/auth/google` / `/auth/google/callback` | GET | OAuth。`state` は HMAC 付き nonce。`popup=1` で callback が `window.opener` へ通知して閉じる |
-| `/auth/email/verify` | GET | メール認証リンク |
+| `/auth/register` / `/auth/login` / `/auth/logout` | POST | ID/Password（§3.9）。`logout` は `gen` を進めて Cookie を消す |
+| `/auth/password` | POST | パスワード変更（ログイン済） |
+| `/auth/reset/request` / `/auth/reset` | POST / GET+POST | パスワード再設定の申請とリンク先（§3.9） |
+| `/auth/email` / `/auth/email/verify` | POST / GET | メールアドレスの登録・変更とメール認証リンク（§3.9） |
+| `/auth/google/start` / `/auth/google/callback` | POST / GET | OAuth（§3.10）。`start` が `state`・`nonce`・PKCE を Cookie に保存して Google へ転送、`callback` が検証して Cookie を発行。`popup=1` で callback が `window.opener` へ通知して閉じる |
 | `/auth/account` | GET / POST | アカウントメニュー（SSR ＋ island）: 種別・Lv・`uid`、専ブラキー発行/失効、キャップ発行/失効、利用ログ、方式移行（`upgrade=1`）、ログアウト |
 | 全ルート | — | `Accept-CH` 付与ミドルウェア（§3.7）。`app/routes/_middleware.ts` は手動管理（`docs/handler-rendering.md`） |
 
@@ -548,7 +651,7 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | 4 | 昇格曲線の読み替え（§4.2）と、クライアント ID が 1 年で L10 に届かないこと | PHOEBE.md の式を L1 開始に合わせて採用。実効上限 L9 を許容 |
 | 5 | `!バルサン` / `!SETTING:BBS_PHOEBE:n` を使える人 | スレ立て人（認証済）＋ `staff` |
 | 6 | `BBS_PHOEBE` ゲートの免除範囲 | `staff` のみ。`cap` 権限者は Lv で判定 |
-| 7 | 連投規制の照合キーに `uid` を加えるか（原案は IP・ID・識別子） | 加える（IP 切替での回避を防ぐ） |
+| 7 | 連投規制の照合キーにアカウント（`aid`）を加えるか（原案は IP・ID・識別子） | 加える（IP 切替での回避を防ぐ） |
 | 8 | ごんたくれの既定値 `timecount=18` / `timeclose=10` と、`timecover` を読まず 24 時間固定にすること | 既定設定の値を踏襲。`timecover` は無視 |
 | 9 | `BBS_SAMBA24` の既定値（既存の SETTING.TXT にはキーが無く、KB-12 により既定値がそのまま効く） | `10` 秒 |
 | 10 | 吸い込まれた投稿を連投履歴に数えるか | 数える |
@@ -560,6 +663,11 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | 16 | 新 UI で未ログインでも投稿欄を描画し、送信時にモーダルで認証する（欄自体を隠す案との比較） | 描画する。下書きを書いてから認証できる方が離脱が少ない |
 | 17 | 認証後の自動再送（1 回）と、Lv 不足時は再送しないこと | そのとおり |
 | 18 | bbs.cgi の応答ヘッダ追加（`x-auth-required` / `x-phoebe-required` / `x-auth-url` / `x-post-error`）。方針メモの `x-age` と同じ位置づけ | 追加する |
+| 19 | メールアドレスを ID/Password アカウント間で一意にするか（複垢の L3 開始を防ぐ） | 一意にする。Google アカウントのメールは索引に載せない |
+| 20 | ログインにも毎回 Turnstile を要求すること（端末ハッシュ取得と兼ねる） | 要求する（Managed モードなら通常は非表示で通る） |
+| 21 | パスワード再設定はメール認証済みのアカウントだけ（未登録は管理者対応） | そのとおり |
+| 22 | ロック閾値（アカウント 10 回/時、`keyIp` 30 回/時）と再設定申請 3 回/日 | 仮置き |
+| 23 | Google 連携の解除（Google → 他方式）を許さないこと、Google アカウント削除時の扱い | 許さない。退会のみ |
 
 ## 14. 不変条件への影響（承認が必要な点）
 
