@@ -55,7 +55,7 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 ### 1.4 ディレクトリ構成
 
 ```
-common/                Scala (JVM/JS cross)。Shift_JIS 以外の純粋ロジック（UTF-8 変換, ルート表 RouteTable.scala, トリップ補助 等）
+common/                Scala (JVM/JS cross)。純粋ロジック（ルート表 RouteTable.scala, BoardId / ThreadKey 等）
 bbs/
   src/main/scala/ch3s/bbs/
     Main.scala         Worker エントリ（JSExportTopLevel）
@@ -63,7 +63,7 @@ bbs/
                        Moderation, AdminHandler（/admin/*）, Responses
     durable/           Board DO, Thread DO（V6PlaceholderDurableObject は骨格確認用の残り）
     external/cloudflare/  Workers / DO / R2 / KV の facade
-    hash/, util/       Web Crypto ハッシュ・MD5 / crypt(3) の npm facade, Shift_JIS 変換
+    hash/, util/       Web Crypto ハッシュ・MD5 / crypt(3) / 16進変換の npm facade, Shift_JIS 変換
   src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
   test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ
 bbs-client/            クライアント側（hydration）Scala

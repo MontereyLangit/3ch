@@ -1,9 +1,8 @@
 package ch3s.bbs.handler
 
 import ch3s.bbs.external.cloudflare.*
-import ch3s.bbs.external.web.{Request, Response}
+import ch3s.bbs.external.web.{Request, Response, TextEncoder}
 import ch3s.bbs.hash.WebHash
-import ch3s.common.text.Utf8
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -65,7 +64,8 @@ object AdminHandler {
     val headers = js.Dictionary("content-type" -> "text/html; charset=utf-8", "cache-control" -> "no-store", "x-content-type-options" -> "nosniff", "referrer-policy" -> "no-referrer", "content-security-policy" -> "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
     if !truth(env.ADMIN_PASSWORD) then return js.Promise.resolve(Responses.response("管理者パスワードが未設定です。", 503, headers))
     val username = if truth(env.ADMIN_USER) then str(env.ADMIN_USER) else "admin"
-    val credentials = Utf8.encode(s"$username:${str(env.ADMIN_PASSWORD)}").map(_.toChar).mkString
+    val credentialBytes = new TextEncoder().encode(s"$username:${str(env.ADMIN_PASSWORD)}")
+    val credentials = (0 until credentialBytes.length).map(i => credentialBytes(i).toChar).mkString
     val expected = "Basic " + js.Dynamic.global.btoa(credentials).asInstanceOf[String]
     val a = WebHash.hash("SHA-256", expected).toFuture
     val b = WebHash.hash("SHA-256", Option(r.headers.get("authorization")).getOrElse("")).toFuture
@@ -83,7 +83,7 @@ object AdminHandler {
             val origin = r.headers.get("origin")
             if js.Dynamic.global.Number(r.headers.get("content-length")).asInstanceOf[Double] > 262144 then fail("入力が大きすぎます。")
             r.asInstanceOf[js.Dynamic].text().asInstanceOf[js.Promise[String]].toFuture.flatMap { body =>
-              if Utf8.encode(body).length > 262144 then fail("入力が大きすぎます。")
+              if new TextEncoder().encode(body).length > 262144 then fail("入力が大きすぎます。")
               val data = js.Dynamic.global.Object.fromEntries(js.Dynamic.newInstance(js.Dynamic.global.URLSearchParams)(body))
               val save: Future[Unit] = path match {
                 case "/admin/board" =>

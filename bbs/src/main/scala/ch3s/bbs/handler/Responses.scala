@@ -1,8 +1,7 @@
 package ch3s.bbs.handler
 
-import ch3s.bbs.external.web.{Response, ResponseInit}
+import ch3s.bbs.external.web.{Response, ResponseInit, TextEncoder}
 import ch3s.bbs.util.SjisEncoding
-import ch3s.common.text.Utf8
 import scala.scalajs.js
 import scala.scalajs.js.typedarray.Uint8Array
 
@@ -20,12 +19,7 @@ object Responses {
     val sjis = encoding == "Shift_JIS"
     val bytes =
       if sjis then SjisEncoding.encode(text)
-      else {
-        val data = Utf8.encode(text)
-        val u8 = new Uint8Array(data.length)
-        data.indices.foreach(i => u8(i) = data(i).toShort)
-        u8
-      }
+      else new TextEncoder().encode(text)
     val size = bytes.length
     val headers = js.Dictionary.empty[String]
     val result = if range.nonEmpty then {

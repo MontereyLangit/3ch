@@ -118,7 +118,19 @@ npm ライブラリへの薄い facade に置き換えた。自作実装は v5 �
   リンクできない。`bbs/` の他の `@JSImport` facade（`react-dom/server` 等）と同じ扱い。
 - 検証: `tests/golden/md5.json`・`crypt.json`・`crypt-bytes.json` の全ケースが一致することを
   `bbs/src/test/.../hash/Md5Suite`・`UnixCryptSuite` で固定している（`common` から移した）。
-  `common/text/Utf8.scala` は `AdminHandler` / `Responses` / `Board` が使うので残す。
+
+同日、残っていた `common/` の補助実装も置き換えた。
+
+- `text/Utf8.scala`（`TextEncoder` の手書き再現）→ 各呼び出し元（`AdminHandler` / `Responses` / `Board`）で
+  `bbs/external/web` の `TextEncoder` facade を直接使う。`common` に置いていた理由は JVM 側でも動かすためだったが、
+  利用者は全て `bbs/` だった。
+- `hash/HexToBinary.scala`（16進 → 1バイト1文字の文字列）→ `hash/Hex.scala`（`@noble/hashes` の `hexToBytes`）。
+  `unix-crypt-td-js` は鍵をバイト配列でも受け取るので、`UnixCrypt.crypt(Uint8Array, String)` に直接渡す。
+  旧実装の「奇数長は末尾を切り捨てる」挙動は、呼び出し元が正規表現で 16 桁を保証しているため到達しない。
+  `tests/golden/hex-to-binary.json` はこの不到達の挙動だけを固定していたので削除した（`v5-final` タグに残る）。
+- `crypt/SaltChar.scala`（KB-19 の `translateSaltChar` 再現）→ 削除。v6 の `PostingHandler.processTrip` は
+  これを呼ばず、JS `RegExp` と文字対応表でソルトを作っているため本番では未使用だった。
+  `tests/golden/translate-salt-char.json` も同時に削除した（v5 の実測値は `v5-final` タグで参照できる）。
 
 ## 4. テストスイート（`bbs/src/test/`）
 

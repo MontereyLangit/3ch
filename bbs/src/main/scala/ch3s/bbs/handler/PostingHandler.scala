@@ -6,8 +6,7 @@ import ch3s.bbs.hash.WebHash
 import ch3s.bbs.domain.posting.{ClientIdentity, PostingContext}
 import ch3s.bbs.domain.posting.moderation.ThreadCreationRejection
 import ch3s.common.domain.{BoardId, ThreadKey}
-import ch3s.common.hash.HexToBinary
-import ch3s.bbs.hash.{Md5, UnixCrypt}
+import ch3s.bbs.hash.{Hex, Md5, UnixCrypt}
 import ch3s.bbs.util.SjisEncoding
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -191,7 +190,7 @@ object PostingHandler {
       val trip: Future[String] = if password.length >= 12 then
         if password.startsWith("#") || password.startsWith("$") then {
           val matched = new js.RegExp("^#([0-9a-fA-F]{16})([./0-9A-Za-z]{0,2})$").exec(password)
-          Future.successful(if matched == null then "???" else UnixCrypt.crypt(HexToBinary.hexToBinary(matched(1).get), (if matched(2).get.isEmpty then ".." else matched(2).get).padTo(2, '.')).takeRight(10))
+          Future.successful(if matched == null then "???" else UnixCrypt.crypt(Hex.toBytes(matched(1).get), (if matched(2).get.isEmpty then ".." else matched(2).get).padTo(2, '.')).takeRight(10))
         } else sha(password).map(_.take(12).replace("+", "."))
       else {
         val from = ":;<=>?@[\\]^_`"

@@ -2,11 +2,13 @@ package ch3s.bbs.hash
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
+import scala.scalajs.js.typedarray.Uint8Array
 
 @js.native
 @JSImport("unix-crypt-td-js", JSImport.Default)
 private object UnixCryptTD extends js.Object {
   def apply(pw: String, salt: String): String = js.native
+  def apply(pw: Uint8Array, salt: String): String = js.native
   def apply(pw: String, salt: String, returnBytes: Boolean): js.Array[js.UndefOr[Int]] = js.native
 }
 
@@ -16,6 +18,9 @@ private object UnixCryptTD extends js.Object {
  */
 object UnixCrypt {
   def crypt(pw: String, salt: String): String = UnixCryptTD(pw, salt)
+
+  /** 鍵をバイト列で渡す版（`#` + 16進16桁のトリップ用）。 */
+  def crypt(pw: Uint8Array, salt: String): String = UnixCryptTD(pw, salt)
 
   /** `crypt(pw, salt, true)` 相当。salt 不足で `undefined` になった要素は `None`（KB-26）。 */
   def cryptBytes(pw: String, salt: String): List[Option[Int]] =
