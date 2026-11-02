@@ -90,7 +90,7 @@ object Posting {
     def h(name: String) = Option(r.headers.get(name)).getOrElse("")
     if r.method != "POST" then deny(g, "POST メソッドを使ってください。<br>\nRecieve GET METHOD")
     if !h("content-type").contains("application/x-www-form-urlencoded") then deny(g, "送信された内容が破損しています。->" + h("content-type") + "<br>\nBroken request body. ")
-    if !matches(h("referer"), "^https?://www\\.3chbbs\\.com") && !matches(h("referer"), "^http://127\\.0\\.0\\.1:8787") then deny(g, "ERROR: あなた騙されてますよ？->" + h("referer") + "<br>\nReferer is invalid.")
+    if !matches(h("referer"), "^https?://www\\.3chbbs\\.com") && !matches(h("referer"), "^http://127\\.0\\.0\\.1:878[78]") then deny(g, "ERROR: あなた騙されてますよ？->" + h("referer") + "<br>\nReferer is invalid.")
     val ua = str(g.userAgent)
     if ua.length < 7 || ua.length > 384 || matches(ua, "[^ -~]") then deny(g, "ERROR: ブラウザ変ですよん。(ua)<br>UserAgent: " + ua + "<br>\nUserAgent is invalid.")
     g.userAgent = ua + Option(r.headers.get("sec-ch-ua-full-version-list")).getOrElse(h("sec-ch-ua"))

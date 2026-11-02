@@ -139,6 +139,16 @@ class PostingSuite extends FunSuite {
     }
   }
 
+  test("checkRequest: ローカル開発用の Referer は 127.0.0.1:8787 と 8788 を許可し、他のポートは拒否する") {
+    val accepted = List("http://127.0.0.1:8787/", "http://127.0.0.1:8788/sample/")
+    Future.traverse(accepted)(referer => post(DurableTestKit.newEnv(), headers = Seq("referer" -> referer))).flatMap { results =>
+      results.foreach(p => assertEquals(header(p.res, "x-resnum"), Some("1")))
+      post(DurableTestKit.newEnv(), headers = Seq("referer" -> "http://127.0.0.1:8789/")).map { p =>
+        assertEquals(errorMessage(p.text), Some("ERROR: あなた騙されてますよ？->http://127.0.0.1:8789/<br>\nReferer is invalid."))
+      }
+    }
+  }
+
   test("KB-24: checkRequest: UserAgentが7バイト未満の場合のエラー（同様に二重ERROR:）") {
     val env = DurableTestKit.newEnv()
     post(env, headers = Seq("user-agent" -> "abc")).map { p =>
