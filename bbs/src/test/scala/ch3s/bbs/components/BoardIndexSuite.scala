@@ -19,14 +19,15 @@ class BoardIndexSuite extends munit.FunSuite {
 
   private def render(props: BoardIndexProps): String = BoardMarkup(BoardIndexComponent.Component(props).rawElement)
 
-  test("feed はダミー本文と送信不可の返信欄、subback は実際の subject を描画する") {
+  test("feed と新着レス一覧は準備中表示、subback は実際の subject を描画する") {
     val feed = render(props.copy(`type` = "feed"))
-    assert(feed.contains("data-feed-source=\"dummy\""))
-    assert(feed.contains("スレッドフィードはダミーデータ"))
-    assert("<fieldset[^>]*disabled=\"\"".r.findFirstIn(feed).isDefined)
+    assert(feed.contains("Coming Soon…"))
+    assert(!feed.contains("data-feed-source"))
+    assert(!feed.contains("ダミーデータ"))
     assert(!feed.contains("実スレ"))
     val subback = render(props.copy(`type` = "subback"))
-    assert(!subback.contains("data-feed-source"))
+    assert(subback.contains("Coming Soon…"))
+    assert(!subback.contains("ダミーデータ"))
     assert(subback.contains("実スレ &amp; &lt;script&gt;"))
     assert(!subback.contains("実スレ &amp;amp;"))
     assert(subback.contains("href=\"/test/read.cgi/sample/1800000001/\""))

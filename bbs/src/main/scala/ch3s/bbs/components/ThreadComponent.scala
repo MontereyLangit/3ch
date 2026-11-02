@@ -7,9 +7,9 @@ import scala.scalajs.js.URIUtils
 
 case class ThreadPost(number: Int, name: String, date: String, message: String, slip: String = "")
 
-/** moreは1レス目の後ろに出す省略表示。read.cgiで全レスを出すときはNoneにする */
+/** moreは1レス目の後ろに出す省略表示。read.cgiで全レスを出すときはNoneにすること */
 case class ThreadProps(bbs: String, time: String, key: String, title: String, count: Int, posts: Seq[ThreadPost],
-                       more: Option[String] = None, dummy: Boolean = false)
+                       more: Option[String] = None)
 
 /** スレッドフィードとスレッド画面で共通のスレタイ・レス・書き込み欄のコンポーネント */
 object ThreadComponent {
@@ -25,7 +25,7 @@ object ThreadComponent {
       props.more.whenDefined(label => <.div(^.className := "more py-[5px] text-center text-black", label)),
       rest.toVdomArray(post(_, isCap)),
       <.details(^.className := "reply-box [&>summary]:text-[#06f]", <.summary("書き込み欄"),
-        PostingFormComponent.Component(PostingFormProps(props.bbs, props.time, Option(props.key), dummy = props.dummy)))
+        PostingFormComponent.Component(PostingFormProps(props.bbs, props.time, Option(props.key))))
     )
   }
 
