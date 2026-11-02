@@ -6,10 +6,9 @@ import japgolly.scalajs.react.vdom.html_<^.*
 import scala.scalajs.js
 import scala.scalajs.js.URIUtils
 
-/** 板概要・板設定・新着レス一覧・新規スレッド作成の開閉ボタンとパネル。 */
+/** 板概要・板設定・新着レス一覧・新規スレッド作成の開閉ボタン・パネル */
 object BoardDetailsIsland {
 
-  /** `settingsText` は SETTING.TXT の `key=value` を改行で連ねたもの。 */
   final case class Props(bbs: String, headText: String, settingsText: String, posting: PostingFormIsland.Props)
 
   object Props {

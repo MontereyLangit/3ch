@@ -4,7 +4,10 @@ import org.scalajs.dom
 
 import scala.util.Try
 
-/** localStorage の読み書き。ブラウザ設定で無効化されていても例外にしない。 */
+/**
+ * localStorage の読み書き
+ * （ブラウザ設定で無効化されていても例外にしないこと）
+ */
 private[islands] object BrowserStorage {
   def read(key: String): Option[String] = Try(Option(dom.window.localStorage.getItem(key))).toOption.flatten
 

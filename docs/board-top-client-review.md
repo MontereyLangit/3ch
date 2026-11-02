@@ -52,19 +52,20 @@
 | ブラウザが復元したフォーム値 | 制御コンポーネントが空で始まるため、hydration 前にブラウザが入れた値は消えうる。下書き復元で実害は小さいが未対応 |
 | 板設定・新着レス一覧のパネル内容 | 右サイドバー（bbs 側）と同じ内容を island 側でも描画しており重複。共通化は今後 |
 | `sbt bbs/test` で island の SSR | `scalajs:client.js` を bbsClient の fastLinkJS 出力へ、honox 内の `hono/jsx` を `react` へ解決する loader を追加（本番は Vite の `reactApiImportSource` が同じ置換をする） |
+| リロード欄の UI | 中央寄せ・全幅のリンク風ボタンに `/static/reload.svg` のアイコンを付け、読み込み中は回転（`animate-spin`）。`tests/board-islands.test.js` でアイコンと回転クラスを確認 |
 | TS 版の Codex 指摘（アップロード中の送信） | island でも同じく抑止し、`sent` を付けない。`tests/board-islands.test.js` で確認 |
 
 ## Codex CLI レビュー（islands 版、2026-11-02）
 
-利用者の指示により bbs-client の修正を対象に実施（`codex exec --sandbox read-only`）。React / HonoX / scalajs-react の作法も観点に含めた。`wrangler.jsonc` は差分から除き、開かないよう指示した。判断・対応は利用者確認待ち。
+利用者の指示により bbs-client の修正を対象に実施（`codex exec --sandbox read-only`）。React / HonoX / scalajs-react の作法も観点に含めた。`wrangler.jsonc` は差分から除き、開かないよう指示した。利用者は #1 #2 #3 #5 の修正を承認し、#4 は見送り（計画は `docs/island-props型付け計画.md`）とした。
 
-| 指摘 | 判断（案） |
+| 指摘 | 判断・対応 |
 | --- | --- |
-| [P2][正しさ] `BoardListIsland.markSeen` が localStorage だけ更新し state を更新しないため、中クリック等で別タブに開いても元の一覧の `+N` が消えない。他タブの既読も反映されない | 妥当。クリック時に `seen` も更新する。他タブ同期（`storage` イベント）は任意 |
-| [P3][作法] unmount 後も Future 完了で `modState(...).runNow()` が走る。`uploading` が React state の外（Backend の var） | 妥当。`AbortController` と unmount 時の無効化、件数を state へ |
-| [P3][作法] `modState` の更新関数内で localStorage を読み書きしている（更新関数は純粋であるべき） | 妥当。読込・判断を更新関数の外へ、保存は確定後の Callback へ |
-| [P3][作法] island props の契約がサーバーとクライアントで別々の文字列キーと `js.Dynamic` で定義され、型で検証されない | 妥当だが範囲が広い。共有 facade 化は別作業として検討 |
-| [P3][テスト] 実際の4 island をサーバーラッパー＋HonoX `createClient` 経由で hydrate するテストがない | 妥当。板top の実 SSR HTML を hydrate するテストを追加する案 |
+| [P2][正しさ] `BoardListIsland.markSeen` が localStorage だけ更新し state を更新しないため、中クリック等で別タブに開いても元の一覧の `+N` が消えない。他タブの既読も反映されない | 修正済み。`markSeen` が state の `seen` を更新し、反映後に localStorage へ保存する。`storage` イベントの listener で他タブの変更も `seen` へ反映（キー削除・全消去を含む）。`tests/board-islands.test.js` に、左/中クリックで即座にバッジが消える・右クリックは不変・`storage` イベントで減少/増加を反映・無関係なキーは無視、を追加 |
+| [P3][作法] unmount 後も Future 完了で `modState(...).runNow()` が走る。`uploading` が React state の外（Backend の var） | 修正済み。`uploading` を State へ移し、アップロードごとに `AbortController` を持って unmount で中断、完了は unmount 後に無視。subject.txt リロードも `AbortController`（unmount・新しいリロード開始で中断）。テストで、保留中アップロード/リロードの unmount 中断（`signal.aborted`、完了後に `console.error` なし）と、2 件並行アップロードで両方終わるまで送信が止まることを確認 |
+| [P3][作法] `modState` の更新関数内で localStorage を読み書きしている（更新関数は純粋であるべき） | 修正済み。localStorage の読込と復元の判断は更新関数の外で行い、保存・削除は `modState` の確定後 Callback で行う（既存の下書き・既読テストで確認） |
+| [P3][作法] island props の契約がサーバーとクライアントで別々の文字列キーと `js.Dynamic` で定義され、型で検証されない | 別作業として見送り（利用者判断）。計画は `docs/island-props型付け計画.md` |
+| [P3][テスト] 実際の4 island をサーバーラッパー＋HonoX `createClient` 経由で hydrate するテストがない | 修正済み。テスト用 export `renderBoardTopTest`（`IslandTestExports`）で板top の実 SSR HTML を得て、Vite ビルドした HonoX `createClient` で hydrate する `tests/board-top-hydration.test.js` を追加。island 境界 3 つ（新規スレッド作成欄は board-details 内）が hydrate され、DOM が再利用され、recoverable error・`console.error` なし、パネル開閉・下書き保存・リロードアイコンの動作を確認 |
 
 総評（Codex）: ScalaComponent builder の採用、SSR と揃えた初期描画、通常 POST の維持、イベント解除、JSON 安全な props、入れ子 island の回避は適切。祖先への CSS 変数設定と検索欄フォーカスは限定的な DOM 連携として妥当。改善点は副作用の配置・非同期処理の寿命・境界の型付け。
 
@@ -74,5 +75,5 @@
 
 ## 検証
 
-- islands 化後: `sbt test` 全件成功（bbs 164、common JVM/JS 各 25、codegen 17、client 1。`SubjectText` のテストは common へ移動）。`-no-indent` 付き `Test/compile` 成功。
-- `npm run v6:build` 後の `npm test`: 30 件成功、skip 0（実リンクした client.js を JSDOM で動かす `tests/board-islands.test.js` 22 件を含む）。`tsc --noEmit` 成功。
+- islands 化後（Codex 指摘の修正後）: `sbt test` 全件成功（bbs 164、common JVM/JS 各 25、codegen 17。bbs-client の単体テストは無し）。`-no-indent` 付き `Test/compile` 成功。
+- `npm run v6:build` 後の `npm test`: 37 件成功、skip 0（実リンクした client.js を JSDOM で動かす `tests/board-islands.test.js` 28 件、板top の実 SSR HTML を HonoX で hydrate する `tests/board-top-hydration.test.js` 1 件を含む）。`tsc --noEmit` 成功。

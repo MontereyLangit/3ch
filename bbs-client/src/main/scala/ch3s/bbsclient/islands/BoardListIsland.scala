@@ -10,7 +10,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 import scala.scalajs.js.URIUtils
 
-/** 板topのスレ一覧（subback）とスレッドフィードの枠。subject.txt を取り直すリロードと既読バッジを持つ。 */
+/** 板topのスレ一覧（subback）とスレッドフィードの枠 */
 object BoardListIsland {
 
   /** `subjectText` は Board DO の subject（`key.dat<>title (n)` の行）、`now` はサーバー描画時刻（ミリ秒）。 */
@@ -105,7 +105,7 @@ object BoardListIsland {
       request = None
     }
 
-    /** 表示中の既読数を更新し、反映後に localStorage へ保存する。 */
+    /** 表示中の既読数を更新し、反映後にlocalStorageへ保存する */
     private def markSeen(key: String, count: Int): Callback = {
       $.modState(s => s.copy(seen = s.seen.updated(key, count.toString)), Callback(BrowserStorage.write(s"$SeenPrefix$key", count.toString)))
     }
@@ -122,7 +122,8 @@ object BoardListIsland {
         <.div(<.a(^.href := s"/test/read.cgi/${URIUtils.encodeURIComponent(threadBoard)}/${thread.key}/",
           ^.className := "thread-link text-black no-underline after:absolute after:inset-0 after:content-[''] hover:text-[#2464b5]",
           ^.onClick --> markSeen(key, thread.resNum),
-          VdomAttr.Event.mouse("onAuxClick") ==> ((e: ReactMouseEventFromHtml) => if e.button == 1 then markSeen(key, thread.resNum) else Callback.empty),
+          VdomAttr.Event.mouse("onAuxClick") ==> (
+            (e: ReactMouseEventFromHtml) => if e.button == 1 then markSeen(key, thread.resNum) else Callback.empty),
           SubjectText.decode(thread.title.value)),
           <.div(^.className := "sub hidden text-xs text-[#697785] max-[660px]:block", s"勢い $rate")),
         <.span(^.className := "created tabular-nums text-[#aaa] max-[660px]:hidden", if common then "—" else created(thread)),
@@ -154,7 +155,7 @@ object BoardListIsland {
             ^.href := s"/${URIUtils.encodeURIComponent(props.bbs)}/kako/", "↩過去ログ倉庫")),
           threads.toVdomArray(row(_, props, state, false)),
           if threads.isEmpty then <.p(^.className := "empty-state m-2 text-xs text-[#697785]", "該当するスレッドはありません。") else EmptyVdom),
-        <.p(^.className := "list-note m-2 text-xs text-[#697785]", "新着順は板の並び順です。最終更新日時は未取得です。")
+        <.p(^.className := "list-note m-2 text-xs text-[#697785]", "(新着順、最終更新日時は準備中)")
       )
     }
 
@@ -196,10 +197,14 @@ object BoardListIsland {
 
     def render(props: Props, state: State): VdomNode = {
       <.div(^.id := "board-list",
-        <.div(^.className := "flex items-center gap-2 px-[13px] pt-1 max-[660px]:px-[9px]",
-          <.button(^.className := "cursor-pointer border border-[#d6dce3] bg-white px-2.5 py-1 disabled:cursor-wait disabled:opacity-60", ^.`type` := "button",
-            VdomAttr("data-board-reload") := "", ^.disabled := state.loading, ^.onClick --> reload, "リロード"),
-          <.span(^.className := "text-xs text-[#777]", VdomAttr("data-board-reload-status") := "", VdomAttr("aria-live") := "polite", state.status)),
+        <.div(^.className := "newposts border-b-2 border-[#e0e0e0] py-0.5 text-center",
+          <.button(^.className :=
+            """inline-flex cursor-pointer items-center gap-0.5 border-0 bg-transparent p-1 text-base text-[#0187e8]
+              | hover:underline disabled:cursor-wait""".stripMargin,
+            ^.`type` := "button", VdomAttr("data-board-reload") := "", ^.disabled := state.loading, ^.onClick --> reload,
+            "リロード",
+            <.img(^.src := "/static/reload.svg", ^.alt := "", ^.className := (if state.loading then "inline size-4 animate-spin" else "inline size-4"))),
+          <.span(^.className := "block text-xs text-[#777]", VdomAttr("data-board-reload-status") := "", VdomAttr("aria-live") := "polite", state.status)),
         if props.viewType == "subback" then subback(props, state)
         else <.div(^.className := "thread-feed", <.p(^.className := "coming-soon m-2 py-6 text-center text-[#697785]", "Coming Soon…"))
       )

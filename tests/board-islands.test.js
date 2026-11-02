@@ -98,6 +98,9 @@ test('スレ一覧: subject を描画し、全板共通スレとエスケープ�
   assert.equal(query('[data-thread-key="924/9240000001"]').dataset.common, 'true');
   assert.match(query('[data-thread-key="sample/1800000001"] .created').textContent, /^2027\/01\/15 \d\d:\d\d$/);
   assert.equal(query('[data-board-reload]').textContent, 'リロード');
+  const icon = query('[data-board-reload] img');
+  assert.equal(icon.getAttribute('src'), '/static/reload.svg');
+  assert.equal(icon.getAttribute('alt'), '');
 });
 
 test('スレ一覧: feed は準備中表示、検索とレス数順を適用する', async () => {
@@ -447,6 +450,154 @@ test('フォーム: localStorage が使えなくても入力できる', async ()
   } finally {
     Object.defineProperty(window, 'localStorage', original);
   }
+});
+
+// ---------------------------------------------------------------- 既読バッジの即時反映と他タブ同期
+
+const SEEN = id => `3ch:threadSeen:sample/${id}`;
+const badgeOf = id => query(`[data-thread-key="sample/${id}"] .new`).textContent;
+const storageEvent = (key, newValue) => act(async () => {
+  window.dispatchEvent(new window.StorageEvent('storage', { key, newValue }));
+});
+
+test('既読バッジ: 左クリックと中クリックで即座に消え、右クリックでは変わらない', async () => {
+  window.localStorage.setItem(SEEN('1800000001'), '1');
+  await mount(client.BoardListJs, listProps);
+  const link = query('[data-thread-key="sample/1800000001"] a.thread-link');
+  assert.equal(badgeOf('1800000001'), '+2');
+  await act(async () => { link.dispatchEvent(new window.MouseEvent('auxclick', { bubbles: true, button: 2 })); });
+  assert.equal(badgeOf('1800000001'), '+2');
+  assert.equal(window.localStorage.getItem(SEEN('1800000001')), '1');
+  await act(async () => { link.dispatchEvent(new window.MouseEvent('auxclick', { bubbles: true, button: 1 })); });
+  assert.equal(badgeOf('1800000001'), '', '中クリックで表示も消える');
+  assert.equal(window.localStorage.getItem(SEEN('1800000001')), '3');
+  window.localStorage.setItem(SEEN('1800000001'), '1');
+  await storageEvent(SEEN('1800000001'), '1');
+  assert.equal(badgeOf('1800000001'), '+2');
+  await click(link);
+  assert.equal(badgeOf('1800000001'), '', '左クリックで表示も消える');
+  assert.equal(window.localStorage.getItem(SEEN('1800000001')), '3');
+});
+
+test('既読バッジ: storage イベントで減少・増加を反映し、無関係なキーは無視する', async () => {
+  window.localStorage.setItem(SEEN('1800000001'), '1');
+  await mount(client.BoardListJs, listProps);
+  assert.equal(badgeOf('1800000001'), '+2');
+  await storageEvent(SEEN('1800000001'), '3');
+  assert.equal(badgeOf('1800000001'), '', '他タブで既読になればバッジが消える');
+  await storageEvent(SEEN('1800000001'), '2');
+  assert.equal(badgeOf('1800000001'), '+1', '既読数が減れば新しい +N');
+  await storageEvent('3ch:postName', '名無し');
+  await storageEvent('other:threadSeen:sample/1800000001', '0');
+  assert.equal(badgeOf('1800000001'), '+1', '無関係なキーでは変わらない');
+  assert.equal(badgeOf('1800000002'), '');
+  await storageEvent(SEEN('1800000002'), '2');
+  assert.equal(badgeOf('1800000002'), '+5');
+  await storageEvent(SEEN('1800000002'), null);
+  assert.equal(badgeOf('1800000002'), '', '削除されればバッジなし');
+});
+
+// ---------------------------------------------------------------- アンマウント・中断・並行アップロード
+
+async function captureConsoleErrors(body) {
+  const errors = [];
+  const original = console.error;
+  console.error = (...args) => { errors.push(args.map(String).join(' ')); };
+  try {
+    await body();
+  } finally {
+    console.error = original;
+  }
+  return errors;
+}
+
+const unmountLast = () => act(async () => { mounted.pop().unmount(); });
+const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+
+test('アンマウント: 保留中の imgur アップロードは中断され、完了しても何も起きない', async () => {
+  const calls = [];
+  let finish;
+  globalThis.fetch = (url, init) => new Promise(resolve => {
+    calls.push(init);
+    finish = () => resolve(imgurOk());
+  });
+  const errors = await captureConsoleErrors(async () => {
+    await mountForm();
+    await upload(png());
+    assert.equal(calls[0].signal.aborted, false);
+    await unmountLast();
+    assert.equal(calls[0].signal.aborted, true, 'アンマウントで中断される');
+    finish();
+    await settle();
+  });
+  assert.deepEqual(errors, []);
+  assert.equal(window.localStorage.getItem(DRAFT), null, '完了は反映されず下書きも書かれない');
+});
+
+test('アンマウント: 保留中の subject.txt リロードは中断され、完了しても何も起きない', async () => {
+  const calls = [];
+  let finish;
+  globalThis.fetch = (url, init) => new Promise(resolve => {
+    calls.push(init);
+    finish = () => resolve(subjectResponse(sjis('1800000009.dat<>x (1)\n')));
+  });
+  const errors = await captureConsoleErrors(async () => {
+    const container = await mount(client.BoardListJs, listProps);
+    await click(query('[data-board-reload]'));
+    assert.equal(calls[0].signal.aborted, false);
+    await unmountLast();
+    assert.equal(calls[0].signal.aborted, true);
+    finish();
+    await settle();
+    assert.equal(container.innerHTML, '');
+  });
+  assert.deepEqual(errors, []);
+});
+
+test('リロード中はボタンが無効で、再度押しても二重に取得しない', async () => {
+  const calls = [];
+  let finish;
+  globalThis.fetch = (url, init) => new Promise(resolve => {
+    calls.push(init);
+    finish = () => resolve(subjectResponse(sjis('1800000009.dat<>', NIHONGO, ' (1)\n')));
+  });
+  await mount(client.BoardListJs, listProps);
+  const button = query('[data-board-reload]');
+  await click(button);
+  await click(button);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].signal.aborted, false);
+  assert.match(query('[data-board-reload] img').getAttribute('class'), /animate-spin/);
+  await act(async () => { finish(); await new Promise(resolve => setTimeout(resolve, 20)); });
+  assert.deepEqual([...document.querySelectorAll('.thread-list [data-thread-key]')].map(row => row.dataset.threadKey), ['sample/1800000009']);
+  assert.doesNotMatch(query('[data-board-reload] img').getAttribute('class'), /animate-spin/);
+  await click(button);
+  assert.equal(calls.length, 2, '完了後は再度リロードできる');
+  assert.equal(calls[0].signal.aborted, false, '完了済みの要求は中断されない');
+});
+
+test('フォーム: 並行する 2 件のアップロードは両方終わるまで送信を止める', async () => {
+  const finishers = [];
+  globalThis.fetch = () => new Promise(resolve => {
+    const n = finishers.length;
+    finishers.push(() => resolve({ ok: true, json: async () => ({ data: { link: `https://i.imgur.com/${n}.png` } }) }));
+  });
+  await mountForm();
+  await upload(png());
+  await upload(png());
+  assert.equal(finishers.length, 2);
+  const submitOnce = async () => {
+    const event = new window.Event('submit', { bubbles: true, cancelable: true });
+    await act(async () => { query('form').dispatchEvent(event); });
+    return event.defaultPrevented;
+  };
+  assert.equal(await submitOnce(), true);
+  await act(async () => { finishers[0](); await new Promise(resolve => setTimeout(resolve, 20)); });
+  assert.equal(await submitOnce(), true, '1 件残っている間は止める');
+  assert.equal(query('[data-imgur-status]').textContent, 'アップロード中です。完了してから送信してください');
+  await act(async () => { finishers[1](); await new Promise(resolve => setTimeout(resolve, 20)); });
+  assert.equal(await submitOnce(), false, '全件終われば送信できる');
+  assert.equal(field('MESSAGE').value, 'https://i.imgur.com/0.png\nhttps://i.imgur.com/1.png');
 });
 
 // ---------------------------------------------------------------- SSR との一致（hydration）

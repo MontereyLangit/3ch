@@ -6,7 +6,7 @@ import org.scalajs.dom
 
 import scala.scalajs.js
 
-/** 共通ヘッダー。下スクロールで隠れ、上スクロールかフォーカスで現れる。 */
+/** 共通ヘッダー */
 object SiteHeaderIsland {
   final case class State(hidden: Boolean)
 
@@ -21,7 +21,7 @@ object SiteHeaderIsland {
     private var lastY = 0.0
     private var focused = false
     private val onScroll: js.Function1[dom.Event, Unit] = _ => scroll.runNow()
-    private val onResize: js.Function1[dom.Event, Unit] = _ => ($.state.flatMap(s => place(s.hidden))).runNow()
+    private val onResize: js.Function1[dom.Event, Unit] = _ => $.state.flatMap(s => place(s.hidden)).runNow()
 
     private def header: Option[dom.html.Element] = headerRef.get.runNow()
 
@@ -30,7 +30,7 @@ object SiteHeaderIsland {
       header.foreach { h =>
         val board = h.closest(".board-ui")
         if board != null then {
-          val height = if hidden then 0.0 else h.offsetHeight.toDouble
+          val height = if hidden then 0.0 else h.offsetHeight
           board.asInstanceOf[dom.html.Element].style.setProperty("--header-height", s"${height.toInt}px")
         }
       }
@@ -72,7 +72,8 @@ object SiteHeaderIsland {
 
     def render(state: State): VdomNode = {
       val hiddenClass = if state.hidden then " header-hidden" else ""
-      <.header(^.className := s"$headerClass$hiddenClass", ^.onFocus --> (Callback { focused = true } >> setHidden(false)), ^.onBlur --> Callback { focused = false },
+      <.header(^.className := s"$headerClass$hiddenClass", ^.onFocus --> (Callback { focused = true } >> setHidden(false)),
+        ^.onBlur --> Callback { focused = false },
         <.a(^.href := "/", ^.className := "site-logo ml-[15px] shrink-0", ^.aria.label := "３ちゃんねる ホーム",
           <.img(^.src := "/static/3ch_logo.png", ^.alt := "３ちゃんねる", ^.className := "inline-block h-[30px] align-middle")),
         <.nav(^.aria.label := "メインメニュー",

@@ -11,7 +11,10 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 import scala.util.Try
 
-/** 書き込みフォーム（板topの新規スレッド作成とスレッドの書き込み欄で共通）。入力値は React の状態で持つ。 */
+/**
+ * 書き込みフォーム
+ * （板topの新規スレッド作成とスレッドの書き込み欄で共通）
+ */
 object PostingFormIsland {
 
   /** `threadKey` は React が `key` を props として渡さないための名前。 */
@@ -251,7 +254,8 @@ object PostingFormIsland {
         <.span("コマンド"),
         commands.toVdomArray { command =>
           val pressed = getField(state, command.field).exists(_.contains(command.text))
-          <.button(^.key := command.text, ^.className := "cursor-pointer border border-[#d6dce3] bg-white px-2 py-0.5 aria-pressed:border-[#f66] aria-pressed:font-bold",
+          <.button(^.key := command.text,
+            ^.className := "cursor-pointer border border-[#d6dce3] bg-white px-2 py-0.5 aria-pressed:border-[#f66] aria-pressed:font-bold",
             ^.`type` := "button", ^.title := command.description, VdomAttr("aria-pressed") := pressed.toString,
             VdomAttr("data-command") := command.text, VdomAttr("data-command-field") := command.field,
             ^.onClick --> toggleCommand(command), command.label)
