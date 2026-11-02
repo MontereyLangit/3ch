@@ -1,6 +1,6 @@
 # トリップ・ID の廃止と、`!id`・スレ主表示の追加
 
-2026-11-02、利用者の指示による仕様変更。**状態: 実装中（認証は未実装。認証ブランチのマージ後に有効になる部分あり）。**
+2026-11-02、利用者の指示による仕様変更。**状態: 実装済み（認証は未実装。認証ブランチのマージ後に有効になる部分あり）。**
 本ブランチは認証機能（[auth-phoebe-rate-limit-design.md](https://github.com/MontereyLangit/ch3s/blob/claude/auth-phoebe-ratelimit-design-df5utn/docs/auth-phoebe-rate-limit-design.md)、別ブランチで設計中）の実装後にマージする前提。
 
 ## 1. 指示の要約
@@ -31,12 +31,13 @@
 
 ### 2.3 `!id`（ユーザー ID の表示）
 
-- 名前欄の `!id`（直後が英数字・`_` でないもの。`!idol` などは対象外）を全て取り除く。フォーム項目 `showid` が空でなければ `!id` と同じ扱い（Web 版のチェックボックス用）。
+- 名前欄の `!id`（直後が英数字・`_` でないもの。`!idol` などは対象外）を全て取り除く。取り除いたときは名前の前後の空白も落とす（`名前 !id` が `名前` になる。名前が空になれば `BBS_NONAME_NAME`）。フォーム項目 `showid` が空でなければ `!id` と同じ扱い（Web 版のチェックボックス用）。
 - 投稿者が認証済なら、名前の直後（識別子の前）に ` </b>(@ユーザーID)<b>` を付ける。ユーザー ID は HTML エスケープする。
 - 未認証・キャップ投稿では取り除くだけで付けない。
 - `BBS_NAME_COUNT` の検査は付ける前の名前で行う。
 - 認証主体は `domain/posting/PostingUser`（`accountKey`: 移行しても変わらない内部 ID、`displayId`: 表示するユーザー ID）で受け取る。
-  現時点の解決関数 `PostingUser.unresolved` は常に未認証を返す。**認証ブランチでここを Cookie / 専ブラ認証キーからの解決に差し替える。**
+  解決関数は `handler/PostingUserResolver`（型 `Resolver`）で、現時点の `PostingUserResolver.unresolved` は常に未認証を返す。
+  `PostingHandler.entry` の第 3 引数で差し替えられる。**認証ブランチでここを Cookie / 専ブラ認証キーからの解決に差し替える。**
   表示 ID を方式ごとに選ぶ（クライアント ID は自動 ID、ID/Password・Google は登録 ID）のは認証側の責務とする。
 
 ### 2.4 スレ主表示 ` (主)`
@@ -95,4 +96,5 @@
 | >>1 の ` (主)` | 付けない | スレ立て人であることは自明 |
 | キャップ | `!id`・` (主)` とも対象外、キャップのスレは `owner` を保存しない | 匿名レスとキャップの結びつきを晒さない |
 | IPv6 の一致範囲 | /64 | 認証設計書の `keyIp` と同じ。一時アドレスの変化を吸収する |
+| 実装上の配置 | 判定は `domain/posting/`（`NameCommands`・`KeyIp`・`ThreadOwner`・`NusiMark`・`PostingUser`）、保存形式は `durable/codec/ThreadOwnerCodec`。投稿処理の `makeId` は `makeShikibetsu` に改名 | AGENTS.md 3.5 |
 | 既存スレ | ` (主)` を付けない | `owner` が無く、ユーザー ID は元から無い。log の IP 文字列を解析する互換処理は入れない |

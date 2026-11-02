@@ -29,7 +29,6 @@
     "hono": "4.13.7",
     "honox": "0.1.61",
     "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "unix-crypt-td-js": "1.1.4"
+    "react-dom": "19.2.8"
   }
 }

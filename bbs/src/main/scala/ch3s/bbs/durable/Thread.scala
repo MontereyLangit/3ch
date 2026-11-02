@@ -1,6 +1,7 @@
 package ch3s.bbs.durable
 
 import ch3s.bbs.external.cloudflare.*
+import ch3s.bbs.durable.codec.ThreadOwnerCodec
 import ch3s.bbs.durable.support.DurableLock
 
 import scala.collection.mutable
@@ -135,6 +136,11 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
   def getSettings(): js.Promise[String] = text("settings").toJSPromise
 
   /**
+   * スレ立て時に保存したスレ主の照合値を返します。無ければ undefined（docs/トリップ・ID廃止とスレ主表示.md §2.4）。
+   */
+  def getOwner(): js.Promise[js.Any] = read("owner").toJSPromise
+
+  /**
    * スレ設定を更新します。
    * @param settings - 新しいスレ設定文字列
    */
@@ -171,6 +177,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
       log <- text("log")
       update = js.Dictionary[js.Any]("dat" -> (dat + datLine + "\n"), "log" -> (log + logLine.replaceFirst("^\\d+<>", s"$count<>") + "\n"), "modifiedAt" -> js.Date.now())
       _ = if truth(p.create) then update("settings") = if truth(p.initialSettings) then p.initialSettings else ""
+      _ = if truth(p.create) && truth(p.owner) then update("owner") = ThreadOwnerCodec.encode(ThreadOwnerCodec.decode(p.owner))
       creationLimit = truth(p.create) && truth(p.creationLimit)
       _ <- if creationLimit then board(str(p.bbs)).reserveThreadCreation(str(p.key), p.creationLimit).toFuture.map { error =>
         if error.nonEmpty then fail(error)
@@ -255,7 +262,10 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
         settings <- text("settings")
         stopped <- read("stopped")
         edited <- read("edited")
-        _ <- thread(target).receiveMove(js.Dynamic.literal(dat = dat, log = log, legacyLog = legacy, settings = settings, stopped = truth(stopped), edited = truth(edited), modifiedAt = js.Date.now()), source).toFuture
+        owner <- read("owner")
+        data = js.Dynamic.literal(dat = dat, log = log, legacyLog = legacy, settings = settings, stopped = truth(stopped), edited = truth(edited), modifiedAt = js.Date.now())
+        _ = if truth(owner) then data.owner = owner
+        _ <- thread(target).receiveMove(data, source).toFuture
       } yield ()).recoverWith { case e =>
         val message = e match {
           case x: js.JavaScriptException => str(x.exception.asInstanceOf[js.Dynamic].message)

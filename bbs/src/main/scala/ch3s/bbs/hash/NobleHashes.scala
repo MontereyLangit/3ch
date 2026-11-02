@@ -15,5 +15,4 @@ private[hash] object NobleMd5 extends js.Function1[Uint8Array, Uint8Array] {
 @JSImport("@noble/hashes/utils.js", JSImport.Namespace)
 private[hash] object NobleUtils extends js.Object {
   def bytesToHex(bytes: Uint8Array): String = js.native
-  def hexToBytes(hex: String): Uint8Array = js.native
 }

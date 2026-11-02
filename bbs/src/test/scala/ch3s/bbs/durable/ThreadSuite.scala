@@ -103,6 +103,46 @@ class ThreadSuite extends FunSuite {
     } yield ()
   }
 
+  private val owner = js.Dynamic.literal(ip = "iphash", shikibetsu = "JP.xx", account = "")
+  private def createWith(env: DurableTestKit.Env, name: String, key: String, extra: js.Dynamic): js.Promise[Int] = {
+    val posting = js.Dynamic.literal(bbs = name.takeWhile(_ != '/'), key = key, title = "title", create = true, sage = false, maxThreads = 700d)
+    js.Object.assign(posting.asInstanceOf[js.Object], extra.asInstanceOf[js.Object])
+    env.thread(name).addRes("name<><>date<> body <>title", "1<>log", posting)
+  }
+
+  test("スレ立てのaddResはownerを同じバッチで保存し、getOwnerで読める") {
+    val env = newEnv()
+    for {
+      _ <- createWith(env, "source/1800000000", "1800000000", js.Dynamic.literal(owner = owner)).toFuture
+      stored <- env.thread("source/1800000000").getOwner().toFuture
+      _ = assertEquals(js.JSON.stringify(stored), """{"ip":"iphash","shikibetsu":"JP.xx","account":""}""")
+    } yield ()
+  }
+
+  test("ownerを渡さないスレ立てと返信はownerキーを作らない") {
+    val env = newEnv()
+    for {
+      _ <- createWith(env, "source/1800000000", "1800000000", js.Dynamic.literal()).toFuture
+      _ <- env.thread("source/1800000000").addRes("r<><><><>", "2<>log", js.Dynamic.literal(bbs = "source", key = "1800000000", title = "title", create = false, owner = owner)).toFuture
+      stored <- env.thread("source/1800000000").getOwner().toFuture
+      _ = assert(stored == null || js.isUndefined(stored), "ownerなしで作成したスレに後からownerは付かない")
+    } yield ()
+  }
+
+  test("移動はownerを移動先へ引き継ぎ、ownerが無ければキーを作らない") {
+    val env = newEnv()
+    for {
+      _ <- createWith(env, "source/1800000000", "1800000000", js.Dynamic.literal(owner = owner)).toFuture
+      _ <- createWith(env, "source/1800000002", "1800000002", js.Dynamic.literal()).toFuture
+      _ <- env.thread("source/1800000000").moderate("move", moveInput()).toFuture
+      _ <- env.thread("source/1800000002").moderate("move", moveInput(key = "1800000002", targetKey = "1800000003")).toFuture
+      moved <- env.thread("target/1800000001").getOwner().toFuture
+      none <- env.thread("target/1800000003").getOwner().toFuture
+      _ = assertEquals(js.JSON.stringify(moved), """{"ip":"iphash","shikibetsu":"JP.xx","account":""}""")
+      _ = assert(none == null || js.isUndefined(none))
+    } yield ()
+  }
+
   test("既存スレ同士の相互移動はロック前に拒否し、元データを保持する") {
     val env = newEnv()
     val source = env.thread("source/1800000000")

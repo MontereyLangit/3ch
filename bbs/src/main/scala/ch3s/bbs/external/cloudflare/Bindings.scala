@@ -60,6 +60,7 @@ trait ThreadDoStub extends DurableObjectStub {
   def getLog(): js.Promise[String] = js.native
   def getSettings(): js.Promise[String] = js.native
   def setSettings(newSettings: String): js.Promise[Unit] = js.native
+  def getOwner(): js.Promise[js.Any] = js.native
   def addRes(datLine: String, logLine: String, posting: js.UndefOr[js.Dynamic] = js.native): js.Promise[Int] = js.native
   def inspect(bbs: js.UndefOr[String] = js.native, key: js.UndefOr[String] = js.native): js.Promise[ThreadInspectResult] = js.native
   def moderate(action: String, input: js.Dynamic): js.Promise[Unit] = js.native
