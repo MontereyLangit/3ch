@@ -96,7 +96,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 | 失効 | ログアウト・パスワード変更・再設定・方式移行・退会・管理者の凍結はいずれも `gen` を進める（全端末のセッションが無効になる。端末ごとの失効は持たない）。クライアント ID は `exp` ＝発行＋365 日 |
 | 複数 Cookie | 現行の `PON` と同時に出すため、応答ヘッダは `Headers.append` で `Set-Cookie` を複数出せる形にする（現行の `js.Dictionary` では 1 本に上書きされる。計画書 §3） |
 
-既存の `PON` 等の Cookie は現行どおり発行し、意味は変えない。`/auth/*`・`/admin/*` の POST は `Origin` ヘッダが自ホストと一致しなければ拒否する（`SameSite=Lax` だけに頼らない）。
+既存の `PON` 等の Cookie は現行どおり発行し、意味は変えない。`/auth/*` の POST と `/admin/*` の `GET` 以外の要求は `Origin` ヘッダが自ホストと一致しなければ拒否する（`SameSite=Lax` だけに頼らない。管理画面の追加条件は改修計画 §3.5）。
 
 ### 3.4 bbs.cgi での認証主体の決定
 
@@ -268,6 +268,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 - 申請は常に「送信しました」を返す（ID・メールの存在を漏らさない）。メール認証済みのアカウントだけに実際に送る（§13-21）。3 回/日。
 - トークンはメール認証と同じ形式で `issuePending("reset", …, now + 1h)`。消費時に `setPassword` → `gen` を進める → ログイン画面へ。
 - メール未登録のアカウントは再設定できない。登録時にその旨を表示し、管理者による手動対応（本人確認は管理画面の裁量）を案内する。
+- 役割（`admin` / `delete` / `regulate`）を持つアカウントは、メールによる再設定を使えない（申請しても送らない）。手順は改修計画 §3.3。
 
 **退会**（`POST /auth/account?action=delete`。パスワード再入力または Google の再認証が必要）
 
@@ -598,16 +599,19 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | `credential` | ID/Password: `{algo: "pbkdf2-sha256", iterations, salt, hash, updatedAt, failures: [t…], lockedUntil?}`。メール認証・パスワード再設定の保留トークンは `pending: {kind, hash, expiresAt, email?}`（§3.9） |
 | `level` | `{lv, lvSince, lvPosts, lvOverride?}` |
 | `roles` | `["admin", ...]` |
+| `adminGen` | 管理者セッションの世代（整数）。管理者のログアウト・役割変更・凍結で進める（改修計画 §3.2） |
 | `caps` | §6.2 |
 | `token` | §6.3 |
 | `pending:email` / `pending:reset` | §3.9 の保留トークン（種別ごとに別キー） |
 | `devices` | `[{hash, firstSeen, lastSeen, keyIpHash}]` 最大 10 件。超えたら `lastSeen` が最も古いものを捨てる |
 | `log:<n>` | 利用ログ 64 件ページ。16 ページ（1,024 件）を超えたら最古のページを消す |
 
-RPC: `create`, `describeForPosting(gen)`, `recordPost(now)`, `verifyPassword(password, now)`, `setPassword`, `issuePending(kind, hash, expiresAt, email?)` / `consumePending(kind, hash, now)`, `bindGoogle(subHash)`, `convert(kind, uid)`, `issueCap` / `revokeCap`, `issueToken` / `revokeToken`, `bindDevice`, `setLevel`, `setRoles`, `setStatus`, `bumpGeneration`, `appendLog`, `inspect`。
+RPC: `create`, `describeForPosting(aid, gen)`, `describeForAdmin(aid, gen, adminGen)`, `bumpAdminGen`, `recordPost(now)`, `verifyPassword(password, now)`, `setPassword`, `issuePending(kind, hash, expiresAt, email?)` / `consumePending(kind, hash, now)`, `bindGoogle(subHash)`, `convert(kind, uid)`, `issueCap` / `revokeCap`, `issueToken` / `revokeToken`, `bindDevice`, `setLevel`, `setRoles`, `setStatus`, `bumpGeneration`, `appendLog`, `inspect`。
 状態遷移（昇格・失効・移行）は `domain/account/` の純粋関数。
 
 **`AccountIndex`**（`idFromName(kind)`。`kind` ∈ `uid` / `login` / `email` / `google` / `cap` / `token` / `role:admin`）
+
+- `role:admin` は `admin` 役割を持つアカウントの一覧で、キーは `HMAC-SHA256(AUTH_SECRET, "role:admin:" + aid)`。初回の管理者の確保 `claimFirstAdmin(aid, now, breakGlass)` を持つ（改修計画 §3.4）。
 
 - キー `=` 正規化した値の `HMAC-SHA256(AUTH_SECRET, 種別 + ":" + 値)`（`wrangler.jsonc` の `salt` は `vars` にあり秘密ではないので、辞書攻撃を防ぐため secret で鍵付きにする）、値 `=` `{aid, state: pending|confirmed, createdAt}`。
 - `register(hash, aid, now)` は既存（`confirmed`、または `pending` で 10 分以内）なら失敗、`confirm(hash)`、`lookup(hash)`、`remove(hash)`。`register` / `confirm` / `remove` は `blockConcurrencyWhile` で直列化し、`lookup` はロックしない。`uid` 種別は `remove` を持たない。
@@ -629,10 +633,10 @@ RPC: `create`, `describeForPosting(gen)`, `recordPost(now)`, `verifyPassword(pas
 | KV | `CAP`（既存） | hash → 表示名。互換のため維持 |
 | DO | `AuthRate`（新） | §9.1 |
 | R2 | `edge-rules.json`・`ios-profiles.json`・`phoebe.cgi`・`reserved-ids.txt`・`disposable-domains.txt`（新） | §3.6・§3.7・§4.3・§3.9 |
-| vars | `TURNSTILE_SITE_KEY`・`GOOGLE_CLIENT_ID`・`AGREEMENT_VERSION` | 公開値 |
-| secret | `AUTH_SECRET`・`TURNSTILE_SECRET_KEY`・`GOOGLE_CLIENT_SECRET`・`MAIL_API_KEY` | `wrangler secret put`。`.dev.vars` で開発。コミットしない |
+| vars | `TURNSTILE_SITE_KEY`・`GOOGLE_CLIENT_ID`・`AGREEMENT_VERSION`・`ADMIN_BREAK_GLASS_UNTIL`（通常は未設定） | 公開値 |
+| secret | `AUTH_SECRET`・`TURNSTILE_SECRET_KEY`・`GOOGLE_CLIENT_SECRET`・`MAIL_API_KEY`・`ADMIN_SESSION_SECRET`（`_PREV`）・`ADMIN_BOOTSTRAP_TOKEN`（`ADMIN_PASSWORD`・`ADMIN_USER` は廃止） | `wrangler secret put`。`.dev.vars` で開発。コミットしない |
 
-`wrangler.jsonc` には `migrations` に `{tag: "v2", new_sqlite_classes: ["Account", "AccountIndex", "AuthRate"]}`、`durable_objects.bindings` に `ACCOUNT_DO`・`ACCOUNT_INDEX_DO`・`AUTH_RATE_DO` を足す。
+`wrangler.jsonc` には `migrations` に `{tag: "v2", new_sqlite_classes: ["Account", "AccountIndex", "AuthRate"]}`、`durable_objects.bindings` に `ACCOUNT_DO`・`ACCOUNT_INDEX_DO`・`AUTH_RATE_DO` を足す。管理画面の監査ログは `{tag: "v3", new_sqlite_classes: ["AdminAudit"]}` と `ADMIN_AUDIT_DO`（改修計画 §3.6）。
 
 ### 9.4 `deny.cgi` との接続
 
@@ -675,7 +679,7 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | `/admin/accounts` | `uid`・ログイン ID（検索条件にだけ使い一覧には出さない）・メール・端末ハッシュ・IP ハッシュで検索 |
 | `/admin/accounts/:uid` | 種別・Lv・`lvOverride`・権限・状態・端末履歴・キャップ・専ブラキー・利用ログ。旧キャップの紐づけ |
 | `/admin/phoebe` | Lv 上限ルール（`phoebe.cgi`）、エッジ防御の規則（`edge-rules.json`）、乱造検知の「要確認」一覧 |
-| `/admin/thread` | 投稿ログの `UID:` / `Device:` から該当アカウント・端末 BAN（`deny.cgi` へ行を追加）へのリンク |
+| `/admin/boards/:bbs/threads/:key` | 投稿ログの `UID:` / `Device:` から該当アカウント・端末 BAN（`deny.cgi` へ行を追加）へのリンク |
 
 ## 12. 実装順序とテスト
 
@@ -686,8 +690,8 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | A | 連投規制（§8）。A-1: `BBS_RENTOU_MODE` の既定 `log` でデプロイし 1 週間観測。A-2: 既定を `on` に。照合キーは現行の IP・ID・識別子（`checked` 書式）。`aid` は空。前提は計画書の段 0〜7（`PostingCodec` を含む段 6） | `PostRateLimitSuite`（純粋判定: 件数窓・24h・Samba24・スレ 1h/40・コピペ末尾 2 行・あぼーん除外）、`BoardSuite`（予約/確定/取消・保持規則・ページ分割・容量）、`ThreadSuite`（`recentPosts` の一括保存・吸い込み時の dat 不変）、`PostingSuite`（パイプライン順序・文言・成功画面での吸い込み・`BBS_LIVE` 除外・設定不正時の既定値）、`AdminSuite`（フォーム検証）、実 workerd 統合 |
 | B | 認証基盤: `Account` / `AccountIndex` DO、Cookie、`/auth/`（クライアント ID・Turnstile・法的確認）、端末ハッシュと突合、`Accept-CH`、専ブラキー、キャップのアカウント紐づけ、`userInfo` の `UID:` / `Device:`、新 UI の `SessionReader`・ヘッダー出し分け・`AuthModal` / `AccountNav`・投稿欄のヘッダ分岐（§3.8）、bbs.cgi の `x-auth-required` / `x-post-error` | `common` の `DeviceFingerprintHasher` / `ClientHints` golden、`CookieCodecSuite`、`AccountSuite`（状態遷移・一意性）、`AuthHandlerSuite`（Turnstile はテスト用サイトキーで成功/失敗を固定）、`PostingSuite`（§3.4 の優先順・`!auth`・Web 版の認証要求とヘッダ）、`SessionReaderSuite`、`BoardIndexSuite`（未ログイン/ログイン済のヘッダーと投稿欄の SSR）、`tests/islands-hydration.test.js` に `AuthModal` の `message` → `ch3s:auth-changed` と再送の jsdom 検証 |
 | C | PHOEBE: Lv 昇格・`BBS_PHOEBE`・`!バルサン` / `!SETTING:BBS_PHOEBE:n`・識別子 `phoebe` 書式・連投規制への `aid` 追加・`!uid` | `PhoebeSuite`（T(lv)/N(lv) 境界・上限・固定）、`IdentifierSuite`（軸ごとの値・欠損 `000`・`D` の `*`）、`UserAgentProfileSuite`（v3 表の golden） |
-| D | 権限・回避レベル・管理画面の認証機能画面（§6・§7・§11、改修計画 段 A3）、スレ立て規制の `BBS_THREAD_PASS` 化 | `BypassLevelSuite`、`ModerationSuite`（5 列目）、`AdminSuite` |
-| E-1 | ID/Password の登録・ログイン・ロック、Google ログイン（§3.9・§3.10 の基本部分）。管理画面のアカウント認証（改修計画 段 A2）の前提なので段 B の直後に行う | `PasswordSuite`・`LoginThrottleSuite`・`GoogleIdTokenSuite`、実 workerd |
+| D | 権限・回避レベル・管理画面の認証機能画面（§6・§7・§11、改修計画 段 M3）、スレ立て規制の `BBS_THREAD_PASS` 化 | `BypassLevelSuite`、`ModerationSuite`（5 列目）、`AdminSuite` |
+| E-1 | ID/Password の登録・ログイン・ロック、Google ログイン（§3.9・§3.10 の基本部分）。管理画面のアカウント認証（改修計画 段 M2）の前提なので段 B の直後に行う | `PasswordSuite`・`LoginThrottleSuite`・`GoogleIdTokenSuite`、実 workerd |
 | E-2 | メール認証・パスワード再設定・方式移行・退会・エッジ防御・乱造検知・Lv 上限ルール | `AccountSuite`（移行）、`EdgeDefenseSuite`、実 workerd |
 
 段 C の識別子既定値の切替は、不変条件 3.4 に触れるため `docs/既知不具合台帳.md` に影響を書き、承認後に独立コミットで行う。
