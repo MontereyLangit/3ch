@@ -113,18 +113,18 @@ npm ライブラリへの薄い facade に置き換えた。自作実装は v5 �
   v2 系は文字列入力を受け付けないので、v5 と同じく `TextEncoder` で UTF-8 化してから渡す
   （孤立サロゲートが U+FFFD になる挙動はこれで保たれる）。
 - crypt(3): `unix-crypt-td-js`（Tim Dumol 版）。v5 の `src/common.js` に同梱されていたのは同じ実装なので、
-  KB-26（2文字未満の salt で NUL が混じる）を含めて出力は同一。
+  KB-26（2文字未満の salt で NUL が混じる）を含めて出力は同一。**2026-11-02 のトリップ廃止で削除した**
+  （`hash/UnixCrypt.scala`・`hash/Hex.scala`・golden `crypt.json` / `crypt-bytes.json` も削除。[トリップ・ID廃止とスレ主表示.md](トリップ・ID廃止とスレ主表示.md)）。
 - 置き場所は `common/` ではなく `bbs/`: npm モジュールは Scala.js からしか呼べず、cross project の JVM 側では
   リンクできない。`bbs/` の他の `@JSImport` facade（`react-dom/server` 等）と同じ扱い。
-- 検証: `tests/golden/md5.json`・`crypt.json`・`crypt-bytes.json` の全ケースが一致することを
-  `bbs/src/test/.../hash/Md5Suite`・`UnixCryptSuite` で固定している（`common` から移した）。
+- 検証: `tests/golden/md5.json` の全ケースが一致することを `bbs/src/test/.../hash/Md5Suite` で固定している（`common` から移した）。
 
 同日、残っていた `common/` の補助実装も置き換えた。
 
 - `text/Utf8.scala`（`TextEncoder` の手書き再現）→ 各呼び出し元（`AdminHandler` / `Responses` / `Board`）で
   `bbs/external/web` の `TextEncoder` facade を直接使う。`common` に置いていた理由は JVM 側でも動かすためだったが、
   利用者は全て `bbs/` だった。
-- `hash/HexToBinary.scala`（16進 → 1バイト1文字の文字列）→ `hash/Hex.scala`（`@noble/hashes` の `hexToBytes`）。
+- `hash/HexToBinary.scala`（16進 → 1バイト1文字の文字列）→ `hash/Hex.scala`（`@noble/hashes` の `hexToBytes`。トリップ廃止で後に削除）。
   `unix-crypt-td-js` は鍵をバイト配列でも受け取るので、`UnixCrypt.crypt(Uint8Array, String)` に直接渡す。
   旧実装の「奇数長は末尾を切り捨てる」挙動は、呼び出し元が正規表現で 16 桁を保証しているため到達しない。
   `tests/golden/hex-to-binary.json` はこの不到達の挙動だけを固定していたので削除した（`v5-final` タグに残る）。

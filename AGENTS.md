@@ -49,7 +49,7 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 - **状態管理**: Durable Objects — `Board`（板: スレ一覧 / 削除済み一覧）, `Thread`（スレ: dat / log / settings / hidden / stopped / movedTo）
 - **オブジェクトストレージ**: R2 `ch3www`（`SETTING.TXT`, `head.txt`, `bbsmenu.html`, `headline.txt`, `deny.cgi`, `ngwords.cgi`, 過去ログ `.cgi`）
 - **KV**: `CAP`（キャップ: パスワードハッシュ → 表示名）, `TEST`
-- **暗号**: Web Crypto (SHA-1 / SHA-256) + npm ライブラリの MD5（`@noble/hashes`）/ Unix crypt(3) DES（`unix-crypt-td-js`。トリップ用）。facade は `bbs/.../hash/`（背景は `docs/v6s実装メモ.md` §3.3）
+- **暗号**: Web Crypto (SHA-1 / SHA-256) + npm ライブラリの MD5（`@noble/hashes`）。facade は `bbs/.../hash/`（背景は `docs/v6s実装メモ.md` §3.3）。トリップと ID は 2026-11-02 に廃止（`docs/トリップ・ID廃止とスレ主表示.md`）
 - **文字コード**: 自前 Shift_JIS (JIS X 0208) エンコーダ/デコーダ（`bbs/.../util/SjisEncoding.scala`、背景は `docs/sjis差異一覧.md`）
 
 ### 1.4 ディレクトリ構成
@@ -63,7 +63,7 @@ bbs/
                        Moderation, AdminHandler（/admin/*）, Responses
     durable/           Board DO, Thread DO（V6PlaceholderDurableObject は骨格確認用の残り）
     external/cloudflare/  Workers / DO / R2 / KV の facade
-    hash/, util/       Web Crypto ハッシュ・MD5 / crypt(3) / 16進変換の npm facade, Shift_JIS 変換
+    hash/, util/       Web Crypto ハッシュ・MD5 の npm facade, Shift_JIS 変換
   src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
   test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ
 bbs-client/            クライアント側（hydration）Scala
@@ -83,6 +83,7 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 | **`docs/現行システム仕様書.md`**                                                       | **最重要。v5 の全ロジックを抽出した仕様書（版 2.0.0）。v6 は同一仕様を実装している。** 文中の `src/*.js` はタグ `v5-final` 上のファイル。第11章に既知の不具合とv6推奨仕様の対照表あり |
 | **`docs/既知不具合台帳.md`**                                                           | **既知不具合の一覧（KB-nn）。** 新たに見つけた不具合もここに追記する。修正方針は 3.3                                                                                                  |
 | `docs/v6s実装メモ.md`                                                                  | Scala.js 実装（`bbs/`）の設計背景。doc コメントから参照される（3.5）                                                                                                                  |
+| `docs/トリップ・ID廃止とスレ主表示.md`                                                 | 2026-11-02 の仕様変更（トリップ・ID 廃止、`!id`、スレ主表示 ` (主)`）。認証ブランチとの差分を含む                                                                                      |
 | `docs/admin.md`                                                                        | 管理画面の利用手順・規制ルール書式                                                                                                                                                    |
 | `docs/admin-review.md`                                                                 | 管理画面追加時のレビュー記録（セルフ / Gemini CLI）                                                                                                                                   |
 | `docs/実装方針251030v1_ストレージ改修.md`                                              | ストレージ改修の実装方針                                                                                                                                                              |
@@ -187,7 +188,7 @@ v6 の振る舞いは次で固定する。仕様変更時は、対応するア�
   - R2 / KV / `caches.default` / ASSETS / 時刻・乱数のフェイクは `durable/DurableTestKit` と `handler/HandlerTestKit`。
     Date / Math.random / `caches` を差し替えるため、`bbs` は `Test / parallelExecution := false`。
   - 期待値は v5 から引き継いだもの。KB-nn コメント付きのアサーションは既知不具合の現挙動の固定。
-  - `common/src/test` と `hash/WebHashSuite`・`Md5Suite`・`UnixCryptSuite` / `SjisEncodingSuite` は `tests/golden/*.json` と照合する。
+  - `common/src/test` と `hash/WebHashSuite`・`Md5Suite` / `SjisEncodingSuite` は `tests/golden/*.json` と照合する。
 - **`npm test`（node:test）**: 実 workerd（`unstable_dev`）が要る `tests/admin.integration.test.js` のみ。
   `dist/index.js`（`npm run v6:build`）が無いと skip される。
 
@@ -233,7 +234,7 @@ step 3 完了までは「v5 とバイト単位で同一の出力」を検証の�
 1. `docs/既知不具合台帳.md` に `KB-nn` を採番して追記する（未記録のものを見つけた場合）。
 2. 修正は 1 件ずつ独立したコミットにし、現挙動を固定しているアサーション（`// KB-nn:` コメント付き）を
    意図した新挙動へ更新する。台帳のステータスも更新する。
-3. 3.4 の不変条件に触れる修正（ID / トリップ / キャップの値、dat 構造、Shift_JIS 出力など）は、
+3. 3.4 の不変条件に触れる修正（識別子 / キャップの値、dat 構造、Shift_JIS 出力など）は、
    既存ユーザーへの影響を台帳に書き、利用者の承認を得てから行う（KB-14 / KB-19 など）。
 4. 仕様書の記述と実動作が食い違う場合は、**コードの実動作を正として**仕様書側を訂正する。
 
@@ -241,7 +242,7 @@ step 3 完了までは「v5 とバイト単位で同一の出力」を検証の�
 
 - **専ブラ互換**: dat の `<>` 5 フィールド構造、本文フィールド前後の半角スペース、エラー時も HTTP 200 + `<!-- 2ch_X:error -->` マーカー、`Range` / `304` の挙動。
 - **Shift_JIS 出力**: 公開エンドポイントの文字コードを変えない。
-- **ID / トリップ / キャップの計算結果**: 同一入力に対し同一の値が出ること（ハッシュ仕様の変更は既存ユーザーの ID 変化＝互換性破壊）。
+- **識別子 / キャップの計算結果**: 同一入力に対し同一の値が出ること（ハッシュ仕様の変更は既存ユーザーの識別子変化＝互換性破壊）。ID とトリップは 2026-11-02 に廃止した。
 - **ストレージスキーマ**: step 4 までは DO / R2 / KV のキーとフォーマットを変更しない。
 
 ### 3.5 コーディング規約
