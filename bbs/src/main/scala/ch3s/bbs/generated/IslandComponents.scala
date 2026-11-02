@@ -25,7 +25,7 @@ private object IslandComponent2 extends js.Function1[js.Object, React.Node] with
 }
 
 @js.native
-@JSImport("scalajs:client.js", "BoardListJs")
+@JSImport("scalajs:client.js", "ThreadListJs")
 private object IslandComponent3 extends js.Function1[js.Object, React.Node] with HasMutableDisplayName {
   def apply(props: js.Object): React.Node = js.native
 }
@@ -43,8 +43,8 @@ object IslandComponents {
     _root_.ch3s.bbs.external.honox.Island(_root_.ch3s.bbs.generated.IslandComponent2, props, "/app/islands/posting-form.tsx")
   }
 
-  def `BoardListJs`(props: _root_.scala.scalajs.js.Object): _root_.japgolly.scalajs.react.vdom.VdomElement = {
-    _root_.ch3s.bbs.external.honox.Island(_root_.ch3s.bbs.generated.IslandComponent3, props, "/app/islands/board-list.tsx")
+  def `ThreadListJs`(props: _root_.scala.scalajs.js.Object): _root_.japgolly.scalajs.react.vdom.VdomElement = {
+    _root_.ch3s.bbs.external.honox.Island(_root_.ch3s.bbs.generated.IslandComponent3, props, "/app/islands/thread-list.tsx")
   }
 
 }

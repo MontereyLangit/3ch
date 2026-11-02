@@ -74,7 +74,7 @@ const click = (element, init = {}) => act(async () => {
   element.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, ...init }));
 });
 
-// ---------------------------------------------------------------- 板一覧（BoardListJs）
+// ---------------------------------------------------------------- スレ一覧（ThreadListJs）
 
 const subjectText = '1800000001.dat<>実スレ &amp; <b> (3)\n1800000002.dat<>次の話題 (7)\n9240000001.dat<>共通のお知らせ (12)\n';
 const listProps = { bbs: 'sample', type: 'subback', subjectText, query: '', sort: 'new', now: 1800000100000 };
@@ -90,7 +90,7 @@ function subjectResponse(buffer) {
 }
 
 test('スレ一覧: subject を描画し、全板共通スレとエスケープ・リンクを保つ', async () => {
-  await mount(client.BoardListJs, listProps);
+  await mount(client.ThreadListJs, listProps);
   const rows = [...document.querySelectorAll('[data-thread-key]')];
   assert.deepEqual(rows.map(row => row.dataset.threadKey), ['924/9240000001', 'sample/1800000001', 'sample/1800000002']);
   assert.equal(query('[data-thread-key="sample/1800000001"] a').textContent, '実スレ & <b>');
@@ -104,22 +104,22 @@ test('スレ一覧: subject を描画し、全板共通スレとエスケープ�
 });
 
 test('スレ一覧: feed は準備中表示、検索とレス数順を適用する', async () => {
-  await mount(client.BoardListJs, { ...listProps, type: 'feed', subjectText: '' });
-  assert.match(query('#board-list').textContent, /Coming Soon…/);
+  await mount(client.ThreadListJs, { ...listProps, type: 'feed', subjectText: '' });
+  assert.match(query('#thread-list').textContent, /Coming Soon…/);
   assert.equal(query('[data-thread-key]'), null);
   document.body.innerHTML = '';
-  await mount(client.BoardListJs, { ...listProps, sort: 'res' });
+  await mount(client.ThreadListJs, { ...listProps, sort: 'res' });
   const keys = [...document.querySelectorAll('.thread-list [data-thread-key]')].map(row => row.dataset.threadKey);
   assert.deepEqual(keys, ['sample/1800000002', 'sample/1800000001']);
   document.body.innerHTML = '';
-  await mount(client.BoardListJs, { ...listProps, query: '実スレ &' });
+  await mount(client.ThreadListJs, { ...listProps, query: '実スレ &' });
   assert.deepEqual([...document.querySelectorAll('.thread-list [data-thread-key]')].map(row => row.dataset.threadKey), ['sample/1800000001']);
 });
 
 test('スレ閲覧履歴は左クリックと中クリックで記録し、右クリックでは記録しない', async () => {
   const key = '3ch:threadSeen:sample/1800000001';
   window.localStorage.setItem(key, '1');
-  await mount(client.BoardListJs, listProps);
+  await mount(client.ThreadListJs, listProps);
   const row = query('[data-thread-key="sample/1800000001"]');
   assert.equal(query('.new', row).textContent, '+2');
   assert.equal(query('[data-thread-key="sample/1800000002"] .new').textContent, '', '保存が無い行はバッジなし');
@@ -135,7 +135,7 @@ test('スレ閲覧履歴は左クリックと中クリックで記録し、右�
 
 test('リロードは subject.txt（Shift_JIS）で一覧だけ差し替え、開閉・既読バッジを維持する', async () => {
   window.localStorage.setItem('3ch:threadSeen:sample/1800000001', '3');
-  await mount(client.BoardListJs, listProps);
+  await mount(client.ThreadListJs, listProps);
   query('.common-threads').open = true;
   const requests = [];
   let release;
@@ -162,15 +162,15 @@ test('リロードは subject.txt（Shift_JIS）で一覧だけ差し替え、�
 });
 
 test('リロード失敗時は一覧を変えずエラーを表示する', async () => {
-  await mount(client.BoardListJs, listProps);
-  const before = query('#board-list .subback').innerHTML;
+  await mount(client.ThreadListJs, listProps);
+  const before = query('#thread-list .subback').innerHTML;
   const failures = [async () => ({ ok: false, status: 500, arrayBuffer: async () => new ArrayBuffer(0) }), async () => { throw new Error('offline'); }];
   for (const fetcher of failures) {
     globalThis.fetch = fetcher;
     await click(query('[data-board-reload]'));
     await flush();
     assert.equal(query('[data-board-reload-status]').textContent, '更新できませんでした');
-    assert.equal(query('#board-list .subback').innerHTML, before);
+    assert.equal(query('#thread-list .subback').innerHTML, before);
     assert.equal(query('[data-board-reload]').disabled, false);
   }
 });
@@ -445,7 +445,7 @@ test('フォーム: localStorage が使えなくても入力できる', async ()
     await mountForm();
     await type('[name="MESSAGE"]', '本文');
     assert.equal(field('MESSAGE').value, '本文');
-    await mount(client.BoardListJs, listProps);
+    await mount(client.ThreadListJs, listProps);
     assert.equal(query('[data-thread-key="sample/1800000001"] .new').textContent, '');
   } finally {
     Object.defineProperty(window, 'localStorage', original);
@@ -462,7 +462,7 @@ const storageEvent = (key, newValue) => act(async () => {
 
 test('既読バッジ: 左クリックと中クリックで即座に消え、右クリックでは変わらない', async () => {
   window.localStorage.setItem(SEEN('1800000001'), '1');
-  await mount(client.BoardListJs, listProps);
+  await mount(client.ThreadListJs, listProps);
   const link = query('[data-thread-key="sample/1800000001"] a.thread-link');
   assert.equal(badgeOf('1800000001'), '+2');
   await act(async () => { link.dispatchEvent(new window.MouseEvent('auxclick', { bubbles: true, button: 2 })); });
@@ -481,7 +481,7 @@ test('既読バッジ: 左クリックと中クリックで即座に消え、右
 
 test('既読バッジ: storage イベントで減少・増加を反映し、無関係なキーは無視する', async () => {
   window.localStorage.setItem(SEEN('1800000001'), '1');
-  await mount(client.BoardListJs, listProps);
+  await mount(client.ThreadListJs, listProps);
   assert.equal(badgeOf('1800000001'), '+2');
   await storageEvent(SEEN('1800000001'), '3');
   assert.equal(badgeOf('1800000001'), '', '他タブで既読になればバッジが消える');
@@ -542,7 +542,7 @@ test('アンマウント: 保留中の subject.txt リロードは中断され�
     finish = () => resolve(subjectResponse(sjis('1800000009.dat<>x (1)\n')));
   });
   const errors = await captureConsoleErrors(async () => {
-    const container = await mount(client.BoardListJs, listProps);
+    const container = await mount(client.ThreadListJs, listProps);
     await click(query('[data-board-reload]'));
     assert.equal(calls[0].signal.aborted, false);
     await unmountLast();
@@ -561,7 +561,7 @@ test('リロード中はボタンが無効で、再度押しても二重に取�
     calls.push(init);
     finish = () => resolve(subjectResponse(sjis('1800000009.dat<>', NIHONGO, ' (1)\n')));
   });
-  await mount(client.BoardListJs, listProps);
+  await mount(client.ThreadListJs, listProps);
   const button = query('[data-board-reload]');
   await click(button);
   await click(button);
@@ -610,8 +610,8 @@ test('SSR の描画と最初のクライアント描画が一致する（保存�
     [client.BoardDetailsJs, detailsProps],
     [client.PostingFormJs, formProps],
     [client.PostingFormJs, { ...formProps, threadKey: '1800000001' }],
-    [client.BoardListJs, listProps],
-    [client.BoardListJs, { ...listProps, type: 'feed' }],
+    [client.ThreadListJs, listProps],
+    [client.ThreadListJs, { ...listProps, type: 'feed' }],
   ];
   for (const [Component, props] of cases) {
     const container = document.body.appendChild(document.createElement('div'));

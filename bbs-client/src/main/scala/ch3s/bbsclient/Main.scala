@@ -1,6 +1,6 @@
 package ch3s.bbsclient
 
-import ch3s.bbsclient.islands.{BoardDetailsIsland, BoardListIsland, PostingFormIsland, SiteHeaderIsland}
+import ch3s.bbsclient.islands.{BoardDetailsIsland, PostingFormIsland, SiteHeaderIsland, ThreadListIsland}
 import ch3s.common.routes.islands
 import japgolly.scalajs.react.*
 
@@ -22,7 +22,7 @@ object Main {
   @JSExportTopLevel("PostingFormJs", "client")
   val postingForm: js.Any = PostingFormIsland.Component.cmapCtorProps[js.Object](PostingFormIsland.Props.fromJs).toJsComponent.raw
 
-  @islands("board-list.tsx")
-  @JSExportTopLevel("BoardListJs", "client")
-  val boardList: js.Any = BoardListIsland.Component.cmapCtorProps[js.Object](BoardListIsland.Props.fromJs).toJsComponent.raw
+  @islands("thread-list.tsx")
+  @JSExportTopLevel("ThreadListJs", "client")
+  val threadList: js.Any = ThreadListIsland.Component.cmapCtorProps[js.Object](ThreadListIsland.Props.fromJs).toJsComponent.raw
 }

@@ -93,10 +93,10 @@ export function hydrate() {
     const { document } = window;
     assert.equal(document.querySelectorAll('honox-island').length, 3, 'island 境界は 3 つ（新規スレッド作成欄は board-details 内の通常コンポーネント）');
     const names = [...document.querySelectorAll('honox-island')].map(el => el.getAttribute('component-name')).sort();
-    assert.deepEqual(names, ['/app/islands/board-details.tsx', '/app/islands/board-list.tsx', '/app/islands/site-header.tsx']);
+    assert.deepEqual(names, ['/app/islands/board-details.tsx', '/app/islands/site-header.tsx', '/app/islands/thread-list.tsx']);
 
     const before = {
-      list: document.querySelector('#board-list'),
+      list: document.querySelector('#thread-list'),
       form: document.querySelector('form.posting-form'),
       header: document.querySelector('header.site-header'),
       button: document.querySelector('[data-board-panel]'),
@@ -115,7 +115,7 @@ export function hydrate() {
 
       assert.deepEqual(hydrator.errors, [], 'hydration は SSR の HTML と一致する');
       assert.equal(hydrator.roots.length, 3, '3 つの island が hydrate された');
-      assert.equal(document.querySelector('#board-list'), before.list);
+      assert.equal(document.querySelector('#thread-list'), before.list);
       assert.equal(document.querySelector('form.posting-form'), before.form);
       assert.equal(document.querySelector('header.site-header'), before.header);
       assert.equal(document.querySelector('[data-board-panel]'), before.button);

@@ -74,9 +74,9 @@ class BoardIndexSuite extends munit.FunSuite {
     assert(!html.contains("name=\"key\""))
   }
 
-  test("一覧を #board-list で包み、リロードボタンを出す") {
+  test("一覧を #thread-list で包み、リロードボタンを出す") {
     val html = render(props)
-    assert(html.contains("id=\"board-list\""))
+    assert(html.contains("id=\"thread-list\""))
     assert(html.contains("data-board-reload"))
     assert(html.contains("data-board-reload-status"))
   }

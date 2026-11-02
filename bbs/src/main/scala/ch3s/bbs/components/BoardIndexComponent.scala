@@ -65,7 +65,7 @@ object BoardIndexComponent {
               <.button(^.className := "cursor-pointer border border-[#d6dce3] bg-white px-2.5 py-1", ^.`type` := "submit", "表示")
             )
           ),
-          IslandComponents.BoardListJs(list.asInstanceOf[js.Object]),
+          IslandComponents.ThreadListJs(list.asInstanceOf[js.Object]),
           <.div(^.className := "board-admin p-3 text-right",
             <.a(^.className := "text-[#06f] hover:underline", ^.href := s"/admin/board?bbs=${URIUtils.encodeURIComponent(props.bbs)}", "管理画面へ"))
         ),

@@ -12,7 +12,7 @@
 | `SiteHeaderJs` | `HeaderComponent`: `js.Dynamic.literal()` | props なし（`_ => ()`） |
 | `PostingFormJs` | `PostingFormComponent.islandProps`: `js.Dynamic.literal(bbs, time, imgurClientId, commands, threadKey)` | `PostingFormIsland.Props.fromJs`: `selectDynamic("bbs")` … |
 | `BoardDetailsJs` | `BoardIndexComponent`: posting form の props に `updateDynamic("headText")` / `("settingsText")` を足す | `BoardDetailsIsland.Props.fromJs`: 同じ生オブジェクトを `PostingFormIsland.Props.fromJs(raw)` にも渡す |
-| `BoardListJs` | `BoardIndexComponent`: `js.Dynamic.literal(bbs, type, subjectText, query, sort, now)` | `BoardListIsland.Props.fromJs` |
+| `ThreadListJs` | `BoardIndexComponent`: `js.Dynamic.literal(bbs, type, subjectText, query, sort, now)` | `ThreadListIsland.Props.fromJs` |
 
 問題点:
 
@@ -63,7 +63,7 @@ trait BoardDetailsProps extends js.Object {
   val postingForm: PostingFormProps   // 平らに混ぜず、入れ子のフィールドにする
 }
 
-trait BoardListProps extends js.Object {
+trait ThreadListProps extends js.Object {
   val bbs: String
   val `type`: String
   val subjectText: String
@@ -114,7 +114,7 @@ trait では、シリアライズ後に値が欠けていても検出できな�
 2. **codegen**: `islands[P]` の型引数を読み、型付きの生成 API を出す。型引数が無ければ現状と同じ出力（既存テストが通ること）。
 3. **`PostingFormProps`**: trait と `validate` を定義し、`PostingFormComponent.islandProps` と `PostingFormIsland` を置き換える。`ThreadCommand`（common の case class）と `ThreadCommandProps` の変換はサーバー側に置く。
 4. **`BoardDetailsProps`**: posting form の props を `postingForm` フィールドに入れ子にし、`updateDynamic` を廃止する。
-5. **`BoardListProps`**: 置き換える。
+5. **`ThreadListProps`**: 置き換える。
 6. **掃除**: `Props.fromJs` と `selectDynamic` が bbs-client と board top のラッパーから無くなったことを確認する（`grep -n "selectDynamic\|js.Dynamic.literal"`）。`docs/islands-ssr.md` の宣言例を型付き版に更新する。
 
 ## 4. テスト

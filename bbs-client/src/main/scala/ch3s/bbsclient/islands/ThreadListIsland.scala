@@ -11,7 +11,7 @@ import scala.scalajs.js
 import scala.scalajs.js.URIUtils
 
 /** 板topのスレ一覧（subback）とスレッドフィードの枠 */
-object BoardListIsland {
+object ThreadListIsland {
 
   /** `subjectText` は Board DO の subject（`key.dat<>title (n)` の行）、`now` はサーバー描画時刻（ミリ秒）。 */
   final case class Props(bbs: String, viewType: String, subjectText: String, query: String, sort: String, now: Double)
@@ -196,7 +196,7 @@ object BoardListIsland {
     }
 
     def render(props: Props, state: State): VdomNode = {
-      <.div(^.id := "board-list",
+      <.div(^.id := "thread-list",
         <.div(^.className := "newposts border-b-2 border-[#e0e0e0] py-0.5 text-center",
           <.button(^.className :=
             """inline-flex cursor-pointer items-center gap-0.5 border-0 bg-transparent p-1 text-base text-[#0187e8]
@@ -212,7 +212,7 @@ object BoardListIsland {
   }
 
   final val Component = ScalaComponent
-    .builder[Props]("BoardList")
+    .builder[Props]("ThreadList")
     .initialStateFromProps(p => State(BbsSubjects.create(p.subjectText), p.now, loading = false, status = "", seen = Map.empty))
     .backend(new Backend(_))
     .renderPS((self, p, s) => self.backend.render(p, s))

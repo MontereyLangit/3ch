@@ -10,7 +10,7 @@
 
 | 項目 | 決定 |
 | --- | --- |
-| リロード | 一覧部分だけ更新する。islands 化後は `/<bbs>/subject.txt` を取り直し（Shift_JIS を `TextDecoder` で復号）、`BoardListJs` を再描画する。入力中のフォームや開いたパネルは維持 |
+| リロード | 一覧部分だけ更新する。islands 化後は `/<bbs>/subject.txt` を取り直し（Shift_JIS を `TextDecoder` で復号）、`ThreadListJs` を再描画する。入力中のフォームや開いたパネルは維持 |
 | 名前・E-mail 記憶 | localStorage `3ch:postName` / `3ch:postMail`（全板共通）。空欄にだけ復元し、復元したら「名前・E-mail」を開く |
 | 下書き | localStorage `3ch:draft:<bbs>/<key または new>` に `{subject, MESSAGE}`。送信時に `sent` を付け、次の通常遷移では破棄、戻る（back_forward）では復元 |
 | imgur | Client-ID は旧3chのものを `wrangler.jsonc` の `vars.IMGUR_CLIENT_ID` から SSR で渡す。未設定ならアップロード欄を出さない。板top の新規スレッド作成欄のみ |
@@ -23,7 +23,7 @@
 | 通常 POST では投稿成否が分からず、下書きを「成功時だけ消す」（`docs/ui/板top_書き込み欄と投稿後更新の方針.md` 2章）ができない | 送信時に `sent` 印を付け、戻るボタン以外の遷移で破棄する方式にした。エラー後に戻るを使わず板top を開き直した場合は下書きが消える。fetch 投稿（同文書 2章）の実装時に成功判定へ置き換える |
 | file input が bbs.cgi に送られないか | `name` 属性なしで描画し、`BoardIndexSuite` で固定。bbs.cgi は urlencoded のみ受け付けるため |
 | 名前欄のトリップキー（`#...`）が localStorage に平文で残る | 専ブラ・旧 UI と同等の挙動として許容。共用端末への注意は今後の UI 文言で検討 |
-| リロード後の一覧内フォーム | islands 化で解消（一覧は `BoardListJs` の React 描画になり、DOM の差し替えをしない） |
+| リロード後の一覧内フォーム | islands 化で解消（一覧は `ThreadListJs` の React 描画になり、DOM の差し替えをしない） |
 | `tests/admin.integration.test.js` の `/ダミー/` が 5499458（Coming Soon 化）以降失敗していた | 本作業と無関係の既存不具合。期待値を `Coming Soon…` に更新 |
 | 公開エンドポイントの文字コード・dat 構造（AGENTS.md 3.4） | 変更なし。板top の HTML と `vars` の追加のみ |
 
@@ -42,7 +42,7 @@
 | `SiteHeaderJs` | ヘッダー。スクロール時の非表示、フォーカスで再表示、`--header-height` の更新、「検索」リンク |
 | `BoardDetailsJs` | 板概要・板設定・新着レス一覧・新規スレッド作成の開閉ボタンとパネル（新規スレッド作成欄は入れ子 island ではなく通常コンポーネント） |
 | `PostingFormJs` | 書き込みフォーム一式（名前/メール記憶、下書き、imgur、アップロード中の送信抑止、コマンド補助） |
-| `BoardListJs` | `#board-list`。リロード、スレ一覧（subback）、フィード枠、既読 `+N` |
+| `ThreadListJs` | `#thread-list`。リロード、スレ一覧（subback）、フィード枠、既読 `+N` |
 
 | 確認事項 | 判断・対応 |
 | --- | --- |
@@ -61,7 +61,7 @@
 
 | 指摘 | 判断・対応 |
 | --- | --- |
-| [P2][正しさ] `BoardListIsland.markSeen` が localStorage だけ更新し state を更新しないため、中クリック等で別タブに開いても元の一覧の `+N` が消えない。他タブの既読も反映されない | 修正済み。`markSeen` が state の `seen` を更新し、反映後に localStorage へ保存する。`storage` イベントの listener で他タブの変更も `seen` へ反映（キー削除・全消去を含む）。`tests/board-islands.test.js` に、左/中クリックで即座にバッジが消える・右クリックは不変・`storage` イベントで減少/増加を反映・無関係なキーは無視、を追加 |
+| [P2][正しさ] `ThreadListIsland.markSeen` が localStorage だけ更新し state を更新しないため、中クリック等で別タブに開いても元の一覧の `+N` が消えない。他タブの既読も反映されない | 修正済み。`markSeen` が state の `seen` を更新し、反映後に localStorage へ保存する。`storage` イベントの listener で他タブの変更も `seen` へ反映（キー削除・全消去を含む）。`tests/board-islands.test.js` に、左/中クリックで即座にバッジが消える・右クリックは不変・`storage` イベントで減少/増加を反映・無関係なキーは無視、を追加 |
 | [P3][作法] unmount 後も Future 完了で `modState(...).runNow()` が走る。`uploading` が React state の外（Backend の var） | 修正済み。`uploading` を State へ移し、アップロードごとに `AbortController` を持って unmount で中断、完了は unmount 後に無視。subject.txt リロードも `AbortController`（unmount・新しいリロード開始で中断）。テストで、保留中アップロード/リロードの unmount 中断（`signal.aborted`、完了後に `console.error` なし）と、2 件並行アップロードで両方終わるまで送信が止まることを確認 |
 | [P3][作法] `modState` の更新関数内で localStorage を読み書きしている（更新関数は純粋であるべき） | 修正済み。localStorage の読込と復元の判断は更新関数の外で行い、保存・削除は `modState` の確定後 Callback で行う（既存の下書き・既読テストで確認） |
 | [P3][作法] island props の契約がサーバーとクライアントで別々の文字列キーと `js.Dynamic` で定義され、型で検証されない | 別作業として見送り（利用者判断）。計画は `docs/island-props型付け計画.md` |
