@@ -1,30 +1,33 @@
 package ch3s.bbs.components
 
+import ch3s.bbs.generated.IslandComponents
+import ch3s.common.domain.ThreadCommand
 import japgolly.scalajs.react.ScalaFnComponent
-import japgolly.scalajs.react.vdom.html_<^.*
 
-case class PostingFormProps(bbs: String, time: String, key: Option[String] = None)
+import scala.scalajs.js
 
-/** 書き込みフォーム（新規スレッド一覧と書き込み欄で共通） */
+case class PostingFormProps(
+  bbs: String,
+  time: String,
+  key: Option[String] = None,
+  imgurClientId: String = "",
+  commands: Seq[ThreadCommand] = ThreadCommand.all
+)
+
+/** 書き込みフォーム（新規スレッド一覧と書き込み欄で共通）。表示と動作は bbs-client の island（PostingFormJs）が持つ。 */
 object PostingFormComponent {
-  final val Component = ScalaFnComponent[PostingFormProps] { props =>
-    <.form(^.className := "posting-form mt-2 mb-3 ml-[2em] text-base [&_label]:inline-block [&_label]:max-w-full max-[660px]:ml-3",
-      ^.method := "post", ^.action := "/test/bbs.cgi", ^.acceptCharset := "UTF-8",
-      <.fieldset(^.className := "m-0 min-w-0 border-0 p-0",
-        <.details(<.summary("名前・E-mail"),
-          <.label("名前：", <.input(^.className := controlClass, ^.`type` := "text", ^.name := "FROM", ^.size := 24)),
-          <.label(" E-mail：", <.input(^.className := controlClass, ^.`type` := "text", ^.name := "mail", ^.size := 24))),
-        props.key.fold[VdomNode](
-          <.label("タイトル：", <.input(^.className := controlClass, ^.`type` := "text", ^.name := "subject", ^.size := 80, ^.required := true)))(_ => EmptyVdom),
-        <.button(^.className := s"$controlClass cursor-pointer", ^.`type` := "submit", ^.name := "submit", ^.value := "書き込む",
-          if props.key.isEmpty then "新規スレッド作成" else "書き込む"),
-        <.label(^.className := "message-label block!", "本文", <.textarea(^.className := s"$controlClass block w-full resize-y",
-          ^.name := "MESSAGE", ^.rows := 8, ^.cols := 80, ^.required := true)),
-        <.input(^.`type` := "hidden", ^.name := "bbs", ^.value := props.bbs),
-        <.input(^.`type` := "hidden", ^.name := "time", ^.value := props.time),
-        props.key.toVdomArray(key => <.input(^.key := key, ^.`type` := "hidden", ^.name := "key", ^.value := key))
-      )
-    )
+
+  /** island に渡す JSON 互換の props。 */
+  def islandProps(props: PostingFormProps): js.Object = {
+    val result = js.Dynamic.literal(bbs = props.bbs, time = props.time, imgurClientId = props.imgurClientId,
+      commands = js.Array(props.commands.map(c =>
+        js.Dynamic.literal(text = c.text, label = c.label, field = c.field, description = c.description)
+      )*))
+    props.key.foreach(key => result.updateDynamic("threadKey")(key))
+    result.asInstanceOf[js.Object]
   }
-  private val controlClass = "max-w-full border border-[#d6dce3] bg-white px-2.5 py-1 hover:border-[#b9c4d0]"
+
+  final val Component = ScalaFnComponent[PostingFormProps] { props =>
+    IslandComponents.PostingFormJs(islandProps(props))
+  }
 }

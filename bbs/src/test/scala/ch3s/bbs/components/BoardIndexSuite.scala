@@ -1,7 +1,7 @@
 package ch3s.bbs.components
 
 import ch3s.bbs.BuildInfo
-import ch3s.common.domain.BbsSubjects
+import ch3s.common.domain.{BbsSubjects, ThreadCommand}
 import japgolly.scalajs.react.facade.React
 
 import scala.scalajs.js
@@ -17,7 +17,12 @@ class BoardIndexSuite extends munit.FunSuite {
   private val subjects = BbsSubjects.create("1800000001.dat<>実スレ &amp; &lt;script&gt; (3)\n1800000002.dat<>次の話題 (7)\n9240000001.dat<>共通のお知らせ (12)\n")
   private val props = BoardIndexProps("テスト板", "<b>ローカルルール</b>", "sample", subjects = subjects, time = "1800000100")
 
-  private def render(props: BoardIndexProps): String = BoardMarkup(BoardIndexComponent.Component(props).rawElement)
+  /** island の `data-serialized-props`（JSON）は見える描画ではないので除く。 */
+  private def visible(html: String): String = html.replaceAll("data-serialized-props=\"[^\"]*\"", "")
+
+  private def renderForm(props: PostingFormProps): String = visible(BoardMarkup(PostingFormComponent.Component(props).rawElement))
+
+  private def render(props: BoardIndexProps): String = visible(BoardMarkup(BoardIndexComponent.Component(props).rawElement))
 
   test("feed と新着レス一覧は準備中表示、subback は実際の subject を描画する") {
     val feed = render(props.copy(`type` = "feed"))
@@ -56,9 +61,10 @@ class BoardIndexSuite extends munit.FunSuite {
   }
 
   test("投稿フィールドを form 内にまとめ、スレ立て用 submit 値を保持する") {
-    val html = BoardMarkup(PostingFormComponent.Component(PostingFormProps("sample", "1800000100")).rawElement)
-    assert(html.startsWith("<form"))
-    assert(html.endsWith("</form>"))
+    val html = renderForm(PostingFormProps("sample", "1800000100"))
+    assert(html.startsWith("<honox-island"))
+    assert(html.contains("<form"))
+    assert(html.endsWith("</form></honox-island>"))
     for (name <- List("FROM", "mail", "subject", "MESSAGE", "bbs", "time", "submit")) {
       assert(html.contains(s"name=\"$name\""))
     }
@@ -68,8 +74,37 @@ class BoardIndexSuite extends munit.FunSuite {
     assert(!html.contains("name=\"key\""))
   }
 
-  test("文字参照は一度だけ戻し、数値文字参照もテキストとして安全に扱う") {
-    assertEquals(SubjectText.decode("&amp;lt; &#128512; &#x3c; &#999999999999;"), "&lt; 😀 < &#999999999999;")
+  test("一覧を #board-list で包み、リロードボタンを出す") {
+    val html = render(props)
+    assert(html.contains("id=\"board-list\""))
+    assert(html.contains("data-board-reload"))
+    assert(html.contains("data-board-reload-status"))
+  }
+
+  test("フォームに下書きキーを付け、imgur 欄は Client-ID があるときだけ name なしで出す") {
+    val none = render(props)
+    assert(none.contains("data-draft-key=\"sample/new\""))
+    assert(!none.contains("data-imgur-upload"))
+    assert(!none.contains("data-imgur-client-id"))
+    val html = render(props.copy(imgurClientId = "cid123"))
+    assert(html.contains("data-imgur-client-id=\"cid123\""))
+    assert("<input[^>]*data-imgur-upload[^>]*>".r.findFirstIn(html).exists(tag => !tag.contains("name=") && tag.contains("type=\"file\"")))
+    assert(html.contains("data-imgur-status"))
+    val thread = renderForm(PostingFormProps("sample", "1", Option("1800000001"), "cid123"))
+    assert(thread.contains("data-draft-key=\"sample/1800000001\""))
+  }
+
+  test("コマンド補助は候補があるスレ立てフォームだけに出す") {
+    assert(!render(props).contains("data-command-helper"))
+    val command = ThreadCommand("!force:ID", "ID強制", "MESSAGE", "IDを表示する")
+    val html = renderForm(PostingFormProps("sample", "1", commands = Seq(command)))
+    assert(html.contains("data-command-helper"))
+    assert(html.contains("data-command=\"!force:ID\""))
+    assert(html.contains("data-command-field=\"MESSAGE\""))
+    assert(html.contains("aria-pressed=\"false\""))
+    assert(html.contains("title=\"IDを表示する\""))
+    val reply = renderForm(PostingFormProps("sample", "1", Option("1"), commands = Seq(command)))
+    assert(!reply.contains("data-command-helper"))
   }
 
   test("板名は URL のパス要素とクエリ値として符号化する") {

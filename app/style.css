@@ -5,6 +5,11 @@
 @source "../bbs-client/src/main/scala";
 @source "../common/src/main/scala";
 
+/* HonoX の island 境界はレイアウトに影響させない。 */
+honox-island {
+    display: contents;
+}
+
 body {
     font-family: ArialMT, "hiragino kaku gothic pron", "ヒラギノ角ゴ pron w3" !important;
     background: #fafafa;

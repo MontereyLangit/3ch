@@ -1,9 +1,9 @@
-package ch3s.bbs.components
+package ch3s.common.domain
 
 import java.util.regex.Matcher
 
 /** dat / subject に保存済みの文字参照を、React のテキスト描画用に一度だけ戻す。 */
-private[components] object SubjectText {
+object SubjectText {
   private val entity = "&(?:amp|lt|gt|quot|apos|#[0-9]+|#[xX][0-9a-fA-F]+);".r
 
   def decode(value: String): String = {

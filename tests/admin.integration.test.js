@@ -85,7 +85,8 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   assert.match(boardHtml, /<title>sandbox<\/title>/);
   assert.match(boardHtml, /<h1[^>]*>sandbox<\/h1>/);
   assert.ok(boardHtml.includes('<b>rules</b>'), 'head.txt は無エスケープで埋め込まれる');
-  assert.ok(!boardHtml.includes('&lt;b&gt;rules'));
+  // island の data-serialized-props（JSON）には属性としてエスケープされた文字列が入る。描画部分だけを見る。
+  assert.ok(!boardHtml.replace(/data-serialized-props="[^"]*"/g, '').includes('&lt;b&gt;rules'));
   assert.match(boardHtml, /<script type="module" src="\/static\/client\.js"><\/script>/);
   const clientScriptResponse = await fetch(origin + '/static/client.js');
   assert.equal(clientScriptResponse.status, 200);
@@ -136,7 +137,7 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   assert.match(await (await fetch(origin + '/sandbox/')).text(), /thread title/, '既定はスレ一覧');
   const feedResponse = await fetch(origin + '/sandbox/?type=feed');
   assert.equal(feedResponse.status, 200);
-  assert.match(await feedResponse.text(), /ダミー/);
+  assert.match(await feedResponse.text(), /Coming Soon…/);
   const path = `/admin/thread?bbs=sandbox&key=${key}`;
   assert.match(await post('sandbox', key, 'second message'), /書きこみました/);
   assert.equal((await save(path, {action: 'stop'})).status, 303);

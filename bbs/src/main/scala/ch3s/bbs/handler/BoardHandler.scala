@@ -43,7 +43,8 @@ object BoardHandler {
         c.renderPromise(
           BoardIndexComponent.Component(BoardIndexProps(
             title, headText, bbs, viewType, subjects, boardSettings.value,
-            c.req.query("q").getOrElse(""), sort, math.floor(js.Date.now() / 1000).toLong.toString
+            c.req.query("q").getOrElse(""), sort, math.floor(js.Date.now() / 1000).toLong.toString,
+            c.env.IMGUR_CLIENT_ID.getOrElse("")
           )).rawElement, props).toFuture
       }
     } yield res).toJSPromise

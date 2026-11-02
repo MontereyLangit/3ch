@@ -63,6 +63,18 @@ class BoardHandlerSuite extends munit.FunSuite {
     }
   }
 
+  test("板top: IMGUR_CLIENT_ID は設定時だけフォームへ渡す") {
+    val env = DurableTestKit.newEnv()
+    render(env, "/sample/").flatMap { html =>
+      assert(!html.contains("data-imgur-upload"), html)
+      env.worker.asInstanceOf[js.Dynamic].updateDynamic("IMGUR_CLIENT_ID")("cid-test")
+      render(env, "/sample/").map { withId =>
+        assert(withId.contains("data-imgur-client-id=\"cid-test\""), withId)
+        assert(withId.contains("data-imgur-upload"), withId)
+      }
+    }
+  }
+
   test("板top: BBS_TITLE内の<DIR_NAME>を板ディレクトリ名に置換する") {
     val env = DurableTestKit.newEnv()
     env.putR2("abc/SETTING.TXT", "BBS_TITLE=<DIR_NAME>の板\n")

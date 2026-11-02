@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "npm run v6:build && wrangler dev --config wrangler.jsonc",
     "deploy": "npm run v6:build && wrangler deploy --config wrangler.jsonc --minify",
-    "pretest": "sbt bbs/Test/fastLinkJS",
+    "pretest": "sbt bbs/Test/fastLinkJS bbsClient/fastLinkJS",
     "test": "node --test tests/*.test.js",
     "v6:generate": "sbt codegen/run",
     "v6:build:client": "vite build --mode client",
@@ -22,13 +22,13 @@
     "jsdom": "^29.1.1",
     "tailwindcss": "4.3.3",
     "typescript": "^5",
-    "vite": "7.3.6",
+    "vite": "8.3.3",
     "wrangler": "^4.146.0"
   },
   "dependencies": {
     "@hono/react-renderer": "1.0.1",
-    "hono": "4.13.7",
-    "honox": "0.1.61",
+    "hono": "4.13.11",
+    "honox": "^0.1.62",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   }

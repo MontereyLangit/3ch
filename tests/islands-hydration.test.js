@@ -10,6 +10,7 @@ import { act } from 'react';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const bridge = path.join(root, 'bbs/target/scala-3.3.8/bbs-test-fastopt/island-test.js');
+const clientModule = path.join(root, 'bbs-client/target/scala-3.3.8/bbsclient-fastopt/client.js');
 
 test('Scala IslandのrawElementはHonoXの検出・入れ子island・要素propsに対応する', async (t) => {
   // npm pretest links the real Scala bridge; do not silently substitute a JS implementation.
@@ -72,6 +73,7 @@ export function hydrate() {
       logLevel: 'silent',
       resolve: { alias: {
         'scala-island-test': bridge,
+        'scalajs:client.js': clientModule,
         'cloudflare:workers': path.join(root, 'bbs/test-stubs/cloudflare-workers-stub.mjs'),
       } },
       ssr: { noExternal: ['honox'] },

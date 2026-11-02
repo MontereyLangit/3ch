@@ -74,18 +74,26 @@ lazy val bbs = project
     // クラスが常にexportされるため、Testのリンク成果物にも巻き込まれる。素の NodeJSEnv では
     // cloudflare: スキームを解決できず Test 全体が起動できないため、Node の Module customization
     // hooks（--import で module.register）で cloudflare:workers の解決だけをスタブへ差し替える
-    Test / jsEnv := new NodeJSEnv(
-      NodeJSEnv.Config()
-        .withArgs(
-          List(
-            "--import",
-            (baseDirectory.value / "test-stubs" / "register.mjs").toURI.toString
+    // island が import する scalajs:client.js を bbsClient のリンク成果物へ解決する
+    // （loader が CH3S_CLIENT_JS_DIR を読む）。リンクはテスト実行・Test/fastLinkJS の前に行う
+    Test / jsEnv := {
+      val clientDir = (bbsClient / Compile / fastLinkJS / scalaJSLinkerOutputDirectory).value
+      (bbsClient / Compile / fastLinkJS).value
+      new NodeJSEnv(
+        NodeJSEnv.Config()
+          .withArgs(
+            List(
+              "--import",
+              (baseDirectory.value / "test-stubs" / "register.mjs").toURI.toString
+            )
           )
-        )
-    )
+          .withEnv(Map("CH3S_CLIENT_JS_DIR" -> clientDir.getAbsolutePath))
+      )
+    },
+    Test / fastLinkJS := (Test / fastLinkJS).dependsOn(bbsClient / Compile / fastLinkJS).value
   )
 
-// --- bbs-client: Scala.js — ブラウザへ配る island コンポーネント（今回は配線のみの空実装） ---
+// --- bbs-client: Scala.js — ブラウザへ配る island コンポーネント（ブラウザ側ロジックは TS でなくここに置くこと） ---
 lazy val bbsClient = project
   .in(file("bbs-client"))
   .enablePlugins(ScalaJSPlugin)
@@ -93,6 +101,7 @@ lazy val bbsClient = project
   .settings(commonSettings)
   .settings(
     scalaJSUseMainModuleInitializer := false,
+    libraryDependencies += "com.github.japgolly.scalajs-react" %%% "core" % "4.0.0",
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) }
   )
 

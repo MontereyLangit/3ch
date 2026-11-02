@@ -1,10 +1,12 @@
 package ch3s.bbs.components
 
 import ch3s.bbs.components.layout.{FooterComponent, HeaderComponent, RightSidebarComponent, RightSidebarProps}
+import ch3s.bbs.generated.IslandComponents
 import ch3s.common.domain.BbsSubjects
 import japgolly.scalajs.react.ScalaFnComponent
 import japgolly.scalajs.react.vdom.html_<^.*
 
+import scala.scalajs.js
 import scala.scalajs.js.URIUtils
 
 case class BoardIndexProps(
@@ -16,14 +18,14 @@ case class BoardIndexProps(
   settings: Map[String, String] = Map.empty,
   query: String = "",
   sort: String = "new",
-  time: String = "0"
+  time: String = "0",
+  imgurClientId: String = "",
+  now: Double = js.Date.now()
 )
 
 /** 板トップ。feed / subback で本文だけを切り替える。 */
 object BoardIndexComponent {
   final val Component = ScalaFnComponent[BoardIndexProps] { props =>
-    val isSubback = props.`type` == "subback"
-
     def tab(kind: String, label: String) = {
       val active = props.`type` == kind
       val href = s"?type=$kind&q=${URIUtils.encodeURIComponent(props.query)}&sort=${props.sort}"
@@ -34,32 +36,20 @@ object BoardIndexComponent {
         VdomAttr("aria-current") := (if active then "page" else "false"), label)
     }
 
-    def detailButton(id: String, label: String) = {
-      <.button(^.`type` := "button", ^.className := "cursor-pointer border-0 bg-transparent px-1 py-[3px] text-xs hover:text-[#2464b5]",
-        VdomAttr("data-board-panel") := id,
-        VdomAttr("aria-expanded") := "false", VdomAttr("aria-controls") := id,
-        <.span(^.aria.hidden := true, "▸ "), label)
-    }
+    val details = PostingFormComponent.islandProps(PostingFormProps(props.bbs, props.time, imgurClientId = props.imgurClientId)).asInstanceOf[js.Dynamic]
+    details.updateDynamic("headText")(props.headText)
+    details.updateDynamic("settingsText")(props.settings.map { case (k, v) => s"$k=$v" }.mkString("\n"))
+
+    val list = js.Dynamic.literal(bbs = props.bbs, `type` = props.`type`, subjectText = if props.`type` == "subback" then props.subjects.toString else "",
+      query = props.query, sort = props.sort, now = props.now)
 
     <.div(^.className := "board-ui min-h-screen bg-[#fafafa] text-sm text-[#333] wrap-anywhere [--header-height:64px] [&_summary]:cursor-pointer",
       HeaderComponent.Component(),
       <.div(^.className := "board-layout grid p-2 grid-cols-[minmax(0,3fr)_minmax(0,1fr)] items-start max-[767px]:block",
         <.main(^.className := "board-main min-w-0 pr-2 max-[767px]:pr-0",
           <.h1(^.className := "board-title my-2 text-lg font-bold", props.title),
-          <.div(^.className := "board-details mt-[9px] flex flex-wrap items-center gap-2",
-            detailButton("board-rules", "板概要・ローカルルール"), detailButton("board-settings", "板設定"),
-            detailButton("board-headline", "新着レス一覧"), detailButton("board-new-thread", "新規スレッド作成")
-          ),
-          <.div(^.id := "board-rules",
-            ^.className := "board-panel details-content mt-2 mb-3 ml-[2em] text-[13px] max-[660px]:ml-3 [&_a]:text-[#06f] [&_a:hover]:underline",
-            ^.hidden := true, ^.dangerouslySetInnerHtml := props.headText),
-          <.div(^.id := "board-settings", ^.className := "board-panel details-content mt-2 mb-3 ml-[2em] text-[13px] max-[660px]:ml-3",
-            ^.hidden := true, BoardSettingsComponent.content(props.bbs, props.settings)),
-          <.div(^.id := "board-headline", ^.className := "board-panel details-content mt-2 mb-3 ml-[2em] text-[13px] max-[660px]:ml-3",
-            ^.hidden := true, HeadlineComponent.content(props.bbs)),
-          <.div(^.id := "board-new-thread", ^.className := "board-panel", ^.hidden := true,
-            PostingFormComponent.Component(PostingFormProps(props.bbs, props.time))),
-          <.noscript(^.dangerouslySetInnerHtml := "<style>.board-ui .board-panel[hidden]{display:block!important}.board-ui .board-details{display:none}</style>"),
+          IslandComponents.BoardDetailsJs(details.asInstanceOf[js.Object]),
+          <.noscript(^.dangerouslySetInnerHtml := "<style>.board-ui .board-panel[hidden]{display:block!important}.board-ui .board-details,.board-ui [data-board-reload]{display:none}</style>"),
           <.div(^.className := "toolbar flex flex-wrap gap-2 p-[13px] max-[660px]:p-[9px]",
             <.nav(^.className := "tabs flex min-w-0 flex-wrap gap-[3px]", ^.aria.label := "表示切り替え",
               tab("feed", "スレッドフィード"), tab("subback", "スレ一覧"),
@@ -75,8 +65,7 @@ object BoardIndexComponent {
               <.button(^.className := "cursor-pointer border border-[#d6dce3] bg-white px-2.5 py-1", ^.`type` := "submit", "表示")
             )
           ),
-          if isSubback then SubbackComponent.Component(SubbackProps(props.bbs, props.subjects, props.query, props.sort))
-          else ThreadFeedComponent.Component(ThreadFeedProps(props.bbs, props.time, props.query, props.sort)),
+          IslandComponents.BoardListJs(list.asInstanceOf[js.Object]),
           <.div(^.className := "board-admin p-3 text-right",
             <.a(^.className := "text-[#06f] hover:underline", ^.href := s"/admin/board?bbs=${URIUtils.encodeURIComponent(props.bbs)}", "管理画面へ"))
         ),

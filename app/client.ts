@@ -2,13 +2,6 @@ import "./style.css";
 import {createClient} from "honox/client";
 import {createElement, type ElementType, type ReactElement} from "react";
 import {hydrateRoot} from "react-dom/client";
-import {initializeBoardUi} from "./board-client";
-// @ts-expect-error scalajs:client.js は @scala-js/vite-plugin-scalajs が解決する仮想モジュール（.d.ts無し）。
-import {v6ClientPing} from "scalajs:client.js";
-
-console.log("[v6s]", v6ClientPing());
-
-initializeBoardUi(document, window);
 
 void createClient<ReactElement>({
   hydrate: (element, root) => {

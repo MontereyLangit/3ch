@@ -146,4 +146,6 @@ trait WorkerEnv extends js.Object {
   val ch3www: R2Bucket = js.native
   val CAP: KVNamespace = js.native
   val ASSETS: Fetcher = js.native
+  /** 板topの画像アップロード用 imgur Client-ID。未設定ならアップロード欄を出さない。 */
+  val IMGUR_CLIENT_ID: js.UndefOr[String] = js.native
 }
