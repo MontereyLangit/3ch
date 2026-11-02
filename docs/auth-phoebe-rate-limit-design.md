@@ -20,7 +20,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 | ID（`ID:xxxx`）・トリップ・キャップの計算 | 変更しない。`BBS_ID_LV=checked` の付加値だけ固定 `10` から実 Lv に直す（KB-15。承認要） |
 | 名前欄の識別子 | **書式を変える（§5）。** 既存の `BBS_ID_SHIKIBETSU=checked` は残し、新書式は新しい値 `phoebe` で有効化する。既定値の切替は承認を得てから行う |
 | ストレージ | Board / Thread DO の既存キー・形式は変更しない。追加キーと新 DO（`Account`・`AccountIndex`）だけ |
-| 管理画面の防御（Basic 認証・no-store・CSP） | 弱めない。権限者向け操作も同じ防御下に置く |
+| 管理画面の防御 | Basic 認証は再認証付きの管理者セッション＋役割＋Origin 検証に置き換え、no-store・CSP は維持する（[管理画面 改修計画](admin-spa-auth-plan.md) §3。AGENTS.md 3.6 の更新は承認後） |
 
 ## 1. 原案（利用者提示、2026-11-01）
 
@@ -96,7 +96,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 | 失効 | ログアウト・パスワード変更・再設定・方式移行・退会・管理者の凍結はいずれも `gen` を進める（全端末のセッションが無効になる。端末ごとの失効は持たない）。クライアント ID は `exp` ＝発行＋365 日 |
 | 複数 Cookie | 現行の `PON` と同時に出すため、応答ヘッダは `Headers.append` で `Set-Cookie` を複数出せる形にする（現行の `js.Dictionary` では 1 本に上書きされる。計画書 §3） |
 
-既存の `PON` 等の Cookie は現行どおり発行し、意味は変えない。`/auth/*`・`/mod/*` の POST は `Origin` ヘッダが自ホストと一致しなければ拒否する（`SameSite=Lax` だけに頼らない）。
+既存の `PON` 等の Cookie は現行どおり発行し、意味は変えない。`/auth/*`・`/admin/*` の POST は `Origin` ヘッダが自ホストと一致しなければ拒否する（`SameSite=Lax` だけに頼らない）。
 
 ### 3.4 bbs.cgi での認証主体の決定
 
@@ -411,8 +411,8 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 | `cap` | キャップでの投稿（キャップを持てる） |
 
 - 付与できるのは ID/Password と Google のアカウントのみ。クライアント ID には付けない。
-- 権限者向けの操作画面は `/admin/*` と分けて **`/mod/*`** に置く。`/admin/*` は現行どおり Basic 認証だけ（AGENTS.md 3.6 の防御を変えない）。`/mod/*` は入場時にパスワード再入力（Google は再認証）を求め、`__Host-ch3s_mod`（host-only・`Secure`・`HttpOnly`・`SameSite=Strict`・有効 1 時間・`aid` と権限の署名付き写し）を別に発行する。POST は `Origin` を検証し、`cache-control: no-store` と CSP は `/admin` と同じ。
-- 画面と権限の対応（段 D で確定）: スレ停止・再開・削除・レス削除・移動 → `delete`。`deny.cgi` / `ngwords.cgi` / `phoebe.cgi` / `edge-rules.json` の編集、端末・アカウント BAN、乱造の要確認一覧 → `regulate`。アカウントの権限・Lv・状態・キャップ紐づけ → `admin`。板設定（`SETTING.TXT`）と `bbsmenu.html` は `/admin` のまま。
+- 権限者向けの操作は **`/admin/*` に統合**し、Basic 認証をやめて役割で画面と操作を出し分ける（2026-11-02 利用者指示。詳細は [管理画面 改修計画](admin-spa-auth-plan.md)）。入場時にパスワード再入力（Google は再認証）を求め、短命の管理者セッション `__Host-ch3s_admin`（`SameSite=Strict`・無操作 30 分・最長 8 時間）を別に発行する。変更系は `Origin` を検証し、`cache-control: no-store` と CSP を維持する。初回の `admin` は `ADMIN_BOOTSTRAP_TOKEN` で作る。
+- 画面と権限の対応（段 D で確定）: スレ停止・再開・削除・レス削除・移動 → `delete`。`deny.cgi` / `ngwords.cgi` / `phoebe.cgi` / `edge-rules.json` の編集、端末・アカウント BAN、乱造の要確認一覧 → `regulate`。アカウントの権限・Lv・状態・キャップ紐づけ、板設定（`SETTING.TXT`・`head.txt`）、`bbsmenu.html`、監査ログ → `admin`。
 
 ### 6.2 キャップ
 
@@ -607,7 +607,7 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 RPC: `create`, `describeForPosting(gen)`, `recordPost(now)`, `verifyPassword(password, now)`, `setPassword`, `issuePending(kind, hash, expiresAt, email?)` / `consumePending(kind, hash, now)`, `bindGoogle(subHash)`, `convert(kind, uid)`, `issueCap` / `revokeCap`, `issueToken` / `revokeToken`, `bindDevice`, `setLevel`, `setRoles`, `setStatus`, `bumpGeneration`, `appendLog`, `inspect`。
 状態遷移（昇格・失効・移行）は `domain/account/` の純粋関数。
 
-**`AccountIndex`**（`idFromName(kind)`。`kind` ∈ `uid` / `login` / `email` / `google` / `cap` / `token`）
+**`AccountIndex`**（`idFromName(kind)`。`kind` ∈ `uid` / `login` / `email` / `google` / `cap` / `token` / `role:admin`）
 
 - キー `=` 正規化した値の `HMAC-SHA256(AUTH_SECRET, 種別 + ":" + 値)`（`wrangler.jsonc` の `salt` は `vars` にあり秘密ではないので、辞書攻撃を防ぐため secret で鍵付きにする）、値 `=` `{aid, state: pending|confirmed, createdAt}`。
 - `register(hash, aid, now)` は既存（`confirmed`、または `pending` で 10 分以内）なら失敗、`confirm(hash)`、`lookup(hash)`、`remove(hash)`。`register` / `confirm` / `remove` は `blockConcurrencyWhile` で直列化し、`lookup` はロックしない。`uid` 種別は `remove` を持たない。
@@ -656,36 +656,39 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | `/auth/google/start` / `/auth/google/callback` | POST / GET | OAuth（§3.10）。`start` が `state`・`nonce`・PKCE を Cookie に保存して Google へ転送、`callback` が検証して Cookie を発行。`popup=1` で callback が `window.opener` へ通知して閉じる |
 | `/auth/account` | GET / POST | アカウントメニュー（SSR ＋ island）: 種別・Lv・`uid`、専ブラキー発行/失効、キャップ発行/失効、利用ログ、方式移行（`upgrade=1`）、ログアウト、退会 |
 | `/auth/session` | GET | 現在のセッションの `{uid, lv}` を JSON で返す（`no-store`。§3.8 の予備経路とヘッダーの client 取得用） |
-| `/mod/*` | GET / POST | 権限者向け操作画面（§6.1）。`__Host-ch3s_mod` と `Origin` 検証 |
+| `/admin/*` | GET / POST / PUT | 管理画面（SPA）と `/admin/api/*`（§6.1、[管理画面 改修計画](admin-spa-auth-plan.md) §5・§6）。`__Host-ch3s_admin` と `Origin` 検証 |
 | 全ルート | — | `Accept-CH` 付与ミドルウェア（§3.7）。`app/routes/_middleware.ts` は手動管理（`docs/handler-rendering.md`） |
 
 島の一覧: `AuthForm`（Turnstile ウィジェット・方式選択・同意チェック・`verify` 呼び出し）、`AuthModal`、`AccountNav`、`AccountMenu`（キー発行の 1 回表示とコピー）。
 
-`auth`・`mod` は板名として使えない（`PostRouting` の禁止板名に追加）。`/auth/*` の応答は `cache-control: no-store`、CSP（Turnstile の `challenges.cloudflare.com` と Google の必要オリジンだけ許可）、`X-Frame-Options` は付けず
+`auth`・`admin` は板名として使えない（`PostRouting` の禁止板名に追加）。`/auth/*` の応答は `cache-control: no-store`、CSP（Turnstile の `challenges.cloudflare.com` と Google の必要オリジンだけ許可）、`X-Frame-Options` は付けず
 `frame-ancestors 'self'` でモーダル埋め込みを許す。`/auth.js` の固定スクリプトは現行のまま残す。
 
 ## 11. 管理画面
 
+画面構成・API・段階は [管理画面 改修計画](admin-spa-auth-plan.md) に従う。本書の認証・Lv・規制に関わる追加項目は次のとおり。
+
 | 画面 | 追加内容 |
 | --- | --- |
-| `/admin/board` | `BBS_PHOEBE`・`timecount`・`timeclose`・`BBS_SAMBA24`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_PASS`・`BBS_RENTOU_KEYS`・`BBS_RENTOU_MODE`・`BBS_THREAD_PASS`・`BBS_LIVE` の専用フォーム（既存のスレ立て規制フォームと同じ ETag 条件付き保存） |
-| `/admin/access` / `/admin/ngwords` | 5 列目の回避レベルを検証 |
-| `/mod/accounts` | `uid`・ログイン ID（検索条件にだけ使い一覧には出さない）・メール・端末ハッシュ・IP ハッシュで検索 |
-| `/mod/account?uid=` | 種別・Lv・`lvOverride`・権限・状態・端末履歴・キャップ・専ブラキー・利用ログ。旧キャップの紐づけ |
-| `/mod/phoebe` | Lv 上限ルール（`phoebe.cgi`）、エッジ防御の規則（`edge-rules.json`）、乱造検知の「要確認」一覧 |
+| `/admin/boards/:bbs` | `BBS_PHOEBE`・`timecount`・`timeclose`・`BBS_SAMBA24`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_PASS`・`BBS_RENTOU_KEYS`・`BBS_RENTOU_MODE`・`BBS_THREAD_PASS`・`BBS_LIVE` の専用フォーム（既存のスレ立て規制フォームと同じ ETag 条件付き保存） |
+| `/admin/rules/access` / `/admin/rules/ngwords` | 5 列目の回避レベルを検証 |
+| `/admin/accounts` | `uid`・ログイン ID（検索条件にだけ使い一覧には出さない）・メール・端末ハッシュ・IP ハッシュで検索 |
+| `/admin/accounts/:uid` | 種別・Lv・`lvOverride`・権限・状態・端末履歴・キャップ・専ブラキー・利用ログ。旧キャップの紐づけ |
+| `/admin/phoebe` | Lv 上限ルール（`phoebe.cgi`）、エッジ防御の規則（`edge-rules.json`）、乱造検知の「要確認」一覧 |
 | `/admin/thread` | 投稿ログの `UID:` / `Device:` から該当アカウント・端末 BAN（`deny.cgi` へ行を追加）へのリンク |
 
 ## 12. 実装順序とテスト
 
-作業メモの順序（連投規制 → デプロイ → 認証ほか）に合わせる。段 A の前に [bbs.cgi DDD 化リファクタリング計画](bbs-cgi-ddd-refactoring-plan.md) の段 0〜7 を終える。各段で `sbt test`・`npm test`・`npm run v6:build` を通し、レビュー連鎖（AGENTS.md 3.2）を行う。
+作業メモの順序（連投規制 → デプロイ → 認証ほか）に合わせる。実施順は A → B → E-1 → C → D → E-2。段 A の前に [bbs.cgi DDD 化リファクタリング計画](bbs-cgi-ddd-refactoring-plan.md) の段 0〜7 を終える。各段で `sbt test`・`npm test`・`npm run v6:build` を通し、レビュー連鎖（AGENTS.md 3.2）を行う。
 
 | 段 | 内容 | 主なテスト |
 | --- | --- | --- |
 | A | 連投規制（§8）。A-1: `BBS_RENTOU_MODE` の既定 `log` でデプロイし 1 週間観測。A-2: 既定を `on` に。照合キーは現行の IP・ID・識別子（`checked` 書式）。`aid` は空。前提は計画書の段 0〜7（`PostingCodec` を含む段 6） | `PostRateLimitSuite`（純粋判定: 件数窓・24h・Samba24・スレ 1h/40・コピペ末尾 2 行・あぼーん除外）、`BoardSuite`（予約/確定/取消・保持規則・ページ分割・容量）、`ThreadSuite`（`recentPosts` の一括保存・吸い込み時の dat 不変）、`PostingSuite`（パイプライン順序・文言・成功画面での吸い込み・`BBS_LIVE` 除外・設定不正時の既定値）、`AdminSuite`（フォーム検証）、実 workerd 統合 |
 | B | 認証基盤: `Account` / `AccountIndex` DO、Cookie、`/auth/`（クライアント ID・Turnstile・法的確認）、端末ハッシュと突合、`Accept-CH`、専ブラキー、キャップのアカウント紐づけ、`userInfo` の `UID:` / `Device:`、新 UI の `SessionReader`・ヘッダー出し分け・`AuthModal` / `AccountNav`・投稿欄のヘッダ分岐（§3.8）、bbs.cgi の `x-auth-required` / `x-post-error` | `common` の `DeviceFingerprintHasher` / `ClientHints` golden、`CookieCodecSuite`、`AccountSuite`（状態遷移・一意性）、`AuthHandlerSuite`（Turnstile はテスト用サイトキーで成功/失敗を固定）、`PostingSuite`（§3.4 の優先順・`!auth`・Web 版の認証要求とヘッダ）、`SessionReaderSuite`、`BoardIndexSuite`（未ログイン/ログイン済のヘッダーと投稿欄の SSR）、`tests/islands-hydration.test.js` に `AuthModal` の `message` → `ch3s:auth-changed` と再送の jsdom 検証 |
 | C | PHOEBE: Lv 昇格・`BBS_PHOEBE`・`!バルサン` / `!SETTING:BBS_PHOEBE:n`・識別子 `phoebe` 書式・連投規制への `aid` 追加・`!uid` | `PhoebeSuite`（T(lv)/N(lv) 境界・上限・固定）、`IdentifierSuite`（軸ごとの値・欠損 `000`・`D` の `*`）、`UserAgentProfileSuite`（v3 表の golden） |
-| D | 権限・回避レベル・管理画面（§6・§7・§11）、スレ立て規制の `BBS_THREAD_PASS` 化 | `BypassLevelSuite`、`ModerationSuite`（5 列目）、`AdminSuite` |
-| E | ID/Password・メール認証・Google 連携・方式移行・エッジ防御・乱造検知・Lv 上限ルール | `AccountSuite`（移行）、`EdgeDefenseSuite`、実 workerd |
+| D | 権限・回避レベル・管理画面の認証機能画面（§6・§7・§11、改修計画 段 A3）、スレ立て規制の `BBS_THREAD_PASS` 化 | `BypassLevelSuite`、`ModerationSuite`（5 列目）、`AdminSuite` |
+| E-1 | ID/Password の登録・ログイン・ロック、Google ログイン（§3.9・§3.10 の基本部分）。管理画面のアカウント認証（改修計画 段 A2）の前提なので段 B の直後に行う | `PasswordSuite`・`LoginThrottleSuite`・`GoogleIdTokenSuite`、実 workerd |
+| E-2 | メール認証・パスワード再設定・方式移行・退会・エッジ防御・乱造検知・Lv 上限ルール | `AccountSuite`（移行）、`EdgeDefenseSuite`、実 workerd |
 
 段 C の識別子既定値の切替は、不変条件 3.4 に触れるため `docs/既知不具合台帳.md` に影響を書き、承認後に独立コミットで行う。
 
@@ -706,7 +709,7 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | 11 | エッジ防御の免除（認証済 Lv3 以上）と RTT 閾値 | 免除あり、400ms |
 | 12 | メール送信手段（外部 API の選定）と Google OAuth のクライアント登録 | 未定。段 E まで不要 |
 | 13 | 乱造検知の閾値と、検知時に自動 BAN せず「要確認」に載せること | 1 時間 10 回・24 時間 5 ハッシュ、自動 BAN なし |
-| 14 | 権限者向け画面を `/mod/*` に分け、`/admin/*` は Basic 認証だけのままにすること | 分ける（§6.1） |
+| 14 | 権限者向け画面の置き場所と管理画面の認証 | `/admin/*` に統合し、Basic 認証をアカウント認証に置き換える（2026-11-02 利用者指示。改修計画 §10 に関連事項） |
 | 15 | 識別子の文字集合（現行の Base64 文字のまま `+` `/` を含む） | 現行どおり |
 | 16 | 新 UI で未ログインでも投稿欄を描画し、送信時にモーダルで認証する（欄自体を隠す案との比較） | 描画する。下書きを書いてから認証できる方が離脱が少ない |
 | 17 | 認証後の自動再送（1 回）と、Lv 不足時は再送しないこと | そのとおり |
