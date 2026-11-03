@@ -7,10 +7,6 @@ import buildCloudflareWorkers, {
 import scalaJSPlugin from "@scala-js/vite-plugin-scalajs";
 import tailwindcss from "@tailwindcss/vite";
 
-// client/server は別々の sbt プロジェクトでリンクする（KB-27）。
-// npm run v6:build は両ビルドを直列に実行し、sbt の同時起動を避ける。
-
-// sbtビルドはこのVite/HonoXプロジェクトと同じルート（ch3s直下）にある。
 const scalaCwd = path.resolve(__dirname);
 
 export default defineConfig(({ mode }) => {
@@ -34,21 +30,8 @@ export default defineConfig(({ mode }) => {
     };
   }
 
-  // v6sはCloudflare Workers専用（DOがcloudflare:workers組込みモジュールに依存するため、
-  // ローカル確認は常に `wrangler dev` で行う）。
-  //
-  // 【参照実装からの重要な引き継ぎ】`@hono/vite-build/cloudflare-workers` は本番ビルド用の
-  // 仮想エントリを合成し、`import.meta.glob(['/app/server.ts', ...], { import: 'default', eager: true })`
-  // で各エントリファイルの **default export のみ** を取り込む
-  // （`node_modules/@hono/vite-build/dist/entry/index.mjs` 参照）。そのため `app/server.ts` の
-  // `export { V6PlaceholderDurableObject }`（named export）は仮想エントリのどこからも
-  // 再exportされず、最終 `dist/index.js` に現れない（素朴に `buildCloudflareWorkers()` だけを
-  // 呼ぶと、DOクラスを持たない `dist/index.js` が生成され、`wrangler.jsonc` の
-  // `durable_objects.bindings` が指す `class_name` を解決できずローカル実行が壊れる）。
-  // → `entryContentAfterHooks`（既定のフック配列にappendする。置き換えるとプリセット既定の
-  // 他の挙動を失うため）で `app/server.ts` からの named re-export 文を仮想エントリへ追加する。
-  // あわせて `cloudflare:workers`（Workersランタイム組込みモジュール。npmには存在しない）を
-  // externalに指定してRollupにバンドルさせない。
+  // 既定のフック配列にDurable Objectの再exportをappend
+  // （cloudflare:workersはexternalに指定しRollupにバンドルさせない）
   const entryContentAfterHooks = [
     ...(cloudflareWorkersDefaultOptions.entryContentAfterHooks ?? []),
     () =>
