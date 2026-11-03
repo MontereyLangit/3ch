@@ -11,7 +11,7 @@ import tailwindcss from "@tailwindcss/vite";
 // npm run v6:build は両ビルドを直列に実行し、sbt の同時起動を避ける。
 
 // sbtビルドはこのVite/HonoXプロジェクトと同じルート（ch3s直下）にある。
-const scalaCwd = path.resolve(__dirname);
+const scalaCwd = path.resolve(import.meta.dirname);
 
 function scalaProject(projectID: string, uriPrefix?: string): Plugin {
   const plugin = scalaJSPlugin({ cwd: scalaCwd, projectID, uriPrefix });
