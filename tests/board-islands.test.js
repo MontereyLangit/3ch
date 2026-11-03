@@ -17,7 +17,7 @@ const { window } = dom;
 const shared = {
   window, document: window.document, navigator: window.navigator, localStorage: window.localStorage,
   HTMLElement: window.HTMLElement, HTMLInputElement: window.HTMLInputElement, HTMLTextAreaElement: window.HTMLTextAreaElement,
-  Node: window.Node, Event: window.Event, MouseEvent: window.MouseEvent, FormData: window.FormData, File: window.File,
+  Node: window.Node, Event: window.Event, MouseEvent: window.MouseEvent, FormData: window.FormData, File: window.File, DOMParser: window.DOMParser,
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 for (const [key, value] of Object.entries(shared)) {
@@ -267,6 +267,31 @@ const DRAFT = '3ch:draft:sample/new';
 
 const mountForm = async (props = formProps) => mount(client.PostingFormJs, props);
 
+const POSTED_HTML = '<html><head><title>書きこみました。</title><meta content="5;URL=/test/read.cgi/sample/1800000999/" http-equiv="refresh"></head><body>書きこみが終わりました。</body></html>';
+const ERROR_HTML = '<html><head><title>ＥＲＲＯＲ！</title></head><body><span><!-- 2ch_X:error --></span><font size="+1" color="#FF0000"><b>ERROR: 本文が長すぎます。<br>too long</b></font><ul>x</ul></body></html>';
+const COOKIE_HTML = '<html><head><title>■ 書き込み確認 ■</title></head><body><font><b>書きこみ＆クッキー確認</b></font><ul><br>題 <br>名前： <b>名無し</b><br>内容：<br><span>a<br>&lt;script&gt;</span><br></ul><b>投稿確認<br>・承諾します。</b></body></html>';
+
+function postResponse(html, charset = 'UTF-8') {
+  const bytes = Buffer.from(html, 'utf8');
+  return { ok: true, headers: { get: () => `text/html; charset=${charset}` }, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) };
+}
+
+const submitForm = async (selector = 'button[type="submit"]') => {
+  await click(query(selector));
+  await flush();
+};
+
+function mockPost(...htmls) {
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url, init });
+    const html = htmls[Math.min(requests.length - 1, htmls.length - 1)];
+    if (html instanceof Error) throw html;
+    return postResponse(html);
+  };
+  return requests;
+}
+
 test('フォーム: 空欄だけ名前・メールを復元して details を開き、入力で保存する', async () => {
   window.localStorage.setItem('3ch:postName', '名無し');
   window.localStorage.setItem('3ch:postMail', 'sage');
@@ -287,10 +312,10 @@ test('フォーム: 保存値が無ければ details は閉じたまま', async 
 });
 
 test('フォーム: SSR 相当の初期描画は通常 POST 用の name・hidden を持つ', async () => {
+  const ssr = renderToString(createElement(client.PostingFormJs, { ...formProps, imgurClientId: '' }));
+  assert.match(ssr, /<form[^>]* action="\/test\/bbs\.cgi"[^>]* method="post"/);
   await mountForm({ ...formProps, imgurClientId: '' });
   const form = query('form.posting-form');
-  assert.equal(form.method, 'post');
-  assert.equal(form.getAttribute('action'), '/test/bbs.cgi');
   assert.equal(field('bbs').value, 'sample');
   assert.equal(field('time').value, '1800000100');
   assert.equal(field('key'), null);
@@ -333,13 +358,9 @@ test('フォーム: 送信済み下書きは通常遷移では破棄し、back_f
   assert.deepEqual(JSON.parse(window.localStorage.getItem(DRAFT)), { subject: 'S', MESSAGE: 'M' });
 });
 
-test('フォーム: submit で sent を記録し、bfcache 復帰では sent なしで再保存する', async () => {
+test('フォーム: bfcache 復帰（pageshow persisted）では下書きを sent なしで再保存する', async () => {
   await mountForm();
   await type('[name="MESSAGE"]', '本文');
-  const submit = new window.Event('submit', { bubbles: true, cancelable: true });
-  await act(async () => { query('form').dispatchEvent(submit); });
-  assert.equal(submit.defaultPrevented, false);
-  assert.equal(typeof JSON.parse(window.localStorage.getItem(DRAFT)).sent, 'number');
   const pageshow = new window.Event('pageshow');
   Object.defineProperty(pageshow, 'persisted', { value: true });
   await act(async () => { window.dispatchEvent(pageshow); });
@@ -382,23 +403,24 @@ test('フォーム: 本文が空なら改行なしで、改行終わりならそ
   assert.equal(field('MESSAGE').value, '行\nhttps://i.imgur.com/a.png');
 });
 
-test('フォーム: imgur アップロード中は送信を止め、sent も記録しない。完了後は送信できる', async () => {
+test('フォーム: imgur アップロード中は bbs.cgi へ送らず、完了後は送信できる', async () => {
   let finish;
-  globalThis.fetch = () => new Promise(resolve => { finish = () => resolve(imgurOk()); });
+  const posts = [];
+  globalThis.fetch = (url, init) => {
+    if (url === '/test/bbs.cgi') { posts.push({ url, init }); return Promise.resolve(postResponse(POSTED_HTML)); }
+    return new Promise(resolve => { finish = () => resolve(imgurOk()); });
+  };
   await mountForm();
+  await type('[name="subject"]', 'タイトル');
   await type('[name="MESSAGE"]', '本文');
   await upload(png());
   assert.equal(query('[data-imgur-status]').textContent, 'アップロード中…');
-  const blocked = new window.Event('submit', { bubbles: true, cancelable: true });
-  await act(async () => { query('form').dispatchEvent(blocked); });
-  assert.equal(blocked.defaultPrevented, true);
+  await submitForm();
+  assert.equal(posts.length, 0);
   assert.equal(query('[data-imgur-status]').textContent, 'アップロード中です。完了してから送信してください');
-  assert.equal(JSON.parse(window.localStorage.getItem(DRAFT)).sent, undefined);
   await act(async () => { finish(); await new Promise(resolve => setTimeout(resolve, 20)); });
-  const allowed = new window.Event('submit', { bubbles: true, cancelable: true });
-  await act(async () => { query('form').dispatchEvent(allowed); });
-  assert.equal(allowed.defaultPrevented, false);
-  assert.equal(typeof JSON.parse(window.localStorage.getItem(DRAFT)).sent, 'number');
+  await submitForm();
+  assert.equal(posts.length, 1);
 });
 
 test('フォーム: imgur アップロード失敗と非画像ファイルはエラー表示にする', async () => {
@@ -450,6 +472,113 @@ test('フォーム: localStorage が使えなくても入力できる', async ()
   } finally {
     Object.defineProperty(window, 'localStorage', original);
   }
+});
+
+// ---------------------------------------------------------------- 書き込みフォームの送信（form action）
+
+const fillForm = async () => {
+  await type('[name="FROM"]', '名前');
+  await type('[name="mail"]', 'sage');
+  await type('[name="subject"]', 'タイトル');
+  await type('[name="MESSAGE"]', '本文\n二行目');
+};
+const values = () => ['FROM', 'mail', 'subject', 'MESSAGE'].map(name => field(name).value);
+const FILLED = ['名前', 'sage', 'タイトル', '本文\n二行目'];
+
+test('フォーム送信: SSR は JS 無しで投稿できる action/method を出力し、マウント後に関数 action へ切り替わる', async () => {
+  const html = renderToString(createElement(client.PostingFormJs, formProps));
+  assert.match(html, /<form[^>]* action="\/test\/bbs\.cgi"/);
+  assert.match(html, /<form[^>]* method="post"/);
+  assert.match(html, /<button[^>]*value="書き込む"[^>]*name="submit"/);
+  await mountForm();
+  assert.notEqual(query('form').getAttribute('action'), '/test/bbs.cgi');
+});
+
+test('フォーム送信: urlencoded（UTF-8）で POST し、成功したら下書きを消して応答の URL へ移動する', async () => {
+  const requests = mockPost(POSTED_HTML);
+  await mountForm();
+  await fillForm();
+  assert.notEqual(window.localStorage.getItem(DRAFT), null);
+  await submitForm();
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, '/test/bbs.cgi');
+  assert.equal(requests[0].init.method, 'POST');
+  assert.equal(requests[0].init.credentials, 'same-origin');
+  const raw = requests[0].init.body.toString();
+  const body = new URLSearchParams(raw);
+  assert.equal(body.get('FROM'), '名前');
+  assert.equal(body.get('subject'), 'タイトル');
+  assert.equal(body.get('MESSAGE').replace(/\r\n/g, '\n'), '本文\n二行目');
+  assert.equal(body.get('bbs'), 'sample');
+  assert.equal(body.get('time'), '1800000100');
+  assert.match(raw, /submit=%E6%9B%B8/);
+  assert.equal(window.localStorage.getItem(DRAFT), null);
+  assert.equal(field('subject').value, '');
+  assert.equal(field('MESSAGE').value, '');
+  assert.equal(query('[data-post-result]'), null);
+});
+
+test('フォーム送信: エラー応答は文言を表示し、フォームの自動 reset 後も入力を残す', async () => {
+  mockPost(ERROR_HTML);
+  await mountForm();
+  await fillForm();
+  await submitForm();
+  assert.equal(query('[data-post-result="error"]').textContent, 'ERROR: 本文が長すぎます。\ntoo long');
+  assert.deepEqual(values(), FILLED);
+  assert.notEqual(window.localStorage.getItem(DRAFT), null);
+  assert.equal(query('button[type="submit"]').disabled, false);
+});
+
+test('フォーム送信: Cookie 確認は textContent で表示し、再送ボタンで同じ入力を送る', async () => {
+  const requests = mockPost(COOKIE_HTML, POSTED_HTML);
+  await mountForm();
+  await fillForm();
+  await submitForm();
+  const result = query('[data-post-result="cookie"]');
+  assert.match(result.textContent, /内容：\na\n<script>/);
+  assert.match(result.textContent, /投稿確認\n・承諾します。/);
+  assert.equal(result.querySelector('script'), null);
+  assert.deepEqual(values(), FILLED);
+  await submitForm('[data-cookie-resend]');
+  assert.equal(requests.length, 2);
+  assert.equal(new URLSearchParams(requests[1].init.body.toString()).get('subject'), 'タイトル');
+  assert.equal(query('[data-post-result]'), null);
+});
+
+test('フォーム送信: 不明な応答・通信失敗は汎用文言を出し、入力を残す', async () => {
+  mockPost('<html><head><title>502</title></head><body></body></html>');
+  await mountForm();
+  await fillForm();
+  await submitForm();
+  assert.match(query('[data-post-result="unknown"]').textContent, /確認できませんでした/);
+  assert.deepEqual(values(), FILLED);
+  mockPost(new Error('offline'));
+  await submitForm();
+  assert.match(query('[data-post-result="unknown"]').textContent, /確認できませんでした/);
+  assert.deepEqual(values(), FILLED);
+});
+
+test('フォーム送信: 送信中は送信ボタンを無効にする（useFormStatus）', async () => {
+  let release;
+  globalThis.fetch = () => new Promise(resolve => { release = () => resolve(postResponse(ERROR_HTML)); });
+  await mountForm();
+  await fillForm();
+  await click(query('button[type="submit"]'));
+  assert.equal(query('button[type="submit"]').disabled, true);
+  await act(async () => { release(); await new Promise(resolve => setTimeout(resolve, 20)); });
+  assert.equal(query('button[type="submit"]').disabled, false);
+});
+
+test('フォーム: 同一コミットでの別欄の変更でも名前・下書きの両方を保存する', async () => {
+  await mountForm();
+  await act(async () => {
+    setValue(field('FROM'), 'a');
+    field('FROM').dispatchEvent(new window.Event('input', { bubbles: true }));
+    setValue(field('subject'), 't');
+    field('subject').dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+  assert.equal(window.localStorage.getItem('3ch:postName'), 'a');
+  assert.equal(JSON.parse(window.localStorage.getItem(DRAFT)).subject, 't');
 });
 
 // ---------------------------------------------------------------- 既読バッジの即時反映と他タブ同期
@@ -578,26 +707,29 @@ test('リロード中はボタンが無効で、再度押しても二重に取�
 
 test('フォーム: 並行する 2 件のアップロードは両方終わるまで送信を止める', async () => {
   const finishers = [];
-  globalThis.fetch = () => new Promise(resolve => {
-    const n = finishers.length;
-    finishers.push(() => resolve({ ok: true, json: async () => ({ data: { link: `https://i.imgur.com/${n}.png` } }) }));
-  });
+  const posts = [];
+  globalThis.fetch = (url) => {
+    if (url === '/test/bbs.cgi') { posts.push(url); return Promise.resolve(postResponse(ERROR_HTML)); }
+    return new Promise(resolve => {
+      const n = finishers.length;
+      finishers.push(() => resolve({ ok: true, json: async () => ({ data: { link: `https://i.imgur.com/${n}.png` } }) }));
+    });
+  };
   await mountForm();
+  await type('[name="subject"]', 'タイトル');
   await upload(png());
   await upload(png());
   assert.equal(finishers.length, 2);
-  const submitOnce = async () => {
-    const event = new window.Event('submit', { bubbles: true, cancelable: true });
-    await act(async () => { query('form').dispatchEvent(event); });
-    return event.defaultPrevented;
-  };
-  assert.equal(await submitOnce(), true);
+  await submitForm();
+  assert.equal(posts.length, 0);
   await act(async () => { finishers[0](); await new Promise(resolve => setTimeout(resolve, 20)); });
-  assert.equal(await submitOnce(), true, '1 件残っている間は止める');
+  await submitForm();
+  assert.equal(posts.length, 0, '1 件残っている間は止める');
   assert.equal(query('[data-imgur-status]').textContent, 'アップロード中です。完了してから送信してください');
   await act(async () => { finishers[1](); await new Promise(resolve => setTimeout(resolve, 20)); });
-  assert.equal(await submitOnce(), false, '全件終われば送信できる');
   assert.equal(field('MESSAGE').value, 'https://i.imgur.com/0.png\nhttps://i.imgur.com/1.png');
+  await submitForm();
+  assert.equal(posts.length, 1, '全件終われば送信できる');
 });
 
 // ---------------------------------------------------------------- SSR との一致（hydration）
