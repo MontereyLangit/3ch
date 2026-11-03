@@ -85,17 +85,16 @@ class RouteTableSuite extends FunSuite {
   test("publicPatterns は v5 の評価順（archive が archives より先）で、代表パスにマッチする") {
     assertEquals(
       RouteTable.publicPatterns.map(_._1),
-      List("dat", "subject", "archive", "archives", "head", "settings", "board")
+      List("dat", "subject", "archive", "archives", "head", "settings")
     )
     def firstKind(path: String): Option[String] =
       RouteTable.publicPatterns.collectFirst { case (kind, re) if path.matches(s"(?s)(?:$re).*") && re.r.findPrefixOf(path).isDefined => kind }
-    assertEquals(firstKind("/news/dat/1234567890.dat"), Some("dat"))
-    assertEquals(firstKind("/news/subject.txt"), Some("subject"))
-    assertEquals(firstKind("/news/kako/2020/subject.txt"), Some("archive"))
-    assertEquals(firstKind("/news/kako/subject.txt"), Some("archives"))
-    assertEquals(firstKind("/news/SETTING.TXT"), Some("settings"))
-    assertEquals(firstKind("/news/"), Some("board"))
-    assertEquals(firstKind("/news/index.html"), Some("board"))
+    assertEquals(firstKind("/news/dat/1234567890.dat"), Option("dat"))
+    assertEquals(firstKind("/news/subject.txt"), Option("subject"))
+    assertEquals(firstKind("/news/kako/2020/subject.txt"), Option("archive"))
+    assertEquals(firstKind("/news/kako/subject.txt"), Option("archives"))
+    assertEquals(firstKind("/news/SETTING.TXT"), Option("settings"))
+    assertEquals(firstKind("/news/"), None)
     assertEquals(firstKind("/news/unknown"), None)
   }
 

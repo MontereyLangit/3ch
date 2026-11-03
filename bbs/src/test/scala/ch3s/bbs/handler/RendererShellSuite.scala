@@ -1,6 +1,7 @@
 package ch3s.bbs.handler
 
 import ch3s.bbs.Main
+import ch3s.bbs.handler.HandlerTestKit.*
 import japgolly.scalajs.react.facade.React
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
@@ -13,13 +14,12 @@ private object RenderShellMarkup extends js.Function1[React.Element, String] {
 }
 
 class RendererShellSuite extends munit.FunSuite {
-  import HandlerTestKit.*
 
   test("BBSMENUはカテゴリと板リンクの構造を保ち、クライアントスクリプトを含む") {
     val page = BbsMenuPage.render(Seq("sample" -> "日本語 & 案内", "sample2" -> "次の板"), "2026/10/5")
     val res = RendererShell.legacyReact(page).asInstanceOf[js.Dynamic]
     sjisText(res).map { html =>
-      assertEquals(header(res, "content-type"), Some("text/html;charset=Shift_JIS"))
+      assertEquals(header(res, "content-type"), Option("text/html;charset=Shift_JIS"))
       assert(html.contains("<b>３ちゃんねる</b><br/>\n<a href=\"https://www.3chbbs.com/sample/\">日本語 &amp; 案内</a><br/>\n<a href=\"https://www.3chbbs.com/sample2/\">次の板</a><br/>\n"))
       assert(html.contains("charset=Shift_JIS"))
       assert(html.contains("<script type=\"module\" src=\"/static/client.js\"></script>"))
@@ -27,28 +27,16 @@ class RendererShellSuite extends munit.FunSuite {
     }
   }
 
-  test("legacyReactは板タイトルをテキストとして保持し、管理リンクを含む") {
-    val res = RendererShell.legacyReact(BoardPage.render("日本語 <板> & 案内", "sample"), doctype = true).asInstanceOf[js.Dynamic]
-    sjisText(res).map { html =>
-      assert(html.startsWith("<!DOCTYPE html>"))
-      assert(html.contains("<title>日本語 &lt;板&gt; &amp; 案内</title>"))
-      assert(html.contains("href=\"/admin/board?bbs=sample\""))
-      assert(html.contains("nowrap=\"\""))
-      assert(html.contains("<script type=\"module\" src=\"/static/client.js\"></script>"))
-    }
-  }
-
-
   test("legacyHtmlは専ブラ向けの生HTMLとShift_JISバイト列を保持する") {
     val html = "<HTML><HEAD><TITLE>日本語</TITLE></HEAD><BODY><!-- 2ch_X:error --><font size=+1 color=#FF0000><b>ERROR: 本文がありません！</b></font>\r\n</BODY></HTML>"
     val res = RendererShell.legacyHtml(html, extra = js.Dictionary("Cache-Control" -> "no-store", "X-Resnum" -> "1")).asInstanceOf[js.Dynamic]
     bytes(res).map { body =>
       assertEquals(status(res), 200)
       assertEquals(body, sjisBytes(html))
-      assertEquals(header(res, "content-type"), Some("text/html;charset=Shift_JIS"))
-      assertEquals(header(res, "content-length"), Some(body.length.toString))
-      assertEquals(header(res, "cache-control"), Some("no-store"))
-      assertEquals(header(res, "x-resnum"), Some("1"))
+      assertEquals(header(res, "content-type"), Option("text/html;charset=Shift_JIS"))
+      assertEquals(header(res, "content-length"), Option(body.length.toString))
+      assertEquals(header(res, "cache-control"), Option("no-store"))
+      assertEquals(header(res, "x-resnum"), Option("1"))
       assertEquals(header(res, "last-modified"), None)
       assertEquals(header(res, "accept-ranges"), None)
     }
@@ -60,9 +48,9 @@ class RendererShellSuite extends munit.FunSuite {
     bytes(res).map { body =>
       assertEquals(status(res), 200)
       assertEquals(body, utf8Bytes(html))
-      assertEquals(header(res, "content-type"), Some("text/html;charset=UTF-8"))
-      assertEquals(header(res, "content-length"), Some(body.length.toString))
-      assertEquals(header(res, "x-threadkey"), Some("1700000000"))
+      assertEquals(header(res, "content-type"), Option("text/html;charset=UTF-8"))
+      assertEquals(header(res, "content-length"), Option(body.length.toString))
+      assertEquals(header(res, "x-threadkey"), Option("1700000000"))
     }
   }
 
@@ -72,7 +60,7 @@ class RendererShellSuite extends munit.FunSuite {
     bytes(res).map { body =>
       assertEquals(status(res), 304)
       assertEquals(body, List.empty[Int])
-      assertEquals(header(res, "last-modified"), Some(modified.toUTCString()))
+      assertEquals(header(res, "last-modified"), Option(modified.toUTCString()))
       assertEquals(header(res, "content-type"), None)
     }
   }

@@ -7,11 +7,15 @@ import scala.scalajs.js.URIUtils
 
 case class ThreadPost(number: Int, name: String, date: String, message: String, slip: String = "")
 
-/** moreは1レス目の後ろに出す省略表示。read.cgiで全レスを出すときはNoneにすること */
+/**
+ * スレッドコンポーネント要props
+ * moreは1レス目の後ろに出す省略表示
+ * read.cgiで全レスを出すときはNoneにすること
+ */
 case class ThreadProps(bbs: String, time: String, key: String, title: String, count: Int, posts: Seq[ThreadPost],
                        more: Option[String] = None)
 
-/** スレッドフィードとスレッド画面で共通のスレタイ・レス・書き込み欄のコンポーネント */
+/** スレッドフィードとスレッド画面で共通のスレタイ，レス，書き込み欄のコンポーネント */
 object ThreadComponent {
   final val Component = ScalaFnComponent[ThreadProps] { props =>
     val isCap = props.key.startsWith("924")
@@ -29,7 +33,7 @@ object ThreadComponent {
     )
   }
 
-  def post(value: ThreadPost, isCap: Boolean): VdomElement = {
+  private def post(value: ThreadPost, isCap: Boolean): VdomElement = {
     <.div(^.key := value.number, ^.className := "post mt-2.5 border-b border-dotted border-[#dcdcdc] pb-[5px]",
       <.span(^.className := "number text-[11px] font-bold text-[#4d4d4d]", s"${value.number} : "),
       <.span(^.className := s"${if isCap then "name cap" else "name"} ml-1.5 text-[11px] text-[#4d4d4d]",

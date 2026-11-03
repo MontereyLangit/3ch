@@ -23,7 +23,7 @@ case class BoardIndexProps(
   now: Double = js.Date.now()
 )
 
-/** 板トップ。feed / subback で本文だけを切り替える。 */
+/** 板top */
 object BoardIndexComponent {
   final val Component = ScalaFnComponent[BoardIndexProps] { props =>
     def tab(kind: String, label: String) = {

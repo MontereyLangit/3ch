@@ -12,8 +12,7 @@ object RouteTable {
     "archive" -> "^/([a-zA-Z0-9\\-_]+)/kako/([0-9]{4})/subject\\.txt",
     "archives" -> "^/([a-zA-Z0-9\\-_]+)/kako/subject\\.txt",
     "head" -> "^/([a-zA-Z0-9\\-_]+)/head\\.txt",
-    "settings" -> "^/([a-zA-Z0-9\\-_]+)/SETTING\\.TXT",
-    "board" -> "^/([a-zA-Z0-9\\-_]+)/(index\\.html)?$"
+    "settings" -> "^/([a-zA-Z0-9\\-_]+)/SETTING\\.TXT"
   )
 
 
@@ -90,7 +89,7 @@ object RouteTable {
         for ((method, exportName) <- handlers) lines += methodExportLine(method, exportName)
     }
 
-    lines.mkString("\n") + "\n"
+    lines.mkString("", "\n", "\n")
   }
 
   /**
@@ -104,7 +103,7 @@ object RouteTable {
     lines += s"""// @ts-expect-error scalajs:${entry.sourceModule} は @scala-js/vite-plugin-scalajs が解決する仮想モジュール（.d.ts無し）。"""
     lines += s"""import { ${entry.exportedName} } from "scalajs:${entry.sourceModule}";"""
     lines += s"export default ${entry.exportedName};"
-    lines.mkString("\n") + "\n"
+    lines.mkString("", "\n", "\n")
   }
 
 }

@@ -2,7 +2,6 @@ import { createApp } from "honox/server";
 import { appendTrailingSlash } from "hono/trailing-slash";
 // Scala.js が公開する DurableObject を Workers のエントリポイントとして再 export する。
 import {
-  V6PlaceholderDurableObject,
   Board,
   Thread,
   // @ts-expect-error scalajs:server.js is resolved by the Scala.js Vite plugin.
@@ -25,9 +24,5 @@ export default app;
 
 // =========================================================
 // !!! CRITICAL STEP: EXPORT THE DURABLE OBJECT CLASSES !!!
-// wrangler.jsonc の durable_objects.bindings が参照する class_name はこのexport名と
-// 一致する必要がある。@hono/vite-build/cloudflare-workers は本番ビルド用の仮想エントリを
-// 合成し、各エントリファイルの **default export のみ** を取り込むため、この named export は
-// 素朴には最終バンドルへ現れない（vite.config.ts の entryContentAfterHooks で再export している）。
 // =========================================================
-export { V6PlaceholderDurableObject, Board, Thread };
+export { Board, Thread };

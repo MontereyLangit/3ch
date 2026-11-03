@@ -61,7 +61,7 @@ bbs/
     Main.scala         Worker エントリ（JSExportTopLevel）
     handler/           PublicRoutes（dat, subject.txt, SETTING.TXT, bbsmenu 等）, Posting（投稿パイプライン）,
                        Moderation, AdminHandler（/admin/*）, Responses
-    durable/           Board DO, Thread DO（V6PlaceholderDurableObject は骨格確認用の残り）
+    durable/           Board DO, Thread DO
     external/cloudflare/  Workers / DO / R2 / KV の facade
     hash/, util/       Web Crypto ハッシュ, Shift_JIS 変換
   src/test/            munitによるScala側テスト。単体テストはこちらで実装する。

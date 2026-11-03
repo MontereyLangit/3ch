@@ -51,7 +51,7 @@ export default defineConfig(({ mode }) => {
   // 仮想エントリを合成し、`import.meta.glob(['/app/server.ts', ...], { import: 'default', eager: true })`
   // で各エントリファイルの **default export のみ** を取り込む
   // （`node_modules/@hono/vite-build/dist/entry/index.mjs` 参照）。そのため `app/server.ts` の
-  // `export { V6PlaceholderDurableObject }`（named export）は仮想エントリのどこからも
+  // `export { Board, Thread }`（named export）は仮想エントリのどこからも
   // 再exportされず、最終 `dist/index.js` に現れない（素朴に `buildCloudflareWorkers()` だけを
   // 呼ぶと、DOクラスを持たない `dist/index.js` が生成され、`wrangler.jsonc` の
   // `durable_objects.bindings` が指す `class_name` を解決できずローカル実行が壊れる）。
@@ -62,7 +62,7 @@ export default defineConfig(({ mode }) => {
   const entryContentAfterHooks = [
     ...(cloudflareWorkersDefaultOptions.entryContentAfterHooks ?? []),
     () =>
-      `export { V6PlaceholderDurableObject, Board, Thread } from '/app/server.ts'`,
+      `export { Board, Thread } from '/app/server.ts'`,
   ];
 
   return {

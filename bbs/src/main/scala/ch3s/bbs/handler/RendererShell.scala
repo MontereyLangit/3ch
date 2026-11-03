@@ -41,11 +41,9 @@ object RendererShell {
     encoding: String = "Shift_JIS",
     modified: js.Date = new js.Date(),
     since: String = "",
-    extra: js.Dictionary[String] = js.Dictionary.empty[String],
-    doctype: Boolean = false
+    extra: js.Dictionary[String] = js.Dictionary.empty[String]
   ): Response = {
-    val prefix = if doctype then "<!DOCTYPE html>" else ""
-    legacyHtml(s"$prefix${renderToStaticMarkup(page)}", encoding, modified, since, extra)
+    legacyHtml(renderToStaticMarkup(page), encoding, modified, since, extra)
   }
 
   /** 完成済み HTML のタグ・コメントを維持して応答する。投稿画面は既存の文字コード判定を渡す。 */

@@ -14,10 +14,14 @@ case class PostingFormProps(
   commands: Seq[ThreadCommand] = ThreadCommand.all
 )
 
-/** 書き込みフォーム（新規スレッド一覧と書き込み欄で共通）。表示と動作は bbs-client の island（PostingFormJs）が持つ。 */
+/**
+ * 書き込みフォーム
+ * （新規スレッド一覧と書き込み欄で共通）
+ * 表示・動作はbbs-clientのPostingFormJsが行う
+ */
 object PostingFormComponent {
 
-  /** island に渡す JSON 互換の props。 */
+  /** islandに渡すJSON互換props */
   def islandProps(props: PostingFormProps): js.Object = {
     val result = js.Dynamic.literal(bbs = props.bbs, time = props.time, imgurClientId = props.imgurClientId,
       commands = js.Array(props.commands.map(c =>
