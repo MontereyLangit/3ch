@@ -9,6 +9,9 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 
+/**
+  * 管理画面用ハンドラ
+  */
 object AdminHandler {
   private def str(v: js.Any): String = js.Dynamic.global.String(v).asInstanceOf[String]
   private def truth(v: js.Any): Boolean = js.Dynamic.global.Boolean(v).asInstanceOf[Boolean]
@@ -27,6 +30,30 @@ object AdminHandler {
   private def area(name: String, value: String, label: String): String = s"""<label>$label<textarea name="$name" rows="16">${escape(value)}</textarea></label>"""
   private def form(body: String, action: String, label: String = "保存"): String = s"""<form method="post">$body<button name="action" value="$action">$label</button></form>"""
   private def text(e: WorkerEnv, file: String, fallback: String = ""): Future[String] = e.ch3www.get(file).toFuture.flatMap(o => if o == null then Future.successful(fallback) else o.text().toFuture)
+  private val creationSettingFields = List(
+    "BBS_THREAD_TATESUGI" -> "通常規制の件数",
+    "BBS_THREAD_TATESUGI_RESET" -> "通常規制の有効期間（秒）",
+    "BBS_THREAD_JUNBAN" -> "広域規制の件数",
+    "BBS_THREAD_JUNBAN_RESET" -> "広域規制の有効期間（秒）",
+    "BBS_THREAD_JUNBAN_AS_ONLY" -> "県で分けずAS全体を対象にするASN（空白・カンマ区切り）"
+  )
+  private def validateCreationSettings(value: String): ThreadCreationSettings.Parsed =
+    ThreadCreationSettings.parseText(value).fold(fail, identity)
+  private def creationForm(settings: String): String = {
+    val parsed = ThreadCreationSettings.parseText(settings)
+    val values = parsed.toOption.map { p => Map(
+      "BBS_THREAD_TATESUGI" -> p.limits.threadTatesugi.toString,
+      "BBS_THREAD_TATESUGI_RESET" -> p.limits.threadTatesugiResetSeconds.toLong.toString,
+      "BBS_THREAD_JUNBAN" -> p.limits.threadJunban.toString,
+      "BBS_THREAD_JUNBAN_RESET" -> p.limits.threadJunbanResetSeconds.toLong.toString,
+      "BBS_THREAD_JUNBAN_AS_ONLY" -> p.asOnly.toList.sorted.mkString(" ")
+    ) }.getOrElse(ThreadCreationSettings.settingsMap(settings))
+    val fields = creationSettingFields.map { (name, label) =>
+      s"""<label>$label <input name="$name" value="${escape(values.getOrElse(name, ""))}"></label>"""
+    }.mkString
+    "<h2>スレ立て規制</h2><p>通常は同一IP・スレタイ、広域は同一UA・AS＋県（海外は海外全体）。件数0でその規制を無効にします。</p>" +
+      parsed.left.toOption.map(message => s"<p>${escape(message)}</p>").getOrElse("") + form(fields, "saveCreationLimit", "スレ立て規制を保存")
+  }
   private def editable(v: String): String = {
     val entities = Map("&lt;" -> "<", "&gt;" -> ">", "&quot;" -> "\"", "&apos;" -> "'", "&amp;" -> "&")
     val replace: js.Function1[String, String] = s => entities(s)
@@ -61,8 +88,33 @@ object AdminHandler {
               val save: Future[Unit] = path match {
                 case "/admin/board" =>
                   val bbs = board(url.searchParams.get("bbs"))
-                  if str(data.action) != "save" then fail("操作が不正です。")
-                  e.ch3www.put(s"$bbs/head.txt", blank(data.head)).toFuture.flatMap(_ => e.ch3www.put(s"$bbs/SETTING.TXT", blank(data.settings)).toFuture).map(_ => ())
+                  str(data.action) match {
+                    case "save" =>
+                      val settings = blank(data.settings)
+                      validateCreationSettings(settings)
+                      e.ch3www.put(s"$bbs/head.txt", blank(data.head)).toFuture.flatMap(_ => e.ch3www.put(s"$bbs/SETTING.TXT", settings).toFuture).map(_ => ())
+                    case "saveCreationLimit" =>
+                      val fields = creationSettingFields.map { (name, _) =>
+                        val value = blank(data.selectDynamic(name))
+                        if (value.contains('\r') || value.contains('\n')) fail("スレ立て規制の入力に改行は使用できません。")
+                        s"$name=${value.trim}"
+                      }
+                      val file = s"$bbs/SETTING.TXT"
+                      for {
+                        obj <- e.ch3www.get(file).toFuture
+                        current <- if (obj == null) Future.successful(PostingText.settingTxtDefault.replace("<DIR_NAME>", bbs)) else obj.text().toFuture
+                        names = creationSettingFields.map(_._1).toSet
+                        other = current.split("\\r?\\n", -1).filterNot(line => names.contains(line.takeWhile(_ != '=').trim))
+                        settings = (other.filter(_.nonEmpty).toSeq ++ fields).mkString("\n") + "\n"
+                        _ = validateCreationSettings(settings)
+                        // 読込後に他の管理操作が保存していたら上書きしない（未作成時は条件なし）
+                        options = if (obj == null) js.Dynamic.literal() else js.Dynamic.literal(onlyIf = js.Dynamic.literal(etagMatches = obj.asInstanceOf[js.Dynamic].etag))
+                        result <- e.ch3www.asInstanceOf[js.Dynamic].put(file, settings, options).asInstanceOf[js.Promise[js.Any]].toFuture
+                      } yield {
+                        if (result == null) fail("他の操作で板設定が更新されました。画面を開き直してから保存してください。")
+                      }
+                    case _ => fail("操作が不正です。")
+                  }
                 case "/admin/access" | "/admin/ngwords" =>
                   Moderation.parseRules(blank(data.rules))
                   e.ch3www.put(if path.endsWith("access") then "deny.cgi" else "ngwords.cgi", blank(data.rules)).toFuture.map(_ => ())
@@ -97,7 +149,7 @@ object AdminHandler {
         for {
           head <- text(e, s"$bbs/head.txt")
           settings <- text(e, s"$bbs/SETTING.TXT", PostingText.settingTxtDefault.replace("<DIR_NAME>", bbs))
-        } yield s"<h1>板管理: ${escape(bbs)}</h1>" + form(area("head", head, "head.txt") + area("settings", settings, "SETTING.TXT"), "save")
+        } yield s"<h1>板管理: ${escape(bbs)}</h1>" + creationForm(settings) + form(area("head", head, "head.txt") + area("settings", settings, "SETTING.TXT"), "save")
       case "/admin/threads" =>
         val bbs = board(url.searchParams.get("bbs"))
         val stub = e.BOARD_DO.get(e.BOARD_DO.idFromName(bbs)).asInstanceOf[BoardDoStub]

@@ -7,7 +7,6 @@ import scala.scalajs.js.typedarray.Uint8Array
 /**
  * Shift_JIS 変換。v5 `src/common.js` の `sjis` と同じ手順でテーブルを構築する
  * v5 との差異は KB-17（未登録文字は NCR）と KB-18（不正バイトは `?`）のみ
- * TODO: これ多分使っていない？
  */
 @js.native
 @JSGlobal("TextDecoder")

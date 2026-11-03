@@ -33,7 +33,7 @@ object Main {
   def publicHandler(c: js.Dynamic): js.Promise[Response] = publicFetch(c.req.raw.asInstanceOf[Request], c.env.asInstanceOf[WorkerEnv], c.executionCtx)
 
   @JSExportTopLevel("bbs_entry", "server")
-  def bbsEntry(request: Request, env: WorkerEnv): js.Promise[Response] = handler.Posting.entry(request, env)
+  def bbsEntry(request: Request, env: WorkerEnv): js.Promise[Response] = handler.PostingHandler.entry(request, env)
 
   @JSExportTopLevel("settingTxtDefault", "server")
   val settingTxtDefault: String = handler.PostingText.settingTxtDefault

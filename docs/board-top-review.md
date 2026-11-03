@@ -10,7 +10,7 @@
 | SETTING.TXT の解析仕様 | 利用者決定により v5 の `parseSettings` 完全互換（JS trim 相当・2つ目の `=` 以降の切捨て等）は採らない。空行と `=` を含まない行は無視、空の値は `""`。 |
 | スレ初期設定の保存順 | `g.settings` のキー順で Thread DO に保存されるため、`VectorMap` で記載順を保持。PostingSuite で保存文字列を固定。 |
 | 板top | BBS_TITLE の title / h1 出力、head.txt の無エスケープ埋め込み、SETTING.TXT 不在時の既定タイトルを `BoardHandlerSuite` で確認。統合テストの `板top` 期待値を更新。 |
-| 管理画面の末尾スラッシュ | `AdminSuite` で各画面の GET と POST のリダイレクト先を確認。 |
+| 管理画面の末尾スラッシュ | `AdminHandlerSuite` で各画面の GET と POST のリダイレクト先を確認。 |
 | 板名の妥当性検査（404） | 実装が TODO のため未テスト。 |
 | テスト名 | 利用者指示により全テスト名を日本語に統一（中身は不変）。 |
 

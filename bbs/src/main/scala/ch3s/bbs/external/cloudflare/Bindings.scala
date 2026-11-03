@@ -85,6 +85,9 @@ trait ThreadInspectResult extends js.Object {
  */
 @js.native
 trait BoardDoStub extends DurableObjectStub {
+  def reserveThreadCreation(key: String, limit: js.Dynamic): js.Promise[String] = js.native
+  def completeThreadCreation(key: String): js.Promise[Unit] = js.native
+  def cancelThreadCreation(key: String): js.Promise[Unit] = js.native
   def getSubject(): js.Promise[String] = js.native
   def getRemoved(): js.Promise[js.Array[String]] = js.native
   def removeThread(key: String): js.Promise[Unit] = js.native
