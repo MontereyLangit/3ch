@@ -202,6 +202,6 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   assert.match(await (await get(moved)).text(), /IP:/);
   assert.match(await (await get('/admin/threads?bbs=destination')).text(), /1800000001/);
   assert.doesNotMatch(await post('destination', '1800000001'), /<title>書きこみました/);
-  await save('/admin/board?bbs=closed-board', {action: 'save', settings: 'BBS_HEISA=checked', head: ''});
-  assert.match(await post('closed-board', '', 'message', 'closed board'), /停止/);
+  await save('/admin/board?bbs=closedboard', {action: 'save', settings: 'BBS_HEISA=checked', head: ''});
+  assert.match(await post('closedboard', '', 'message', 'closed board'), /停止/);
 });

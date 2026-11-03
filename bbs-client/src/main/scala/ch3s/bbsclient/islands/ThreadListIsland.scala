@@ -37,20 +37,20 @@ object ThreadListIsland {
       | max-[660px]:grid-cols-[minmax(0,1fr)_40px_50px] max-[660px]:gap-2 max-[660px]:px-[9px]""".stripMargin.replace("\n", "")
 
   private def isCommon(thread: BbsSubject): Boolean = {
-    val key = thread.key.toString
+    val key = thread.key.value.toString
     key.startsWith("900") || key.startsWith("924")
   }
 
   private def speed(thread: BbsSubject, now: Double): Double = {
     if isCommon(thread) then 0.0
-    else thread.resNum / math.max(1.0 / 24, (now / 1000 - thread.key) / 86400)
+    else thread.resNum / math.max(1.0 / 24, (now / 1000 - thread.key.value) / 86400)
   }
 
-  private def rowKey(bbs: String, thread: BbsSubject): String = s"${if isCommon(thread) then "924" else bbs}/${thread.key}"
+  private def rowKey(bbs: String, thread: BbsSubject): String = s"${if isCommon(thread) then "924" else bbs}/${thread.key.value}"
 
   /** スレ立て時刻（JST、`yyyy/MM/dd HH:mm`）。実行環境の Intl に依存させず SSR と一致させる。 */
   private def created(thread: BbsSubject): String = {
-    val d = new js.Date(thread.key.toDouble * 1000 + 9 * 3600 * 1000)
+    val d = new js.Date(thread.key.value.toDouble * 1000 + 9 * 3600 * 1000)
     def two(n: Int): String = if n < 10 then s"0$n" else n.toString
     s"${d.getUTCFullYear().toInt}/${two(d.getUTCMonth().toInt + 1)}/${two(d.getUTCDate().toInt)} ${two(d.getUTCHours().toInt)}:${two(d.getUTCMinutes().toInt)}"
   }
@@ -89,12 +89,12 @@ object ThreadListIsland {
     val rate = if common then "—" else f"${speed(thread, state.now)}%.1f"
     val threadBoard = if common then "924" else props.bbs
     val key = rowKey(props.bbs, thread)
-    val newClass = if thread.key.toString.startsWith("924") then "new numeric cap-update text-right font-bold text-[#d00]"
+    val newClass = if thread.key.value.toString.startsWith("924") then "new numeric cap-update text-right font-bold text-[#d00]"
     else "new numeric text-right font-bold text-black"
-    <.div(^.key := thread.key.toString, ^.className := s"list-row relative cursor-pointer $rowGrid px-4 py-[11px] text-[13px] hover:bg-[#fafdff]",
+    <.div(^.key := thread.key.value.toString, ^.className := s"list-row relative cursor-pointer $rowGrid px-4 py-[11px] text-[13px] hover:bg-[#fafdff]",
       VdomAttr("data-thread-key") := key, VdomAttr("data-res") := thread.resNum.toString,
       VdomAttr("data-common") := common.toString,
-      <.div(<.a(^.href := s"/test/read.cgi/${URIUtils.encodeURIComponent(threadBoard)}/${thread.key}/",
+      <.div(<.a(^.href := s"/test/read.cgi/${URIUtils.encodeURIComponent(threadBoard)}/${thread.key.value}/",
         ^.className := "thread-link text-black no-underline after:absolute after:inset-0 after:content-[''] hover:text-[#2464b5]",
         ^.onClick --> markSeen(key, thread.resNum),
         VdomAttr.Event.mouse("onAuxClick") ==> (

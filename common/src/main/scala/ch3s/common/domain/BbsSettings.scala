@@ -24,10 +24,10 @@ object BbsSettings {
     * SETTING.TXT形式の文字列をパースして設定オブジェクトを生成
     *
     * @param text `"BBS_TITLE=テスト板＠3ch掲示板\nBBS_THREAD_TATESUGI=16\n"` …
-    * @param bbs 板ディレクトリ名 TODO: BoardIdオブジェクトを使うよう修正
+    * @param board 板ID
     * @return 板・スレ設定
     */
-  def create(text: String, bbs: String): BbsSettings = parse(text.replace("<DIR_NAME>", bbs), "\n")
+  def create(text: String, board: BoardId): BbsSettings = parse(text.replace("<DIR_NAME>", board.value), "\n")
 
   /**
     * `separator` 区切りの `キー=値` 列をパースする

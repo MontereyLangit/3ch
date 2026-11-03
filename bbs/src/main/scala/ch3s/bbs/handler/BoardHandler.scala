@@ -4,6 +4,7 @@ import ch3s.bbs.components.{BoardIndexComponent, BoardIndexProps}
 import ch3s.bbs.external.hono.{HonoContextFacade, RenderProps}
 import ch3s.bbs.external.web.Response
 import ch3s.bbs.repository.BoardRepository
+import ch3s.common.domain.BoardId
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.scalajs.js
@@ -21,11 +22,18 @@ object BoardHandler {
     * @return レンダリング結果(Promise)
     */
   def index(c: HonoContextFacade): js.Promise[Response] = {
-    // TODO: bbsが[a-zA-Z0-9]{1,16}でなければ404にする ここもBoardIdにする
-    val bbs = c.req.param("bbs").toString
-    val boardSettingsF = BoardRepository.getBoardSettings(bbs, c.env)
-    val headTextF = BoardRepository.getHeadText(bbs, c.env)
-    val subjectsF = BoardRepository.getSubjects(bbs, c.env)
+    val raw = c.req.param("bbs").toString
+    BoardId.create(raw).fold(_ => js.Promise.resolve[Response](notFound(s"/$raw/")), board => render(c, board))
+  }
+
+  /** 板名はそのまま404本文へ出るため、HTMLエスケープする */
+  private def notFound(path: String): Response = Responses.response(PublicText.respond404(path.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")), 404, js.Dictionary("content-type" -> "text/html;charset=UTF-8"))
+
+  private def render(c: HonoContextFacade, board: BoardId): js.Promise[Response] = {
+    val bbs = board.value
+    val boardSettingsF = BoardRepository.getBoardSettings(board, c.env)
+    val headTextF = BoardRepository.getHeadText(board, c.env)
+    val subjectsF = BoardRepository.getSubjects(board, c.env)
 
     (for {
       boardSettings <- boardSettingsF

@@ -33,7 +33,7 @@ object BbsSubjects {
       .flatMap({
         case pattern(key, title, resNum) =>
           for {
-            parsedKey <- key.toLongOption
+            parsedKey <- key.toLongOption.flatMap(ThreadKey.create(_).toOption)
             parsedCount <- resNum.toIntOption
             parsedTitle <- ThreadTitle.create(title).toOption
             subject <- BbsSubject.create(parsedKey, parsedTitle, parsedCount).toOption
@@ -52,7 +52,7 @@ object BbsSubjects {
  * @param resNum レス数
  */
 case class BbsSubject private (
-  key: Long,
+  key: ThreadKey,
   title: ThreadTitle,
   resNum: Int
 ) {
@@ -62,12 +62,12 @@ case class BbsSubject private (
    *
    * @return `"1792588031.dat<>PHPというのが大変らしい (5)"` …
    */
-  override def toString: String = s"$key.dat<>${title.value} ($resNum)"
+  override def toString: String = s"${key.value}.dat<>${title.value} ($resNum)"
 }
 
 object BbsSubject {
-  def create(key: Long, title: ThreadTitle, resNum: Int): Either[String, BbsSubject] = {
-    val isValid = 99999999L < key && key < 10000000000L && title != null && resNum > 0
+  def create(key: ThreadKey, title: ThreadTitle, resNum: Int): Either[String, BbsSubject] = {
+    val isValid = title != null && resNum > 0
     Either.cond(isValid, BbsSubject(key, title, resNum), "不正な値")
   }
 }

@@ -4,7 +4,7 @@ class BbsSubjectsSuite extends munit.FunSuite {
   test("KB-37: subject.txt を順序とタイトルを保持して読み書きする") {
     val text = "1791039040.dat<>雑談 (続き) &amp; テスト (6)\n1792588031.dat<>質問スレ (5)\n"
     val subjects = BbsSubjects.create(text)
-    assertEquals(subjects.value.map(_.key), List(1791039040L, 1792588031L))
+    assertEquals(subjects.value.map(_.key.value), List(1791039040L, 1792588031L))
     assertEquals(subjects.value.head.title.value, "雑談 (続き) &amp; テスト")
     assertEquals(subjects.value.map(_.resNum), List(6, 5))
     assertEquals(subjects.toString, text)

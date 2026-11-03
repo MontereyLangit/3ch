@@ -205,7 +205,8 @@ object PostingHandler {
     }
 
   private def boardSettings(g: js.Dynamic, e: WorkerEnv): Future[Unit] = guarded(g, "getBoardSettings", "不明なエラーが発生しました。", "time") {
-    BoardRepository.getBoardSettings(str(g.form.bbs), e).map { boardSettings =>
+    val board = BoardId.create(str(g.form.bbs)).fold(_ => deny(g, "板の指定が不正です。<br>\nThe board directory is incorrect..."), identity)
+    BoardRepository.getBoardSettings(board, e).map { boardSettings =>
       g.settings = boardSettings.value.toJSDictionary.asInstanceOf[js.Dynamic]
       g.boardSettings = g.settings
       g.boardSettingsText = boardSettings.toString

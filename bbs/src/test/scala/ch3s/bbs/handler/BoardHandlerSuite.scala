@@ -3,7 +3,7 @@ package ch3s.bbs.handler
 import ch3s.bbs.Main
 import ch3s.bbs.durable.DurableTestKit
 import ch3s.bbs.repository.BoardRepository
-import ch3s.common.domain.BbsSettings
+import ch3s.common.domain.{BbsSettings, BoardId}
 import ch3s.bbs.handler.HandlerTestKit.*
 
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -12,6 +12,8 @@ import scala.scalajs.js
 /** 板top (`BoardHandler.index`) と `BoardRepository` のテスト。 */
 class BoardHandlerSuite extends munit.FunSuite {
 
+  private def board(value: String): BoardId = BoardId.create(value).toOption.get
+
   private def render(env: DurableTestKit.Env, path: String) = {
     val app = new RenderApp()
     app.use("*", ReactRendererMiddleware(props => Main.renderShell(props.children, props.title, "/static/client.js")))
@@ -19,15 +21,36 @@ class BoardHandlerSuite extends munit.FunSuite {
     app.request(path, js.Dynamic.literal().asInstanceOf[js.Object], env.worker.asInstanceOf[js.Object]).toFuture.flatMap(res => text(res.asInstanceOf[js.Dynamic]))
   }
 
+  test("板top: 板名が[a-zA-Z0-9]{1,16}でなければ404を返し、板名はエスケープして本文へ出す") {
+    val env = DurableTestKit.newEnv()
+    val app = new RenderApp()
+    app.use("*", ReactRendererMiddleware(props => Main.renderShell(props.children, props.title, "/static/client.js")))
+    app.get("/:bbs/", context => BoardHandler.index(context))
+    def get(path: String) = app.request(path, js.Dynamic.literal().asInstanceOf[js.Object], env.worker.asInstanceOf[js.Object]).toFuture
+    for {
+      dash <- get("/ab-c/")
+      long <- get("/" + "a" * 17 + "/")
+      script <- get("/%3Cscript%3E/")
+      scriptHtml <- text(script.asInstanceOf[js.Dynamic])
+      ok <- get("/" + "a" * 16 + "/")
+    } yield {
+      assertEquals(status(dash.asInstanceOf[js.Dynamic]), 404)
+      assertEquals(status(long.asInstanceOf[js.Dynamic]), 404)
+      assertEquals(status(script.asInstanceOf[js.Dynamic]), 404)
+      assert(!scriptHtml.contains("<script>"), scriptHtml)
+      assertEquals(status(ok.asInstanceOf[js.Dynamic]), 200)
+    }
+  }
+
   test("getBoardSettings: 板のSETTING.TXTを返し、無ければ既定値を返す") {
     val env = DurableTestKit.newEnv()
     env.putR2("news/SETTING.TXT", "BBS_TITLE=ニュース\n")
     for {
-      found <- BoardRepository.getBoardSettings("news", env.worker)
-      missing <- BoardRepository.getBoardSettings("other", env.worker)
+      found <- BoardRepository.getBoardSettings(board("news"), env.worker)
+      missing <- BoardRepository.getBoardSettings(board("other"), env.worker)
     } yield {
-      assertEquals(found, BbsSettings.create("BBS_TITLE=ニュース\n", "news"))
-      assertEquals(missing, BbsSettings.create(PostingText.settingTxtDefault, "other"))
+      assertEquals(found, BbsSettings.create("BBS_TITLE=ニュース\n", board("news")))
+      assertEquals(missing, BbsSettings.create(PostingText.settingTxtDefault, board("other")))
     }
   }
 
@@ -35,8 +58,8 @@ class BoardHandlerSuite extends munit.FunSuite {
     val env = DurableTestKit.newEnv()
     env.putR2("news/head.txt", "<b>ルール</b>")
     for {
-      found <- BoardRepository.getHeadText("news", env.worker)
-      missing <- BoardRepository.getHeadText("other", env.worker)
+      found <- BoardRepository.getHeadText(board("news"), env.worker)
+      missing <- BoardRepository.getHeadText(board("other"), env.worker)
     } yield {
       assertEquals(found, "<b>ルール</b>")
       assertEquals(missing, "")

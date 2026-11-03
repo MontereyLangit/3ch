@@ -4,7 +4,7 @@ import scala.collection.immutable.ListMap
 
 class BbsSettingsSuite extends munit.FunSuite {
 
-  private def parse(text: String, bbs: String = "sample"): BbsSettings = BbsSettings.create(text, bbs)
+  private def parse(text: String, bbs: String = "sample"): BbsSettings = BbsSettings.create(text, BoardId.create(bbs).toOption.get)
 
   test("<DIR_NAME> は全箇所が板ディレクトリ名に置換される") {
     val s = parse("BBS_TITLE=<DIR_NAME>＠3ch掲示板\nPATH=/<DIR_NAME>/<DIR_NAME>/", "news")

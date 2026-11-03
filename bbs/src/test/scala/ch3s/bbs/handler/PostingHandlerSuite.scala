@@ -891,6 +891,17 @@ class PostingHandlerSuite extends FunSuite {
     }
   }
 
+  test("特殊ルーティング: `-` `_` を含む・17文字以上の板名は返信でも拒否される") {
+    val env = DurableTestKit.newEnv()
+    List("bad-name", "bad_name", "a" * 17).foldLeft(Future.unit) { (acc, bbs) =>
+      acc.flatMap { _ =>
+        post(env, Seq("bbs" -> bbs, "key" -> "1800000001", "MESSAGE" -> "返信")).map { p =>
+          assertEquals(errorMessage(p.text), Some("板の指定が不正です。<br>\nThe board directory is incorrect..."), s"""bbs="$bbs"""")
+        }
+      }
+    }
+  }
+
   // ==================== 12. スレッド上限 ====================
 
   test("既知の不具合: dat行数が1000以上で拒否されるため実質999レスで書き込み不能になる") {
