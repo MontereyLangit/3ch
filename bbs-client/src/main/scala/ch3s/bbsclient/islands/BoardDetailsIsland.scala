@@ -19,8 +19,6 @@ object BoardDetailsIsland {
     }
   }
 
-  final case class State(expanded: Set[String])
-
   private val panelClass = "board-panel details-content mt-2 mb-3 ml-[2em] text-[13px] max-[660px]:ml-3"
 
   private val buttons = List(
@@ -30,22 +28,23 @@ object BoardDetailsIsland {
     "board-new-thread" -> "新規スレッド作成"
   )
 
-  final class Backend($: BackendScope[Props, State]) {
-    private def toggle(id: String): Callback = $.modState(s => State(if s.expanded.contains(id) then s.expanded - id else s.expanded + id))
+  private def button(id: String, label: String, expanded: Boolean, toggle: Callback) = {
+    <.button(^.key := id, ^.`type` := "button", ^.className := "cursor-pointer border-0 bg-transparent px-1 py-[3px] text-xs hover:text-[#2464b5]",
+      VdomAttr("data-board-panel") := id,
+      VdomAttr("aria-expanded") := expanded.toString, VdomAttr("aria-controls") := id,
+      ^.onClick --> toggle,
+      <.span(^.aria.hidden := true, if expanded then "▾ " else "▸ "), label)
+  }
 
-    private def button(id: String, label: String, expanded: Boolean) = {
-      <.button(^.key := id, ^.`type` := "button", ^.className := "cursor-pointer border-0 bg-transparent px-1 py-[3px] text-xs hover:text-[#2464b5]",
-        VdomAttr("data-board-panel") := id,
-        VdomAttr("aria-expanded") := expanded.toString, VdomAttr("aria-controls") := id,
-        ^.onClick --> toggle(id),
-        <.span(^.aria.hidden := true, if expanded then "▾ " else "▸ "), label)
-    }
-
-    def render(props: Props, state: State): VdomNode = {
-      def closed(id: String): Boolean = !state.expanded.contains(id)
+  final val Component = ScalaFnComponent[Props] { props =>
+    for {
+      expanded <- useState(Set.empty[String])
+    } yield {
+      def closed(id: String): Boolean = !expanded.value.contains(id)
+      def toggle(id: String): Callback = expanded.modState(s => if s.contains(id) then s - id else s + id)
       <.div(^.className := "contents",
         <.div(^.className := "board-details mt-[9px] flex flex-wrap items-center gap-2",
-          buttons.toVdomArray { case (id, label) => button(id, label, state.expanded.contains(id)) }),
+          buttons.toVdomArray { case (id, label) => button(id, label, expanded.value.contains(id), toggle(id)) }),
         <.div(^.id := "board-rules", ^.hidden := closed("board-rules"),
           ^.className := s"$panelClass [&_a]:text-[#06f] [&_a:hover]:underline", ^.dangerouslySetInnerHtml := props.headText),
         <.div(^.id := "board-settings", ^.className := panelClass, ^.hidden := closed("board-settings"),
@@ -59,11 +58,4 @@ object BoardDetailsIsland {
       )
     }
   }
-
-  final val Component = ScalaComponent
-    .builder[Props]("BoardDetails")
-    .initialState(State(Set.empty))
-    .backend(new Backend(_))
-    .renderPS((self, p, s) => self.backend.render(p, s))
-    .build
 }
