@@ -31,5 +31,10 @@
     "honox": "^0.1.62",
     "react": "19.2.8",
     "react-dom": "19.2.8"
+  },
+  "overrides": {
+    "@scala-js/vite-plugin-scalajs": {
+      "vite": "$vite"
+    }
   }
 }
