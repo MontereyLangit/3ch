@@ -550,11 +550,11 @@ test('フォーム送信: 不明な応答・通信失敗は汎用文言を出し
   await mountForm();
   await fillForm();
   await submitForm();
-  assert.match(query('[data-post-result="unknown"]').textContent, /確認できませんでした/);
+  assert.match(query('[data-post-result="unknown"]').textContent, /書き込みに失敗しました/);
   assert.deepEqual(values(), FILLED);
   mockPost(new Error('offline'));
   await submitForm();
-  assert.match(query('[data-post-result="unknown"]').textContent, /確認できませんでした/);
+  assert.match(query('[data-post-result="unknown"]').textContent, /書き込みに失敗しました/);
   assert.deepEqual(values(), FILLED);
 });
 
