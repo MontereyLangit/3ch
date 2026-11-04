@@ -10,7 +10,7 @@ val scala3Version = "3.3.8" // Scala 3 LTS
 val munitVersion  = "1.0.0"
 
 ThisBuild / scalaVersion := scala3Version
-ThisBuild / organization := "3ch"
+ThisBuild / organization := "io._3ch"
 ThisBuild / version      := "1.2.0"
 
 lazy val commonSettings = Seq(
@@ -48,15 +48,15 @@ lazy val bbs = project
   .in(file("bbs"))
   .enablePlugins(ScalaJSPlugin)
   // "test->test" も繋いでおく: bbs の golden テスト（WebHashSuite 等）が、common 側で
-  // 自己完結して用意した golden JSON パーサ/ローダ (ch3s.common.golden.{Json, GoldenFile})
+  // 自己完結して用意した golden JSON パーサ/ローダ (io._3ch.common.golden.{Json, GoldenFile})
   // をテストだけ再利用できるようにするため
   .dependsOn(commonJS % "compile->compile;test->test")
   .settings(commonSettings)
   .settings(
     Compile / sourceGenerators += Def.task {
-      val output = (Compile / sourceManaged).value / "ch3s" / "bbs" / "BuildInfo.scala"
+      val output = (Compile / sourceManaged).value / "io" / "_3ch" / "bbs" / "BuildInfo.scala"
       val updatedDate = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Tokyo")).toString
-      IO.write(output, s"""package ch3s.bbs
+      IO.write(output, s"""package io._3ch.bbs
                          |object BuildInfo {
                          |  val version = "${version.value}"
                          |  val updatedDate = "$updatedDate"
@@ -118,5 +118,6 @@ lazy val root = project
   .in(file("."))
   .aggregate(commonJVM, commonJS, bbs, bbsClient, codegen)
   .settings(
+    name := "3ch",
     publish / skip := true
   )

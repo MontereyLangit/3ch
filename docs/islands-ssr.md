@@ -11,7 +11,7 @@ SSR 側は `app/islands/*.tsx` を import せず、生成 API が raw な client
 ScalaComponent の builder / Scala 側ラッパー自体ではなく、JS props から React 要素を返す JS 関数などを export する。
 
 ```scala
-import ch3s.common.routes.islands
+import io._3ch.common.routes.islands
 import scala.scalajs.js.annotation.JSExportTopLevel
 
 @islands("thread-view.tsx")
@@ -24,12 +24,12 @@ val threadView = ThreadView.component
 | 生成先 | 内容 |
 | --- | --- |
 | `app/islands/thread-view.tsx` | `scalajs:client.js` の `ThreadViewJs` を default export。ブラウザ側の探索・読み込み入口。 |
-| `bbs/src/main/scala/ch3s/bbs/generated/IslandComponents.scala` | `IslandComponents.ThreadViewJs(props)`。raw な `ThreadViewJs` と `/app/islands/thread-view.tsx` を結び付ける。 |
+| `bbs/src/main/scala/io/_3ch/bbs/generated/IslandComponents.scala` | `IslandComponents.ThreadViewJs(props)`。raw な `ThreadViewJs` と `/app/islands/thread-view.tsx` を結び付ける。 |
 
 サーバーの Scala ページでは次のように使う。
 
 ```scala
-import ch3s.bbs.generated.IslandComponents
+import io._3ch.bbs.generated.IslandComponents
 import scala.scalajs.js
 
 val props = js.Dictionary[js.Any]("threadId" -> "123")
