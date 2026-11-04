@@ -7,7 +7,10 @@ import japgolly.scalajs.react.*
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSExportTopLevel
 
-/** client.jsの処理のexport。bbsClientで独立してリンクする。 */
+/**
+ * client.jsの処理のexport
+ * bbsClientで独立してリンクする
+ */
 object Main {
 
   @islands("site-header.tsx")
@@ -16,13 +19,13 @@ object Main {
 
   @islands("board-details.tsx")
   @JSExportTopLevel("BoardDetailsJs", "client")
-  val boardDetails: js.Any = BoardDetailsIsland.Component.cmapCtorProps[js.Object](BoardDetailsIsland.Props.fromJs).toJsComponent.raw
+  val boardDetails: js.Any = BoardDetailsIsland.JsComponent.toJsComponent.raw
 
   @islands("posting-form.tsx")
   @JSExportTopLevel("PostingFormJs", "client")
-  val postingForm: js.Any = PostingFormIsland.Component.cmapCtorProps[js.Object](PostingFormIsland.Props.fromJs).toJsComponent.raw
+  val postingForm: js.Any = PostingFormIsland.JsComponent.toJsComponent.raw
 
   @islands("thread-list.tsx")
   @JSExportTopLevel("ThreadListJs", "client")
-  val threadList: js.Any = ThreadListIsland.Component.cmapCtorProps[js.Object](ThreadListIsland.Props.fromJs).toJsComponent.raw
+  val threadList: js.Any = ThreadListIsland.JsComponent.toJsComponent.raw
 }

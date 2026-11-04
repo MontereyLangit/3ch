@@ -1,5 +1,6 @@
 package ch3s.bbsclient.islands
 
+import ch3s.common.domain.BoardId
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 
@@ -9,13 +10,17 @@ import scala.scalajs.js.URIUtils
 /** 板概要・板設定・新着レス一覧・新規スレッド作成の開閉ボタン・パネル */
 object BoardDetailsIsland {
 
-  final case class Props(bbs: String, headText: String, settingsText: String, posting: PostingFormIsland.Props)
+  final case class Props(bbs: BoardId, headText: String, settingsText: String, posting: PostingFormIsland.Props)
 
   object Props {
-    def fromJs(raw: js.Object): Props = {
+    /** 板名が不正なら None */
+    def fromJs(raw: js.Object): Option[Props] = {
       val o = raw.asInstanceOf[js.Dynamic]
       def text(name: String): String = o.selectDynamic(name).asInstanceOf[js.UndefOr[String]].getOrElse("")
-      Props(text("bbs"), text("headText"), text("settingsText"), PostingFormIsland.Props.fromJs(raw))
+      for {
+        bbs <- BoardId.create(text("bbs")).toOption
+        posting <- PostingFormIsland.Props.fromJs(raw)
+      } yield Props(bbs, text("headText"), text("settingsText"), posting)
     }
   }
 
@@ -50,12 +55,20 @@ object BoardDetailsIsland {
         <.div(^.id := "board-settings", ^.className := panelClass, ^.hidden := closed("board-settings"),
           <.div(
             <.pre(^.className := "m-0 whitespace-pre-wrap font-mono text-xs", props.settingsText),
-            <.a(^.className := "text-[#06f] hover:underline", ^.href := s"/${URIUtils.encodeURIComponent(props.bbs)}/SETTING.TXT", "SETTING.TXT"))),
+            <.a(^.className := "text-[#06f] hover:underline", ^.href := s"/${URIUtils.encodeURIComponent(props.bbs.value)}/SETTING.TXT", "SETTING.TXT"))),
         <.div(^.id := "board-headline", ^.className := panelClass, ^.hidden := closed("board-headline"),
           <.div(^.className := "side-headline", <.p(^.className := "coming-soon m-2 py-6 text-center text-[#697785]", "Coming Soon…"))),
         <.div(^.id := "board-new-thread", ^.className := "board-panel", ^.hidden := closed("board-new-thread"),
           PostingFormIsland.Component(props.posting))
       )
     }
+  }
+
+  /**
+   * jsから渡されるpropsを [[Props]] へ変換して描画
+   * 不正なpropsのときは何も描画しない
+   */
+  final val JsComponent = ScalaFnComponent[js.Object] { raw =>
+    Props.fromJs(raw).fold[VdomNode](EmptyVdom)(Component(_))
   }
 }

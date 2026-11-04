@@ -5,13 +5,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import test, { beforeEach } from 'node:test';
 import { JSDOM } from 'jsdom';
 
-// 板topの island（bbs-client の Scala.js）を、リンク済みの実モジュールのまま jsdom 上で動かす。
-// npm pretest が bbsClient/fastLinkJS を実行する。JS で再実装せず、実物の export だけを使う。
+// 板topのIslandを、リンク済みの実モジュールのままjsdom上で動かす
+// npm pretest が bbsClient/fastLinkJS を実行
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const clientJs = path.join(root, 'bbs-client/target/scala-3.3.8/bbsclient-fastopt/client.js');
 await access(clientJs);
 
-// react-dom は読み込み時に window の有無を見るため、import より前にグローバルを用意する。
+// react-dom は読み込み時に window の有無を見るため、import より前にグローバルを用意する
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'https://board.example/sample/' });
 const { window } = dom;
 const shared = {
@@ -579,6 +579,19 @@ test('フォーム: 同一コミットでの別欄の変更でも名前・下書
   });
   assert.equal(window.localStorage.getItem('3ch:postName'), 'a');
   assert.equal(JSON.parse(window.localStorage.getItem(DRAFT)).subject, 't');
+});
+
+test('不正な板名・スレキーの props では何も描画しない（例外にしない）', async () => {
+  const cases = [
+    [client.PostingFormJs, { ...formProps, bbs: 'bad-name' }],
+    [client.PostingFormJs, { ...formProps, threadKey: 'abc' }],
+    [client.BoardDetailsJs, { ...detailsProps, bbs: '' }],
+    [client.ThreadListJs, { ...listProps, bbs: 'a'.repeat(17) }],
+  ];
+  for (const [Component, props] of cases) {
+    const container = await mount(Component, props);
+    assert.equal(container.innerHTML, '');
+  }
 });
 
 // ---------------------------------------------------------------- 既読バッジの即時反映と他タブ同期

@@ -1,6 +1,6 @@
 package ch3s.bbsclient.islands
 
-import ch3s.common.domain.ThreadCommand
+import ch3s.common.domain.{BoardId, ThreadCommand, ThreadKey}
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 
@@ -13,19 +13,27 @@ import scala.scalajs.js
  */
 object PostingFormIsland {
 
-  final case class Props(bbs: String, time: String, threadKey: Option[String], imgurClientId: String, commands: List[ThreadCommand]) {
-    def draftKey: String = s"$bbs/${threadKey.getOrElse("new")}"
+  final case class Props(bbs: BoardId, time: String, threadKey: Option[ThreadKey], imgurClientId: String, commands: List[ThreadCommand]) {
+    def draftKey: String = s"${bbs.value}/${threadKey.fold("new")(_.value.toString)}"
   }
 
   object Props {
-    def fromJs(raw: js.Object): Props = {
+    /** 板名・スレキーが不正なら None */
+    def fromJs(raw: js.Object): Option[Props] = {
       val o = raw.asInstanceOf[js.Dynamic]
+
       def text(name: String): String = o.selectDynamic(name).asInstanceOf[js.UndefOr[String]].getOrElse("")
+
       val commands = o.selectDynamic("commands").asInstanceOf[js.UndefOr[js.Array[js.Dynamic]]].toList.flatMap(_.toList).map { c =>
         def field(name: String): String = c.selectDynamic(name).asInstanceOf[js.UndefOr[String]].getOrElse("")
+
         ThreadCommand(field("text"), field("label"), field("field"), field("description"))
       }
-      Props(text("bbs"), text("time"), o.selectDynamic("threadKey").asInstanceOf[js.UndefOr[String]].toOption, text("imgurClientId"), commands)
+      val threadKey = o.selectDynamic("threadKey").asInstanceOf[js.UndefOr[String]].toOption.map(ThreadKey.parse(_).toOption)
+      for {
+        bbs <- BoardId.create(text("bbs")).toOption
+        key <- threadKey.fold[Option[Option[ThreadKey]]](Option(None))(_.map(Option(_)))
+      } yield Props(bbs, text("time"), key, text("imgurClientId"), commands)
     }
   }
 
@@ -39,7 +47,8 @@ object PostingFormIsland {
   private def toggledValue(command: ThreadCommand, current: String): String = {
     val text = command.text
     if command.field == "MESSAGE" then {
-      if current.contains(text) then removeFirst(removeFirst(current, s"""$text
+      if current.contains(text) then removeFirst(removeFirst(current,
+        s"""$text
 """), text) else s"$text\n$current"
     } else if current.contains(text) then {
       removeFirst(current, text).replaceAll("\\s+", " ").trim
@@ -142,11 +151,19 @@ object PostingFormIsland {
             ^.name := "MESSAGE", ^.rows := 8, ^.cols := 80, ^.required := true, ^.value := fields.message,
             ^.onChange ==> ((e: ReactEventFromTextArea) => fields.setField("MESSAGE", e.target.value)))),
           if props.imgurClientId.nonEmpty then imgurUpload(upload) else EmptyVdom,
-          <.input(^.`type` := "hidden", ^.name := "bbs", ^.value := props.bbs),
+          <.input(^.`type` := "hidden", ^.name := "bbs", ^.value := props.bbs.value),
           <.input(^.`type` := "hidden", ^.name := "time", ^.value := props.time),
-          props.threadKey.toVdomArray(key => <.input(^.key := key, ^.`type` := "hidden", ^.name := "key", ^.value := key))
+          props.threadKey.map(_.value.toString).toVdomArray(key => <.input(^.key := key, ^.`type` := "hidden", ^.name := "key", ^.value := key))
         )
       )
     }
+  }
+
+  /**
+   * jsから渡されるpropsを [[Props]] へ変換して描画
+   * 不正なpropsのときは何も描画しない
+   */
+  final val JsComponent = ScalaFnComponent[js.Object] { raw =>
+    Props.fromJs(raw).fold[VdomNode](EmptyVdom)(Component(_))
   }
 }

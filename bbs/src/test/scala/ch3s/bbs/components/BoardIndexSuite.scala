@@ -1,7 +1,7 @@
 package ch3s.bbs.components
 
 import ch3s.bbs.BuildInfo
-import ch3s.common.domain.{BbsSubjects, ThreadCommand}
+import ch3s.common.domain.{BbsSubjects, BoardId, ThreadCommand, ThreadKey}
 import japgolly.scalajs.react.facade.React
 
 import scala.scalajs.js
@@ -15,9 +15,13 @@ private object BoardMarkup extends js.Function1[React.Element, String] {
 
 class BoardIndexSuite extends munit.FunSuite {
   private val subjects = BbsSubjects.create("1800000001.dat<>実スレ &amp; &lt;script&gt; (3)\n1800000002.dat<>次の話題 (7)\n9240000001.dat<>共通のお知らせ (12)\n")
-  private val props = BoardIndexProps("テスト板", "<b>ローカルルール</b>", "sample", subjects = subjects, time = "1800000100")
+  private val sample = BoardId.create("sample").toOption.get
 
-  /** island の `data-serialized-props`（JSON）は見える描画ではないので除く。 */
+  private def threadKey(value: Long) = Option(ThreadKey.create(value).toOption.get)
+
+  private val props = BoardIndexProps("テスト板", "<b>ローカルルール</b>", sample, subjects = subjects, time = "1800000100")
+
+  /** island の data-serialized-propsは見える描画ではないので除く */
   private def visible(html: String): String = html.replaceAll("data-serialized-props=\"[^\"]*\"", "")
 
   private def renderForm(props: PostingFormProps): String = visible(BoardMarkup(PostingFormComponent.Component(props).rawElement))
@@ -61,7 +65,7 @@ class BoardIndexSuite extends munit.FunSuite {
   }
 
   test("投稿フィールドを form 内にまとめ、スレ立て用 submit 値を保持する") {
-    val html = renderForm(PostingFormProps("sample", "1800000100"))
+    val html = renderForm(PostingFormProps(sample, "1800000100"))
     assert(html.startsWith("<honox-island"))
     assert(html.contains("<form"))
     assert(html.endsWith("</form></honox-island>"))
@@ -90,26 +94,26 @@ class BoardIndexSuite extends munit.FunSuite {
     assert(html.contains("data-imgur-client-id=\"cid123\""))
     assert("<input[^>]*data-imgur-upload[^>]*>".r.findFirstIn(html).exists(tag => !tag.contains("name=") && tag.contains("type=\"file\"")))
     assert(html.contains("data-imgur-status"))
-    val thread = renderForm(PostingFormProps("sample", "1", Option("1800000001"), "cid123"))
+    val thread = renderForm(PostingFormProps(sample, "1", threadKey(1800000001L), "cid123"))
     assert(thread.contains("data-draft-key=\"sample/1800000001\""))
   }
 
   test("コマンド補助は候補があるスレ立てフォームだけに出す") {
     assert(!render(props).contains("data-command-helper"))
     val command = ThreadCommand("!force:ID", "ID強制", "MESSAGE", "IDを表示する")
-    val html = renderForm(PostingFormProps("sample", "1", commands = Seq(command)))
+    val html = renderForm(PostingFormProps(sample, "1", commands = Seq(command)))
     assert(html.contains("data-command-helper"))
     assert(html.contains("data-command=\"!force:ID\""))
     assert(html.contains("data-command-field=\"MESSAGE\""))
     assert(html.contains("aria-pressed=\"false\""))
     assert(html.contains("title=\"IDを表示する\""))
-    val reply = renderForm(PostingFormProps("sample", "1", Option("1"), commands = Seq(command)))
+    val reply = renderForm(PostingFormProps(sample, "1", threadKey(1800000001L), commands = Seq(command)))
     assert(!reply.contains("data-command-helper"))
   }
 
-  test("板名は URL のパス要素とクエリ値として符号化する") {
-    for (bbs <- List("/evil.example", "news_4-test", "a&b/#c")) {
-      val html = render(props.copy(bbs = bbs, `type` = "subback"))
+  test("板名（BoardId は英数字のみ）は URL のパス要素とクエリ値にそのまま出る") {
+    for (bbs <- List("news4test", "A1b2C3d4E5f6G7h8")) {
+      val html = render(props.copy(bbs = BoardId.create(bbs).toOption.get, `type` = "subback"))
       val encoded = js.URIUtils.encodeURIComponent(bbs)
       assert(html.contains(s"href=\"/$encoded/SETTING.TXT\""))
       assert(html.contains(s"href=\"/$encoded/kako/\""))

@@ -26,7 +26,10 @@ object BoardHandler {
     BoardId.create(raw).fold(_ => js.Promise.resolve[Response](notFound(s"/$raw/")), board => render(c, board))
   }
 
-  /** 板名はそのまま404本文へ出るため、HTMLエスケープする */
+  /**
+   * 無効な板名の場合404
+   * 404画面に板名をそのまま出力するので、HTMLエスケープすること
+   */
   private def notFound(path: String): Response = Responses.response(PublicText.respond404(path.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")), 404, js.Dictionary("content-type" -> "text/html;charset=UTF-8"))
 
   private def render(c: HonoContextFacade, board: BoardId): js.Promise[Response] = {
@@ -49,7 +52,7 @@ object BoardHandler {
         val sort = c.req.query("sort").filter(Set("new", "speed", "res")).getOrElse("new")
         c.renderPromise(
           BoardIndexComponent.Component(BoardIndexProps(
-            title, headText, bbs, viewType, subjects, boardSettings.value,
+            title, headText, board, viewType, subjects, boardSettings.value,
             c.req.query("q").getOrElse(""), sort, math.floor(js.Date.now() / 1000).toLong.toString,
             c.env.IMGUR_CLIENT_ID.getOrElse("")
           )).rawElement, props).toFuture

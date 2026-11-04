@@ -2,7 +2,7 @@ package ch3s.bbs.components
 
 import ch3s.bbs.components.layout.{FooterComponent, HeaderComponent, RightSidebarComponent, RightSidebarProps}
 import ch3s.bbs.generated.IslandComponents
-import ch3s.common.domain.BbsSubjects
+import ch3s.common.domain.{BbsSubjects, BoardId}
 import japgolly.scalajs.react.ScalaFnComponent
 import japgolly.scalajs.react.vdom.html_<^.*
 
@@ -12,7 +12,7 @@ import scala.scalajs.js.URIUtils
 case class BoardIndexProps(
   title: String,
   headText: String,
-  bbs: String = "test",
+  bbs: BoardId,
   `type`: String = "subback",
   subjects: BbsSubjects = BbsSubjects(Nil),
   settings: Map[String, String] = Map.empty,
@@ -40,7 +40,7 @@ object BoardIndexComponent {
     details.updateDynamic("headText")(props.headText)
     details.updateDynamic("settingsText")(props.settings.map { case (k, v) => s"$k=$v" }.mkString("\n"))
 
-    val list = js.Dynamic.literal(bbs = props.bbs, `type` = props.`type`, subjectText = if props.`type` == "subback" then props.subjects.toString else "",
+    val list = js.Dynamic.literal(bbs = props.bbs.value, `type` = props.`type`, subjectText = if props.`type` == "subback" then props.subjects.toString else "",
       query = props.query, sort = props.sort, now = props.now)
 
     <.div(^.className := "board-ui min-h-screen bg-[#fafafa] text-sm text-[#333] wrap-anywhere [--header-height:64px] [&_summary]:cursor-pointer",
@@ -67,9 +67,9 @@ object BoardIndexComponent {
           ),
           IslandComponents.ThreadListJs(list.asInstanceOf[js.Object]),
           <.div(^.className := "board-admin p-3 text-right",
-            <.a(^.className := "text-[#06f] hover:underline", ^.href := s"/admin/board?bbs=${URIUtils.encodeURIComponent(props.bbs)}", "管理画面へ"))
+            <.a(^.className := "text-[#06f] hover:underline", ^.href := s"/admin/board?bbs=${URIUtils.encodeURIComponent(props.bbs.value)}", "管理画面へ"))
         ),
-        RightSidebarComponent.Component(RightSidebarProps(props.bbs, props.headText, props.settings))
+        RightSidebarComponent.Component(RightSidebarProps(props.bbs.value, props.headText, props.settings))
       ),
       FooterComponent.Component()
     )

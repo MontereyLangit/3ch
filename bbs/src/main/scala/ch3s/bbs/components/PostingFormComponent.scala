@@ -1,15 +1,15 @@
 package ch3s.bbs.components
 
 import ch3s.bbs.generated.IslandComponents
-import ch3s.common.domain.ThreadCommand
+import ch3s.common.domain.{BoardId, ThreadCommand, ThreadKey}
 import japgolly.scalajs.react.ScalaFnComponent
 
 import scala.scalajs.js
 
 case class PostingFormProps(
-  bbs: String,
+  bbs: BoardId,
   time: String,
-  key: Option[String] = None,
+  key: Option[ThreadKey] = None,
   imgurClientId: String = "",
   commands: Seq[ThreadCommand] = ThreadCommand.all
 )
@@ -23,11 +23,11 @@ object PostingFormComponent {
 
   /** islandに渡すJSON互換props */
   def islandProps(props: PostingFormProps): js.Object = {
-    val result = js.Dynamic.literal(bbs = props.bbs, time = props.time, imgurClientId = props.imgurClientId,
+    val result = js.Dynamic.literal(bbs = props.bbs.value, time = props.time, imgurClientId = props.imgurClientId,
       commands = js.Array(props.commands.map(c =>
         js.Dynamic.literal(text = c.text, label = c.label, field = c.field, description = c.description)
       )*))
-    props.key.foreach(key => result.updateDynamic("threadKey")(key))
+    props.key.foreach(key => result.updateDynamic("threadKey")(key.value.toString))
     result.asInstanceOf[js.Object]
   }
 

@@ -1,6 +1,6 @@
 package ch3s.bbsclient.islands
 
-import ch3s.common.domain.{BbsSubject, BbsSubjects, SubjectText}
+import ch3s.common.domain.{BbsSubject, BbsSubjects, BoardId, SubjectText}
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
@@ -16,18 +16,20 @@ object ThreadListIsland {
   /**
    * ThreadListIslandコンポーネントのprops
    * subjectTextは Board DOのsubject、nowはサーバー描画ミリ秒UNIXTIME */
-  final case class Props(bbs: String, viewType: String, subjectText: String, query: String, sort: String, now: Double)
+  final case class Props(bbs: BoardId, viewType: String, subjectText: String, query: String, sort: String, now: Double)
 
   object Props {
-    def fromJs(raw: js.Object): Props = {
+    /** 板名が不正なら None */
+    def fromJs(raw: js.Object): Option[Props] = {
       val o = raw.asInstanceOf[js.Dynamic]
       def text(name: String): String = o.selectDynamic(name).asInstanceOf[js.UndefOr[String]].getOrElse("")
-      Props(text("bbs"), text("type"), text("subjectText"), text("query"), text("sort"),
-        o.selectDynamic("now").asInstanceOf[js.UndefOr[Double]].getOrElse(0.0))
+      BoardId.create(text("bbs")).toOption.map { bbs =>
+        Props(bbs, text("type"), text("subjectText"), text("query"), text("sort"), o.selectDynamic("now").asInstanceOf[js.UndefOr[Double]].getOrElse(0.0))
+      }
     }
   }
 
-  /** `seen` は行キー（`板/スレキー`）ごとに localStorage から読んだ既読レス数の文字列。 */
+  /** seen は板/スレキーごとに localStorage から読んだ既読レス数 */
   final case class State(subjects: BbsSubjects, now: Double, loading: Boolean, status: String, seen: Map[String, String])
 
   private val SeenPrefix = "3ch:threadSeen:"
@@ -46,23 +48,25 @@ object ThreadListIsland {
     else thread.resNum / math.max(1.0 / 24, (now / 1000 - thread.key.value) / 86400)
   }
 
-  private def rowKey(bbs: String, thread: BbsSubject): String = s"${if isCommon(thread) then "924" else bbs}/${thread.key.value}"
+  private def rowKey(bbs: BoardId, thread: BbsSubject): String = s"${if isCommon(thread) then "924" else bbs.value}/${thread.key.value}"
 
-  /** スレ立て時刻（JST、`yyyy/MM/dd HH:mm`）。実行環境の Intl に依存させず SSR と一致させる。 */
+  /**
+   * スレ立て時刻 -> JST、yyyy/MM/dd HH:mm
+   * 実行環境の Intl に依存させず SSR と一致させること
+   */
   private def created(thread: BbsSubject): String = {
     val d = new js.Date(thread.key.value.toDouble * 1000 + 9 * 3600 * 1000)
     def two(n: Int): String = if n < 10 then s"0$n" else n.toString
     s"${d.getUTCFullYear().toInt}/${two(d.getUTCMonth().toInt + 1)}/${two(d.getUTCDate().toInt)} ${two(d.getUTCHours().toInt)}:${two(d.getUTCMinutes().toInt)}"
   }
 
-  private def loadSeen(bbs: String, subjects: BbsSubjects): Map[String, String] = {
+  private def loadSeen(bbs: BoardId, subjects: BbsSubjects): Map[String, String] = {
     subjects.value.flatMap { thread =>
       val key = rowKey(bbs, thread)
       BrowserStorage.read(s"$SeenPrefix$key").map(key -> _)
     }.toMap
   }
 
-  /** 既読レス数より増えていれば `+N`。保存が無い・数値でない場合は出さない。 */
   private def badge(stored: Option[String], count: Int): String = {
     stored.map(s => js.Dynamic.global.Number(s).asInstanceOf[Double]).filter(n => !n.isNaN && !n.isInfinity && count > n)
       .fold("")(n => s"+${count - n}")
@@ -75,7 +79,7 @@ object ThreadListIsland {
       <.span(^.className := "numeric text-right", "レス"))
   }
 
-  /** 他タブの localStorage 変更を `seen` へ反映する。`key == null`（全消去）は `seen` を空にする。 */
+  /** 他タブの localStorage 変更を seen へ反映 */
   private def withStorageChange(state: State, storageKey: String, newValue: String): State = {
     if storageKey == null then state.copy(seen = Map.empty)
     else if !storageKey.startsWith(SeenPrefix) then state
@@ -87,7 +91,7 @@ object ThreadListIsland {
 
   private def row(thread: BbsSubject, props: Props, state: State, common: Boolean, markSeen: (String, Int) => Callback): VdomElement = {
     val rate = if common then "—" else f"${speed(thread, state.now)}%.1f"
-    val threadBoard = if common then "924" else props.bbs
+    val threadBoard = if common then "924" else props.bbs.value
     val key = rowKey(props.bbs, thread)
     val newClass = if thread.key.value.toString.startsWith("924") then "new numeric cap-update text-right font-bold text-[#d00]"
     else "new numeric text-right font-bold text-black"
@@ -127,7 +131,7 @@ object ThreadListIsland {
         if commonThreads.isEmpty then <.p(^.className := "empty-state m-2 text-xs text-[#697785]", "全板共通スレはありません。") else EmptyVdom),
       <.div(^.className := "thread-list mt-[5px] border-t border-[#dcdcdc]", heading,
         <.div(^.className := s"list-row $rowGrid px-4 py-[11px] text-[13px] hover:bg-[#fafdff]", <.a(^.className := "text-[#06f] hover:underline",
-          ^.href := s"/${URIUtils.encodeURIComponent(props.bbs)}/kako/", "↩過去ログ倉庫")),
+          ^.href := s"/${URIUtils.encodeURIComponent(props.bbs.value)}/kako/", "↩過去ログ倉庫")),
         threads.toVdomArray(row(_, props, state, false, markSeen)),
         if threads.isEmpty then <.p(^.className := "empty-state m-2 text-xs text-[#697785]", "該当するスレッドはありません。") else EmptyVdom),
       <.p(^.className := "list-note m-2 text-xs text-[#697785]", "(最終更新日時は準備中)")
@@ -165,7 +169,7 @@ object ThreadListIsland {
         state.modState(s => s.copy(seen = s.seen.updated(key, count.toString))) >> Callback(BrowserStorage.write(s"$SeenPrefix$key", count.toString))
       }
 
-      /** `/<板>/subject.txt`（Shift_JIS）を取り直して一覧を差し替える。アンマウントで中断する。 */
+      /** リロード -> /<板>/subject.txtをSJISで取得 */
       def reload: Callback = {
         state.modState(_.copy(loading = true, status = "更新中…")) >> Callback {
           request.value.foreach(_.abort())
@@ -175,7 +179,7 @@ object ThreadListIsland {
           init.cache = dom.RequestCache.`no-store`
           init.credentials = dom.RequestCredentials.`same-origin`
           init.signal = controller.signal
-          Future.delegate(dom.fetch(s"/${URIUtils.encodeURIComponent(props.bbs)}/subject.txt", init).toFuture)
+          Future.delegate(dom.fetch(s"/${URIUtils.encodeURIComponent(props.bbs.value)}/subject.txt", init).toFuture)
             .flatMap { r =>
               if !r.ok then Future.failed(new RuntimeException(s"HTTP ${r.status}"))
               else r.arrayBuffer().toFuture.map(decodeShiftJis)
@@ -209,5 +213,13 @@ object ThreadListIsland {
         else <.div(^.className := "thread-feed", <.p(^.className := "coming-soon m-2 py-6 text-center text-[#697785]", "Coming Soon…"))
       )
     }
+  }
+
+  /**
+   * jsから渡されるpropsを [[Props]] へ変換して描画
+   * 不正なpropsのときは何も描画しない
+   */
+  final val JsComponent = ScalaFnComponent[js.Object] { raw =>
+    Props.fromJs(raw).fold[VdomNode](EmptyVdom)(Component(_))
   }
 }
