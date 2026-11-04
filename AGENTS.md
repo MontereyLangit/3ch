@@ -1,4 +1,4 @@
-# 3ch 掲示板システム (ch3s) 開発ガイド
+# 3ch 掲示板システム 開発ガイド
 
 AI アシスタント（Claude Code / Gemini CLI / Codex CLI）および開発者向けの、本リポジトリにおける
 プロジェクト概要・移植計画・作業規約。
@@ -18,7 +18,8 @@ AI アシスタント（Claude Code / Gemini CLI / Codex CLI）および開発�
 
 ### 1.1 これは何か
 
-`ch3s` は 2ch 互換掲示板「3ch（３ちゃんねる）」の **現行稼働システム = 3ch（Scala.js + HonoX）** のリポジトリ。
+`3ch`（旧プロジェクト名 `ch3s`）は 2ch 互換掲示板「3ch（３ちゃんねる）」の **現行稼働システム = 3ch（Scala.js + HonoX）** のリポジトリ。
+Scala のパッケージは `io._3ch.*`。ローカル作業ディレクトリは `C:/project/3ch/ch3s/` のままとする。
 Cloudflare Workers / Durable Objects / R2 / KV 上で動く。専用ブラウザ（専ブラ, Monazilla 系）互換の
 dat / subject.txt プロトコルを提供する。
 
@@ -34,9 +35,9 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 | :------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `2ch`, `readcgi`, `gns`, `bbs18c`      | 参考用の歴史的実装（perl / C / PHP）                                                                                                                                                                          |
 | `v3`, `delightly-v2`(=v4)              | 旧 3ch システム（PHP）。現在ほぼ未使用                                                                                                                                                                        |
-| **`ch3s`（本リポジトリ）**             | **v6 = 現行稼働システム**。Scala.js + HonoX on Cloudflare Workers + DO + R2 + KV（旧 v5 はタグ `v5-final`）                                                                                                   |
+| **`3ch`（本リポジトリ）**             | **v6 = 現行稼働システム**。Scala.js + HonoX on Cloudflare Workers + DO + R2 + KV（旧 v5 はタグ `v5-final`）                                                                                                   |
 | `ch3s-migration`                       | **Scala.js × HonoX 移植の参照実装**（後述 step 3 の手本）                                                                                                                                                     |
-| `ch3/3chiko`                           | 旧フロントエンド配布元（`3chiko.html`, Cloudflare Pages 経由）。**2026-09-25、`ch3s` へ統合済み**（本体は `public/3chiko.html` 1本。Workers Static Assets(`env.ASSETS`)経由で配信）。以後はこちらを更新しない |
+| `ch3/3chiko`                           | 旧フロントエンド配布元（`3chiko.html`, Cloudflare Pages 経由）。**2026-09-25、`3ch` へ統合済み**（本体は `public/3chiko.html` 1本。Workers Static Assets(`env.ASSETS`)経由で配信）。以後はこちらを更新しない |
 | `3ch_ui`                               | 新 UI のデザイン案・HTML モック                                                                                                                                                                               |
 | `v6`, `v6-s`, `v6-k`, `v6-s2`, `v6-bp` | v6 検討・試作（Kotlin/Spring Boot 版含む）                                                                                                                                                                    |
 | `kako-data`                            | 過去ログデータ（step 6 の移行対象）                                                                                                                                                                           |
@@ -57,7 +58,7 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 ```
 common/                Scala (JVM/JS cross)。Shift_JIS 以外の純粋ロジック（MD5, crypt(3), ルート表 RouteTable.scala 等）
 bbs/
-  src/main/scala/ch3s/bbs/
+  src/main/scala/io/_3ch/bbs/
     Main.scala         Worker エントリ（JSExportTopLevel）
     handler/           PublicRoutes（dat, subject.txt, SETTING.TXT, bbsmenu 等）, Posting（投稿パイプライン）,
                        Moderation, AdminHandler（/admin/*）, Responses

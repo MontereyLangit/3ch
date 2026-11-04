@@ -1,5 +1,5 @@
 {
-  "name": "ch3s",
+  "name": "3ch",
   "type": "module",
   "scripts": {
     "dev": "npm run v6:build && wrangler dev --config wrangler.jsonc",

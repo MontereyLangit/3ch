@@ -133,7 +133,7 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   const listHtml = await listResponse.text();
   assert.match(listHtml, /thread title/);
   assert.ok(listHtml.includes(`/test/read.cgi/sandbox/${key}/`));
-  assert.match(listHtml, /https:\/\/github.com\/MontereyLangit\/ch3s/);
+  assert.match(listHtml, /https:\/\/github.com\/MontereyLangit\/3ch/);
   assert.match(await (await fetch(origin + '/sandbox/')).text(), /thread title/, '既定はスレ一覧');
   const feedResponse = await fetch(origin + '/sandbox/?type=feed');
   assert.equal(feedResponse.status, 200);

@@ -55,7 +55,7 @@
 
 ### Claude Code 指摘対応・Tailwind 移行後
 
-- `sbt "bbs/testOnly ch3s.bbs.components.BoardIndexSuite ch3s.bbs.handler.BoardHandlerSuite"`: 全12件成功。板名の URL
+- `sbt "bbs/testOnly io._3ch.bbs.components.BoardIndexSuite io._3ch.bbs.handler.BoardHandlerSuite"`: 全12件成功。板名の URL
   符号化と共通スレの勢い順を追加検証。
 - 検索フォーカス・ヘッダーフォーカス・左/中/右クリックを jsdom で検証する3件を追加。
 - `npm run v6:build` / `npm run v6:typecheck`: 成功。生成 CSS にレスポンシブ境界、header-hidden variant、CSS 変数を使う高さ計算と

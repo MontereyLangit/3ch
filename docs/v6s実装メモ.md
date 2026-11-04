@@ -9,24 +9,24 @@ Scala.js 実装（`bbs/`）の doc コメントから移した背景情報。コ
 
 HonoX のルート（`app/routes` 配下、codegen 生成の TypeScript）から `scalajs:server.js` 経由で
 import されるエントリポイント関数群。TS 側はここで export した関数を1行呼ぶだけの薄い配線にする
-（参照実装 ch3s-migration の `ch3s.bbs.Main` と同じ方針）。
+（参照実装 ch3s-migration の `io._3ch.bbs.Main` と同じ方針）。
 
 生成対象は `bbs.Main` の `@route` と `bbsclient.Main` の `@islands` で指定し、
 同じ宣言の `@JSExportTopLevel` から export 名を取得する。既存 fetch の振り分けは
 `app/routes/index.ts` に手書きで保持する。SSR の `rawElement` と Islands の違いは
 [ルート・Islands アノテーション化レビュー](route-annotations-review.md)を参照。
 
-`@islands` から SSR 用の `ch3s.bbs.generated.IslandComponents` も生成する。
+`@islands` から SSR 用の `io._3ch.bbs.generated.IslandComponents` も生成する。
 `IslandComponents.<export名>(props).rawElement` で HonoX の hydration 境界を付けた React 要素を取得できる。
 生成 TSX を SSR 側から import する必要はない。利用方法と制約は [Scala からの Islands SSR](islands-ssr.md)を参照。
 
 ```scala
-// bbs.Main（ch3s.common.routes.route を import）
+// bbs.Main（io._3ch.common.routes.route を import）
 @route("_v6/health.ts")
 @JSExportTopLevel("healthHandler", "server")
 def healthHandler(c: js.Any): js.Promise[Response] = { /* handler 呼び出し */ }
 
-// bbsclient.Main（ch3s.common.routes.islands を import）
+// bbsclient.Main（io._3ch.common.routes.islands を import）
 @islands("thread-view.tsx")
 @JSExportTopLevel("ThreadView", "client")
 val threadView = /* JS props を受ける React コンポーネント */
@@ -146,7 +146,7 @@ step 3 方針から外れる。
 
 ### 4.4 `WebHashSuite`
 
-golden JSON の読み込みに `common` のテスト専用ユーティリティ（`ch3s.common.golden.{Json, GoldenFile}`）を
+golden JSON の読み込みに `common` のテスト専用ユーティリティ（`io._3ch.common.golden.{Json, GoldenFile}`）を
 `"test->test"` 依存で再利用している（`build.sbt` の `bbs` プロジェクト設定）。
 
 ### 4.5 `SjisEncodingSuite`

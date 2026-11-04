@@ -17,7 +17,7 @@ test('KB-27: ブラウザ向け JS にサーバ処理を含めない', {
     // island（Scala.js）は client.js から遅延読込される別チャンクに入る。
     if (source.includes('3ch:draft:')) islandsBundled = true;
     assert.doesNotMatch(source,
-      /ch3s\.bbs\.|cloudflare:workers|ADMIN_PASSWORD|deny\.cgi|ngwords\.cgi/,
+      /io\._3ch\.bbs\.|cloudflare:workers|ADMIN_PASSWORD|deny\.cgi|ngwords\.cgi/,
       `${file} にサーバ専用の処理が含まれています`);
   }
   assert.ok(islandsBundled, 'ブラウザ向け JS に bbs-client の island が含まれていません');

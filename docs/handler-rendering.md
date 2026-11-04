@@ -13,9 +13,9 @@ Hono の戻り値は `Response | Promise<Response>` なので、Promise を返�
 `js.Promise.resolve[Response](c.render(...))` または `c.renderPromise(...)` を使う。
 
 ```scala
-import ch3s.bbs.external.hono.{HonoContextFacade, RenderProps}
-import ch3s.bbs.external.hono.HonoContextFacade.*
-import ch3s.bbs.external.web.Response
+import io._3ch.bbs.external.hono.{HonoContextFacade, RenderProps}
+import io._3ch.bbs.external.hono.HonoContextFacade.*
+import io._3ch.bbs.external.web.Response
 import japgolly.scalajs.react.vdom.html_<^.*
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSExportTopLevel
@@ -37,7 +37,7 @@ Hono の API は [render / setRenderer](https://hono.dev/docs/api/context#render
 ## Shift_JIS の応答
 
 ```scala
-import ch3s.bbs.handler.RendererShell.createSjisResponse
+import io._3ch.bbs.handler.RendererShell.createSjisResponse
 
 js.Promise.resolve(createSjisResponse(page.rawElement, "text/html"))
 js.Promise.resolve(createSjisResponse("<html><!-- 2ch_X:error -->本文</html>", "text/html"))

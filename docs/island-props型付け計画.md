@@ -1,7 +1,7 @@
 # island props の型付け計画（Codex 指摘 #4）
 
-2026-11-02 作成。対象は板top の islands（`bbs-client/src/main/scala/ch3s/bbsclient/islands/`）と、それを呼ぶサーバー側ラッパー
-（`bbs/src/main/scala/ch3s/bbs/components/`）。指摘の記録は `docs/board-top-client-review.md` の「Codex CLI レビュー（islands 版）」。
+2026-11-02 作成。対象は板top の islands（`bbs-client/src/main/scala/io/_3ch/bbsclient/islands/`）と、それを呼ぶサーバー側ラッパー
+（`bbs/src/main/scala/io/_3ch/bbs/components/`）。指摘の記録は `docs/board-top-client-review.md` の「Codex CLI レビュー（islands 版）」。
 
 ## 1. 現状と問題
 
@@ -36,7 +36,7 @@
 ### 2.2 props の定義（例）
 
 ```scala
-package ch3s.common.islands
+package io._3ch.common.islands
 
 import scala.scalajs.js
 
@@ -99,9 +99,9 @@ trait では、シリアライズ後に値が欠けていても検出できな�
   `common` は JVM でもコンパイルされ、そこには `js.Object` が無い。そのため境界は付けず `islands[P](filePath)` にし、
   型引数の構文だけを codegen が読む。`@islands("x.tsx")` のように型引数を省いた場合は従来どおり `js.Object` とする。
 - `AnnotatedAppEntries` は scalameta の `Mod.Annot` から型引数の構文（例: `PostingFormProps`）を取り出し、`IslandEntry.propsType: Option[String]` に入れる。
-  型名は完全修飾名で書かせる（例: `@islands[ch3s.common.islands.PostingFormProps]("posting-form.tsx")`）か、
-  `ch3s.common.islands` 配下に限定して単純名を許す。前者の方が codegen が単純になるので推奨。
-- `GenerateIslandComponents` は `def PostingFormJs(props: ch3s.common.islands.PostingFormProps): VdomElement` を出力する。
+  型名は完全修飾名で書かせる（例: `@islands[io._3ch.common.islands.PostingFormProps]("posting-form.tsx")`）か、
+  `io._3ch.common.islands` 配下に限定して単純名を許す。前者の方が codegen が単純になるので推奨。
+- `GenerateIslandComponents` は `def PostingFormJs(props: io._3ch.common.islands.PostingFormProps): VdomElement` を出力する。
 - クライアントの入口も同じ型を使う: `Component.cmapCtorProps[PostingFormProps](...)`。
   これで「生成 API の引数型 = クライアントが受け取る型」が1つの型名でつながる。
 - `AnnotatedAppEntriesSuite` / `GenerateIslandComponents` のテストに、型引数あり・なしの両ケースを追加する。
@@ -110,7 +110,7 @@ trait では、シリアライズ後に値が欠けていても検出できな�
 
 1 件ずつ独立したコミットにする。
 
-1. **基盤**: `build.sbt` の `common.jsSettings` に `Compile / unmanagedSourceDirectories += .../src/main/scala-js` を追加し、空のパッケージ `ch3s.common.islands` を作る。
+1. **基盤**: `build.sbt` の `common.jsSettings` に `Compile / unmanagedSourceDirectories += .../src/main/scala-js` を追加し、空のパッケージ `io._3ch.common.islands` を作る。
 2. **codegen**: `islands[P]` の型引数を読み、型付きの生成 API を出す。型引数が無ければ現状と同じ出力（既存テストが通ること）。
 3. **`PostingFormProps`**: trait と `validate` を定義し、`PostingFormComponent.islandProps` と `PostingFormIsland` を置き換える。`ThreadCommand`（common の case class）と `ThreadCommandProps` の変換はサーバー側に置く。
 4. **`BoardDetailsProps`**: posting form の props を `postingForm` フィールドに入れ子にし、`updateDynamic` を廃止する。
@@ -135,6 +135,6 @@ trait では、シリアライズ後に値が欠けていても検出できな�
 
 ## 6. 未決事項
 
-- 型名の書き方: 完全修飾名に限定するか、`ch3s.common.islands` の単純名を許すか（推奨は完全修飾名）。
+- 型名の書き方: 完全修飾名に限定するか、`io._3ch.common.islands` の単純名を許すか（推奨は完全修飾名）。
 - 検証に失敗したときの描画: 「JS 無し相当」で十分か、画面上にエラーを出すか。
-- 今後 read.cgi など他画面の island を足すときも、同じく `ch3s.common.islands` に props を置くか（画面ごとにサブパッケージを切るか）。
+- 今後 read.cgi など他画面の island を足すときも、同じく `io._3ch.common.islands` に props を置くか（画面ごとにサブパッケージを切るか）。

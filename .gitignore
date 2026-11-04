@@ -16,7 +16,7 @@ dist/
 
 # codegen（sbt codegen/run）が Main のアノテーションから機械生成するファイル
 # /app/routes/
-/bbs/src/main/scala/ch3s/bbs/generated/
+/bbs/src/main/scala/io/_3ch/bbs/generated/
 
 .vscode/
 .bloop
