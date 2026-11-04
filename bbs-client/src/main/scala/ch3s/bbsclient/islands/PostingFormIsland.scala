@@ -47,9 +47,7 @@ object PostingFormIsland {
   private def toggledValue(command: ThreadCommand, current: String): String = {
     val text = command.text
     if command.field == "MESSAGE" then {
-      if current.contains(text) then removeFirst(removeFirst(current,
-        s"""$text
-"""), text) else s"$text\n$current"
+      if current.contains(text) then removeFirst(removeFirst(current, s"$text\n"), text) else s"$text\n$current"
     } else if current.contains(text) then {
       removeFirst(current, text).replaceAll("\\s+", " ").trim
     } else if current == "" || current.last.isWhitespace then {
