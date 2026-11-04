@@ -15,7 +15,8 @@ object ThreadListIsland {
 
   /**
    * ThreadListIslandコンポーネントのprops
-   * subjectTextは Board DOのsubject、nowはサーバー描画ミリ秒UNIXTIME */
+   * subjectTextは Board DOのsubject、nowはサーバー描画ミリ秒UNIXTIME
+   */
   final case class Props(bbs: BoardId, viewType: String, subjectText: String, query: String, sort: String, now: Double)
 
   object Props {
