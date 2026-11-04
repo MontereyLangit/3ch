@@ -19,12 +19,11 @@ object PublicRoutes {
     case x: js.JavaScriptException => str(x.exception.asInstanceOf[js.Any])
     case _ => e.toString
   }
-  private def blank(v: js.Any): String = if truth(v) then str(v) else ""
   private def notFound(path: String): Response = Responses.response(PublicText.respond404(path), 404, js.Dictionary("content-type" -> "text/html;charset=UTF-8"))
   private def failed(message: String): Response = Responses.response(PublicText.respond500(message), 500, js.Dictionary("content-type" -> "text/html;charset=UTF-8"))
   private def board(e: WorkerEnv, bbs: String): BoardDoStub = e.BOARD_DO.get(e.BOARD_DO.idFromName(bbs)).asInstanceOf[BoardDoStub]
   private def validHead(f: Array[String]): Boolean = f.length >= 5 && f(0).matches("^[a-zA-Z0-9\\-_]+$") && f(1).nonEmpty
-  private def read(e: WorkerEnv, file: String): Future[Option[String]] = e.ch3www.get(file).toFuture.flatMap(o => if o == null then Future.successful(None) else o.text().toFuture.map(Some(_)))
+  private def read(e: WorkerEnv, file: String): Future[Option[String]] = e.ch3www.get(file).toFuture.flatMap(o => if o == null then Future.successful(None) else o.text().toFuture.map(Option(_)))
   private def date(s: String, parse: Boolean = false): js.Date = new js.Date((if parse then js.Dynamic.global.parseInt(s).asInstanceOf[Double] else js.Dynamic.global.Number(s).asInstanceOf[Double]) * 1000)
   private def guard(path: String)(f: => Future[Response]): Future[Response] = Future.unit.flatMap(_ => f).recover { case e => failed(s"$path Error -> ${error(e)}") }
   /** 3chiko.html本体をWorkers Static Assets(env.ASSETS)経由で取得する(public/3chiko.html、src/3chiko.js参照)。 */
@@ -38,15 +37,6 @@ object PublicRoutes {
     val url = js.Dynamic.newInstance(js.Dynamic.global.URL)(r.url)
     val path = str(url.pathname)
     def h(name: String): String = Option(r.headers.get(name)).getOrElse("")
-    // webclient=3chiko の場合のみ3chiko.htmlを返す判定(cookie優先度はv5のsrc/3chiko.jsに合わせクエリを優先)。
-    def webclientParam(): String = {
-      val query = blank(url.searchParams.get("webclient"))
-      if query.nonEmpty then query
-      else h("cookie").split("[;,]\\s*", -1).flatMap { pair =>
-        val parts = pair.split("=", 2)
-        if parts.length == 2 && parts(0) == "webclient" then Some(parts(1)) else None
-      }.headOption.getOrElse("")
-    }
     def cached(work: => Future[Response]): Future[Response] = {
       val cache = js.Dynamic.global.caches.default
       val key = js.Dynamic.newInstance(js.Dynamic.global.Request)(url.toString(), r)
@@ -90,7 +80,7 @@ object PublicRoutes {
           val rows = text.split("\n", -1)
           val modified = if rows.length > 1 then date(rows(0), true) else new js.Date()
           val lines = rows.drop(1).map(row => trim(row).split("<>", -1)).filter(validHead)
-          lines.foldLeft(Future.successful("")) { (acc, f) => acc.flatMap(s => board(e, f(0)).getRemoved().toFuture.map(removed => s + (if removed.contains(f(3)) then "" else f.take(5).mkString("<>") + "\n"))) }.map(text => Responses.plain(text, "plain", modified = modified, extra = js.Dictionary("cache-control" -> "no-store")))
+          lines.foldLeft(Future.successful("")) { (acc, f) => acc.flatMap(s => board(e, f(0)).getRemoved().toFuture.map(removed => s"$s${if removed.contains(f(3)) then "" else s"${f.take(5).mkString("<>")}\n"}")) }.map(text => Responses.plain(text, "plain", modified = modified, extra = js.Dictionary("cache-control" -> "no-store")))
       }
     } else {
       val route = RouteTable.publicPatterns.iterator.map { (kind, regex) => (kind, new js.RegExp(regex).exec(path)) }.find(_._2 != null)
@@ -124,7 +114,7 @@ object PublicRoutes {
             }
             case "archive" | "archives" =>
               val single = kind == "archive"
-              val prefix = if single then matched(2).get + "/" else ""
+              val prefix = if single then s"${matched(2).get}/" else ""
               val canonical = s"/$bbs/kako/${prefix}subject.txt"
               def work = guard(canonical) {
                 val removedF = if single then board(e, bbs).getRemoved().toFuture else Future.successful(js.Array[String]())
@@ -140,22 +130,12 @@ object PublicRoutes {
                 }}
               }
               if single then work else cached(work)
-            case "head" | "settings" | "board" =>
-              // 板トップは webclient=3chiko (cookie/クエリ) 指定時のみ3chiko.htmlを返す。専ブラは板名取得の
-              // ためこのURLへアクセスするため、既定では従来どおり専ブラ用の板名ページを返す(main.js準拠)。
-              // TODO: UAのMonazillaで振り分けるよう修正
-              if kind == "board" && webclientParam() == "3chiko" then view3chiko(e, url, r)
-              else {
-                val file = if kind == "head" then "head.txt" else "SETTING.TXT"
-                guard(s"/$bbs/$file") {
-                  read(e, s"$bbs/$file").map { stored =>
-                    val text = stored.getOrElse(if kind == "head" then "" else PostingText.settingTxtDefault)
-                    val settings = if kind == "head" then text else text.replace("<DIR_NAME>", bbs)
-                    if kind != "board" then Responses.plain(settings, "plain", "Shift_JIS") else {
-                      val title = trim(settings).split("\n", -1).map(_.split("=", -1)).find(_(0) == "BBS_TITLE").map(f => trim(f.lift(1).getOrElse(""))).getOrElse(bbs + "＠3ch掲示板")
-                      RendererShell.legacyReact(BoardPage.render(title, bbs), doctype = true)
-                    }
-                  }
+            case "head" | "settings" =>
+              val file = if kind == "head" then "head.txt" else "SETTING.TXT"
+              guard(s"/$bbs/$file") {
+                read(e, s"$bbs/$file").map { stored =>
+                  val text = stored.getOrElse(if kind == "head" then "" else PostingText.settingTxtDefault)
+                  Responses.plain(if kind == "head" then text else text.replace("<DIR_NAME>", bbs), "plain", "Shift_JIS")
                 }
               }
             case _ => Future.successful(notFound(path))

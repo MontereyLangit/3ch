@@ -3,13 +3,13 @@ package ch3s.bbs.handler
 import munit.FunSuite
 import ch3s.bbs.durable.DurableTestKit
 import ch3s.bbs.durable.DurableTestKit.Env
+import ch3s.bbs.handler.HandlerTestKit.*
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
 /** 公開ルート（`PublicRoutes.fetch`）の現仕様固定。KB-nn は docs/既知不具合台帳.md を参照。 */
 class PublicRoutesSuite extends FunSuite {
-  import HandlerTestKit.*
 
   override def beforeEach(context: BeforeEach): Unit = installCaches()
   override def afterEach(context: AfterEach): Unit = restoreCaches()
@@ -24,7 +24,7 @@ class PublicRoutesSuite extends FunSuite {
   )
 
   private def get(env: Env, path: String, headers: (String, String)*): Future[js.Dynamic] =
-    fut[js.Dynamic](PublicRoutes.fetch(request("http://x" + path, headers), env.worker, ctx))
+    fut[js.Dynamic](PublicRoutes.fetch(request(s"http://x$path", headers), env.worker, ctx))
 
   private def createThread(env: Env, bbs: String, key: String, title: String = "title", message: String = "hello", date: String = "2026/09/22(火) 12:00:00"): Future[Unit] =
     env.thread(s"$bbs/$key").addRes(s"name<><>$date<>$message<>$title", "1<>log",
@@ -46,12 +46,12 @@ class PublicRoutesSuite extends FunSuite {
       body <- bytes(res)
     } yield {
       assertEquals(status(res), 200)
-      assertEquals(header(res, "content-type"), Some("text/plain;charset=Shift_JIS"))
-      assertEquals(header(res, "cache-control"), Some("no-store"))
-      assertEquals(header(res, "s-maxage"), Some("1"))
-      assertEquals(header(res, "accept-ranges"), Some("bytes"))
+      assertEquals(header(res, "content-type"), Option("text/plain;charset=Shift_JIS"))
+      assertEquals(header(res, "cache-control"), Option("no-store"))
+      assertEquals(header(res, "s-maxage"), Option("1"))
+      assertEquals(header(res, "accept-ranges"), Option("bytes"))
       assertEquals(body, DatBoard1SjisBytes)
-      assertEquals(header(res, "content-length"), Some(DatBoard1SjisBytes.length.toString))
+      assertEquals(header(res, "content-length"), Option(DatBoard1SjisBytes.length.toString))
     }
   }
 
@@ -64,7 +64,7 @@ class PublicRoutesSuite extends FunSuite {
       body <- text(res)
     } yield {
       assertEquals(status(res), 404)
-      assertEquals(header(res, "content-type"), Some("text/html;charset=UTF-8"))
+      assertEquals(header(res, "content-type"), Option("text/html;charset=UTF-8"))
       assert(body.contains("/board1/dat/1800000001.dat"))
     }
   }
@@ -83,9 +83,9 @@ class PublicRoutesSuite extends FunSuite {
       body <- bytes(res)
     } yield {
       assertEquals(status(res), 206)
-      assertEquals(header(res, "content-range"), Some(s"bytes 5-${total - 1}/$total"))
-      assertEquals(header(res, "content-length"), Some((total - 5).toString))
-      assertEquals(header(res, "accept-ranges"), Some("bytes"))
+      assertEquals(header(res, "content-range"), Option(s"bytes 5-${total - 1}/$total"))
+      assertEquals(header(res, "content-length"), Option((total - 5).toString))
+      assertEquals(header(res, "accept-ranges"), Option("bytes"))
       // ヘッダだけでなく本文バイト自体も正しい範囲であることを検証する(ヘッダは合っていて
       // 本文の切り出しが間違っている移植ミスを検知するため)。
       assertEquals(body, DatBoard1SjisBytes.drop(5))
@@ -100,8 +100,8 @@ class PublicRoutesSuite extends FunSuite {
       body <- bytes(res)
     } yield {
       assertEquals(status(res), 206)
-      assertEquals(header(res, "content-range"), Some("bytes 2-5/46"))
-      assertEquals(header(res, "content-length"), Some("4"))
+      assertEquals(header(res, "content-range"), Option("bytes 2-5/46"))
+      assertEquals(header(res, "content-length"), Option("4"))
       assertEquals(body, DatBoard1SjisBytes.slice(2, 6))
     }
   }
@@ -113,7 +113,7 @@ class PublicRoutesSuite extends FunSuite {
       res <- get(env, "/board1/dat/1800000004.dat", "range" -> "bytes=99999-")
     } yield {
       assertEquals(status(res), 416)
-      assertEquals(header(res, "content-range"), Some("bytes */46"))
+      assertEquals(header(res, "content-range"), Option("bytes */46"))
     }
   }
 
@@ -127,7 +127,7 @@ class PublicRoutesSuite extends FunSuite {
       assertEquals(status(res), 400)
       assertEquals(body, "Bad Range Header")
       // Response(text, {status}) の既定content-typeがそのまま出る（アプリ側では明示していない）。
-      assertEquals(header(res, "content-type"), Some("text/plain;charset=UTF-8"))
+      assertEquals(header(res, "content-type"), Option("text/plain;charset=UTF-8"))
     }
   }
 
@@ -147,7 +147,7 @@ class PublicRoutesSuite extends FunSuite {
       res2 <- get(env, "/board1/dat/1800000007.dat", "if-modified-since" -> oneSecondLater)
     } yield {
       assertEquals(status(res2), 304)
-      assertEquals(header(res2, "last-modified"), Some(lm))
+      assertEquals(header(res2, "last-modified"), Option(lm))
       assertEquals(header(res2, "content-type"), None)
     }
   }
@@ -177,7 +177,7 @@ class PublicRoutesSuite extends FunSuite {
       _ <- createThread(env, "board1", "1800000008")
       _ <- putModifiedAt(env, "board1", "1800000008", fixedPast) // addRes直後のmodifiedAtを過去日時に差し替える
       res <- get(env, "/board1/dat/1800000008.dat")
-    } yield assertEquals(header(res, "last-modified"), Some(new js.Date(fixedPast).toUTCString()))
+    } yield assertEquals(header(res, "last-modified"), Option(new js.Date(fixedPast).toUTCString()))
   }
 
   test("dat: modifiedAtが未設定の場合のみ、datの最終行の日付文字列がLast-Modifiedのフォールバックとして使われる") {
@@ -188,7 +188,7 @@ class PublicRoutesSuite extends FunSuite {
       _ <- createThread(env, "board1", "1800000108", date = "2021/03/04(木) 09:08:07")
       _ <- env.threadInstance("board1/1800000108").state.storage.delete("modifiedAt").toFuture
       res <- get(env, "/board1/dat/1800000108.dat")
-    } yield assertEquals(header(res, "last-modified"), Some(new js.Date("2021/03/04(木) 09:08:07").toUTCString()))
+    } yield assertEquals(header(res, "last-modified"), Option(new js.Date("2021/03/04(木) 09:08:07").toUTCString()))
   }
 
   test("dat: editRes後はRange/If-Modified-Sinceを無視して全文200を返す") {
@@ -210,11 +210,11 @@ class PublicRoutesSuite extends FunSuite {
       body <- bytes(res)
     } yield {
       assertEquals(status(res), 200)
-      assertEquals(header(res, "content-type"), Some("text/plain;charset=Shift_JIS"))
+      assertEquals(header(res, "content-type"), Option("text/plain;charset=Shift_JIS"))
       // 仕様書は "max-age=5, s-maxage=1" と記載しているが、実際にはCache-Controlヘッダではなく
       // 生の "max-age" / "s-maxage" という独自ヘッダ名で出力される（11章記載の既知の不具合）。
-      assertEquals(header(res, "max-age"), Some("5"))
-      assertEquals(header(res, "s-maxage"), Some("1"))
+      assertEquals(header(res, "max-age"), Option("5"))
+      assertEquals(header(res, "s-maxage"), Option("1"))
       assertEquals(header(res, "cache-control"), None)
       assertEquals(body, sjisBytes("1800000010.dat<>AAA (3)\n"))
     }
@@ -231,8 +231,9 @@ class PublicRoutesSuite extends FunSuite {
     }
   }
 
-  test("KB-06: subject.txt: 既知の不具合 — lastModifiedが常にnew Date()のため、前回のLast-Modifiedを" +
-    "If-Modified-Sinceに送っても304にならず200が返る（専ブラの定期巡回が軽減されない）") {
+  test(
+    """KB-06: subject.txt: 既知の不具合 — lastModifiedが常にnew Date()のため、
+      |前回のLast-ModifiedをIf-Modified-Sinceに送っても304にならず200が返る（専ブラの定期巡回が軽減されない）""".stripMargin) {
     // グローバルDateをミリ秒≠0に固定して決定論的にする（ミリ秒が偶然0だと304になりフレーキーになるため）。
     withFixedTime(js.Date.UTC(2024, 0, 1, 0, 0, 30, 500)) {
       val env = DurableTestKit.newEnv()
@@ -282,7 +283,7 @@ class PublicRoutesSuite extends FunSuite {
       body <- sjisText(res)
     } yield {
       assertEquals(status(res), 200)
-      assertEquals(header(res, "content-type"), Some("text/plain;charset=Shift_JIS"))
+      assertEquals(header(res, "content-type"), Option("text/plain;charset=Shift_JIS"))
       assert(body.split("\n", -1).contains("BBS_TITLE=board1＠3ch掲示板"))
     }
   }
@@ -310,7 +311,7 @@ class PublicRoutesSuite extends FunSuite {
       body <- bytes(res)
     } yield {
       assertEquals(status(res), 200)
-      assertEquals(header(res, "content-type"), Some("text/plain;charset=Shift_JIS"))
+      assertEquals(header(res, "content-type"), Option("text/plain;charset=Shift_JIS"))
       assertEquals(body, sjisBytes("ローカルルールです"))
     }
   }
@@ -326,26 +327,7 @@ class PublicRoutesSuite extends FunSuite {
     }
   }
 
-  // ---------- 5. /{bbs}/ , /{bbs}/index.html ----------
-
-  for (path <- List("/board1/", "/board1/index.html")) {
-    test(s"板トップ $path: BBS_TITLEを埋め込んだShift_JIS HTML") {
-      val env = DurableTestKit.newEnv()
-      for {
-        res <- get(env, path)
-        html <- sjisText(res)
-      } yield {
-        assertEquals(status(res), 200)
-        assertEquals(header(res, "content-type"), Some("text/html;charset=Shift_JIS"))
-        // type="html"なのでLast-Modified/Accept-Rangesは付与されない（type==="plain"のときだけ付与)
-        assertEquals(header(res, "last-modified"), None)
-        assertEquals(header(res, "accept-ranges"), None)
-        assert(html.contains("<title>board1＠3ch掲示板</title>"))
-      }
-    }
-  }
-
-  // ---------- 5b. 3chiko.html統合 ----------
+  // ---------- 5. 3chiko.html統合 ----------
 
   private def assert3chiko(res: js.Dynamic): Future[Unit] = {
     assertEquals(status(res), 200)
@@ -366,26 +348,6 @@ class PublicRoutesSuite extends FunSuite {
     }
   }
 
-  test("板トップ /{bbs}/?webclient=3chiko: クエリ指定で3chiko.htmlを返す") {
-    get(DurableTestKit.newEnv(), "/board1/?webclient=3chiko").flatMap(assert3chiko)
-  }
-
-  test("板トップ /{bbs}/: webclient=3chiko cookieでも3chiko.htmlを返す") {
-    get(DurableTestKit.newEnv(), "/board1/", "cookie" -> "webclient=3chiko").flatMap(assert3chiko)
-  }
-
-  test("板トップ /{bbs}/: webclient指定が無ければ従来どおり専ブラ用HTMLのまま") {
-    for {
-      res <- get(DurableTestKit.newEnv(), "/board1/")
-      html <- sjisText(res)
-    } yield {
-      assertEquals(status(res), 200)
-      assertEquals(header(res, "content-type"), Some("text/html;charset=Shift_JIS"))
-      assert(html.contains("<title>board1＠3ch掲示板</title>"))
-      assert(html.contains("href=\"/admin/board?bbs=board1\""))
-    }
-  }
-
   // ---------- 6. /bbsmenu.html ----------
 
   test("bbsmenu.html: R2にbbsmenu.htmlがあればcache-control:no-storeで直接返す") {
@@ -396,7 +358,7 @@ class PublicRoutesSuite extends FunSuite {
       body <- bytes(res)
     } yield {
       assertEquals(status(res), 200)
-      assertEquals(header(res, "cache-control"), Some("no-store"))
+      assertEquals(header(res, "cache-control"), Option("no-store"))
       assertEquals(body, sjisBytes("<html>custom menu</html>"))
     }
   }
@@ -409,8 +371,8 @@ class PublicRoutesSuite extends FunSuite {
       html <- sjisText(res)
     } yield {
       assertEquals(status(res), 200)
-      assertEquals(header(res, "max-age"), Some("60"))
-      assertEquals(header(res, "s-maxage"), Some("60"))
+      assertEquals(header(res, "max-age"), Option("60"))
+      assertEquals(header(res, "s-maxage"), Option("60"))
       assertEquals(header(res, "cache-control"), None)
       assert(html.contains("Board One"))
     }
@@ -430,8 +392,8 @@ class PublicRoutesSuite extends FunSuite {
       body <- bytes(res)
     } yield {
       assertEquals(status(res), 200)
-      assertEquals(header(res, "content-type"), Some("text/plain;charset=UTF-8"))
-      assertEquals(header(res, "cache-control"), Some("no-store"))
+      assertEquals(header(res, "content-type"), Option("text/plain;charset=UTF-8"))
+      assertEquals(header(res, "cache-control"), Option("no-store"))
       assertEquals(body, utf8Bytes("board1<>Board One<>1700000000<>ThreadTitle<>lastmsg\n"))
     }
   }
@@ -449,8 +411,8 @@ class PublicRoutesSuite extends FunSuite {
       res1 <- get(env, "/board1/kako/1700/subject.txt")
       body1 <- text(res1)
       _ = assertEquals(status(res1), 200)
-      _ = assertEquals(header(res1, "content-type"), Some("text/plain;charset=UTF-8"))
-      _ = assertEquals(header(res1, "cache-control"), Some("no-store"))
+      _ = assertEquals(header(res1, "content-type"), Option("text/plain;charset=UTF-8"))
+      _ = assertEquals(header(res1, "cache-control"), Option("no-store"))
       _ = assertEquals(body1, "1700000001<>ThreadA<>name<>id<>date<>msg\n1700000002<>ThreadB<>name<>id<>date<>msg\n")
       _ <- env.board("board1").removeThread("1700000001").toFuture
       res2 <- get(env, "/board1/kako/1700/subject.txt")
@@ -470,9 +432,9 @@ class PublicRoutesSuite extends FunSuite {
       body <- text(res)
     } yield {
       assertEquals(status(res), 200)
-      assertEquals(header(res, "content-type"), Some("text/plain;charset=UTF-8"))
-      assertEquals(header(res, "max-age"), Some("86400"))
-      assertEquals(header(res, "s-maxage"), Some("86400"))
+      assertEquals(header(res, "content-type"), Option("text/plain;charset=UTF-8"))
+      assertEquals(header(res, "max-age"), Option("86400"))
+      assertEquals(header(res, "s-maxage"), Option("86400"))
       assertEquals(header(res, "cache-control"), None)
       assertEquals(body, "1700<>1700000000\n")
     }
@@ -486,7 +448,7 @@ class PublicRoutesSuite extends FunSuite {
       body <- bytes(res)
     } yield {
       assertEquals(status(res), 200)
-      assertEquals(header(res, "content-type"), Some("application/javascript;charset=UTF-8"))
+      assertEquals(header(res, "content-type"), Option("application/javascript;charset=UTF-8"))
       assertEquals(body, utf8Bytes("/* test */"))
     }
   }
@@ -506,7 +468,7 @@ class PublicRoutesSuite extends FunSuite {
       body <- text(res)
     } yield {
       assertEquals(status(res), 404)
-      assertEquals(header(res, "content-type"), Some("text/html;charset=UTF-8"))
+      assertEquals(header(res, "content-type"), Option("text/html;charset=UTF-8"))
       assert(body.contains("<title>Error 404</title>"))
       assert(body.contains("/unknown/path/here"))
     }
@@ -520,15 +482,15 @@ class PublicRoutesSuite extends FunSuite {
       bbs = "board1", key = "", MESSAGE = "hi", FROM = "a", mail = "", subject = "t", time = "1", submit = "書き込む"
     )).asInstanceOf[js.Any]
     def post(path: String): Future[js.Dynamic] =
-      fut[js.Dynamic](PublicRoutes.fetch(request("http://x" + path, method = "POST", body = body()), env.worker, ctx))
+      fut[js.Dynamic](PublicRoutes.fetch(request(s"http://x$path", method = "POST", body = body()), env.worker, ctx))
     for {
       res1 <- post("/test/bbs.cgi")
       _ = assertEquals(status(res1), 200)
-      _ = assertEquals(header(res1, "content-type"), Some("text/html;charset=UTF-8"))
+      _ = assertEquals(header(res1, "content-type"), Option("text/html;charset=UTF-8"))
       res2 <- post("/test/subbbs.cgi")
     } yield {
       assertEquals(status(res2), 200)
-      assertEquals(header(res2, "content-type"), Some("text/html;charset=UTF-8"))
+      assertEquals(header(res2, "content-type"), Option("text/html;charset=UTF-8"))
     }
   }
 }

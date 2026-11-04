@@ -3,17 +3,19 @@ package ch3s.bbs.handler
 import ch3s.bbs.external.cloudflare.*
 import ch3s.bbs.external.web.{Request, Response}
 import ch3s.bbs.hash.WebHash
+import ch3s.bbs.repository.BoardRepository
 import ch3s.bbs.domain.posting.{ClientIdentity, PostingContext}
 import ch3s.bbs.domain.posting.moderation.ThreadCreationRejection
-import ch3s.common.domain.{BoardId, ThreadKey}
-import ch3s.common.hash.{Md5, HexToBinary}
-import ch3s.common.crypt.UnixCrypt
 import ch3s.bbs.util.SjisEncoding
+import ch3s.common.crypt.UnixCrypt
+import ch3s.common.domain.{BbsSettings, BoardId, ThreadKey}
+import ch3s.common.hash.{HexToBinary, Md5}
+
+import scala.concurrent.Future
+import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.typedarray.Uint8Array
-import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
-import scala.concurrent.Future
 
 /**
   * bbs.cgi書き込み処理ハンドラ
@@ -94,7 +96,7 @@ object PostingHandler {
     def h(name: String) = Option(r.headers.get(name)).getOrElse("")
     if r.method != "POST" then deny(g, "POST メソッドを使ってください。<br>\nRecieve GET METHOD")
     if !h("content-type").contains("application/x-www-form-urlencoded") then deny(g, "送信された内容が破損しています。->" + h("content-type") + "<br>\nBroken request body. ")
-    if !matches(h("referer"), "^https?://www\\.3chbbs\\.com") && !matches(h("referer"), "^http://127\\.0\\.0\\.1:8787") then deny(g, "ERROR: あなた騙されてますよ？->" + h("referer") + "<br>\nReferer is invalid.")
+    if !matches(h("referer"), "^https?://www\\.3chbbs\\.com") && !matches(h("referer"), "^http://127\\.0\\.0\\.1:878[78]") then deny(g, "ERROR: あなた騙されてますよ？->" + h("referer") + "<br>\nReferer is invalid.")
     val ua = str(g.userAgent)
     if ua.length < 7 || ua.length > 384 || matches(ua, "[^ -~]") then deny(g, "ERROR: ブラウザ変ですよん。(ua)<br>UserAgent: " + ua + "<br>\nUserAgent is invalid.")
     g.userAgent = ua + Option(r.headers.get("sec-ch-ua-full-version-list")).getOrElse(h("sec-ch-ua"))
@@ -202,16 +204,12 @@ object PostingHandler {
       trip.map(t => { g.tripString = t; g.form.FROM = str(g.form.FROM) + s" </b>◆$t</b>" })
     }
 
-  private def parseSettings(target: js.Dynamic, text: String, separator: String): Unit =
-    trim(text).split(separator, -1).foreach { pair =>
-      val parts = pair.split("=", -1)
-      if parts(0).nonEmpty then target.updateDynamic(parts(0))(trim(parts.lift(1).getOrElse("")))
-    }
   private def boardSettings(g: js.Dynamic, e: WorkerEnv): Future[Unit] = guarded(g, "getBoardSettings", "不明なエラーが発生しました。", "time") {
-    e.ch3www.get(str(g.form.bbs) + "/SETTING.TXT").toFuture.flatMap(o => if o == null then Future.successful(PostingText.settingTxtDefault) else o.text().toFuture).map { text =>
-      parseSettings(g.settings, replace(text, "<DIR_NAME>", str(g.form.bbs)), "\n")
+    val board = BoardId.create(str(g.form.bbs)).fold(_ => deny(g, "板の指定が不正です。<br>\nThe board directory is incorrect..."), identity)
+    BoardRepository.getBoardSettings(board, e).map { boardSettings =>
+      g.settings = boardSettings.value.toJSDictionary.asInstanceOf[js.Dynamic]
       g.boardSettings = g.settings
-      g.boardSettingsText = text
+      g.boardSettingsText = boardSettings.toString
     }
   }
   private def threadSettings(g: js.Dynamic, e: WorkerEnv): Future[Unit] = {
@@ -231,7 +229,7 @@ object PostingHandler {
           g.subject = lines(0).split("<>", -1).last
           if !truth(g.subject) then deny(g, "スレッドのログファイルが壊れています。(タイトル取得失敗)")
           g.number = lines.length
-          if settings.nonEmpty then parseSettings(g.settings, settings, "<>")
+          BbsSettings.parse(settings, "<>").value.foreach((k, v) => g.settings.updateDynamic(k)(v))
           if lines.length >= 1000 then deny(g, "このスレッドは1000を超えたのでもう書けません。")
           if eq(g.settings.BBS_HEISA, "checked") then deny(g, "この板・スレッドは停止されています。")
         }

@@ -77,7 +77,7 @@ class PostingHandlerSuite extends FunSuite {
     }
   }
 
-  test("React confirmation keeps the cookie marker, Shift_JIS and preescaped form fragments") {
+  test("React版確認画面はcookieマーカー・Shift_JIS・エスケープ済みフォーム断片を保持する") {
     val g = js.Dynamic.literal(form = js.Dynamic.literal(
       subject = "題名 &lt;test&gt;", FROM = "名前 &amp;", mail = "a&amp;b", MESSAGE = "本文 &lt;script&gt;<br>次行"
     ))
@@ -359,6 +359,16 @@ class PostingHandlerSuite extends FunSuite {
     }
   }
 
+  test("checkRequest: ローカル開発用の Referer は 127.0.0.1:8787 と 8788 を許可し、他のポートは拒否する") {
+    val accepted = List("http://127.0.0.1:8787/", "http://127.0.0.1:8788/sample/")
+    Future.traverse(accepted)(referer => post(DurableTestKit.newEnv(), headers = Seq("referer" -> referer))).flatMap { results =>
+      results.foreach(p => assertEquals(header(p.res, "x-resnum"), Some("1")))
+      post(DurableTestKit.newEnv(), headers = Seq("referer" -> "http://127.0.0.1:8789/")).map { p =>
+        assertEquals(errorMessage(p.text), Some("ERROR: あなた騙されてますよ？->http://127.0.0.1:8789/<br>\nReferer is invalid."))
+      }
+    }
+  }
+
   test("KB-24: checkRequest: UserAgentが7バイト未満の場合のエラー（同様に二重ERROR:）") {
     val env = DurableTestKit.newEnv()
     post(env, headers = Seq("user-agent" -> "abc")).map { p =>
@@ -427,7 +437,7 @@ class PostingHandlerSuite extends FunSuite {
       assert(key.nonEmpty && key.forall(_.isDigit), key)
       assertEquals(header(p.res, "x-resnum"), Some("1"))
       // Preserve the refresh target and delay across React attribute formatting.
-      assert(p.text.contains(s"""content="5;URL=/test/read.cgi/sample/$key/l50""""))
+      assert(p.text.contains(s"""content="5;URL=/test/read.cgi/sample/$key/""""))
       assert(p.text.contains("http-equiv=\"refresh\""))
     }
   }
@@ -881,6 +891,17 @@ class PostingHandlerSuite extends FunSuite {
     }
   }
 
+  test("特殊ルーティング: `-` `_` を含む・17文字以上の板名は返信でも拒否される") {
+    val env = DurableTestKit.newEnv()
+    List("bad-name", "bad_name", "a" * 17).foldLeft(Future.unit) { (acc, bbs) =>
+      acc.flatMap { _ =>
+        post(env, Seq("bbs" -> bbs, "key" -> "1800000001", "MESSAGE" -> "返信")).map { p =>
+          assertEquals(errorMessage(p.text), Some("板の指定が不正です。<br>\nThe board directory is incorrect..."), s"""bbs="$bbs"""")
+        }
+      }
+    }
+  }
+
   // ==================== 12. スレッド上限 ====================
 
   test("既知の不具合: dat行数が1000以上で拒否されるため実質999レスで書き込み不能になる") {
@@ -1021,6 +1042,62 @@ class PostingHandlerSuite extends FunSuite {
         "1700000000.dat<>ThreadA [ID:zxQ0miZR★] (3)\n1700000001.dat<>ThreadB [ID:zxQ0miZR★] (2)\n",
         "Math.random()===0.1はsage側(閾値ぴったりでも強制sage)"
       )
+    }
+  }
+
+  // ==================== 15. 板のSETTING.TXTが boardSettings / スレ初期設定に効く ====================
+
+  test("boardSettings: 板のBBS_TITLEがheadlineに反映される") {
+    withFixedTime(1700000000d * 1000) {
+      val env = DurableTestKit.newEnv()
+      env.putR2("titletest/SETTING.TXT", "BBS_TITLE=<DIR_NAME>の看板\n")
+      post(env, Seq("bbs" -> "titletest", "subject" -> "T", "MESSAGE" -> "first")).map { p =>
+        assertEquals(header(p.res, "x-resnum"), Some("1"))
+        assert(env.r2Text("headline.txt").exists(_.contains("\ntitletest<>titletestの看板<>")), env.r2Text("headline.txt").toString)
+      }
+    }
+  }
+
+  test("boardSettings: 板のBBS_MAX_MENU_THREADがsubjectの最大スレッド数に効く") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("maxtest/SETTING.TXT", "BBS_MAX_MENU_THREAD=2\nBBS_THREAD_TATESUGI=0\nBBS_THREAD_JUNBAN=0\n")
+    def create(ms: Double, subject: String): Future[Posted] =
+      withFixedTime(ms * 1000)(post(env, Seq("bbs" -> "maxtest", "subject" -> subject)))
+    for {
+      _ <- create(1700000000d, "S1")
+      _ <- create(1700000001d, "S2")
+      _ <- create(1700000002d, "S3")
+      subject <- env.board("maxtest").getSubject().toFuture
+    } yield {
+      assertEquals(subject.split("\n").length, 2)
+      assert(subject.contains("S3") && subject.contains("S2") && !subject.contains("S1"), subject)
+    }
+  }
+
+  test("updateThread: スレ初期設定のキー順はSETTING.TXTの記載順") {
+    withFixedTime(1700000000d * 1000) {
+      val env = DurableTestKit.newEnv()
+      env.putR2("ordertest/SETTING.TXT", "Z_LAST=1\nA_FIRST=2\nMID=3\nBBS_TITLE=t\nB_KEY=4\nY_KEY=5\n")
+      for {
+        p <- post(env, Seq("bbs" -> "ordertest", "subject" -> "O"))
+        settings <- env.thread(s"ordertest/${threadKey(p)}").getSettings().toFuture
+      } yield assertEquals(settings, "Z_LAST=1<>A_FIRST=2<>MID=3<>BBS_TITLE=t<>B_KEY=4<>Y_KEY=5<>BBS_SHIKIBETSU=off<>") // 末尾のBBS_SHIKIBETSUは投稿処理が未設定時に補う値
+    }
+  }
+
+  test("threadSettings: 返信時はスレ初期設定を板設定と同じ規則で読む（値の = を保持）") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("eqtest/SETTING.TXT", "BBS_NONAME_NAME=a=b\n")
+    for {
+      p <- post(env, Seq("bbs" -> "eqtest", "FROM" -> "", "subject" -> "EQ"))
+      _ = env.putR2("eqtest/SETTING.TXT", "BBS_NONAME_NAME=板側\n")
+      r <- post(env, Seq("bbs" -> "eqtest", "key" -> threadKey(p), "FROM" -> "", "subject" -> ""))
+      d <- dat(env, "eqtest", threadKey(p))
+    } yield {
+      assertEquals(header(r.res, "x-resnum"), Some("2"))
+      assert(fieldsOf(d)(0).startsWith("a=b "), fieldsOf(d)(0))
+      val reply = d.split("\n", -1)(1).split("<>", -1)(0)
+      assert(reply.startsWith("a=b "), reply)
     }
   }
 }

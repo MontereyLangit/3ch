@@ -1,7 +1,8 @@
 package ch3s.bbs.handler
 
-import japgolly.scalajs.react.facade.React
 import ch3s.bbs.external.web.Response
+import ch3s.bbs.util.SjisEncoding
+import japgolly.scalajs.react.facade.React
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
@@ -14,8 +15,21 @@ private object renderToStaticMarkup extends js.Function1[React.Element, String] 
 
 /** 通常画面の React シェルと、専ブラ互換の既存 HTML 応答を画面側で選択する。 */
 object RendererShell {
+  /** 完成済み文字列または React 要素を Shift_JIS 応答にする。レイアウトは付けない。 */
+  def createSjisResponse(content: String, contentType: String): Response = {
+    val bytes = SjisEncoding.encode(content)
+    Responses.response(bytes, headers = js.Dictionary(
+      "Content-Type" -> s"$contentType;charset=Shift_JIS",
+      "Content-Length" -> bytes.length.toString
+    ))
+  }
+
+  def createSjisResponse(content: React.Element, contentType: String): Response = {
+    createSjisResponse(s"<!DOCTYPE html>${renderToStaticMarkup(content)}", contentType)
+  }
+
   // wrangler dev も Vite のビルド済み Static Assets を使う。
-  val ClientScriptSrc = "/static/client.js"
+  private val ClientScriptSrc = "/static/client.js"
 
   def clientScript(src: String = ClientScriptSrc): React.Element = {
     React.createElement("script", js.Dictionary("type" -> "module", "src" -> src).asInstanceOf[js.Object])
@@ -27,11 +41,9 @@ object RendererShell {
     encoding: String = "Shift_JIS",
     modified: js.Date = new js.Date(),
     since: String = "",
-    extra: js.Dictionary[String] = js.Dictionary.empty[String],
-    doctype: Boolean = false
+    extra: js.Dictionary[String] = js.Dictionary.empty[String]
   ): Response = {
-    val prefix = if doctype then "<!DOCTYPE html>" else ""
-    legacyHtml(prefix + renderToStaticMarkup(page), encoding, modified, since, extra)
+    legacyHtml(renderToStaticMarkup(page), encoding, modified, since, extra)
   }
 
   /** 完成済み HTML のタグ・コメントを維持して応答する。投稿画面は既存の文字コード判定を渡す。 */
@@ -54,7 +66,9 @@ object RendererShell {
     )
     val script = clientScript(clientScriptSrc)
     val headChildren: Seq[React.Node] =
-      Seq[React.Node](meta.asInstanceOf[React.Node], viewport.asInstanceOf[React.Node], script.asInstanceOf[React.Node]) ++
+      Seq[React.Node](meta.asInstanceOf[React.Node], viewport.asInstanceOf[React.Node],
+        React.createElement("link", js.Dictionary("rel" -> "stylesheet", "href" -> "/static/assets/client.css").asInstanceOf[js.Object]).asInstanceOf[React.Node],
+        script.asInstanceOf[React.Node]) ++
         title.toOption.map(t => React.createElement("title", new js.Object(), t).asInstanceOf[React.Node]).toSeq
 
     val head = React.createElement("head", new js.Object(), headChildren*)

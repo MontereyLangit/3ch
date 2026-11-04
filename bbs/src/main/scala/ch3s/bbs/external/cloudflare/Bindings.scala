@@ -43,16 +43,6 @@ trait DurableObjectNamespace extends js.Object {
   def get(id: DurableObjectId): DurableObjectStub = js.native
 }
 
-/**
- * `V6PlaceholderDurableObject` の型付きRPCスタブ
- * （DO毎に必要なメンバだけを宣言するサブトレイト）
- * `/_v6/health` が`blockConcurrencyWhile` 経由のRPCを実際に呼べることの検証用
- */
-@js.native
-trait V6PlaceholderDoStub extends DurableObjectStub {
-  def ping(): js.Promise[String] = js.native
-}
-
 /** スレDO の型付きRPCスタブ */
 @js.native
 trait ThreadDoStub extends DurableObjectStub {
@@ -136,17 +126,15 @@ trait Fetcher extends js.Object {
   def fetch(request: Request): js.Promise[Response] = js.native
 }
 
-/**
- * Workers バインディング一式。`env.THREAD_DO` 等へ型付きで触るためのキャスト先。
- * TODO: `V6_PLACEHOLDER_DO` は本骨格でのみ使う検証用DO（次タスクで `THREAD_DO`/`BOARD_DO` に置き換わる）。
- */
+/** Workers バインディング一式。`env.THREAD_DO` 等へ型付きで触るためのキャスト先。 */
 @js.native
 trait WorkerEnv extends js.Object {
-  val V6_PLACEHOLDER_DO: DurableObjectNamespace = js.native
   /** v5 `thread.js` / `board.js` 移植分のバインディング（`wrangler.jsonc` 参照）。 */
   val THREAD_DO: DurableObjectNamespace = js.native
   val BOARD_DO: DurableObjectNamespace = js.native
   val ch3www: R2Bucket = js.native
   val CAP: KVNamespace = js.native
   val ASSETS: Fetcher = js.native
+  /** 板topの画像アップロード用 imgur Client-ID。未設定ならアップロード欄を出さない。 */
+  val IMGUR_CLIENT_ID: js.UndefOr[String] = js.native
 }

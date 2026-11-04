@@ -45,7 +45,7 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 ### 1.3 技術スタック（現行 v6）
 
 - **ランタイム**: Cloudflare Workers (ES Modules, `compatibility_date: 2026-08-04`。この日付以降は `nodejs_compat` が既定で有効)
-- **言語 / フレームワーク**: Scala 3 / Scala.js（`bbs/` = Worker・DO・ハンドラ、`common/` = 純粋ロジック）+ scalajs-react + HonoX + Vite。ルーティングは `common/.../routes/RouteTable.scala` から `codegen` が生成
+- **言語 / フレームワーク**: Scala 3 / Scala.js（`bbs/` = Worker・DO・ハンドラ、`common/` = 純粋ロジック）+ scalajs-react + HonoX + Vite。`codegen` は `bbs.Main` の `@route` と `bbsclient.Main` の `@islands` から配線を生成。既存 fetch の `app/routes/index.ts` は手書き
   - 管理画面はscalajs-reactのSPA。利用者向け画面はHonoX SSR (Islands)
 - **状態管理**: Durable Objects — `Board`（板: スレ一覧 / 削除済み一覧）, `Thread`（スレ: dat / log / settings / hidden / stopped / movedTo）
 - **オブジェクトストレージ**: R2 `ch3www`（`SETTING.TXT`, `head.txt`, `bbsmenu.html`, `headline.txt`, `deny.cgi`, `ngwords.cgi`, 過去ログ `.cgi`）
@@ -61,14 +61,14 @@ bbs/
     Main.scala         Worker エントリ（JSExportTopLevel）
     handler/           PublicRoutes（dat, subject.txt, SETTING.TXT, bbsmenu 等）, Posting（投稿パイプライン）,
                        Moderation, AdminHandler（/admin/*）, Responses
-    durable/           Board DO, Thread DO（V6PlaceholderDurableObject は骨格確認用の残り）
+    durable/           Board DO, Thread DO
     external/cloudflare/  Workers / DO / R2 / KV の facade
     hash/, util/       Web Crypto ハッシュ, Shift_JIS 変換
   src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
   test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ
 bbs-client/            クライアント側（hydration）Scala
-codegen/               RouteTable.scala から app/routes/ を生成
-app/                   HonoX（server.ts がエントリ。routes/ は生成物）
+codegen/               Main の @route / @islands から app/routes/・app/islands/・bbs の IslandComponents を生成
+app/                   HonoX（server.ts がエントリ。routes/index.ts と _renderer.tsx は手書き）
 public/
   3chiko.html          3chiko.html本体。Vite の publicDir として dist/ へコピーされ Workers Static Assets で配信
 tests/                 実workerdを使う統合テスト（要 dist/）用ディレクトリ。admin.integration.test.js（実 workerd）。golden/ は言語中立の入出力表（Scala 側が読む）
@@ -92,7 +92,7 @@ npm ci                 # 依存導入
 npm run v6:build       # sbt codegen/run → vite build（client / workers）→ dist/
 npm run dev            # v6:build 後に wrangler dev --config wrangler.jsonc → http://127.0.0.1:8787
 sbt test               # 単体テスト/現仕様固定テスト（munit。golden 照合を含む）
-npm test               # 実 workerd を使う統合テストのみ（要 dist/）
+npm test               # Scala テスト用リンク → workerd 統合・Islands SSR/hydration 検証（要 dist/）
 npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc --minify
 ```
 

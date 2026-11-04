@@ -4,7 +4,7 @@ class GenerateDurableObjectTypesSuite extends munit.FunSuite {
   private def render(source: String): String =
     GenerateDurableObjectTypes.render(Seq("Example.scala" -> source))
 
-  test("export names and multiline constructor declarations follow the Scala source") {
+  test("export名と複数行のコンストラクタ宣言はScalaソースに従う") {
     val result = render("""
       // @JSExportTopLevel("NotAClass", "server")
       @JSExportTopLevel(
@@ -28,7 +28,7 @@ class GenerateDurableObjectTypesSuite extends munit.FunSuite {
     assert(!result.contains("InternalBoard"))
   }
 
-  test("other modules and non-exported classes do not leak into the declarations") {
+  test("他モジュールや非exportのクラスは型定義に漏れない") {
     val result = render("""
       class Helper
       @JSExportTopLevel("Client", "client")
@@ -38,7 +38,7 @@ class GenerateDurableObjectTypesSuite extends munit.FunSuite {
     assert(!result.contains("export class"))
   }
 
-  test("regeneration drops removed classes and is independent of file ordering") {
+  test("再生成は削除されたクラスを落とし、ファイル順に依存しない") {
     def source(name: String): (String, String) = name ->
       s"""@JSExportTopLevel("$name", "server")
       class $name(state: DurableObjectState, env: js.Any) extends DurableObject(state, env)"""
@@ -47,14 +47,14 @@ class GenerateDurableObjectTypesSuite extends munit.FunSuite {
     assert(!GenerateDurableObjectTypes.render(sources.tail).contains("class Z"))
   }
 
-  test("unsupported parameter types fail instead of silently weakening the declaration") {
+  test("未対応の引数型は型定義を黙って弱めず失敗する") {
     intercept[IllegalArgumentException] {
       render("""@JSExportTopLevel("Board", "server")
         class Board(state: DurableObjectState, env: NewEnvironment) extends DurableObject(state, env)""")
     }
   }
 
-  test("duplicate exports and nonliteral names are rejected") {
+  test("exportの重複と非リテラルの名前は拒否される") {
     val source = """@JSExportTopLevel("Board", "server")
       class Board(state: DurableObjectState, env: js.Any) extends DurableObject(state, env)"""
     intercept[IllegalArgumentException] {

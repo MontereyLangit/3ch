@@ -1,5 +1,5 @@
 import path from "node:path";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import honox from "honox/vite";
 import buildCloudflareWorkers, {
   defaultOptions as cloudflareWorkersDefaultOptions,
@@ -7,15 +7,25 @@ import buildCloudflareWorkers, {
 import scalaJSPlugin from "@scala-js/vite-plugin-scalajs";
 import tailwindcss from "@tailwindcss/vite";
 
-const scalaCwd = path.resolve(__dirname);
+const scalaCwd = path.resolve(import.meta.dirname);
+
+function scalaProject(projectID: string, uriPrefix?: string): Plugin {
+  const plugin = scalaJSPlugin({ cwd: scalaCwd, projectID, uriPrefix });
+  const buildStart = plugin.buildStart;
+  if (buildStart) {
+    plugin.buildStart = {
+      sequential: true,
+      handler:
+        typeof buildStart === "function" ? buildStart : buildStart.handler,
+    };
+  }
+  return plugin;
+}
 
 export default defineConfig(({ mode }) => {
   if (mode === "client") {
     return {
-      plugins: [
-        tailwindcss(),
-        scalaJSPlugin({ cwd: scalaCwd, projectID: "bbsClient" }),
-      ],
+      plugins: [tailwindcss(), scalaProject("bbsClient")],
       build: {
         rollupOptions: {
           input: ["./app/client.ts"],
@@ -35,17 +45,21 @@ export default defineConfig(({ mode }) => {
   const entryContentAfterHooks = [
     ...(cloudflareWorkersDefaultOptions.entryContentAfterHooks ?? []),
     () =>
-      `export { V6PlaceholderDurableObject, Board, Thread } from '/app/server.ts'`,
+      `export { Board, Thread } from '/app/server.ts'`,
   ];
 
   return {
+    resolve: {
+      alias: { "scalajs:client.js": "scalajs-client:client.js" },
+    },
     plugins: [
-      honox(),
+      honox({ islandComponents: { reactApiImportSource: "react" } }),
       buildCloudflareWorkers({
         external: ["cloudflare:workers"],
         entryContentAfterHooks,
       }),
-      scalaJSPlugin({ cwd: scalaCwd, projectID: "bbs" }),
+      scalaProject("bbs"),
+      scalaProject("bbsClient", "scalajs-client"),
     ],
   };
 });
