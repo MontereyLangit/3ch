@@ -81,7 +81,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 
 **B. 認証・登録ページ**（`/auth/`）
 - 板トップ・read.cgi のリンク、および bbs.cgi の認証要求エラー（§3.5）に載せる URL から開く。`return` クエリで戻り先を持つ（同一オリジンのパスのみ許可）。
-- 専ブラ利用者は、ログイン後のアカウントメニュー（`/auth/account`）で専ブラ用認証キーを発行し、専ブラの初回投稿でメール欄に `!#{キー}` を入れる（§6.3）。サーバは照合に成功したら `Set-Cookie` を返し、以後は Cookie で認証済として扱う。
+- 専ブラ利用者は、ログイン後のアカウントメニュー（`/auth/account`）で専ブラ用認証キーを発行し、専ブラの初回投稿でメール欄に `!#{キー}` を入れる（§6.3）。キーは最初に使った専ブラの UA に紐づく。サーバは照合に成功したら `Set-Cookie` を返し、以後は同じ UA からの Cookie で認証済として扱う。
 
 **現行 `3chiko.html` の扱い**: ロジックを変えない方針のため、Web 版の投稿で未認証なら bbs.cgi が `/auth/?return=...` へのリンク付きエラー（HTTP 200 ＋ `<!-- 2ch_X:error -->`）を返す。モーダルは step 4 の新 UI で実装する。
 
@@ -90,7 +90,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 | 項目 | 値 |
 | --- | --- |
 | 名前 | `__Host-ch3s_sid`（host-only。`Domain` を付けない） |
-| 値 | `1.{aid}.{uid}.{gen}.{exp}.{lv}.{dev}.{sig}`。`gen` はアカウントの世代番号、`exp` は失効 UNIX 秒、`lv` は発行時点の Lv（表示用の写し）、`dev` は端末ハッシュ（粒度 1 字＋18 hex。無ければ空）、`sig` は `AUTH_SECRET` による HMAC-SHA256 の先頭 128 bit（base64url） |
+| 値 | `1.{aid}.{uid}.{gen}.{exp}.{lv}.{dev}.{bind}.{sig}`。`bind` は専ブラ用認証キーで発行したときだけ `t:{tokenId}:{UA ハッシュ先頭 16 文字}`（§6.3）、それ以外は空。`gen` はアカウントの世代番号、`exp` は失効 UNIX 秒、`lv` は発行時点の Lv（表示用の写し）、`dev` は端末ハッシュ（粒度 1 字＋18 hex。無ければ空）、`sig` は `AUTH_SECRET` による HMAC-SHA256 の先頭 128 bit（base64url） |
 | 属性 | `Path=/; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax`。**HTTPS の要求にだけ発行する**（HTTP で来た専ブラのキー認証は「HTTPS で接続してください」で拒否）。開発環境は `http://localhost:8787` で確認する（主要ブラウザは localhost を安全なコンテキストとして `Secure` Cookie を受け付ける。`127.0.0.1` では付かない場合がある） |
 | 検証 | bbs.cgi: 署名 → `exp` → `Account.describeForPosting(aid, gen)` で `gen` 一致・状態（active / frozen / banned）・Lv・権限を得る。DO 呼び出しは投稿 1 回につき 1 回。DO の Lv が Cookie の `lv` と違えば応答で Cookie を発行し直す。SSR 画面（板 top・read.cgi）: 署名と `exp` だけ見て `uid` と `lv` を表示に使い、DO は呼ばない（`SessionReader`、§3.8） |
 | 失効 | ログアウト・パスワード変更・再設定・方式移行・退会・管理者の凍結はいずれも `gen` を進める（全端末のセッションが無効になる。端末ごとの失効は持たない）。クライアント ID は `exp` ＝発行＋365 日 |
@@ -104,8 +104,8 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 優先順は次のとおり。最初に当たったものを採用し、残りは見ない。
 
 1. メール欄の `#パスワード` がキャップに一致 → **キャップの所有アカウントとしてログイン扱い**。所有者のない旧キャップは「権限 `cap` だけの仮主体」で、認証済として扱い、`BBS_PHOEBE` ゲート（§4.4）と Lv 判定の対象外（現行の「キャップは全規制スルー」に準じる）。
-2. メール欄の `!#{キー}` が専ブラ認証キーに一致 → そのアカウント。`Set-Cookie` を返す。
-3. 有効なセッション Cookie → そのアカウント。
+2. メール欄の `!#{キー}` が専ブラ認証キーに一致し、UA の判定（§6.3）を通る → そのアカウント。`Set-Cookie` を返す。拒否なら書き込みも拒否し（HTTP 200 ＋ エラーマーカー）、3 以降は見ない。
+3. 有効なセッション Cookie → そのアカウント。キーから発行した Cookie は UA の一致とキーの有効性も確かめる（§6.3）。
 4. いずれもない → 未ログイン（L0）。
 
 メール欄からは `#...`・`!#...`・`!auth` を取り除いてから sage 判定に使う（dat には保存されないので表示影響なし）。ログイン済で `!auth` を付けた場合は無視して通常投稿にする。
@@ -429,10 +429,65 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 
 ### 6.3 専ブラ用認証キー
 
-- 形式: `!#` ＋ 20 文字 `[a-z2-7]`（100 bit）。アカウントにつき有効なキーは 1 つ。再発行で旧キーは失効。
-- 保存は `AccountIndex("token")`（`SHA-256(キー + salt)` → `aid`）と `Account.token`＝`{hash, issuedAt, revokedAt}`。平文は発行画面で 1 度だけ表示する。
-- 専ブラの初回投稿でメール欄に入れる。一致したら `Set-Cookie` を返し、以後は Cookie（§3.3）で認証する。利用ログは §6.2 と同じ形で `kind: "token"`。
-- キャップ利用者は不要（キャップでログイン扱いになるため）。
+**方針（2026-11-05 利用者指示）**: 不正利用と荒らしを防ぐため、キーは UA（User-Agent）ごとに使わせる。
+
+- キーを最初に使った UA を記録し（紐づけ）、以後は異なる UA からは使わせない。
+- 1 つのアカウントで、同じ UA に紐づくキーは 1 個だけにする。同じ UA で別のキーが使われたら、前のキーを無効にする。
+
+**形式と発行**
+
+- 形式は `!#` ＋ 20 文字 `[a-z2-7]`（100 bit）。平文は発行画面で 1 度だけ表示する。
+- キーは Web（`/auth/account`）で発行し専ブラで使うので、発行した時点では UA が決まらない。発行したキーは「未使用」で、最初に使われた時点でその UA に紐づく。
+- 未使用のキーは同時に 1 個まで。新しく発行すると、前の未使用キーは無効になる。発行から 24 時間使われなければ失効する。
+- 紐づいたキーは 1 アカウントにつき最大 5 個（5 つの UA）。上限に達した状態で 6 つ目の UA に紐づけようとすると拒否し、アカウント設定で不要なキーを無効にしてもらう（§13-31）。
+
+**UA の扱い**
+
+- 照合するのは要求の `User-Agent` ヘッダそのもの（前後の空白だけ除く）。現行の `g.userAgent` は Client Hints を後ろに付け足すので使わない。
+- 保存するのは `HMAC-SHA256(AUTH_SECRET, "token-ua:" + UA)` だけで、生の UA は保存しない。アカウント設定に出すため、`UserAgentProfile`（§5.2）で解析した表示名（例: `JaneStyle 4.23 · Windows`）を一緒に残す。
+- 比較は完全一致。専ブラを更新して UA の版番号が変わると同じキーは使えなくなり、新しいキーの発行が要る（§13-30）。
+- 受け付けるのは専ブラ（現行の `isMonazilla`）からの書き込みだけ。Web ブラウザはログインで認証する（§13-32）。
+- キー認証は HTTPS の要求に限る（§3.3）。
+
+**使ったときの判定**
+
+判定は `domain/account/DedicatedBrowserTokens` の純粋関数 `use(tokens, tokenId, uaHash, now)` が行い、`Account.useToken` が `blockConcurrencyWhile` の中で読込 → 判定 → 保存する（AGENTS.md 3.3）。同じアカウントへの同時の使用も直列になる。
+
+| キーの状態 | 結果 |
+| --- | --- |
+| 未使用・期限内 | 許可し、この UA に紐づける。**同じ UA に紐づく別の有効なキーがあれば無効にする**（理由 `superseded`） |
+| 紐づき済み・UA が一致 | 許可し、最終利用時刻を更新する |
+| 紐づき済み・UA が不一致 | 拒否（`auth:token:ua-mismatch`）。キーは無効にしない（漏れたキーを他人が試しただけで正規の利用者のキーが止まらないようにする）。利用ログに残し、アカウント設定に「別の専用ブラウザから使われそうになりました」と出す |
+| 無効化済み・失効 | 拒否（`auth:token:revoked`） |
+| 索引に無い | 拒否（`auth:token:unknown`） |
+| 未使用だが紐づけ上限 | 拒否（`auth:token:limit`） |
+| 専ブラ以外からの使用 | 拒否（`auth:token:not-dedicated`）。キーの状態は変えない |
+
+**Cookie との関係**
+
+- キーで認証できたら通常セッションの Cookie（§3.3）を発行する。この Cookie には紐づけ情報 `bind`（キー ID と UA ハッシュの先頭 16 文字）を入れる。
+- その Cookie で書き込むたびに、要求の UA が `bind` と一致することと、`describeForPosting(aid, gen, tokenId)` でキーがまだ有効なことを確かめる。一致しなければ Cookie は無いものとして扱う（未ログイン）。
+- そのため、Cookie を別の UA に写しても使えない。キーが無効になる（置き換え・手動の無効化・退会）と、そのキーから発行したセッションも次の書き込みから無効になる。
+
+**保存**
+
+- `Account.tokens`: `[{tokenId, hash, issuedAt, expiresAt, uaHash?, uaLabel?, boundAt?, lastUsedAt?, revokedAt?, revokeReason?}]`。無効になったものも 30 日は残して一覧に出し、その後は消す。
+- `AccountIndex("token")`: `HMAC-SHA256(AUTH_SECRET, "token:" + キー)` → `{aid, tokenId}`。無効にしたキーの索引は後から消す（照合の正は Account DO の `tokens` なので、索引に残っていても使えない）。
+- 利用ログは §6.2 と同じ形で `kind: "token"`、`tokenId`・`uaLabel`・結果（許可・各拒否コード）を残す。
+
+**アカウント設定（`/auth/account`）**
+
+専用ブラウザ（UA）と有効なキーの対照表を中心に置く。モックは `docs/ui/account.html`。
+
+- 1 行が 1 つの UA。列は「専用ブラウザ（UA の表示名と OS）」「有効なキー（末尾 4 文字だけ。状態の印付き）」「紐づけ日時」「最終利用」「無効にする」。
+- 同じ UA でキーが置き換わったときは、その行に「前のキー `!#…xxxx` は日時に置き換え」と添える。
+- 未使用のキーは表の最後に「まだ使われていません」の行として出し、失効までの残り時間と「取り消す」を置く。
+- 表の上に使用枠（使用中の UA の数 / 5）を出す。UA が一致しない使用があったときは、日時・試した側の表示名・対象のキーを帯で知らせる。
+- 無効になったキー（置き換え・手動・失効）は折りたたみの中に 30 日間出す。
+- 発行したキーの平文は、発行直後の枠に 1 度だけ出す。
+- スマートフォン幅では表を UA ごとのカードに組み替える。
+
+キャップ利用者は不要（キャップでログイン扱いになるため）。
 
 ### 6.4 名無しでの権限使用
 
@@ -584,6 +639,11 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | `post-rate:thread:copipe` | （成功画面。§8.5） |
 | `auth:required:login` / `auth:required:level:<n>` | §3.5 の文言＋ URL |
 | `auth:frozen` / `auth:banned` | `このアカウントは現在書き込みできません。` |
+| `auth:token:ua-mismatch` | `この認証キーは別の専用ブラウザで使われています。アカウント設定で、この専用ブラウザ用のキーを発行してください。` |
+| `auth:token:revoked` / `auth:token:unknown` | `認証キーが無効です。アカウント設定で新しいキーを発行してください。`（どちらも同じ文言） |
+| `auth:token:limit` | `認証キーを使える専用ブラウザの数が上限です。アカウント設定で不要なキーを無効にしてください。` |
+| `auth:token:not-dedicated` | `認証キーは専用ブラウザからの書き込みでだけ使えます。ブラウザではログインしてください。` |
+| `auth:token:insecure` | `認証キーは HTTPS で接続したときだけ使えます。` |
 | `phoebe:command:denied` | （コマンドを無視して通常投稿。文言なし） |
 
 `x-post-error` ヘッダ（§3.8）にはコードの先頭 3 要素だけを載せる（`post-rate:board:samba24`）。
@@ -604,12 +664,12 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | `roles` | `["admin", ...]` |
 | `adminGen` | 管理者セッションの世代（整数）。管理者のログアウト・役割変更・凍結で進める（改修計画 §3.2） |
 | `caps` | §6.2 |
-| `token` | §6.3 |
+| `tokens` | 専ブラ用認証キーの一覧（§6.3 の「保存」） |
 | `pending:email` / `pending:reset` | §3.9 の保留トークン（種別ごとに別キー） |
 | `devices` | `[{hash, firstSeen, lastSeen, keyIpHash}]` 最大 10 件。超えたら `lastSeen` が最も古いものを捨てる |
 | `log:<n>` | 利用ログ 64 件ページ。16 ページ（1,024 件）を超えたら最古のページを消す |
 
-RPC: `create`, `describeForPosting(aid, gen)`, `describeForAdmin(aid, gen, adminGen)`, `bumpAdminGen`, `recordPost(now)`, `verifyPassword(password, now)`, `setPassword`, `issuePending(kind, hash, expiresAt, email?)` / `consumePending(kind, hash, now)`, `bindGoogle(subHash)`, `convert(kind, uid)`, `issueCap` / `revokeCap`, `issueToken` / `revokeToken`, `bindDevice`, `setLevel`, `setRoles`, `setStatus`, `bumpGeneration`, `appendLog`, `inspect`。
+RPC: `create`, `describeForPosting(aid, gen)`, `describeForAdmin(aid, gen, adminGen)`, `bumpAdminGen`, `recordPost(now)`, `verifyPassword(password, now)`, `setPassword`, `issuePending(kind, hash, expiresAt, email?)` / `consumePending(kind, hash, now)`, `bindGoogle(subHash)`, `convert(kind, uid)`, `issueCap` / `revokeCap`, `issueToken` / `useToken(tokenId, uaHash, now)` / `revokeToken`, `bindDevice`, `setLevel`, `setRoles`, `setStatus`, `bumpGeneration`, `appendLog`, `inspect`。
 状態遷移（昇格・失効・移行）は `domain/account/` の純粋関数。
 
 **`AccountIndex`**（`idFromName(kind)`。`kind` ∈ `uid` / `login` / `email` / `google` / `cap` / `token` / `role:admin`）
@@ -691,7 +751,7 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | 段 | 内容 | 主なテスト |
 | --- | --- | --- |
 | A | 連投規制（§8）。A-1: `BBS_RENTOU_MODE` の既定 `log` でデプロイし 1 週間観測。A-2: 既定を `on` に。照合キーは現行の IP・ID・識別子（`checked` 書式）。`aid` は空。前提は計画書の段 0〜7（`PostingCodec` を含む段 6） | `PostRateLimitSuite`（純粋判定: 件数窓・24h・Samba24・スレ 1h/40・コピペ末尾 2 行・あぼーん除外）、`BoardSuite`（予約/確定/取消・保持規則・ページ分割・容量）、`ThreadSuite`（`recentPosts` の一括保存・吸い込み時の dat 不変）、`PostingSuite`（パイプライン順序・文言・成功画面での吸い込み・`BBS_LIVE` 除外・設定不正時の既定値）、`AdminSuite`（フォーム検証）、実 workerd 統合 |
-| B | 認証基盤: `Account` / `AccountIndex` DO、Cookie、`/auth/`（クライアント ID・Turnstile・法的確認）、端末ハッシュと突合、`Accept-CH`、専ブラキー、キャップのアカウント紐づけ、`userInfo` の `UID:` / `Device:`、新 UI の `SessionReader`・ヘッダー出し分け・`AuthModal` / `AccountNav`・投稿欄のヘッダ分岐（§3.8）、bbs.cgi の `x-auth-required` / `x-post-error` | `common` の `DeviceFingerprintHasher` / `ClientHints` golden、`CookieCodecSuite`、`AccountSuite`（状態遷移・一意性）、`AuthHandlerSuite`（Turnstile はテスト用サイトキーで成功/失敗を固定）、`PostingSuite`（§3.4 の優先順・`!auth`・Web 版の認証要求とヘッダ）、`SessionReaderSuite`、`BoardIndexSuite`（未ログイン/ログイン済のヘッダーと投稿欄の SSR）、`tests/islands-hydration.test.js` に `AuthModal` の `message` → `ch3s:auth-changed` と再送の jsdom 検証 |
+| B | 認証基盤: `Account` / `AccountIndex` DO、Cookie、`/auth/`（クライアント ID・Turnstile・法的確認）、端末ハッシュと突合、`Accept-CH`、専ブラキー、キャップのアカウント紐づけ、`userInfo` の `UID:` / `Device:`、新 UI の `SessionReader`・ヘッダー出し分け・`AuthModal` / `AccountNav`・投稿欄のヘッダ分岐（§3.8）、bbs.cgi の `x-auth-required` / `x-post-error` | `common` の `DeviceFingerprintHasher` / `ClientHints` golden、`CookieCodecSuite`、`AccountSuite`（状態遷移・一意性）、`DedicatedBrowserTokensSuite`（未使用の紐づけ・同じ UA での置き換え・UA 不一致・上限・失効・Cookie の `bind`）、`AuthHandlerSuite`（Turnstile はテスト用サイトキーで成功/失敗を固定）、`PostingSuite`（§3.4 の優先順・`!auth`・Web 版の認証要求とヘッダ）、`SessionReaderSuite`、`BoardIndexSuite`（未ログイン/ログイン済のヘッダーと投稿欄の SSR）、`tests/islands-hydration.test.js` に `AuthModal` の `message` → `ch3s:auth-changed` と再送の jsdom 検証 |
 | C | PHOEBE: Lv 昇格・`BBS_PHOEBE`・`!バルサン` / `!SETTING:BBS_PHOEBE:n`・識別子 `phoebe` 書式・連投規制への `aid` 追加・`!uid` | `PhoebeSuite`（T(lv)/N(lv) 境界・上限・固定）、`IdentifierSuite`（軸ごとの値・欠損 `000`・`D` の `*`）、`UserAgentProfileSuite`（v3 表の golden） |
 | D | 権限・回避レベル・管理画面の認証機能画面（§6・§7・§11、改修計画 段 M3）、スレ立て規制の `BBS_THREAD_PASS` 化 | `BypassLevelSuite`、`ModerationSuite`（5 列目）、`AdminSuite` |
 | E-1 | ID/Password の登録・ログイン・ロック、Google ログイン（§3.9・§3.10 の基本部分）。管理画面のアカウント認証（改修計画 段 M2）の前提なので段 B の直後に行う | `PasswordSuite`・`LoginThrottleSuite`・`GoogleIdTokenSuite`、実 workerd |
@@ -732,6 +792,10 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | 27 | 板 top 等の Cookie による出し分けを SSR で行う（`private, no-cache`）か、ヘッダーだけ client で `/auth/session` を取る（共有キャッシュを保つ）か | SSR で行う |
 | 28 | 3chiko.html の Web 版利用者が、認証基盤の公開と同時にログイン必須になること（専ブラは影響なし） | 公開と同時。§14 |
 | 29 | Cookie を host-only（`__Host-`）にし、専ブラのキー認証を HTTPS に限ること。サブドメインで Cookie を共有する必要があるか | host-only。要確認 |
+| 30 | 専ブラ用キーの UA を完全一致で比べること。専ブラの更新で版番号が変わると、新しいキーの発行が要る | 完全一致。版番号を除いて比べる案は、UA の偽装で別の専ブラに流用されやすくなるので採らない |
+| 31 | 紐づけられる UA の上限（1 アカウント 5 個）、未使用キーは同時に 1 個・24 時間で失効 | 仮置き |
+| 32 | 専ブラ用キーを専ブラ（`Monazilla/1.00` で始まる UA）以外から使えないようにすること | 使えないようにする |
+| 33 | UA が一致しない使用でキーを止めないこと（止めると、漏れたキーを他人が試すだけで正規の利用者が書けなくなる） | 止めない。記録と通知だけ |
 
 ## 14. 不変条件への影響（承認が必要な点）
 

@@ -35,16 +35,49 @@
   </div>
 
   <div class="panel" id="key"><h2>■ 専ブラ用認証キー</h2>
-    <p style="margin:0 0 8px">専ブラ（専用ブラウザ）の初回の書き込みで、メール欄にこのキーを入れてください。2 回目からは不要です。</p>
-    <div class="banner warn" style="margin-bottom:8px"><b>今だけ表示されます。</b>この画面を閉じると再表示できません。<span class="spacer"></span></div>
-    <div class="keybox">!#q7m2xv4kp9ta3nc6wz5d</div>
-    <div style="margin-top:8px"><button class="btn">コピー</button> <button class="btn danger">再発行（いまのキーを無効にする）</button></div>
-    <p class="notice">発行日 2026/11/05 13:10 · 最終利用 —</p>
+    <p style="margin:0 0 8px">キーは<b>最初に使った専用ブラウザだけ</b>で使えます。同じ専用ブラウザで新しいキーを使うと、前のキーは無効になります。</p>
+
+    <div class="banner warn" style="margin-bottom:10px"><span><b>11/05 12:50</b> に、別の専用ブラウザ（不明 · Linux）から JaneStyle 用のキー <code>!#…wz5d</code> が使われそうになりました。心当たりが無ければ、そのキーを無効にしてください。</span></div>
+
+    <div class="quota"><span>使用中の専用ブラウザ <b>3</b> / 5</span><div class="progress" style="width:160px"><span style="width:60%"></span></div></div>
+
+    <table class="list ua-table">
+      <thead><tr><th>専用ブラウザ（UA）</th><th>有効なキー</th><th>紐づけ</th><th>最終利用</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><b>JaneStyle 4.23</b><small>Windows</small></td>
+          <td><code class="k">!#…wz5d</code> <span class="st on">有効</span>
+            <small class="prev">前のキー <code>!#…k2ap</code> は 11/05 13:12 に置き換え</small></td>
+          <td>11/05 13:12</td><td>11/05 13:40</td><td><button class="btn danger sm">無効にする</button></td></tr>
+        <tr><td><b>ChMate 0.8.10</b><small>Android</small></td>
+          <td><code class="k">!#…m3qe</code> <span class="st on">有効</span></td>
+          <td>11/02 21:05</td><td>11/05 08:01</td><td><button class="btn danger sm">無効にする</button></td></tr>
+        <tr><td><b>Siki 2.1</b><small>iOS</small></td>
+          <td><code class="k">!#…b7td</code> <span class="st on">有効</span></td>
+          <td>10/28 19:44</td><td>11/01 23:10</td><td><button class="btn danger sm">無効にする</button></td></tr>
+        <tr class="unbound"><td><b>（まだ使われていません）</b><small>最初に使った専用ブラウザに紐づきます</small></td>
+          <td><code class="k">!#…xa9c</code> <span class="st wait">未使用 · あと 21 時間</span></td>
+          <td>—</td><td>—</td><td><button class="btn sm">取り消す</button></td></tr>
+      </tbody>
+    </table>
+
+    <div style="margin-top:12px"><button class="btn">新しいキーを発行</button>
+      <span class="notice">未使用のキーは 1 個だけ持てます。発行すると上の未使用キーは無効になります。</span></div>
+
+    <div class="issued"><b>発行したキー（今だけ表示されます）</b>
+      <div class="keybox" style="margin-top:6px">!#q7m2xv4kp9ta3nc6xa9c</div>
+      <div style="margin-top:6px"><button class="btn sm">コピー</button> <span class="notice">専用ブラウザのメール欄に入れて書き込んでください。24 時間使われないと失効します。</span></div></div>
+
+    <details style="margin-top:10px"><summary class="notice">無効になったキー（30 日間表示）</summary>
+      <table class="list ua-table" style="margin-top:6px">
+        <tr class="dead"><td><b>JaneStyle 4.23</b><small>Windows</small></td><td><code class="k">!#…k2ap</code> <span class="st off">置き換え</span></td><td>10/20 10:02</td><td>11/05 12:31</td><td></td></tr>
+        <tr class="dead"><td><b>Xeno 1.9</b><small>Windows</small></td><td><code class="k">!#…p8hs</code> <span class="st off">手動で無効</span></td><td>10/12 18:20</td><td>10/19 00:12</td><td></td></tr>
+      </table></details>
   </div>
 
   <div class="panel"><h2>■ 利用ログ</h2>
     <table class="list"><tr><th>日時</th><th>種別</th><th>板・スレ</th><th>接続元</th></tr>
-      <tr><td>2026/11/05 13:12</td><td>専ブラ用キー</td><td>zatsudan/1730000000</td><td>docomo · 東京都</td></tr>
+      <tr><td>2026/11/05 13:12</td><td>専ブラ用キー（JaneStyle 4.23）</td><td>zatsudan/1730000000</td><td>docomo · 東京都</td></tr>
+      <tr><td>2026/11/05 12:50</td><td><span class="err">専ブラ用キー · UA 不一致で拒否</span></td><td>news/1729990000</td><td>不明 · 海外</td></tr>
       <tr><td>2026/11/05 12:58</td><td>Web</td><td>zatsudan/1730000000</td><td>docomo · 東京都</td></tr>
       <tr><td>2026/11/04 22:31</td><td>Web</td><td>news/1729990000</td><td>楽天モバイル · 東京都</td></tr>
     </table>

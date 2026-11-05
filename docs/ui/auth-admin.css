@@ -147,3 +147,30 @@ dialog.auth .dbody{padding:12px 14px}
 .panel h2{margin-bottom:8px}
 .row .ctl .tag{align-self:flex-start}
 .row .ctl .pair .input{width:56px}
+
+/* 専ブラ用認証キーの UA 対照表 */
+.quota{display:flex;align-items:center;gap:10px;margin:0 0 6px;font-size:12.5px}
+.ua-table td{vertical-align:top}
+.ua-table td small{display:block;color:#697785;font-size:11.5px}
+.ua-table code.k{font-family:ui-monospace,monospace;font-size:13px;background:#f4f6f8;padding:1px 5px;border-radius:3px}
+.ua-table small.prev{margin-top:3px}
+.ua-table tr.unbound td{background:#fbfbfd}
+.ua-table tr.dead td{color:#9aa5b1}.ua-table tr.dead code.k{text-decoration:line-through}
+.st{display:inline-block;padding:0 7px;border-radius:9px;font-size:11px;line-height:17px;border:1px solid}
+.st.on{color:#1a7f37;border-color:#b5dfc3;background:#e7f5ec}
+.st.wait{color:#8a5a00;border-color:#f3d18a;background:#fff8e6}
+.st.off{color:#7a8794;border-color:#d6dce3;background:#f4f6f8}
+.btn.sm{padding:2px 8px;font-size:12px}
+.issued{margin-top:12px;border:1px dashed #b9c4d0;border-radius:6px;padding:10px 12px;background:#fcfcfd}
+@media (max-width:767px){
+  .ua-table thead{display:none}
+  .ua-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;border-bottom:1px solid #dce1e6;padding:8px 0}
+  table.list.ua-table td{border:0;padding:2px 4px}
+  .ua-table td:nth-child(1){grid-column:1;grid-row:1}
+  .ua-table td:nth-child(5){grid-column:2;grid-row:1;text-align:right}
+  .ua-table td:nth-child(2){grid-column:1/-1}
+  .ua-table td:nth-child(3),.ua-table td:nth-child(4){grid-column:1/-1;font-size:12px;color:#697785}
+  .ua-table td:nth-child(3)::before{content:"紐づけ "}
+  .ua-table td:nth-child(4)::before{content:"最終利用 "}
+  .ua-table tr.unbound td{background:transparent}.ua-table tr.unbound{background:#fbfbfd}
+}
