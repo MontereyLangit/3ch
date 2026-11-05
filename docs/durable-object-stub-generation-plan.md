@@ -11,11 +11,11 @@ DO 本体を原本とし、通常のコンパイルで Scala の native facade �
 
 ## 現状と利用する仕組み
 
-- DO 本体: `bbs/src/main/scala/ch3s/bbs/durable/`。
-- 手書き Stub と Namespace: `bbs/src/main/scala/ch3s/bbs/external/cloudflare/Bindings.scala`。
-- 既存生成器: `codegen/src/main/scala/ch3s/codegen/GenerateDurableObjectTypes.scala`。
+- DO 本体: `bbs/src/main/scala/io/_3ch/bbs/durable/`。
+- 手書き Stub と Namespace: `bbs/src/main/scala/io/_3ch/bbs/external/cloudflare/Bindings.scala`。
+- 既存生成器: `codegen/src/main/scala/io/_3ch/codegen/GenerateDurableObjectTypes.scala`。
   Scalameta で Scala 3 のソースを解析するが、現在は TS のクラス名とコンストラクタだけを生成する。
-- 既存エントリ: `codegen/src/main/scala/ch3s/codegen/GenerateAppFiles.scala`。
+- 既存エントリ: `codegen/src/main/scala/io/_3ch/codegen/GenerateAppFiles.scala`。
   TS 生成の現行仕様は [durable-object-types.md](durable-object-types.md) を参照。
 
 既存の構文解析を再利用し、Scala Stub 用の生成器を追加する。

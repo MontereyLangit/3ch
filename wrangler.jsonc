@@ -5,6 +5,7 @@
   "compatibility_date": "2026-10-02",
   "vars": {
     "ENVIRONMENT": "production",
+    "IMGUR_CLIENT_ID": "34ee59e33373302",
     "salt": "ch35th_md5_SALT!2328959a823239020f%4M?67343883c469360-.|tc-/*BG&f&uzxG|NG4Dnts#C4L$j2,#,^:;fd99d62ad94fd0f261d7aaa09cce38030cs55e9a6192d683bd577f2717f7ce0088334e06fb4389d01529c73a372e6b3826c4c6116d4ZWf88a2521b69a3749ddf308D2fEDUIM=",
   },
   // KV Namespace bindings.
@@ -54,5 +55,21 @@
   // Limits for your Worker.
   "limits": {
     "cpu_ms": 300000,
+  },
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true
+    },
+    "issue_detection": {
+      "enabled": true
+    }
   },
 }
