@@ -53,6 +53,7 @@ object PostingResponse {
     }
   }
 
+  /** 応答ページの title で、書き込み完了・エラー・書き込み確認・不明に分ける */
   def classify(page: PostingPage): PostingOutcome = {
     page.title.trim match {
       case PostedTitle => PostingOutcome.Posted(page.refreshContent.flatMap(refreshUrl))

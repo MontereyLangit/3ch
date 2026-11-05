@@ -11,10 +11,14 @@ final case class ThreadCreationLimit(settings: ThreadCreationRateLimit.Settings,
 
 /** スレ立て予約の拒否理由。RPC では [[code]] の文字列で返す。 */
 enum ThreadCreationRejection {
+  /** 同一 IP・同一スレタイによる規制 */
   case Narrow(reason: Reason)
+  /** 同一 UA・同一ネットワークグループによる規制 */
   case Broad(reason: Reason)
+  /** 履歴の保存件数の上限に達した */
   case Capacity
 
+  /** RPC とエラーコードに使う文字列 */
   def code: String = this match {
     case Narrow(reason) => s"thread-creation:narrow:${ThreadCreationRejection.reasonCode(reason)}"
     case Broad(reason) => s"thread-creation:broad:${ThreadCreationRejection.reasonCode(reason)}"
@@ -33,6 +37,7 @@ object ThreadCreationRejection {
   private val all: Map[String, ThreadCreationRejection] =
     (Capacity +: Reason.values.toSeq.flatMap(reason => Seq(Narrow(reason), Broad(reason)))).map(value => value.code -> value).toMap
 
+  /** code の文字列から拒否理由を戻す。知らない文字列なら None */
   def fromCode(code: String): Option[ThreadCreationRejection] = all.get(code)
 }
 
@@ -54,8 +59,10 @@ final case class ThreadCreationRecord(
   expiresAt: Double,
   status: ThreadCreationStatus
 ) {
+  /** 期限内の予約か */
   def isActivePending(now: Double): Boolean = status == ThreadCreationStatus.Pending && now <= expiresAt
 
+  /** 判定に使う履歴の 1 件にする */
   def toEntry: Entry = Entry(timestampSeconds, title, identity)
 }
 

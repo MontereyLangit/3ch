@@ -49,6 +49,7 @@ enum PostingError {
   case BrokenBody(contentType: String)
   case InvalidReferer(referer: String)
   case InvalidUserAgent(userAgent: String)
+  /** Client-IP ヘッダが付いている。clientIp はその値 */
   case ProxyHeader(clientIp: String)
   case NoSubmit
   case SjisFromWeb
@@ -57,21 +58,28 @@ enum PostingError {
   case MissingSubject(key: String)
   case InvalidTime(time: String)
   case InvalidKey
+  /** limit は文言に出す上限で、設定値の文字列そのもの（無ければ既定値） */
   case FieldTooLong(field: PostField, length: Int, limit: String)
+  /** 本文の行数（<br> で数える）が多すぎる。limit は文言に出す上限 */
   case TooManyLines(lines: Int, limit: String)
   case Closed
+  /** 返信先のスレが無い。logFile は文言に出す旧ログのパス */
   case ThreadMissing(logFile: String)
   case BrokenLog(kind: BrokenLogKind)
   case ThreadFull
+  /** 同じ key のスレが同時に立った */
   case DuplicateKey
   case GlobalThreadCreateCapOnly
   case GlobalThreadCapOnly
   case Moderated(denial: ModerationDenial)
   case InvalidCreationSettings(reason: ThreadCreationSettingError)
   case ThreadCreation(rejection: ThreadCreationRejection)
+  /** 過去ログ目次の書き込みが ETag の競合で失敗した。target は文言に出す対象名 */
   case ArchiveConflict(target: String, site: FailureSite)
+  /** 段の途中で起きた例外。cause は例外の文字列 */
   case Internal(stage: PostingStage, site: FailureSite, cause: String)
 
+  /** 拒否理由の識別子。種別:詳細 の形で、設計書 §8.9 のエラーコードに合わせる */
   def code: String = this match {
     case MethodNotPost => "request:method"
     case BrokenBody(_) => "request:content-type"

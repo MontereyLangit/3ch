@@ -7,12 +7,14 @@ import io._3ch.bbs.domain.posting.ClientIdentity
   * 詳細は docs/thread-creation-regulation.md「判定」。
   */
 object ThreadCreationRateLimit {
+  /** 狭域（tatesugi）と広域（junban）の、見る件数と秒数 */
   final case class Settings(
     threadTatesugi: Int,
     threadTatesugiResetSeconds: Double,
     threadJunban: Int,
     threadJunbanResetSeconds: Double
   )
+  /** 判定に使うスレ立て履歴の 1 件。識別情報とスレタイはハッシュ済み */
   final case class Entry(
     timestampSeconds: Double,
     title: String,

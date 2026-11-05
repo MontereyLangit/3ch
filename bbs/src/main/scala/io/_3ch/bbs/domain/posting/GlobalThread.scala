@@ -8,6 +8,7 @@ object GlobalThread {
   /** 共通スレの保存先となる板名。 */
   val board: String = "924"
 
+  /** 共通スレの種別。prefix はスレキーの先頭 3 桁 */
   enum Kind(val prefix: String) {
     /** ★のみ立てられ、★のみ書き込める。 */
     case CapOnly extends Kind("924")
@@ -18,6 +19,7 @@ object GlobalThread {
   /** 一覧に並べる順。 */
   val kinds: List[Kind] = List(Kind.CapOnly, Kind.Open)
 
+  /** スレキーの先頭 3 桁から共通スレの種別を返す。共通スレでなければ None */
   def kindOf(key: String): Option[Kind] = kinds.find(kind => key.startsWith(kind.prefix))
 
   /** 本文先頭の `!924` / `!900` を読み、種別と（直後の空白・`<br>` を除いた）残りの本文を返す。`!9240` のように数字が続く場合は命令としない。 */
@@ -31,6 +33,7 @@ object GlobalThread {
   /** スレ立て時刻（unixtime 10桁）の先頭3桁を種別の接頭辞に置き換えてスレキーにする。 */
   def key(kind: Kind, unixtime: String): String = kind.prefix + unixtime.drop(3)
 
+  /** その種別のスレに書き込めるか。924 はキャップだけ書き込める */
   def canPost(kind: Kind, cap: Boolean): Boolean = kind match {
     case Kind.CapOnly => cap
     case Kind.Open => true

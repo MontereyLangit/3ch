@@ -66,6 +66,7 @@ case class BbsSubject private (
 }
 
 object BbsSubject {
+  /** 1 行分を作る。題名が null かレス数が 1 未満なら Left */
   def create(key: ThreadKey, title: ThreadTitle, resNum: Int): Either[String, BbsSubject] = {
     val isValid = title != null && resNum > 0
     Either.cond(isValid, BbsSubject(key, title, resNum), "不正な値")

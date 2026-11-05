@@ -2,6 +2,7 @@ package io._3ch.common.domain.posting
 
 /** KV で照合したキャップの表示名と、制限を迂回する強キャップか */
 final case class CapHandle(name: String, strong: Boolean) {
+  /** 名前欄に出す 名前＠表示名 ★。名前が空なら 表示名 ★ */
   def displayName(postedName: String): String = (if (postedName.isEmpty) "" else postedName + "＠") + name + " ★"
 }
 

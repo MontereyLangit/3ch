@@ -121,4 +121,9 @@
 | 振る舞いの保存 | RPC の外形（プレーンオブジェクトと同じ項目名）は変えず、DO スタブの署名も変わらないので codegen の生成物はそのまま。旧形式は従来の読み方に合わせ、null と省略は付帯情報なし、真偽は JavaScript の真偽判定、板名・key が無ければ String(undefined) の名前で Board DO を呼ぶ。初期スレ設定・スレ立て規制・スレ主は create が真で値が真のときだけ読む。subject.txt の空 ETag と未作成時の doesNotExist（KB-25）、headline の条件と結果を見ない扱いも維持。スナップショット差分なし |
 | テスト | DatLineFormatterSuite（JVM / JS）、PostingCodecSuite（往復、外形、旧形式・真偽判定・create でない場合）、ArchiveIndexRepositorySuite（ETag 競合、空 ETag と KB-25、headline）、ResponsesSuite（Set-Cookie の複数と 1 本のときの出力）。ThreadSuite・ThreadCreationSuite は変更なしで通る |
 | 計画との差分 | 計画書は日付文字列を Clock 経由で渡すとしているので、ポートの Clock だけを段 6 で入れ、ハンドラは Clock.system を使う。Thread DO の旧ログ変換（convertLegacy）の日付整形は対象外のまま。旧形式で title が null のときは undefined として渡す（スレ一覧に既存行があれば既存の題名を使う従来の扱いに揃う。既存行が無い場合だけ従来の "null" が "undefined" になるが、ハンドラは常に文字列を渡す） |
+| 検証（段 5・6 と下記 doc 補足の後） | sbt test 計 681 件（common JVM 53・common JS 50・codegen 27・bbs 551。投稿スナップショット 196 ケース全件一致）、-no-indent の Test/compile、npm run v6:build、npm run v6:typecheck、npm test（実 workerd を含む 46 件、スキップなし）、git diff --check が成功。PostingHandlerSuite・スナップショット・golden は変更していない |
 | 未解決 | subject.txt と headline.txt の本文の組み立て、sage の判定、g.subject・g.number・g.sage・g.time・g.unixtime・g.nowTime・g.cookies は段 7 でサービスへ移す |
+
+## domain の Scaladoc の補足
+
+bbs/domain と common/domain の公開型・公開メソッドで doc が無かったもの（GlobalThread.Kind・kindOf・canPost、KeyIp.of、NusiMark、PostingError の一部の場合と code、ThreadCreationRejection・ThreadCreationRecord・ThreadCreationRateLimit の Settings / Entry、ThreadCreationSettingError、BoardId・ThreadKey・ThreadTitle・BbsSubject の create、SubjectText.decode、PostingResponse.classify、DateSalt・ShikibetsuFormat・ShikibetsuSeeds、CapHandle.displayName、NameField.withIdentity、UserInfo.text など）に 1 行の doc を足した。コードと既存の doc の意味は変えていない。
