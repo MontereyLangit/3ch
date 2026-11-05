@@ -3,6 +3,7 @@ package io._3ch.bbs.handler
 import io._3ch.bbs.external.cloudflare.*
 import io._3ch.bbs.external.web.{Request, Response, TextEncoder}
 import io._3ch.bbs.hash.WebHash
+import io._3ch.bbs.domain.posting.moderation.ModerationRuleSet
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -116,7 +117,7 @@ object AdminHandler {
                     case _ => fail("操作が不正です。")
                   }
                 case "/admin/access" | "/admin/ngwords" =>
-                  Moderation.parseRules(blank(data.rules))
+                  ModerationRuleSet.parse(blank(data.rules)).left.foreach(error => fail(AdminText.ruleError(error)))
                   e.ch3www.put(if path.endsWith("access") then "deny.cgi" else "ngwords.cgi", blank(data.rules)).toFuture.map(_ => ())
                 case "/admin/menu" => e.ch3www.put("bbsmenu.html", blank(data.html)).toFuture.map(_ => ())
                 case "/admin/thread" =>

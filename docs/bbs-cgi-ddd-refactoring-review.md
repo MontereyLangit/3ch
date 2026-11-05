@@ -101,3 +101,13 @@
 | スタイル | GlobalThread.postingError を同じファイルの if ... then に揃えた |
 | 検証 | sbt test 計 647 件（投稿スナップショット 196 ケース全件一致）、-no-indent の Test/compile、npm run v6:build、npm run v6:typecheck、npm test（実 workerd を含む 46 件、スキップなし）、git diff --check が成功。PostingHandlerSuite・スナップショット・golden は変更していない |
 | 見送り | PostingFormDecoder の Shift_JIS 復号に残る var と可変バッファ、PostingHandler の Draft の var は、段 7 でアプリケーションサービスへ集約するときに扱う |
+
+## 段 5: 規制
+
+| 項目 | 内容 |
+| --- | --- |
+| 実施 | handler/Moderation を削除し、bbs/domain/posting/moderation に ModerationRuleSet（deny.cgi / ngwords.cgi の 1 行を js.RegExp に閉じた ModerationRule にし、書式の誤りは行番号と ModerationRuleProblem で返す）と ModerationService（ModerationRuleFile の順に読み、ModerationDecision の Pass(form) / Deny(denial, form) を返す）を追加。R2 の読込は repository/ModerationRuleRepository（Missing / Broken / Loaded）。log と規制の対象欄に使う投稿者情報は common/domain/posting/UserInfo にし、g.userInfo を削除した |
+| 振る舞いの保存 | 照合は mark を付ける前の内容で行い、拒否の後のルールと後のファイルは読まない。拒否時もそれまでの mark を付けたフォームをエラー画面に出す（従来どおり）。R2 の get の失敗は Promise の reject のまま、本文の読込失敗と書式の誤りは BrokenRules。文字参照の復元は JavaScript の parseInt / Number / String.fromCodePoint を BigInt と Character.toChars に置き換え、範囲外の参照を残す扱いも同じにした。スナップショット差分なし |
+| 管理画面 | 規制ルールの保存時の検証は ModerationRuleSet.parse を使い、文言は AdminText.ruleError で従来どおり「N行目: …」にする |
+| テスト | ModerationSuite を ModerationRuleSetSuite・ModerationServiceSuite（読んだファイルの記録、saku 板、対象欄の書式、文字参照の境界を追加）・ModerationRuleRepositorySuite に移設。UserInfoSuite（JVM / JS）、AdminHandlerSuite に規制ルールの誤りの文言を追加 |
+| 計画との差分 | 計画書は ModerationDecision を Deny / Mark / Pass としていたが、mark は拒否時にも残るので、Pass と Deny がどちらも加工後のフォームを持つ形にした。UserInfo は正規表現を使わないので計画書 §2 の bbs/domain ではなく common に置いた。Main の parseRules / checkModeration の書き出し（v5 互換の名残で、どこからも使われていない）を削除した |

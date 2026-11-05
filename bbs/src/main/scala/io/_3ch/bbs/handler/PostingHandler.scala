@@ -3,12 +3,12 @@ package io._3ch.bbs.handler
 import io._3ch.bbs.external.cloudflare.*
 import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.hash.{Md5, WebHash}
-import io._3ch.bbs.repository.{BoardRepository, CapRepository, ThreadRepository}
+import io._3ch.bbs.repository.{BoardRepository, CapRepository, ModerationRuleRepository, ThreadRepository}
 import io._3ch.bbs.domain.posting.{BrokenLogKind, ClientIdentity, FailureClock, FailureSite, GlobalThread, KeyIp, NusiMark, PostField, PostRouting, PostingContext, PostingError, PostingIdentity, PostingStage, PostingUser, ThreadOwner}
-import io._3ch.bbs.domain.posting.moderation.ThreadCreationRejection
+import io._3ch.bbs.domain.posting.moderation.{ModerationDecision, ModerationInput, ModerationService, ThreadCreationRejection}
 import io._3ch.bbs.durable.codec.ThreadOwnerCodec
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
-import io._3ch.common.domain.posting.{CapHandle, NameField, PostForm, PostKind}
+import io._3ch.common.domain.posting.{CapHandle, NameField, PostForm, PostKind, UserInfo}
 import io._3ch.common.domain.identity.{DateSalt, ShikibetsuFormat, ShikibetsuMode, ShikibetsuSeeds}
 
 import scala.collection.immutable.ListMap
@@ -64,7 +64,7 @@ object PostingHandler {
     val g = js.Dynamic.literal(
       version = "2025/7/31", time = str(js.Date.now()), unixtime = str(math.floor(js.Date.now() / 1000)),
       cookies = js.Dynamic.literal(HAP = "", D = "", U = "", PON = "", time = "", PIN = "", cert = ""),
-      userInfo = "", sage = 0,
+      sage = 0,
       path = "PATH", logPath = "LOGPATH", logFile = "LOGDAT", logData = "", subject = "", number = 0,
       headers = js.Dictionary.empty[String]
     )
@@ -78,16 +78,14 @@ object PostingHandler {
       _ <- threadSettings(g, d, board, env)
       _ <- identify(g, d, req)
       user <- resolveUser(request, env)
-      _ = g.userInfo = s"UID: IP:${d.identity.host} AS${d.identity.asn}-${d.identity.country},${d.identity.region},${d.identity.city}Device:${d.identity.deviceInfo} UA:${d.identity.userAgent}"
-      moderated <- Moderation.decide(d.cap.isDefined, d.identity.country, str(g.userInfo), number(g.number), d.form, d.settings, env)
-      _ = d.form = moderated._2
-      _ = moderated._1.foreach(denial => reject(PostingError.Moderated(denial)))
+      userInfo = UserInfo("", d.identity.host, d.identity.asn, d.identity.country, d.identity.region, d.identity.city, d.identity.deviceInfo, d.identity.userAgent)
+      _ <- moderate(g, d, userInfo, env)
       _ = checkSizes(g, d)
       creationLimit <- threadCreationLimit(g, d, req, board.settings)
       _ <- makeShikibetsu(g, d, user)
       owner <- markNusi(g, d, user, board.settings)
       _ = prepare(g, d)
-      _ <- updateThread(g, d, env, creationLimit, owner)
+      _ <- updateThread(g, d, env, creationLimit, owner, userInfo)
       _ <- updateSubback(g, d, env)
       _ <- updateHeadline(g, d, env)
     } yield respond(g, d, None)).recover { case Rejected(error) => respond(g, d, Some(error)) }.toJSPromise
@@ -166,6 +164,14 @@ object PostingHandler {
     }
     hash(md5(d.identity.ip.getOrElse("null")) + d.identity.salt).flatMap(sha).map { pon =>
       g.headers.updateDynamic("Set-Cookie")(s"PON=$pon; Max-Age=63072000; path=/; ${if !d.form.isMonazilla then "Secure;" else ""} HttpOnly")
+    }
+  }
+
+  private def moderate(g: js.Dynamic, d: Draft, userInfo: UserInfo, e: WorkerEnv): Future[Unit] = {
+    val input = ModerationInput(d.form, userInfo, d.cap.isDefined, d.identity.country, number(g.number), d.settings)
+    ModerationService.check(input, ModerationRuleRepository.load(_, e)).map {
+      case ModerationDecision.Pass(form) => d.form = form
+      case ModerationDecision.Deny(denial, form) => d.form = form; reject(PostingError.Moderated(denial))
     }
   }
 
@@ -272,7 +278,7 @@ object PostingHandler {
     def unapply(error: Throwable): Option[ThreadCreationRejection] = ThreadCreationRejection.fromCode(errorText(error).stripPrefix("Error: "))
   }
 
-  private def updateThread(g: js.Dynamic, d: Draft, e: WorkerEnv, creationLimit: js.UndefOr[js.Dynamic], owner: js.UndefOr[js.Dynamic]): Future[Unit] = {
+  private def updateThread(g: js.Dynamic, d: Draft, e: WorkerEnv, creationLimit: js.UndefOr[js.Dynamic], owner: js.UndefOr[js.Dynamic], userInfo: UserInfo): Future[Unit] = {
     val stub = thread(d, e)
     guarded(g, d, PostingStage.ThreadWrite, FailureClock.Unixtime) {
       val initial: js.UndefOr[String] = if number(g.number) == 1 then initialSettings(d.settings) else js.undefined
@@ -280,7 +286,7 @@ object PostingHandler {
       val date = formatter.format(new js.Date(int(g.unixtime) * 1000)).asInstanceOf[String]
       d.form = d.form.copy(message = d.form.message.jsReplace("<br>", " <br> "))
       val dat = s"${d.form.name}<><>$date<> ${d.form.message} <>${if number(g.number) == 1 then str(g.subject) else ""}"
-      stub.addRes(dat, s"${str(g.number)}<>${str(g.userInfo)}", js.Dynamic.literal(bbs = d.form.bbs, key = d.form.key, title = g.subject, sage = truth(g.sage), maxThreads = d.settings.int("BBS_MAX_MENU_THREAD", "700"), create = number(g.number) == 1, initialSettings = initial, creationLimit = creationLimit, owner = owner)).toFuture.map(n => g.number = n).recover {
+      stub.addRes(dat, s"${str(g.number)}<>${userInfo.text}", js.Dynamic.literal(bbs = d.form.bbs, key = d.form.key, title = g.subject, sage = truth(g.sage), maxThreads = d.settings.int("BBS_MAX_MENU_THREAD", "700"), create = number(g.number) == 1, initialSettings = initial, creationLimit = creationLimit, owner = owner)).toFuture.map(n => g.number = n).recover {
         case CreationRejected(rejection) => reject(PostingError.ThreadCreation(rejection))
       }
     }

@@ -38,12 +38,6 @@ object Main {
   @JSExportTopLevel("settingTxtDefault", "server")
   val settingTxtDefault: String = handler.PostingText.settingTxtDefault
 
-  @JSExportTopLevel("parseRules", "server")
-  def parseRules(text: String): js.Array[js.Dynamic] = handler.Moderation.parseRules(text)
-
-  @JSExportTopLevel("checkModeration", "server")
-  def checkModeration(gb: js.Dynamic, env: WorkerEnv): js.Promise[Int] = handler.Moderation.check(gb, env)
-
   @route("[bbs]/index.ts")
   @JSExportTopLevel("boardIndexHandler", "server")
   def boardIndexHandler(c: js.Any): js.Promise[Response] =
