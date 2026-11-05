@@ -1043,9 +1043,14 @@ class PostingHandlerSuite extends FunSuite {
 
   test("特殊ルーティング: keyが924または900始まりだと板名が強制的に\"924\"へ書き換えられる") {
     val env = DurableTestKit.newEnv()
-    post(env, Seq("bbs" -> "othername", "key" -> "9240000005", "subject" -> "")).map { p =>
+    env.putCap("weakpass", "キャップ")
+    for {
+      open <- post(env, Seq("bbs" -> "othername", "key" -> "9000000005", "subject" -> ""))
+      capOnly <- post(env, Seq("bbs" -> "othername", "key" -> "9240000005", "subject" -> "", "mail" -> "#!weakpass"))
+    } yield {
       // 投稿されたbbs="othername"は無視され、"924"板のスレッドとして扱われるため該当スレ無しエラーのパスに"924"が現れる
-      assertEquals(errorMessage(p.text), Some("該当するスレッドがありません。924/thread/9240/9240000005.cgi"))
+      assertEquals(errorMessage(open.text), Some("該当するスレッドがありません。924/thread/9000/9000000005.cgi"))
+      assertEquals(errorMessage(capOnly.text), Some("該当するスレッドがありません。924/thread/9240/9240000005.cgi"))
     }
   }
 
@@ -1057,6 +1062,114 @@ class PostingHandlerSuite extends FunSuite {
           assertEquals(errorMessage(p.text), Some("板の指定が不正です。<br>\nThe board directory is incorrect..."), s"""bbs="$bbs"""")
         }
       }
+    }
+  }
+
+  // ==================== 11b. 全板共通スレ (docs/global-thread.md) ====================
+
+  private def subjectOf(env: Env, bbs: String): Future[String] = env.board(bbs).getSubject().toFuture
+
+  test("全板共通スレ: ★が本文先頭の!924でスレ立てすると、キー先頭3桁が924になり板924に保存される") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    for {
+      p <- atSecond(1700000000d)(post(env, Seq("bbs" -> "sample", "subject" -> "共通スレ", "mail" -> "#!weakpass", "MESSAGE" -> "!924\n本文")))
+      d <- dat(env, "924", "9240000000")
+      own <- dat(env, "sample", "1700000000")
+      global <- subjectOf(env, "924")
+      sample <- subjectOf(env, "sample")
+    } yield {
+      assertEquals(header(p.res, "x-resnum"), Some("1"))
+      assertEquals(header(p.res, "x-threadkey"), Some("9240000000"))
+      val fields = fieldsOf(d)
+      assertEquals(fields(3), " 本文 ") // 命令と直後の改行は本文から取り除かれる
+      assert(fields(4).startsWith("共通スレ"), fields(4))
+      assertEquals(own, "")
+      assert(global.startsWith("9240000000.dat<>共通スレ"), global)
+      assertEquals(sample, "")
+    }
+  }
+
+  test("全板共通スレ: !900 はキー先頭3桁が900になる") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    for {
+      p <- atSecond(1700000000d)(post(env, Seq("subject" -> "共通スレ", "mail" -> "#!weakpass", "MESSAGE" -> "!900 本文")))
+      d <- dat(env, "924", "9000000000")
+    } yield {
+      assertEquals(header(p.res, "x-threadkey"), Some("9000000000"))
+      assertEquals(fieldsOf(d)(3), " 本文 ")
+    }
+  }
+
+  test("全板共通スレ: ★以外が !924 / !900 でスレ立てすると拒否され、datは作られない") {
+    val env = DurableTestKit.newEnv()
+    for {
+      a <- atSecond(1700000000d)(post(env, Seq("subject" -> "共通スレ", "MESSAGE" -> "!924 本文")))
+      b <- atSecond(1700000000d)(post(env, Seq("subject" -> "共通スレ", "MESSAGE" -> "!900 本文")))
+      d1 <- dat(env, "924", "9240000000")
+      d2 <- dat(env, "924", "9000000000")
+      own <- dat(env, "sample", "1700000000")
+    } yield {
+      assertEquals(errorMessage(a.text), Some(PostingText.globalThreadCreateCapOnly))
+      assertEquals(errorMessage(b.text), Some(PostingText.globalThreadCreateCapOnly))
+      assertEquals(d1, "")
+      assertEquals(d2, "")
+      assertEquals(own, "")
+    }
+  }
+
+  test("全板共通スレ: 命令だけで本文が無ければ「本文がありません！」") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    post(env, Seq("subject" -> "共通スレ", "mail" -> "#!weakpass", "MESSAGE" -> "!924\n")).map { p =>
+      assertEquals(errorMessage(p.text), Some("本文がありません！"))
+    }
+  }
+
+  test("全板共通スレ: !9240 のように数字が続くものは命令にならず通常のスレ立てになる") {
+    val env = DurableTestKit.newEnv()
+    for {
+      p <- atSecond(1700000000d)(post(env, Seq("subject" -> "ふつう", "MESSAGE" -> "!9240 本文")))
+      d <- dat(env, "sample", "1700000000")
+    } yield {
+      assertEquals(header(p.res, "x-threadkey"), Some("1700000000"))
+      assertEquals(fieldsOf(d)(3), " !9240 本文 ")
+    }
+  }
+
+  test("全板共通スレ: 924スレは★のみ書き込め、★以外は拒否される") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    for {
+      created <- atSecond(1700000000d)(post(env, Seq("subject" -> "共通スレ", "mail" -> "#!weakpass", "MESSAGE" -> "!924 本文")))
+      key = threadKey(created)
+      denied <- post(env, Seq("bbs" -> "sample", "key" -> key, "subject" -> "", "MESSAGE" -> "レス"))
+      allowed <- post(env, Seq("bbs" -> "sample", "key" -> key, "subject" -> "", "MESSAGE" -> "レス", "mail" -> "#!weakpass"))
+      d <- dat(env, "924", key)
+    } yield {
+      assertEquals(errorMessage(denied.text), Some(PostingText.globalThreadCapOnly))
+      assertEquals(header(allowed.res, "x-resnum"), Some("2"))
+      assertEquals(d.split("\n", -1).count(_.nonEmpty), 2)
+    }
+  }
+
+  test("全板共通スレ: 900スレは誰でも書き込め、どの板のURLから投稿しても板924のスレに追記される") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    for {
+      created <- atSecond(1700000000d)(post(env, Seq("subject" -> "共通スレ", "mail" -> "#!weakpass", "MESSAGE" -> "!900 本文")))
+      key = threadKey(created)
+      first <- post(env, Seq("bbs" -> "sample", "key" -> key, "subject" -> "", "MESSAGE" -> "レス1"))
+      second <- post(env, Seq("bbs" -> "othername", "key" -> key, "subject" -> "", "MESSAGE" -> "レス2"))
+      d <- dat(env, "924", key)
+      global <- subjectOf(env, "924")
+    } yield {
+      assertEquals(header(first.res, "x-resnum"), Some("2"))
+      assertEquals(header(second.res, "x-resnum"), Some("3"))
+      assertEquals(d.split("\n", -1).count(_.nonEmpty), 3)
+      assert(global.startsWith(s"$key.dat<>共通スレ"), global)
+      assert(global.contains("(3)"), global)
     }
   }
 

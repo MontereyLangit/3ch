@@ -92,6 +92,7 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 | `docs/admin-spa-auth-plan.md`                                                          | 管理画面の改修計画（アカウント認証化・新 UI・scalajs-react SPA。2026-11-02、未着手）                                                                                                            |
 | `docs/admin-spa-auth-review.md`                                                        | 管理画面改修計画の Opus 5 セルフレビュー記録（2026-11-02）                                                                                                                               |
 | `docs/durable-object-stubs.md`                                                         | DO の RPC スタブ（`*DoStub`）のコンパイル時生成の仕様・対応範囲・運用手順                                                                                                            |
+| `docs/thread-creation-regulation.md` / `docs/global-thread.md`                         | 投稿機能の追加仕様（スレ立て規制、全板共通スレ 924 / 900）                                                                                                                            |
 
 ### 1.6 開発コマンド
 
