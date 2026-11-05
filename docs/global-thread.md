@@ -32,7 +32,7 @@ v5 以来「スレキーが 924 / 900 始まりの投稿は板 `924` へ送る�
 
 - Thread DO 名は `924/<key>`、スレ一覧は Board DO `924` の `subjectList`。
 - 板設定は R2 `924/SETTING.TXT`（無ければ既定値）。`BBS_MAX_MENU_THREAD` など一覧の上限も板 924 の設定。
-- ID のグループは板 924（`BBS_ID_GROUP` 未設定時）。900 スレへの書き込みの ID は投稿元の板ではなく板 924 で計算する。
+- 識別子のグループは板 924（`BBS_ID_GROUP` 未設定時）。900 スレへの書き込みの識別子は投稿元の板ではなく板 924 で計算する。
 - 過去ログ目次 R2 `924/thread/<先頭4桁>/subject.txt`、`headline.txt` の板名も `924` になる。
   `bbsmenu.html` を headline から生成している場合、板 `924` が板一覧に現れる。
 - スレ立て規制（`docs/thread-creation-regulation.md`）は★が対象外なので共通スレには掛からない。
@@ -64,7 +64,7 @@ v5 以来「スレキーが 924 / 900 始まりの投稿は板 `924` へ送る�
 
 ## 変更していないもの
 
-dat の5フィールド構造、Shift_JIS 出力、ID・トリップ・キャップの計算、DO / R2 / KV のキーと形式。
+dat の5フィールド構造、Shift_JIS 出力、識別子・キャップの計算、DO / R2 / KV のキーと形式。
 `subject.txt` の `Last-Modified` は従来どおり現在時刻（KB-06）。
 
 ## テスト
