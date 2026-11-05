@@ -56,7 +56,7 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 ### 1.4 ディレクトリ構成
 
 ```
-common/                Scala (JVM/JS cross)。Shift_JIS 以外の純粋ロジック（MD5, crypt(3), ルート表 RouteTable.scala 等）
+common/                Scala (JVM/JS cross)。純粋ロジック（ルート表 RouteTable.scala, BoardId / ThreadKey / BbsSettings 等）
 bbs/
   src/main/scala/io/_3ch/bbs/
     Main.scala         Worker エントリ（JSExportTopLevel）
@@ -64,7 +64,7 @@ bbs/
                        Moderation, AdminHandler（/admin/*）, Responses
     durable/           Board DO, Thread DO
     external/cloudflare/  Workers / DO / R2 / KV の facade（DO の RPC スタブ `*DoStub` はコンパイル時に codegen が生成。docs/durable-object-stubs.md）
-    hash/, util/       Web Crypto ハッシュ, Shift_JIS 変換
+    hash/, util/       Web Crypto ハッシュ・MD5 の npm facade（`@noble/hashes`）, Shift_JIS 変換
   src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
   test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ
 bbs-client/            クライアント側（hydration）Scala
@@ -84,6 +84,7 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 | **`docs/現行システム仕様書.md`**                                                       | **最重要。v5 の全ロジックを抽出した仕様書（版 2.0.0）。v6 は同一仕様を実装している。** 文中の `src/*.js` はタグ `v5-final` 上のファイル。第11章に既知の不具合とv6推奨仕様の対照表あり |
 | **`docs/既知不具合台帳.md`**                                                           | **既知不具合の一覧（KB-nn）。** 新たに見つけた不具合もここに追記する。修正方針は 3.3                                                                                                  |
 | `docs/v6s実装メモ.md`                                                                  | Scala.js 実装（`bbs/`）の設計背景。doc コメントから参照される                                                                                                                  |
+| `docs/トリップ・ID廃止とスレ主表示.md`                                                 | 2026-11-02 の仕様変更（トリップ・ID 廃止、`!id`、スレ主表示 ` (主)`）。認証ブランチとの差分を含む                                                                                      |
 | `docs/admin.md`                                                                        | 管理画面の利用手順・規制ルール書式                                                                                                                                                    |
 | `docs/auth-phoebe-rate-limit-design.md`                                                | 認証・PHOEBE（Lv）・連投規制と新 UI での Web 版認証の設計案（2026-11-01、未実装）                                                                                                               |
 | `docs/bbs-cgi-ddd-refactoring-plan.md`                                                 | bbs.cgi 投稿処理の DDD 化リファクタリング計画（2026-11-01、未着手。設計書を載せる前提作業）                                                                                                            |

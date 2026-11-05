@@ -1,9 +1,9 @@
-package io._3ch.common.hash
+package io._3ch.bbs.hash
 
 import io._3ch.common.golden.{GoldenFile, Json}
 import munit.FunSuite
 
-/** `tests/golden/md5.json` を読み、`src/common.js` の `md5()` と一致することを確認する。 */
+/** [[Md5]] を `tests/golden/md5.json`（v5 `src/common.js` の `md5()` 実測値）と照合する。 */
 class Md5Suite extends FunSuite {
 
   test("golden: md5.json の全ケースがJS実測値と一致する(ブロック境界・孤立サロゲートを含む)") {

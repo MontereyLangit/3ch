@@ -6,7 +6,7 @@ import scala.scalajs.js.annotation.JSExportTopLevel
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
-import io._3ch.common.text.Utf8
+import io._3ch.bbs.external.web.TextEncoder
 import io._3ch.bbs.domain.posting.moderation.ThreadCreationHistory
 import io._3ch.bbs.durable.codec.ThreadCreationCodec
 import io._3ch.bbs.durable.support.DurableLock
@@ -126,7 +126,7 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
       }
       def render = if lines.isEmpty then "" else lines.mkString("\n") + "\n"
       var result = render
-      while Utf8.encode(result).length > 512 * 1024 && lines.nonEmpty do {
+      while new TextEncoder().encode(result).length > 512 * 1024 && lines.nonEmpty do {
         lines = lines.dropRight(1)
         result = render
       }
