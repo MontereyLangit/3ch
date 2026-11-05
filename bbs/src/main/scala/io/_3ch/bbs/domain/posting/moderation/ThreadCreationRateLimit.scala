@@ -4,7 +4,7 @@ import io._3ch.bbs.domain.posting.ClientIdentity
 
 /**
   * スレ立て規制の判定。通常は同一IP・同一スレタイ、広域は同一UA・同一ネットワークグループを拒否する。
-  * 詳細は docs/thread-creation-regulation.md「判定」。
+  * 詳細は docs/thread-creation-regulation.md「判定」
   */
 object ThreadCreationRateLimit {
   /** 狭域（tatesugi）と広域（junban）の、見る件数と秒数 */
@@ -57,7 +57,7 @@ object ThreadCreationRateLimit {
 
   /**
     * 確定済み履歴は件数窓ごと全体で、有効な予約は1件ずつ個別に判定し、最優先の規制理由を返す。
-    * 優先順は [[Reason]] の宣言順。
+    * 優先順は [[Reason]] の宣言順
     */
   def checkWithReservations(settings: Settings, records: Seq[ThreadCreationRecord], request: ThreadCreationRequest, nowSeconds: Double): Option[Reason] = {
     val (pending, completed) = records.partition(_.isActivePending(nowSeconds))

@@ -2,7 +2,7 @@ package io._3ch.common.domain
 
 /**
  * スレッド番号
- * @param value 9桁～10桁のUNIXタイムスタンプ（スレ立て時刻）。
+ * @param value 9桁～10桁のUNIXタイムスタンプ（スレ立て時刻）
  */
 case class ThreadKey private (
   value: Long

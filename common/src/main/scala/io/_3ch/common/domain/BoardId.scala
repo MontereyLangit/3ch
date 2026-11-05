@@ -2,7 +2,7 @@ package io._3ch.common.domain
 
 /**
  * 板ID
- * @param value [a-zA-Z0-9]の文字列。1文字以上16文字以下。
+ * @param value [a-zA-Z0-9]の文字列。1文字以上16文字以下
  */
 case class BoardId private (
   value: String

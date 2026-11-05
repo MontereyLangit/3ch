@@ -2,7 +2,7 @@ package io._3ch.common.domain
 
 /**
  * スレッド一覧
- * @param value BbsSubjectのリスト。
+ * @param value BbsSubjectのリスト
  */
 case class BbsSubjects (
   value: List[BbsSubject]

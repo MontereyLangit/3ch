@@ -1,6 +1,6 @@
 package io._3ch.bbs.domain.posting
 
-/** 返信の名前欄に付ける ` (主)` の判定（docs/トリップ・ID廃止とスレ主表示.md §2.4）。 */
+/** 返信の名前欄に付ける ` (主)` の判定（docs/トリップ・ID廃止とスレ主表示.md §2.4） */
 object NusiMark {
   /** 名前欄の末尾に付ける印 */
   val suffix: String = " (主)"

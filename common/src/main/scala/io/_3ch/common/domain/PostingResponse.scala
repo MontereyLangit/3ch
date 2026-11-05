@@ -10,14 +10,14 @@ object PostingOutcome {
 
   /**
    * 書きこみました。
-   * @param redirect 書き込み先URL。完了画面meta refreshで指定されている。
+   * @param redirect 書き込み先URL。完了画面meta refreshで指定されている
    */
   final case class Posted(redirect: Option[String]) extends PostingOutcome
 
   /**
    * ＥＲＲＯＲ！
    * TODO: 認証実装時、認証要求エラーは分離（Webは強制で認証させるため） -> 認証画面モーダル
-   * @param message エラーメッセージ。エラー画面h1タグの中に入っている。
+   * @param message エラーメッセージ。エラー画面h1タグの中に入っている
    */
   final case class Rejected(message: String) extends PostingOutcome
 
