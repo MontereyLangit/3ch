@@ -1,7 +1,7 @@
 # 認証・PHOEBE（Lv）・連投規制 設計
 
 2026-11-01。利用者提示の原案（§1）、[PHOEBE.md](bbscgi/PHOEBE.md)、端末フィンガープリントと認証に関する裁定メモ
-（リポジトリ外の `ninja_auth_system.md` 系。要点は §3.7 に転記）、および新 UI（`feature/board_top`。
+（リポジトリ外の `ninja_auth_system.md` 系。要点は §3.7 に転記）、および新 UI（`develop` に統合済みの板トップ。PR #37。
 `docs/ui/板top_書き込み欄と投稿後更新の方針.md`・`docs/islands-ssr.md`・`docs/handler-rendering.md`）をもとに、
 v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の挙動（§3.8）を設計する。
 **状態: 設計案（未実装）。** 実装は §12 の順で行い、各段で本書を実装結果に合わせて訂正する。
@@ -96,7 +96,8 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 | 失効 | ログアウト・パスワード変更・再設定・方式移行・退会・管理者の凍結はいずれも `gen` を進める（全端末のセッションが無効になる。端末ごとの失効は持たない）。クライアント ID は `exp` ＝発行＋365 日 |
 | 複数 Cookie | 現行の `PON` と同時に出すため、応答ヘッダは `Headers.append` で `Set-Cookie` を複数出せる形にする（現行の `js.Dictionary` では 1 本に上書きされる。計画書 §3） |
 
-既存の `PON` 等の Cookie は現行どおり発行し、意味は変えない。`/auth/*` の POST と `/admin/*` の `GET` 以外の要求は `Origin` ヘッダが自ホストと一致しなければ拒否する（`SameSite=Lax` だけに頼らない。管理画面の追加条件は改修計画 §3.5）。
+既存の `PON` 等の Cookie は現行どおり発行し、意味は変えない（`develop` では `PON` も `Domain` を付けない host-only になっている）。
+`www.3chbbs.com` は専ブラ以外を `www.3ch.io` へ 301 で転送するので、Web 版の Cookie は `www.3ch.io` にだけ載る。専ブラが `www.3chbbs.com` のまま書き込んだ場合、キー認証で発行する Cookie はそのホストに載り、`www.3ch.io` の Cookie とは別になる。`/auth/*` の POST と `/admin/*` の `GET` 以外の要求は `Origin` ヘッダが自ホストと一致しなければ拒否する（`SameSite=Lax` だけに頼らない。管理画面の追加条件は改修計画 §3.5）。
 
 ### 3.4 bbs.cgi での認証主体の決定
 
@@ -159,7 +160,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 
 画面のモックは `docs/ui/auth.html`（`/auth/`）・`auth-modal.html`（板トップ上の認証モーダル）・`account.html`（`/auth/account`）。見た目は板トップに揃えている。
 
-新 UI（`feature/board_top` 以降）は scalajs-react の SSR コンポーネント（`bbs/.../components/`）と、`bbs-client` の
+新 UI（板トップ以降）は scalajs-react の SSR コンポーネント（`bbs/.../components/`）と、`bbs-client` の
 `@islands` で hydrate するクライアント部品で構成される。投稿欄は板 top の各スレカードに `details` 方式で置き、
 `fetch` で bbs.cgi へ送って `x-threadkey` / `x-resnum` で成否を見る（上記の方針メモ 2 章）。認証はこの構成に次を足す。
 
@@ -289,7 +290,7 @@ Turnstile は要求しない（原案「作成時の認証なし」）が、端�
    Cookie `ch3s_oauth`＝`{state, nonce, verifier, dev, return, popup, link: aid?, agreedAt}` を `AUTH_SECRET` で署名して保存
    （`Path=/auth/google; Max-Age=600; HttpOnly; Secure; SameSite=Lax`）。
 4. `https://accounts.google.com/o/oauth2/v2/auth` へ 302:
-   `client_id`・`redirect_uri=https://www.3chbbs.com/auth/google/callback`・`response_type=code`・`scope=openid email`・
+   `client_id`・`redirect_uri=https://www.3ch.io/auth/google/callback`・`response_type=code`・`scope=openid email`・
    `state`・`nonce`・`code_challenge=S256(verifier)`・`code_challenge_method=S256`・`prompt=select_account`。
 
 **コールバック**（`GET /auth/google/callback?code=&state=`）
@@ -315,7 +316,7 @@ Turnstile は要求しない（原案「作成時の認証なし」）が、端�
 - Google アカウント 1 つ（`sub`）につき 3ch アカウント 1 つ。同じ人が ID/Password アカウントも別に持つことは許す（相互移行はしない）。
 - 連携解除・Google → 他方式の移行はしない（§13-23）。退会は §3.9 と同じ。
 - Google 側でアカウントが消えた・取り消された場合はログインできなくなるだけで、3ch 側のデータは残す。
-- `redirect_uri` は本番 `https://www.3chbbs.com/auth/google/callback` と開発 `http://127.0.0.1:8787/auth/google/callback` を Google Cloud Console に登録する。
+- `redirect_uri` は本番 `https://www.3ch.io/auth/google/callback` と開発 `http://127.0.0.1:8787/auth/google/callback` を Google Cloud Console に登録する。
   `GOOGLE_CLIENT_ID` は `vars`、`GOOGLE_CLIENT_SECRET` は secret（§9.3）。
 - エッジ防御（§3.6）のデータセンター ASN 拒否は `start` にも適用する。
 - テスト: `GoogleIdToken.verifyClaims(claims, now, nonce, clientId)` を `common` の純粋関数にして JVM でも検証。署名検証・トークン交換・JWKS は `AuthHandlerSuite` で `fetch` を差し替えて確認。
@@ -647,7 +648,7 @@ RPC: `create`, `describeForPosting(aid, gen)`, `describeForAdmin(aid, gen, admin
 
 ## 10. ルーティングと画面
 
-ルートは `feature/board_top` の方式（`bbs/Main.scala` のハンドラに `@route` 注釈、codegen が `app/routes/` を生成。
+ルートは板トップと同じ方式（`bbs/Main.scala` のハンドラに `@route` 注釈、codegen が `app/routes/` を生成。
 `IslandRender` は廃止済みで、画面は handler が `c.renderPromise` で描く — `docs/handler-rendering.md`）に従う。
 islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 

@@ -1,17 +1,18 @@
 # bbs.cgi 投稿処理の DDD 化リファクタリング計画
 
 2026-11-01。[認証・PHOEBE・連投規制 設計](auth-phoebe-rate-limit-design.md)（以下「設計書」）を載せる前提として、
-`bbs.cgi` の投稿処理（`handler/PostingHandler.scala`。`feature/board_top` では `handler/Posting.scala`）を
+`bbs.cgi` の投稿処理（`bbs/src/main/scala/io/_3ch/bbs/handler/PostingHandler.scala`）を
 ドメインモデル・ドメインサービス・アプリケーションサービス・リポジトリ・DO に分ける。**状態: 計画（未着手）。**
 2026-11-02 の Opus 5 セルフレビュー（[auth-phoebe-review.md](auth-phoebe-review.md)）の指摘を反映した。
+2026-11-05、`develop` の取り込みに合わせて前提を改めた（`develop_v6s` と `feature/board_top` は PR #37 で統合済み、パッケージは `io._3ch.*`）。
 
 ## 0. 前提と不変条件
 
 | 項目 | 扱い |
 | --- | --- |
-| 起点 | `develop_v6s`（スレ立て規制の `domain/` と `durable/codec` `durable/support` を含む）と `feature/board_top`（`Posting.scala` への改名、`common/domain/BbsSettings` `BbsSubjects` `ThreadTitle`、`repository/BoardRepository`、`@route` / `@islands` 注釈、`components/`）。両者の分岐点は `0c405af` で、`board_top` はスレ立て規制を含まない。段 0 で統合する |
+| 起点 | `develop`（2026-11-05 時点。`develop_v6s` のスレ立て規制・ドメイン型と `feature/board_top` の `BbsSettings`・`BoardRepository`・`components/`・islands は PR #37 で統合済み。投稿処理は `PostingHandler.scala`） |
 | 振る舞い | **HTTP レベルの入出力をバイト単位で変えない。** dat / log / subject / R2 の書き込み内容、応答本文・ヘッダ・文字コード・エラー文言（`guarded` の内部エラー文言の書式を含む）も同じ。既知不具合（KB-03・KB-09・KB-10・KB-24・KB-25 など）は直さず残す。直すときは AGENTS.md 3.3 に従い別コミット |
-| 検証の軸 | **統合前の `develop_v6s` で**入出力スナップショットを作り（§5）、以後の段でこれを通す。`develop_v6s` の `PostingHandlerSuite`（68 件）と `board_top` の `PostingSuite`（55 件）は期待値が分かれているので、段 0 の終わりに統合したスイートを基準として確定し、段 1 以降は変更しない |
+| 検証の軸 | **現在の `develop`（本番相当）で**入出力スナップショットを作り（§5）、以後の段でこれを通す。`PostingHandlerSuite`（73 件）は段 1 以降、対象の改名以外は変更しない |
 | 規約 | AGENTS.md 3.5（DO はインフラ操作のみ、波括弧、短い doc コメント）。`common` は JVM/JS クロスで I/O と `js.*` を持たない |
 | 対象外 | 公開ルート（dat / subject.txt 等）、管理画面、`3chiko.html`。DO のストレージキー・形式 |
 
@@ -19,7 +20,7 @@
 
 - **`g: js.Dynamic` の可変バッグ**: 40 個超のフィールドを 15 段の関数が読み書きする。型がなく、段の順序依存（`makeId` は `identify` の後、`threadCreationLimit` は `checkSizes` の後）がコードに現れない。
 - **エラーの表現**: `deny(g, 文言)` が `g.error` に文言を入れて `Rejected` を投げる。文言の組み立てが各段に散らばり、判定（ドメイン）と文言（表示）が分かれていない。
-- **設定の読み方が 3 通り**: `Posting.parseSettings`（`<>` / `\n` 区切り、2 つ目の `=` 以降を捨てる）、`ThreadCreationSettings.settingsMap`（trim・後勝ち）、`BbsSettings.parse`（`board_top`。値 trim・最初の `=` で分割）。KB-34 / KB-35 / KB-36 はこの差から生じた。
+- **設定の読み方の名残**: 統合前は 3 通りの読み方があり、KB-34〜36 はその差から生じた。`develop` では `BbsSettings` にほぼ揃ったが、スレ立て規制だけが `BbsSettings` の出力を `ThreadCreationSettings.settingsMap` で読み直している。
 - **ドメイン規則の置き場所**: ID・識別子の種の組み立て、トリップの分岐、キャップ表示名、dat 行の整形、sage 判定が handler の中にあり、Thread DO の `addRes` にも 1000 件上限・`BBS_HEISA`・同一 key・スレ不在の判定が入っている（3.5 の「DO はインフラ操作だけ」に反する）。
 - **I/O の混在**: R2 の `SETTING.TXT` / `deny.cgi` / 過去ログ目次 / `headline.txt`、KV `CAP`、Thread / Board DO の呼び出しが handler に直書きで、テストはすべて HTTP レベル（`HandlerTestKit` で `Date` / `Math.random` / `caches` を差し替えるため `parallelExecution := false`）。
 - **`js.Dynamic` が RPC 境界を越える**: `Thread.addRes(dat, log, posting: js.Dynamic)` の `posting` に板名・key・sage・初期設定・スレ立て規制の材料が入り、DO 側で `truth(p.create)` のように読む。
@@ -28,7 +29,7 @@
 ## 2. 目標構造
 
 ```
-common/src/main/scala/ch3s/common/
+common/src/main/scala/io/_3ch/common/
   domain/
     BoardId, ThreadKey, ThreadTitle, BbsSettings（統合後の唯一の設定モデル）
     posting/   PostKind（NewThread / Reply）, PostForm（サニタイズ済み入力）, DatLine, DatLineFormatter,
@@ -38,7 +39,7 @@ common/src/main/scala/ch3s/common/
                （設計書 §5.2 の UA 解析 `UserAgentProfile` は v3 の正規表現表を使うため bbs/domain に置く）
     account/   設計書 §9.1 の Level / Phoebe / Roles / BypassLevel（段 10 で追加）
   text/        Utf8（既存）, HtmlEntity（正規表現を使わない文字参照の復元）
-bbs/src/main/scala/ch3s/bbs/
+bbs/src/main/scala/io/_3ch/bbs/
   domain/posting/
     PostingContext（既存を拡張）, PostingError（拒否理由の enum。文言は持たない）, PostingOutcome,
     FormSanitizer / PostRouting（js.RegExp を内部に閉じ込めた純粋関数）, UserInfo（log の userInfo 文字列）
@@ -79,8 +80,8 @@ bbs/src/main/scala/ch3s/bbs/
 
 | 段 | 内容 | 主な成果物 |
 | --- | --- | --- |
-| 0a | **スナップショット作成**: 統合前の `develop_v6s`（本番相当）で §5 のスナップショットを生成し、`tests/snapshots/` に置く。これが「振る舞いを変えない」の比較基準 | スナップショット、生成コマンド |
-| 0b | **ブランチ統合**: `develop_v6s` を `feature/board_top` に取り込む（`Posting.scala` と `threadCreationLimit`、`ThreadCreationSettings` と `BbsSettings` の競合を解消）。設定の読みを `BbsSettings` に一本化（`settingsMap` の「キーも trim・後勝ち」を `BbsSettings.parse` に寄せ、`BbsSettingsSuite` に境界ケースを足す）。`board_top` 側の KB-34〜36 の修正と設定読みの統一は**振る舞いの変更**なので、スナップショットの差分を意図した変更として記録し、独立コミットにする（AGENTS.md 3.3）。統合後のテストスイートを基準として確定する | 統合済みブランチ、`BbsSettings` 統合、差分の記録 |
+| 0a | **スナップショット作成**: 現在の `develop` で §5 のスナップショットを生成し、`tests/snapshots/` に置く。これが「振る舞いを変えない」の比較基準 | スナップショット、生成コマンド |
+| 0b | **設定の読み方の仕上げ**: ブランチ統合は PR #37 で済み、板設定は `BoardRepository` → `BbsSettings.create`、スレ設定は `BbsSettings.parse` で読むようになった。残るのは、スレ立て規制が `BbsSettings` の出力を `ThreadCreationSettings.settingsMap` で読み直している二重の解析で、これを `BbsSettings` の値を直接使う形にする。振る舞いが変わる場合はスナップショットの差分を意図した変更として記録し、独立コミットにする（AGENTS.md 3.3） | `ThreadCreationSettings` の整理、差分の記録 |
 | 1 | **エラーモデル**: `deny(g, 文言)` を `PostingError` と `PostingText.message` に置き換える。`Rejected` 例外は `PostingService` の内部実装に閉じる。`guarded` の内部エラー文言は `Internal` の文言化で同じ書式を再現する | `domain/posting/PostingError.scala`、`PostingText` の文言表、`PostingTextSuite`（全エラーの文言一致） |
 | 2 | **入力の型付け**: `PostingRequest.from(Request)`、`FormSanitizer`（`readForm` の置換列・Shift_JIS 復号・`submit=書` 判定）、`PostRouting`（`!newthread`、924 / 900、禁止板、スレ立て/返信の判定）。`g.form` を `PostForm` に置き換える | `bbs/domain/posting/{FormSanitizer, PostRouting}.scala`、`FormSanitizerSuite`（エスケープ・制御文字・`★☆` 変換・KB-03 の固定） |
 | 3 | **設定**: `BoardRepository.getBoardSettings` と新設 `ThreadRepository.getSettings` から `BbsSettings` を取り、`PostingContext.settings` に合成。`BbsSettings` に型付き読み（`int(name, default)`、`checked(name)`）を足す。KB-12（既定値とのマージ無し）は維持 | `common/domain/BbsSettings` 拡張、`repository/ThreadRepository.scala` |
@@ -102,7 +103,7 @@ bbs/src/main/scala/ch3s/bbs/
   - `tests/golden/` とは分ける（golden は v5 由来で手で編集しない表。スナップショットは v6 の現行コードから生成し、意図した変更時に再生成する）。
   - Shift_JIS の本文・バイト列は base64 で載せる。`Last-Modified` と `Date` は固定時刻から決まるので正規化しない。
   - 現行の内部エラー文言に出る `undefined`（`g.nowTime` 未設定。KB-39）はそのまま固定する。
-  - 生成は `sbt "bbs/testOnly ch3s.bbs.handler.PostingSnapshotSuite -- --update"`（環境変数ではなく引数で更新モードにする）。再生成した差分はレビュー記録に理由を書いてからコミットする。
+  - 生成は `sbt "bbs/testOnly io._3ch.bbs.handler.PostingSnapshotSuite -- --update"`（環境変数ではなく引数で更新モードにする）。再生成した差分はレビュー記録に理由を書いてからコミットする。
 - `sbt 'set ThisBuild / scalacOptions += "-no-indent"' Test/compile`、`npm run v6:build`、`npm run v6:typecheck`、`npm test`（実 workerd）、`git diff --check`。
 - 各段でレビュー連鎖（AGENTS.md 3.2）。記録は `docs/bbs-cgi-ddd-refactoring-review.md` に段ごとの表で残す。
 
@@ -113,7 +114,7 @@ bbs/src/main/scala/ch3s/bbs/
 | JVM と JS で正規表現の意味が違う | 正規表現を使うロジックは `bbs/domain` に置き、JVM テストに持ち込まない。`common` へ移すときは正規表現を使わない実装に書き直し、golden で同値を示す |
 | `guarded` の内部エラー文言（段名・時刻・板名・key・番号・原因文字列）が一致しない | `PostingError.Internal` に段名・説明・時計種別・原因を持たせ、文言化を 1 関数に集約。スナップショットで固定 |
 | DO の RPC 境界を越えるエラー文字列（`fail("…")`）を段 8 でコード化すると handler 側の文言が変わる | コード → 従来文言の対応表を `PostingText` に持ち、`errmsg:updateThreadFile->Error: …` までスナップショットで一致を確認 |
-| `board_top` との競合 | 段 0 で統合してから始める。`board_top` 側で `Posting.scala` に触る作業が並行する場合は段 0 を先に `board_top` へマージする |
+| 並行する UI 作業との競合 | 板トップの統合は済んだ。`PostingHandler.scala` に触る UI 側の作業（投稿欄の fetch 送信など）と並行する場合は、段ごとに `develop` を取り込んでから進める |
 | 非同期ハッシュの順序変更で ID・識別子が変わる | ハッシュの入力文字列（種）を純粋関数にして golden で固定し、サービス側は種を渡すだけにする |
 | テスト実行時間の増加 | ドメインテストは JVM で速く回る。HTTP レベルのテストは件数を増やさず、スナップショット 1 本に集約する |
 | `Thread.addRes` の引数を変えると管理画面・移動（`receiveMove`）の経路が壊れる | 段 8 まで RPC 署名を変えず、`PostingCodec` で旧形式も読めるようにする |

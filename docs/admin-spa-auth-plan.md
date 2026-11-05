@@ -19,7 +19,7 @@
 | 保存先 | R2 の `{bbs}/SETTING.TXT`・`{bbs}/head.txt`・`deny.cgi`・`ngwords.cgi`・`bbsmenu.html`、Thread / Board DO の既存 RPC をそのまま使う。形式は変えない。新規は設計書 §9 の DO と本書の監査ログだけ |
 | 管理操作の意味 | 現行のスレ停止・再開・削除・移動・レス編集・レス削除・規制ルール検証・スレ立て規制フォームの ETag 条件付き保存は、挙動を変えずに API 化する（`docs/admin.md` の記述が引き続き正） |
 | 防御 | AGENTS.md 3.6（Basic 認証＋Origin 検証＋no-store＋CSP）は、Basic 認証を「再認証付きの管理者セッション」に置き換える。**Origin 検証は復活させる**（Cookie 認証では必須。現行は 2026-10-05 の利用者確認で意図的に外しており、外した理由は記録に無い）。no-store と CSP は維持し、CSP は SPA 用に改める（§5.4）。**Origin 検証の復活と CSP の変更（`script-src 'self'`）は段 M1 で行うので、M1 の前に利用者の承認を得る**（§10-9）。3.6 の文言更新は段 M2 で行う |
-| 起点 | DDD 化計画（`docs/bbs-cgi-ddd-refactoring-plan.md`）の段 0b で `develop_v6s` と `feature/board_top` を統合した後のブランチ。`board_top` 側の `AdminHandler` にはスレ立て規制フォームが無いので、統合で `develop_v6s` 側を採る |
+| 起点 | 現在の `develop`（板トップ統合後。`AdminHandler` にはスレ立て規制フォームがある）。DDD 化計画（`docs/bbs-cgi-ddd-refactoring-plan.md`）の段 0b と並行してよい |
 
 ## 1. 現状
 
@@ -200,7 +200,7 @@ HTML の `style` 属性は CSP（`style-src 'self'`）で弾かれ、`bgcolor` �
 
 **未設定と明示値**: 各項目は「未設定（既定値 n を表示）」と「明示値」を区別して持つ。保存時は、明示値の項目と、未設定から値を入れた項目だけを書き出し、触っていない未設定の項目は書き出さない（KB-12 によりコードの既定値がそのまま効くので、既定値の変更、たとえば設計書 §8.1 の `BBS_RENTOU_MODE` を `log` から `on` へ変えることが、保存した板にも届くようにするため）。明示値を未設定に戻す操作（「既定に戻す」）も置く。
 
-**読み方の基準**: `SETTING.TXT` の解析は DDD 化計画の段 0b で統合した `BbsSettings.parse` だけを使う（最初の `=` で分割、キー・値を trim、重複は後勝ち）。行順を保ち、`=` の無い行（コメントなど）は「その他」欄にそのまま残す。フォームの項目と同じキーを「その他」欄に書いたら保存を拒否する（`admin:invalid`）。
+**読み方の基準**: `SETTING.TXT` の解析は `develop` で統一された `BbsSettings`（`create` / `parse`）だけを使う（最初の `=` で分割、キー・値を trim、重複は後勝ち）。行順を保ち、`=` の無い行（コメントなど）は「その他」欄にそのまま残す。フォームの項目と同じキーを「その他」欄に書いたら保存を拒否する（`admin:invalid`）。
 
 **保存の手順**: 読込時に `SETTING.TXT` と `head.txt` の両方の ETag を返し、保存では両方を ETag 条件付きで書く。先に `SETTING.TXT`、次に `head.txt` の順で書き、`SETTING.TXT` が競合したら何も書かずに 409 を返す。`head.txt` だけが競合したら部分成功（`SETTING.TXT` は保存済み）として返し、元に戻す処理はしない（間に保存された他人の `head.txt` を消さないため）。未作成のファイルは「存在しない場合だけ作る」条件で書く（R2 の `etagDoesNotMatch: "*"` が使えるかは段 M0 で確かめる。使えなければ KB-25 と同じく条件なし）。
 検証はサーバ側（`bbs`）で行い、スレ立て規制は `ThreadCreationSettings`、設計書の各設定はその検証関数を使う。`common` の `BoardSettingsForm` は項目の定義と `SETTING.TXT` との相互変換だけを持ち、検証を持たない（`ThreadCreationSettings` は `bbs` の型に依存するため）。`KEY=VALUE` の値に改行を入れさせない。
@@ -211,13 +211,13 @@ HTML の `style` 属性は CSP（`style-src 'self'`）で弾かれ、`bgcolor` �
 ### 5.1 プロジェクト
 
 ```
-common/src/main/scala/ch3s/common/admin/
+common/src/main/scala/io/_3ch/common/admin/
   AdminDto.scala          API の要求・応答の型（板設定、スレ、ルール、アカウント、監査など）
   AdminCodec.scala        JSON の読み書き（§10-4）
   AdminRole.scala         役割と画面・操作の対応表（§4.1）。サーバとクライアントで共有
   BoardSettingsForm.scala 板設定の項目定義（キー・入力種別・範囲・帯の色・表示条件・既定値）と SETTING.TXT との相互変換（検証はサーバ側）
   ResEditText.scala       dat のフィールドと編集用テキストの相互変換（現行 AdminHandler.editable の移設）
-admin-client/src/main/scala/ch3s/admin/
+admin-client/src/main/scala/io/_3ch/admin/
   Main.scala              createRoot で起動
   AdminApp.scala          ルータとレイアウト
   AdminRoutes.scala       scalajs-react extra の Router 定義（URL ↔ ページ）
@@ -229,7 +229,7 @@ admin-web/
   main.js                 import "./admin.css"; import "scalajs:main.js";
   admin.css               Tailwind の読み込み（app/style.css と同じ @source）と管理画面固有の少数の指定
 vite.admin.config.ts      管理画面専用ビルド（HonoX なし。Tailwind は板トップと同じ設定）
-bbs/src/main/scala/ch3s/bbs/
+bbs/src/main/scala/io/_3ch/bbs/
   handler/admin/AdminAuth.scala     管理者セッション・再認証・役割検査・Origin 検査
   handler/admin/AdminApi.scala      JSON の入出力とルーティング
   handler/admin/AdminAssets.scala   起動ページと資産の配信
@@ -245,7 +245,7 @@ bbs/src/main/scala/ch3s/bbs/
 ### 5.2 ビルド
 
 - `npm run v6:build` に `vite build --config vite.admin.config.ts` を足し、`dist/admin/`（`index.html`・`assets/*.js`・`assets/*.css`）へ出す。設定は `root: "admin-web"`、`base: "/admin/"`（無いと資産を `/assets/*` で参照して 404 になる）、`publicDir: false`（無いと `public/3chiko.html` が複製される）、`build.outDir: "../dist/admin"`、`emptyOutDir: true`（`dist/admin/` だけを空にする）。
-- 実行順は client → workers → admin。workers ビルド（`@hono/vite-build`）が `dist/` を空にするかは未確認なので、admin を最後にして、`dist/admin/index.html` の存在をビルド後に検査する。`feature/board_top` の `vite.config.ts` にある Scala.js プロジェクトの直列化ラッパーを流用する。
+- 実行順は client → workers → admin。workers ビルド（`@hono/vite-build`）が `dist/` を空にするかは未確認なので、admin を最後にして、`dist/admin/index.html` の存在をビルド後に検査する。`vite.config.ts` にある Scala.js プロジェクトの直列化ラッパーを流用する。
 - sbt は `adminClient/fastLinkJS`・`fullLinkJS` を既存ビルドと直列に実行する（`docs/client-build-review.md` の方針どおり sbt を同時起動しない）。
 
 ### 5.3 配信
@@ -299,7 +299,7 @@ bbs/src/main/scala/ch3s/bbs/
 
 | 段 | 内容 | 前提 | 完了条件 |
 | --- | --- | --- | --- |
-| M0 | **API 化**: `AdminService`・`AdminApi`・`AdminDto` / `AdminCodec`・`BoardSettingsForm`・`ResEditText` を作り、`/admin/api/*` を Basic 認証のまま追加する。既存の HTML 画面はそのまま残し、内部で `AdminService` を共用する。板設定・`head.txt`・`bbsmenu.html`・規制ルールの ETag 条件付き保存への変更は独立コミット | DDD 化計画の段 0b | 既存の `AdminHandlerSuite`・統合テストが、条件付き保存の変更分を除いて通る。`AdminApiSuite` で全 API の正常系・検証エラー・ETag 競合・CR/LF 拒否・入力上限・未設定と明示値の往復を確認 |
+| M0 | **API 化**: `AdminService`・`AdminApi`・`AdminDto` / `AdminCodec`・`BoardSettingsForm`・`ResEditText` を作り、`/admin/api/*` を Basic 認証のまま追加する。既存の HTML 画面はそのまま残し、内部で `AdminService` を共用する。板設定・`head.txt`・`bbsmenu.html`・規制ルールの ETag 条件付き保存への変更は独立コミット | — | 既存の `AdminHandlerSuite`・統合テストが、条件付き保存の変更分を除いて通る。`AdminApiSuite` で全 API の正常系・検証エラー・ETag 競合・CR/LF 拒否・入力上限・未設定と明示値の往復を確認 |
 | M1 | **SPA 化**: `adminClient`・`admin-web`・`vite.admin.config.ts`、配信（`run_worker_first`・`AdminAssets`）、モックの見た目。全画面が現行と同じ操作をできたら、旧 HTML の描画（`AdminText` の画面部分）を削除する。認証は Basic 認証のまま、API に §3.5 の Origin 等の検査を加える。**着手前に Origin 検証の復活と CSP の変更について利用者の承認を得る**（§10-9） | M0、利用者の承認 | 現行の全操作を SPA から実行できることを実 workerd で確認（§8）。CSP 違反が出ない。`dist/admin/` が `/admin` 以外から取れない。`AdminHandlerSuite` の「Origin・Fetch Metadata によらず受け付ける」と `tests/admin.integration.test.js` の同趣旨の確認を、他オリジンからの変更を拒否する期待値に書き換える |
 | M2 | **アカウント認証へ切替**: 管理者セッション・再認証・役割検査・bootstrap・監査ログ・**最小限の役割付与 API と画面**（`PUT /admin/api/accounts/:uid/roles`。Basic 認証で作業していた人に役割を配れるようにするため）。Basic 認証・`ADMIN_PASSWORD`・`ADMIN_USER` を削除。AGENTS.md 1.6・3.6、`docs/admin.md`（ログイン・bootstrap・役割・開発時の手順）を更新 | 設計書の段 B（`Account` / `AccountIndex` DO・セッション）と、段 E-1（ID/Password ログインと Google ログイン） | 役割ごとの許可・拒否の表を全 API について `AdminAuthSuite` で確認。Basic 認証の資格情報では入れない。bootstrap の条件（0 件・非常用期限・同時実行で 1 人だけ）、`adminGen` による失効、パスワード規則の検査時点、Google 再認証の `aid` 照合を確認。`auth_time` の実機確認の結果を本書に反映 |
 | M3 | **認証機能の管理画面**: アカウント・キャップ・PHOEBE / エッジ防御・連投規制とスレ立て規制の各項目（§4.3 の「設計書 段 A / C / D 以降」） | 設計書の各段 | 各画面の API テスト。§4.3 の表示条件が各段の完了と一致する |
