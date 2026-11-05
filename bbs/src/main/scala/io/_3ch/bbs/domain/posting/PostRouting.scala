@@ -5,7 +5,7 @@ import io._3ch.common.domain.posting.PostForm
 import scala.scalajs.js
 import scala.scalajs.js.JSStringOps.*
 
-/** 復号済みフォームの振り分け（`!newthread`、全板共通スレ、禁止板）と必須項目の検査。 */
+/** 復号済みフォームの振り分け（!newthread、全板共通スレ、禁止板）と必須項目の検査 */
 object PostRouting {
   private val NewThread = new js.RegExp("^!newthread([^\\r\\t\\n\\f\\v<]+)(.*)$")
   private val LineBreak = new js.RegExp(" ?<br> ?", "g")
@@ -15,8 +15,8 @@ object PostRouting {
   private val Forbidden = Set("", "test", "js", "css", "html", "images")
 
   /**
-    * スレ立てか返信かを決め、スレ立てなら `key` を `unixtime`（本文先頭の `!924` / `!900` なら共通スレのキー）にする。
-    * 返信なら題名を空にする。拒否時は、その時点までに整えたフォームを添えて返す。
+    * スレ立てなら key を unixtime（本文先頭が !924・!900 なら共通スレのキー）にし、返信なら題名を空にする。
+    * 拒否時はそこまで整えたフォームを添えて返す
     */
   def route(form: PostForm, unixtime: String): Either[(PostingError, PostForm), PostForm] = {
     val next = NewThread.exec(form.message)

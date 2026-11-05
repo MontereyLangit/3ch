@@ -1,6 +1,6 @@
 package io._3ch.common.text
 
-/** JavaScript の `Number(s)` と `parseInt(s)`（基数省略）の文字列解釈。 */
+/** JavaScript の Number(s) と parseInt(s)（基数省略）の文字列解釈 */
 object JsNumber {
   private def isJsSpace(c: Char): Boolean =
     c == '\t' || c == '\n' || c == '\u000b' || c == '\f' || c == '\r' || c == ' ' || c == ' ' || c == ' ' ||
@@ -12,7 +12,7 @@ object JsNumber {
 
   private def radixValue(digits: String, radix: Int): Double = BigInt(digits, radix).toDouble
 
-  /** `Number(s)`。空白だけなら 0、解釈できなければ NaN。 */
+  /** Number(s) と同じ。空白だけなら 0、解釈できなければ NaN */
   def parse(s: String): Double = {
     val t = trim(s)
     val decimal = "[+-]?(?:[0-9]+\\.?[0-9]*|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
@@ -31,7 +31,7 @@ object JsNumber {
     } else Double.NaN
   }
 
-  /** `parseInt(s)`。先頭の整数部分だけを読み、`0x` 始まりは 16 進。数字が無ければ NaN。 */
+  /** parseInt(s) と同じ。先頭の整数部分だけを読み、0x 始まりは 16 進。数字が無ければ NaN */
   def parseInt(s: String): Double = {
     val t = trim(s)
     val negative = t.startsWith("-")

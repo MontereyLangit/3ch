@@ -31,7 +31,7 @@ object ThreadCreationSettings {
 
   def parseText(text: String): Either[ThreadCreationSettingError, Parsed] = parse(settingsMap(text))
 
-  /** 設定名の前後空白を除き、重複は後勝ちで読む。 */
+  /** 板設定から読む。設定名の前後の空白は除き、重複は後勝ち */
   def fromSettings(settings: BbsSettings): Either[ThreadCreationSettingError, Parsed] =
     parse(settings.value.foldLeft(Map.empty[String, String]) { case (acc, (k, v)) => acc.updated(k.trim, v) })
 

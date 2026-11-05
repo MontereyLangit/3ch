@@ -22,6 +22,7 @@ object PostingText {
     case PostField.Message => "本文"
   }
 
+  /** スレ立て設定の誤りを管理画面と投稿エラーの文言にする */
   def creationSettingsMessage(reason: ThreadCreationSettingError): String = reason match {
     case ThreadCreationSettingError.NonNegativeIntegerRequired(setting) => s"$setting は0以上の整数で指定してください。"
     case ThreadCreationSettingError.AboveMaximum(setting, maximum) => s"$setting は $maximum 以下で指定してください。"

@@ -8,11 +8,12 @@ import io._3ch.common.domain.posting.PostForm
 import scala.scalajs.js
 import scala.scalajs.js.typedarray.Uint8Array
 
-/** bbs.cgi のフォーム本文を復号する。`submit=書…` は UTF-8、それ以外は Monazilla の Shift_JIS とみなす。 */
+/** bbs.cgi のフォーム本文を復号する。submit=書… なら UTF-8、それ以外は Monazilla の Shift_JIS とみなす */
 object PostingFormDecoder {
   private val Submit = new js.RegExp("submit=([^&]+)")
   private val HexByte = new js.RegExp("^[0-9a-fA-F]{2}$")
 
+  /** 拒否時は、その時点のフォームを添えて返す */
   def decode(body: Uint8Array, isMonazilla: Boolean): Either[(PostingError, PostForm), PostForm] = {
     val text = new TextDecoder("utf-8").decode(body)
     val empty = PostForm(isMonazilla = isMonazilla)

@@ -7,9 +7,10 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
 object ThreadRepository {
+  /** 板とスレキーに対応する Thread DO のスタブ */
   def stub(board: BoardId, key: String, e: WorkerEnv): ThreadDoStub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"${board.value}/$key"))
 
-  /** スレの Durable Object からスレ設定（`キー=値<>` 列）を読む。無ければ空。 */
+  /** スレの DO からスレ設定（キー=値<> の列）を読む。無ければ空 */
   def getSettings(board: BoardId, key: String, e: WorkerEnv): Future[BbsSettings] =
     stub(board, key, e).getSettings().toFuture.map(BbsSettings.parse(_, "<>"))
 }

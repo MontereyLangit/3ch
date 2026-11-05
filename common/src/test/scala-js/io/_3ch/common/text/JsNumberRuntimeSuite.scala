@@ -3,7 +3,7 @@ package io._3ch.common.text
 import scala.scalajs.js
 import io._3ch.common.domain.identity.DateSalt
 
-/** `JsNumber` が実行環境の `Number` / `parseInt` と一致することの確認。 */
+/** JsNumber が実行環境の Number・parseInt と一致するか */
 class JsNumberRuntimeSuite extends munit.FunSuite {
   private val inputs = List(
     "", " ", "\t\n", "0", "12", " 12 ", "+1.5", "-2", ".5", "5.", "1e3", "1E-3", "1e400", "0x1F", "0X1f", "0o17", "0b101", "0x", "0b2",

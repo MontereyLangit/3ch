@@ -32,8 +32,10 @@ final case class PostingRequest(
   /** UA に Client Hints（完全版があればそちら）を連結したもの */
   def browserUserAgent: String = userAgent + secChUaFullVersionList.getOrElse(secChUa)
 
+  /** Accept・Accept-Language・Accept-Encoding の連結 */
   def browserInfo: String = "Accept:" + accept + "Accept-Language:" + acceptLanguage + "Accept-Encoding:" + acceptEncoding
 
+  /** Client Hints を連結した UA が Monazilla/1.00 で始まるか */
   def isMonazilla: Boolean = PostingRequest.Monazilla.test(browserUserAgent)
 
   /** 表示用のホスト。接続元 IP（無ければ null）に、それと異なる最初の転送ヘッダを <…> で付ける */
@@ -59,6 +61,7 @@ object PostingRequest {
   private val LocalReferer = new js.RegExp("^http://127\\.0\\.0\\.1:878[78]([/?#]|$)")
   private val NonAscii = new js.RegExp("[^ -~]")
 
+  /** Request から読む。cf が無いか値が null・undefined なら None */
   def from(request: Request): PostingRequest = {
     def header(name: String): String = Option(request.headers.get(name)).getOrElse("")
     val cf = request.cf.toOption

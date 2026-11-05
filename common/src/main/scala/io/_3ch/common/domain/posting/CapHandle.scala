@@ -1,11 +1,12 @@
 package io._3ch.common.domain.posting
 
-/** KV で照合済みのキャップ表示名と、制限を迂回する強キャップの指定。 */
+/** KV で照合したキャップの表示名と、制限を迂回する強キャップか */
 final case class CapHandle(name: String, strong: Boolean) {
   def displayName(postedName: String): String = (if (postedName.isEmpty) "" else postedName + "＠") + name + " ★"
 }
 
 object CapHandle {
+  /** KV の値を読む。末尾が ★ なら強キャップとし、最初の ★ から行末までを表示名から除く。空ならキャップにしない */
   def fromStored(value: String): Option[CapHandle] = {
     if (value.isEmpty) None
     else {
@@ -19,6 +20,6 @@ object CapHandle {
     }
   }
 
-  /** メールの最初の # の直後だけをパスワードとして読む。 */
+  /** メールの最初の # の直後だけをパスワードとして読む */
   def password(mail: String): Option[String] = mail.split("#", -1).lift(1).filter(_.nonEmpty)
 }

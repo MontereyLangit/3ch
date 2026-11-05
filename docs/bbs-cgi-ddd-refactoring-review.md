@@ -87,3 +87,17 @@
 | Scaladoc・コメント | `ThreadCreationSettings.fromSettings` などを現在の契約の説明に絞り、互換化の経緯はこの記録に残した。型付きエラーが表示文言を保持しなくなり、Scaladoc と実装の食い違いも解消した |
 | レビュー | 実装者のセルフレビュー、独立レビュー、オーケストレーターの統合レビューを実施。追加の修正指摘なし。既存 `PostingHandlerSuite`・スナップショット・golden は変更していない |
 | 検証 | `sbt test` 計 634 件、`npm run pretest`、`npm run test`（実 workerd を含む 46 件、スキップなし）、`npm run v6:typecheck`、`sbt 'set ThisBuild / scalacOptions += "-no-indent"' Test/compile`、`git diff --check` が成功。既存の投稿スナップショット 196 ケースは全件一致。`npm run dev` はローカル専用の salt を指定して起動し、トップと投稿エラー応答の HTTP 200、管理者パスワード未設定時の既定の HTTP 503 を確認して停止した |
+
+## 段 0a〜4 のレビュー指摘への対応
+
+| 指摘 | 対応 |
+| --- | --- |
+| コメントの文体 | このブランチで足した doc コメントとコメントの末尾の句点を外し、バッククォートを紛らわしい記号を含む箇所（スナップショット再生成のコマンド）だけに減らした。説明調の言い回しを 1〜2 行に詰めた |
+| Scaladoc の不足 | ShikibetsuMode と parse、CapHandle.fromStored、CapRepository、ThreadRepository.stub、BbsSettings.get・updated に加え、PostingRequest の browserInfo・isMonazilla・from、PostingFormDecoder.decode、PostingText.creationSettingsMessage に 1 行の doc を足した |
+| Moderation.decide の var | ルールの走査を foldLeft で（拒否理由, mark 適用後のフォーム）に畳み込み、ファイルごとに次のファイルへ渡す形にした。拒否の後のルールは評価しない。照合は従来どおり mark を付ける前の内容で行う |
+| 文字列で表した種別 | FailureSite.clock を FailureClock（Time・Unixtime）にした。文言は label で出し、PostingTextSuite とスナップショットで同じ文言を確認した |
+| 正規表現の生成 | PostingRequest の validate・isMonazilla の正規表現を companion の private val にした |
+| テストの整理と不足 | PostRouting のテストを PostRoutingSuite に移した。PostingRequestSuite でヘッダ検査の判定順、referer・UA の境界、host、Client Hints の連結、Monazilla 判定、cf の欠損を固定した。ModerationSuite には書き換え前に mark の重複・拒否後の打ち切り・ファイルをまたぐ mark・照合に使う内容のテストを足した |
+| スタイル | GlobalThread.postingError を同じファイルの if ... then に揃えた |
+| 検証 | sbt test 計 647 件（投稿スナップショット 196 ケース全件一致）、-no-indent の Test/compile、npm run v6:build、npm run v6:typecheck、npm test（実 workerd を含む 46 件、スキップなし）、git diff --check が成功。PostingHandlerSuite・スナップショット・golden は変更していない |
+| 見送り | PostingFormDecoder の Shift_JIS 復号に残る var と可変バッファ、PostingHandler の Draft の var は、段 7 でアプリケーションサービスへ集約するときに扱う |

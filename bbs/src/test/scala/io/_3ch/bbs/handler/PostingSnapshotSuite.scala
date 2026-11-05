@@ -32,8 +32,8 @@ private object SnapshotPath extends js.Object {
 }
 
 /**
- * bbs.cgi 投稿処理の入出力スナップショット（`tests/snapshots/posting` の JSON）。固定時刻・固定乱数で応答と保存内容を照合する。
- * 再生成は `sbt "bbs/testOnly io._3ch.bbs.handler.PostingSnapshotSuite -- --include-tags=update"`。
+ * bbs.cgi 投稿処理の入出力スナップショット（tests/snapshots/posting の JSON）。固定時刻・固定乱数で応答と保存内容を照合する。
+ * 再生成は `sbt "bbs/testOnly io._3ch.bbs.handler.PostingSnapshotSuite -- --include-tags=update"`
  */
 class PostingSnapshotSuite extends FunSuite {
   import HandlerTestKit.*
@@ -124,11 +124,11 @@ class PostingSnapshotSuite extends FunSuite {
   private def all(steps: (Env => Future[Unit])*): Env => Future[Unit] = env =>
     steps.foldLeft(Future.unit)((acc, step) => acc.flatMap(_ => step(env)))
 
-  /** 準備として `at` 秒に投稿処理を通す（スレ立て規制の履歴作り）。 */
+  /** 準備として at 秒に投稿処理を通す（スレ立て規制の履歴作り） */
   private def priorPost(at: Double, c: Case): Env => Future[Unit] = env =>
     withFixedTime(at * 1000)(fut[js.Dynamic](PostingHandler.entry(makeRequest(c), env.worker, resolver(c)))).map(_ => ())
 
-  /** 以後の `THREAD_DO.get(...)` が返すスタブの `method` を失敗させる。 */
+  /** 以後の THREAD_DO.get(...) が返すスタブの method を失敗させる */
   private def failThread(method: String, message: String): Env => Future[Unit] = env => Future.successful {
     val worker = env.worker.asInstanceOf[js.Dynamic]
     val original = worker.THREAD_DO
@@ -156,11 +156,11 @@ class PostingSnapshotSuite extends FunSuite {
   private val Alice = Some(PostingUser("aid1", "alice"))
   private val OtherClient = Seq("CF-Connecting-IP" -> "192.0.2.77", "user-agent" -> "Mozilla/5.0 (OtherBrowser)")
 
-  /** 準備としてスレ `ExistingKey` を投稿処理で立てる（スレ主情報を残す）。 */
+  /** 準備としてスレ ExistingKey を投稿処理で立てる（スレ主情報を残す） */
   private def ownThread(headers: Seq[(String, String)] = Nil, user: Option[PostingUser] = None): Env => Future[Unit] =
     priorPost(Now - 10000, Case("prior", headers = headers, user = user))
 
-  /** 板 924 に共通スレ `key` を置く。 */
+  /** 板 924 に共通スレ key を置く */
   private def globalThread(key: String): Env => Future[Unit] =
     existing(bbs = "924", key = key)
 
