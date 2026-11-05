@@ -7,7 +7,7 @@ class ShikibetsuSuite extends munit.FunSuite {
     assertEquals(DateSalt.window("54000suffix", "0x15180"), 1d)
     assertEquals(DateSalt.window("-32401", "86400"), -1d)
     assertEquals(DateSalt.window("0", "0"), Double.PositiveInfinity)
-    assertEquals(DateSalt.window("0", "-0"), Double.PositiveInfinity)
+    assertEquals(DateSalt.window("0", "-0"), Double.NegativeInfinity)
     assert(DateSalt.window("bad", "86400").isNaN)
     assert(DateSalt.window("0", "bad").isNaN)
     assertEquals(DateSalt.window("0", "Infinity"), 0d)

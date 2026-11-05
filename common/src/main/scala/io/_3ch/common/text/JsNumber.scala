@@ -1,6 +1,6 @@
 package io._3ch.common.text
 
-/** JavaScript の `Number(s)` と `parseInt(s)`（基数省略）の文字列解釈。設定値を従来どおり数値にするために使う。 */
+/** JavaScript の `Number(s)` と `parseInt(s)`（基数省略）の文字列解釈。 */
 object JsNumber {
   private def isJsSpace(c: Char): Boolean =
     c == '\t' || c == '\n' || c == '\u000b' || c == '\f' || c == '\r' || c == ' ' || c == ' ' || c == ' ' ||
@@ -19,7 +19,7 @@ object JsNumber {
     if (t.isEmpty) 0d
     else if (t == "Infinity" || t == "+Infinity") Double.PositiveInfinity
     else if (t == "-Infinity") Double.NegativeInfinity
-    else if (t.matches(decimal)) BigDecimal(t).toDouble
+    else if (t.matches(decimal)) java.lang.Double.parseDouble(t)
     else if (t.length > 2 && t(0) == '0') {
       val radix = t(1) match {
         case 'x' | 'X' => 16
@@ -40,7 +40,7 @@ object JsNumber {
     val digits = body.takeWhile(c => Character.digit(c, radix) >= 0 && c < '\u0080')
     if (digits.isEmpty) Double.NaN
     else {
-      val value = if (radix == 10) BigDecimal(digits).toDouble else radixValue(digits, radix)
+      val value = if (radix == 10) java.lang.Double.parseDouble(digits) else radixValue(digits, radix)
       if (negative) -value else value
     }
   }
