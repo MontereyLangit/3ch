@@ -4,15 +4,14 @@
 //   codegen: JVM-only ファイルI/O）。BBSロジックはbbs、純粋な暗号・文字コード処理はcommon。
 // bg（バックグラウンドサービス、http4s/tapir）は step 5 のスコープなのでこの骨格には含めない。
 
-import org.scalajs.linker.interface.ModuleSplitStyle
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 
 val scala3Version = "3.3.8" // Scala 3 LTS
 val munitVersion  = "1.0.0"
 
 ThisBuild / scalaVersion := scala3Version
-ThisBuild / organization := "ch3s"
-ThisBuild / version      := "0.1.0-SNAPSHOT"
+ThisBuild / organization := "io._3ch"
+ThisBuild / version      := "1.2.0"
 
 lazy val commonSettings = Seq(
   scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked"),
@@ -21,7 +20,7 @@ lazy val commonSettings = Seq(
 )
 
 // --- common: cross project (JVM + Scala.js) ---
-// 純粋関数のみ（I/O禁止）。RouteTable（ルーティング表の唯一の真実）をここに置く。
+// 純粋関数のみ（I/O禁止）。公開パスの互換パターンと配線生成用アノテーションをここに置く。
 lazy val common = crossProject(JSPlatform, JVMPlatform)
   .crossType(CrossType.Pure)
   .in(file("common"))
@@ -50,10 +49,10 @@ val durableObjectStubsFile = settingKey[File]("生成する RPC スタブ（src_
 val generateDurableObjectStubs = taskKey[Seq[File]]("DO の公開メソッドから RPC スタブを生成する")
 
 lazy val generateDurableObjectStubsTask: Def.Initialize[Task[Seq[File]]] = Def.taskDyn {
-  val durableDir = (Compile / scalaSource).value / "ch3s" / "bbs" / "durable"
+  val durableDir = (Compile / scalaSource).value / "io" / "_3ch" / "bbs" / "durable"
   val output = (Compile / durableObjectStubsFile).value
   // パスに空白が含まれても 1 引数として渡るよう引用符で囲む（spaceDelimited は引用符を解釈する）
-  val arguments = s""" ch3s.codegen.GenerateDurableObjectStubsMain "${durableDir.getAbsolutePath}" "${output.getAbsolutePath}""""
+  val arguments = s""" io._3ch.codegen.GenerateDurableObjectStubsMain "${durableDir.getAbsolutePath}" "${output.getAbsolutePath}""""
   Def.task {
     (codegen / Compile / runMain).toTask(arguments).value
     Seq((Compile / durableObjectStubsFile).value)
@@ -65,17 +64,28 @@ lazy val bbs = project
   .in(file("bbs"))
   .enablePlugins(ScalaJSPlugin)
   // "test->test" も繋いでおく: bbs の golden テスト（WebHashSuite 等）が、common 側で
-  // 自己完結して用意した golden JSON パーサ/ローダ (ch3s.common.golden.{Json, GoldenFile})
+  // 自己完結して用意した golden JSON パーサ/ローダ (io._3ch.common.golden.{Json, GoldenFile})
   // をテストだけ再利用できるようにするため
   .dependsOn(commonJS % "compile->compile;test->test")
   .settings(commonSettings)
   .settings(
+    Compile / sourceGenerators += Def.task {
+      val output = (Compile / sourceManaged).value / "io" / "_3ch" / "bbs" / "BuildInfo.scala"
+      val updatedDate = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Tokyo")).toString
+      IO.write(output, s"""package io._3ch.bbs
+                         |object BuildInfo {
+                         |  val version = "${version.value}"
+                         |  val updatedDate = "$updatedDate"
+                         |}
+                         |""".stripMargin)
+      Seq(output)
+    }.taskValue,
     scalaJSUseMainModuleInitializer := false,
     libraryDependencies += "com.github.japgolly.scalajs-react" %%% "core" % "4.0.0",
     // ブラウザへサーバ処理を混入させないため、bbsClient とは別にリンクする
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
     // DO の公開メソッドから RPC スタブ（BoardDoStub 等）を生成する（上記 generateDurableObjectStubsTask）
-    Compile / durableObjectStubsFile := (Compile / sourceManaged).value / "ch3s" / "bbs" / "external" / "cloudflare" / "DurableObjectStubs.scala",
+    Compile / durableObjectStubsFile := (Compile / sourceManaged).value / "io" / "_3ch" / "bbs" / "external" / "cloudflare" / "DurableObjectStubs.scala",
     Compile / generateDurableObjectStubs := generateDurableObjectStubsTask.value,
     Compile / sourceGenerators += (Compile / generateDurableObjectStubs).taskValue,
     // テストが Date / Math.random / caches 等のグローバルを一時的に差し替えるため、スイート間は直列に実行する
@@ -83,19 +93,27 @@ lazy val bbs = project
     // 参照実装からの既知の地雷: `@JSImport("cloudflare:workers", "DurableObject")` を extends した
     // クラスが常にexportされるため、Testのリンク成果物にも巻き込まれる。素の NodeJSEnv では
     // cloudflare: スキームを解決できず Test 全体が起動できないため、Node の Module customization
-    // hooks（--experimental-loader）で cloudflare:workers の解決だけをスタブへ差し替える
-    Test / jsEnv := new NodeJSEnv(
-      NodeJSEnv.Config()
-        .withArgs(
-          List(
-            "--import",
-            (baseDirectory.value / "test-stubs" / "register.mjs").toURI.toString
+    // hooks（--import で module.register）で cloudflare:workers の解決だけをスタブへ差し替える
+    // island が import する scalajs:client.js を bbsClient のリンク成果物へ解決する
+    // （loader が CH3S_CLIENT_JS_DIR を読む）。リンクはテスト実行・Test/fastLinkJS の前に行う
+    Test / jsEnv := {
+      val clientDir = (bbsClient / Compile / fastLinkJS / scalaJSLinkerOutputDirectory).value
+      (bbsClient / Compile / fastLinkJS).value
+      new NodeJSEnv(
+        NodeJSEnv.Config()
+          .withArgs(
+            List(
+              "--import",
+              (baseDirectory.value / "test-stubs" / "register.mjs").toURI.toString
+            )
           )
-        )
-    )
+          .withEnv(Map("CH3S_CLIENT_JS_DIR" -> clientDir.getAbsolutePath))
+      )
+    },
+    Test / fastLinkJS := (Test / fastLinkJS).dependsOn(bbsClient / Compile / fastLinkJS).value
   )
 
-// --- bbs-client: Scala.js — ブラウザへ配る island コンポーネント（今回は配線のみの空実装） ---
+// --- bbs-client: Scala.js — ブラウザへ配る island コンポーネント（ブラウザ側ロジックは TS でなくここに置くこと） ---
 lazy val bbsClient = project
   .in(file("bbs-client"))
   .enablePlugins(ScalaJSPlugin)
@@ -103,10 +121,11 @@ lazy val bbsClient = project
   .settings(commonSettings)
   .settings(
     scalaJSUseMainModuleInitializer := false,
+    libraryDependencies += "com.github.japgolly.scalajs-react" %%% "core" % "4.0.0",
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) }
   )
 
-// --- codegen: JVM — RouteTable からルート、DO の Scala 宣言から TS 型と Scala RPC スタブを生成 ---
+// --- codegen: JVM — Main のアノテーションから配線、DO の Scala 宣言から TS 型と Scala RPC スタブを生成 ---
 lazy val codegen = project
   .in(file("codegen"))
   .dependsOn(commonJVM)
@@ -114,12 +133,13 @@ lazy val codegen = project
   .settings(
     libraryDependencies += ("org.scalameta" %% "scalameta" % "4.17.4").cross(CrossVersion.for3Use2_13),
     // `sbt codegen/run`（npm run v6:generate）はルートと TS 型の生成。Scala スタブは bbs の sourceGenerators から runMain で呼ぶ
-    Compile / mainClass := Some("ch3s.codegen.GenerateAppFiles")
+    Compile / mainClass := Some("io._3ch.codegen.GenerateAppFiles")
   )
 
 lazy val root = project
   .in(file("."))
   .aggregate(commonJVM, commonJS, bbs, bbsClient, codegen)
   .settings(
+    name := "3ch",
     publish / skip := true
   )

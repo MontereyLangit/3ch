@@ -2,13 +2,13 @@
 
 `bbs` のコンパイル（`sbt compile` / `sbt test` / `npm run v6:build`）のたびに、
 `bbs / Compile / sourceGenerators` が DO クラスの公開メソッドから `@js.native` の RPC スタブ
-（`BoardDoStub` / `ThreadDoStub` / `V6PlaceholderDoStub`）を生成する。
+（`BoardDoStub` / `ThreadDoStub`）を生成する。
 計画は [durable-object-stub-generation-plan.md](durable-object-stub-generation-plan.md)。
 
-- 生成器: `codegen/src/main/scala/ch3s/codegen/GenerateDurableObjectStubs.scala`
+- 生成器: `codegen/src/main/scala/io/_3ch/codegen/GenerateDurableObjectStubs.scala`
   （入口 `GenerateDurableObjectStubsMain`。`build.sbt` の `bbs` 設定から `codegen / Compile / runMain` で呼ぶ）。
-- 入力: `bbs/src/main/scala/ch3s/bbs/durable/` 配下の `.scala`（Scalameta の Scala 3 パーサで構文解析）。
-- 出力: `bbs/target/scala-*/src_managed/main/ch3s/bbs/external/cloudflare/DurableObjectStubs.scala`。
+- 入力: `bbs/src/main/scala/io/_3ch/bbs/durable/` 配下の `.scala`（Scalameta の Scala 3 パーサで構文解析）。
+- 出力: `bbs/target/scala-*/src_managed/main/io/_3ch/bbs/external/cloudflare/DurableObjectStubs.scala`。
   Git 管理しない。手編集しない。内容が同じなら書き直さない（Zinc の再コンパイルを避ける）。
 - 利用側: `WorkerEnv` の `THREAD_DO: DurableObjectNamespace[ThreadDoStub]` 等（`Bindings.scala`）。
   `get` が型付きスタブを返すので、呼び出し側の `asInstanceOf[...DoStub]` は不要。
@@ -20,7 +20,7 @@
 - 対象クラス: `@JSExportTopLevel("名前", "server")` を持ち `DurableObject` を直接継承するクラス
   （TS 型生成 [durable-object-types.md](durable-object-types.md) と同じ抽出）。
 - スタブ名: export 名の末尾 `DurableObject` を除いて `DoStub` を付ける
-  （`Board` → `BoardDoStub`、`V6PlaceholderDurableObject` → `V6PlaceholderDoStub`）。
+  （`Board` → `BoardDoStub`。`V6PlaceholderDurableObject` のように `DurableObject` で終わる名前は末尾を除く）。
 - 対象メンバー: クラス本体直下の `private` でない `def`。
   フィールド（`val` / `var`）、コンストラクタ、メソッド内のローカル定義、コメント・文字列内の疑似宣言は対象外。
   継承メンバーは走査しない（DO は `DurableObject` を直接継承し、親に Scala のメソッドを持たない前提）。
@@ -36,9 +36,9 @@
 - 型の解決（生成先から参照できる形に写す。構文解析だけで解決できない型を `js.Any` 等に置き換えない）:
   - `String` / `Boolean` / `Int` / `Double` / `Unit`: そのまま。
   - `js.X`（`import scala.scalajs.js` が必要）、`scala.scalajs.js.X`: そのまま。
-  - 単純名の facade 型（`ThreadInspectResult` 等）: その DO ファイルの `import ch3s.bbs.external.cloudflare.*`
+  - 単純名の facade 型（`ThreadInspectResult` 等）: その DO ファイルの `import io._3ch.bbs.external.cloudflare.*`
     または `{...}` で取り込まれていることを確認し、完全修飾名で出力する。
-  - `ch3s.bbs.external.cloudflare.X` の完全修飾名: そのまま。
+  - `io._3ch.bbs.external.cloudflare.X` の完全修飾名: そのまま。
   - import は DO ファイル内の全 `import` 文を見る。
 
 ## 生成エラーになるもの
@@ -51,7 +51,7 @@
 - backquote 付きの名前（`` def `type`() `` 等）。
 - 括弧なしの `def foo: T`（JS プロパティになり RPC メソッドではない）。
 - 戻り値型の省略、`js.Promise[T]` 以外の戻り値型（`Future` 等）、引数型の省略。
-- 別名 import（`{X => Y}`）で来た型、`ch3s.bbs.external.cloudflare` 以外のパッケージの型、
+- 別名 import（`{X => Y}`）で来た型、`io._3ch.bbs.external.cloudflare` 以外のパッケージの型、
   DO ソース内で宣言された型・型エイリアス、関数型・タプル型など。
 - `Long` / `Float` / `Option` / `Seq` / `Array` / `Future` など scala / Predef 由来で RPC 境界に向かない型。
 - export 名の重複。

@@ -5,8 +5,8 @@
 > 2026-09-23、「案A: `encoding-japanese` + NEC重複符号の双方向互換マッピング」を破棄し、
 > 「v5と同じ構築手順（`TextDecoder`ランタイム構築）+ KB-17/KB-18の2件のみ意図的差異」へ
 > 差し戻した。本ファイルはこの最終実装に基づく差異一覧で、案A時代の版を完全に置き換える。
-> 実装は `bbs/src/main/scala/ch3s/bbs/util/SjisEncoding.scala`、検証は
-> `bbs/src/test/scala/ch3s/bbs/util/SjisEncodingSuite.scala`。
+> 実装は `bbs/src/main/scala/io/_3ch/bbs/util/SjisEncoding.scala`、検証は
+> `bbs/src/test/scala/io/_3ch/bbs/util/SjisEncodingSuite.scala`。
 > 案A時代の記録（NEC重複符号11件の機械抽出等）は git 履歴
 > （`fc42b56` 〜 `b9ea910` の間のこのファイルの版）を参照。
 
@@ -102,7 +102,7 @@ v5の状態遷移で以下に該当する箇所:
 ## 4. テスト
 
 - `npm test`: 134件 green（`src/` 無変更）。
-- `sbt test`: 全件 green。うち `ch3s.bbs.util.SjisEncodingSuite`（6テスト）が本対応の検証を担う。
+- `sbt test`: 全件 green。うち `io._3ch.bbs.util.SjisEncodingSuite`（6テスト）が本対応の検証を担う。
 - `npm run v6:test:characterization`: 99件 green。
 - `npm run v6:test:http`: 実`wrangler dev`（workerd）上の差分テスト。3回連続実行して green
   （Shift_JIS全数スイープの`unexpected*`は毎回0件）。

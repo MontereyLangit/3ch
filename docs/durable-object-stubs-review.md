@@ -11,7 +11,7 @@
 | `Thread.inspect` の戻り値の弱体化 | 本体の戻り値を `js.Promise[ThreadInspectResult]` に揃えた（`Object.fromEntries` の結果をキャストするだけ。欠落プロパティを含む実体は不変）。 |
 | `Board.updateThread` の `sage: js.Any` | 手書き Stub と同じ `js.UndefOr[Boolean]` に揃えた。実行時の判定は `Boolean(sage)` の真偽値のまま。 |
 | 省略引数で DO 本体の既定値が RPC でも効くか | `tests/rpc.integration.test.js` で実 workerd 上の `getDat()` / `addRes(dat, log)` / `inspect()` / `updateThread(data)` を省略呼び出しして確認。 |
-| 型の解決を構文解析だけで行う危うさ | 使える型を `js.*` / プリミティブ / `ch3s.bbs.external.cloudflare` の facade に限定し、別名 import・他パッケージ・ローカル宣言はエラー。複数の `*` import がある場合は cloudflare 由来とみなして完全修飾名にするので、誤りは `bbs` のコンパイルエラーとして現れる。 |
+| 型の解決を構文解析だけで行う危うさ | 使える型を `js.*` / プリミティブ / `io._3ch.bbs.external.cloudflare` の facade に限定し、別名 import・他パッケージ・ローカル宣言はエラー。複数の `*` import がある場合は cloudflare 由来とみなして完全修飾名にするので、誤りは `bbs` のコンパイルエラーとして現れる。 |
 | sbt のタスクグラフ | `bbs / Compile / sourceGenerators` → `codegen / Compile / runMain`。codegen は `commonJVM` にのみ依存し、bbs のソースをファイルとして読むだけなので循環しない。`sbt codegen/run` は `mainClass` を固定して従来どおり動く。 |
 | 再生成の決定性 | クラスは export 名順、メソッドは名前順。内容が同じなら書き直さない。削除・改名は次のコンパイルで反映（単体テストで確認）。 |
 | 公開プロトコル・ストレージ | 変更なし。dat / subject.txt / DO の保存形式に触れていない。 |
@@ -42,7 +42,7 @@
 | `protected` メソッドは Scala.js の非 native JS クラスでは JS に露出するのに、生成器は黙って除外し docs は「公開範囲と一致」と断言している | medium | 採用。`protected def` を生成エラーにし、docs の記述を訂正。テストを追加。 |
 | `PublicRoutes` に `asInstanceOf[js.Dynamic]` 経由の `getPublicData` 呼び出しが残っている | medium | 採用。生成スタブの `getPublicData` で型付き呼び出しにし、キャストを除去。 |
 | クラス本体直下の `extension` / `given` / ネストした公開クラス・オブジェクトを黙って落とす | low | 採用。これらは生成エラーにする（公開 `val` / `var` は JS プロパティだが RPC メソッドではないので対象外と docs に明記）。 |
-| `Long` / `Option` / `Seq` 等の scala / Predef 型が `*` import により `ch3s.bbs.external.cloudflare.Long` に書き換わり、bbs のコンパイルで分かりにくく失敗する | low | 採用。既知の型名を生成器で拒否し、RPC 境界で使えない旨を案内。 |
+| `Long` / `Option` / `Seq` 等の scala / Predef 型が `*` import により `io._3ch.bbs.external.cloudflare.Long` に書き換わり、bbs のコンパイルで分かりにくく失敗する | low | 採用。既知の型名を生成器で拒否し、RPC 境界で使えない旨を案内。 |
 | backquote 付きの名前（`` `type` ``）が `name.value` 経由で無効な Scala になる | low | 採用。`name.syntax` を識別子検査にかけ、backquote 付きは拒否。 |
 | `runMain.toTask` の引数が空白区切りで、パスに空白があると壊れる | low | 採用。引数を引用符で囲む。 |
 | `bbs/compile` のたびに codegen の `runMain` が走り JVM 側のコンパイル確認が加わる | low（情報） | 現状維持。循環はなく、内容不変なら書き直さないので Zinc の再コンパイルは起きない（2 回目の `bbs/compile` が 3 秒で no-op なことを確認）。 |
