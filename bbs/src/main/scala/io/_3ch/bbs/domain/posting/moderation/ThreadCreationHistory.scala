@@ -6,6 +6,9 @@ import io._3ch.bbs.domain.posting.moderation.ThreadCreationRateLimit.{Entry, Rea
 /** スレ立て要求。識別情報とスレタイはソルト付きハッシュ値で、平文は持たない。 */
 final case class ThreadCreationRequest(identity: ClientIdentity, title: String)
 
+/** スレ立て規制の設定と、この投稿の照合値（ハッシュ済み） */
+final case class ThreadCreationLimit(settings: ThreadCreationRateLimit.Settings, request: ThreadCreationRequest)
+
 /** スレ立て予約の拒否理由。RPC では [[code]] の文字列で返す。 */
 enum ThreadCreationRejection {
   case Narrow(reason: Reason)

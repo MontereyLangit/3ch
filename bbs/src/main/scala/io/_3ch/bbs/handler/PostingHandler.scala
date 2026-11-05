@@ -3,12 +3,13 @@ package io._3ch.bbs.handler
 import io._3ch.bbs.external.cloudflare.*
 import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.hash.{Md5, WebHash}
-import io._3ch.bbs.repository.{BoardRepository, CapRepository, ModerationRuleRepository, ThreadRepository}
-import io._3ch.bbs.domain.posting.{BrokenLogKind, ClientIdentity, FailureClock, FailureSite, GlobalThread, KeyIp, NusiMark, PostField, PostRouting, PostingContext, PostingError, PostingIdentity, PostingStage, PostingUser, ThreadOwner}
-import io._3ch.bbs.domain.posting.moderation.{ModerationDecision, ModerationInput, ModerationService, ThreadCreationRejection}
+import io._3ch.bbs.application.posting.ports.Clock
+import io._3ch.bbs.repository.{ArchiveIndexRepository, BoardRepository, CapRepository, ModerationRuleRepository, ThreadRepository}
+import io._3ch.bbs.domain.posting.{BrokenLogKind, ClientIdentity, FailureClock, FailureSite, GlobalThread, KeyIp, NusiMark, PostField, PostRouting, PostingContext, PostingError, PostingIdentity, PostingStage, PostingUser, ThreadOwner, ThreadPosting}
+import io._3ch.bbs.domain.posting.moderation.{ModerationDecision, ModerationInput, ModerationService, ThreadCreationLimit, ThreadCreationRejection, ThreadCreationRequest}
 import io._3ch.bbs.durable.codec.ThreadOwnerCodec
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
-import io._3ch.common.domain.posting.{CapHandle, NameField, PostForm, PostKind, UserInfo}
+import io._3ch.common.domain.posting.{CapHandle, DatLineFormatter, NameField, PostForm, PostKind, UserInfo}
 import io._3ch.common.domain.identity.{DateSalt, ShikibetsuFormat, ShikibetsuMode, ShikibetsuSeeds}
 
 import scala.collection.immutable.ListMap
@@ -16,7 +17,6 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
-import scala.scalajs.js.JSStringOps.*
 import scala.scalajs.js.typedarray.Uint8Array
 
 /**
@@ -52,7 +52,11 @@ object PostingHandler {
     var cap: Option[CapHandle] = None
     var shikibetsu: String = ""
     var threadOwner: () => Option[ThreadOwner] = () => None
+    var ponCookie: Option[String] = None
   }
+
+  private val clock = Clock.system
+  private def logFile(d: Draft): String = s"${d.form.bbs}/thread/${d.form.key.take(4)}/${d.form.key}.cgi"
 
   def entry(request: Request, env: WorkerEnv, resolveUser: PostingUserResolver.Resolver = PostingUserResolver.unresolved): js.Promise[Response] = {
     val rawEnv = env.asInstanceOf[js.Dynamic]
@@ -62,18 +66,16 @@ object PostingHandler {
       req.asn.getOrElse("0000"), req.country.getOrElse("unknown"), req.region.getOrElse("catv?"), req.city.getOrElse(""), md5(str(rawEnv.salt))
     ))
     val g = js.Dynamic.literal(
-      version = "2025/7/31", time = str(js.Date.now()), unixtime = str(math.floor(js.Date.now() / 1000)),
+      version = "2025/7/31", time = str(clock.nowMillis()), unixtime = str(math.floor(clock.nowMillis() / 1000)),
       cookies = js.Dynamic.literal(HAP = "", D = "", U = "", PON = "", time = "", PIN = "", cert = ""),
       sage = 0,
-      path = "PATH", logPath = "LOGPATH", logFile = "LOGDAT", logData = "", subject = "", number = 0,
-      headers = js.Dictionary.empty[String]
+      subject = "", number = 0
     )
     (for {
       _ <- Future { checkRequest(d, req) }
       _ <- readForm(g, d, request, req.isMonazilla)
       _ <- processCap(d, env)
       _ = GlobalThread.postingError(d.form.key, d.form.kind == PostKind.NewThread, d.cap.isDefined).foreach(reject)
-      _ = { g.path = d.form.bbs + "/"; g.logPath = str(g.path) + "thread/" + d.form.key.take(4) + "/"; g.logFile = str(g.logPath) + d.form.key + ".cgi" }
       board <- boardSettings(g, d, env)
       _ <- threadSettings(g, d, board, env)
       _ <- identify(g, d, req)
@@ -85,7 +87,7 @@ object PostingHandler {
       _ <- makeShikibetsu(g, d, user)
       owner <- markNusi(g, d, user, board.settings)
       _ = prepare(g, d)
-      _ <- updateThread(g, d, env, creationLimit, owner, userInfo)
+      _ <- updateThread(g, d, board, env, creationLimit, owner, userInfo)
       _ <- updateSubback(g, d, env)
       _ <- updateHeadline(g, d, env)
     } yield respond(g, d, None)).recover { case Rejected(error) => respond(g, d, Some(error)) }.toJSPromise
@@ -93,8 +95,8 @@ object PostingHandler {
 
   private def respond(g: js.Dynamic, d: Draft, error: Option[PostingError]): Response = {
     val charset = if d.form.isSJIS then "Shift_JIS" else "UTF-8"
-    val headers = g.headers.asInstanceOf[js.Dictionary[String]]
-    if error.isEmpty then { headers("x-threadkey") = d.form.key; headers("x-resnum") = str(g.number) }
+    val posted = if error.isEmpty then Seq("x-threadkey" -> d.form.key, "x-resnum" -> str(g.number)) else Nil
+    val headers = d.ponCookie.map("Set-Cookie" -> _).toSeq ++ posted
     val html = error.fold(PostingPages.respondEndHtml(d.form, charset))(e => PostingPages.respondError(d.form, d.identity.host, PostingText.message(e), charset))
     RendererShell.legacyReact(html, encoding = charset, extra = headers)
   }
@@ -136,13 +138,13 @@ object PostingHandler {
       if d.settings.checked("BBS_HEISA") then reject(PostingError.Closed)
       if d.form.kind == PostKind.NewThread then stub.getDat().toFuture.map { dat =>
         if dat.nonEmpty then reject(PostingError.DuplicateKey)
-        g.logData = d.form.subject + "\n"; g.number = 1; g.subject = d.form.subject
+        g.number = 1; g.subject = d.form.subject
       } else {
         val datF = stub.getDat(d.form.bbs, d.form.key).toFuture
         val settingsF = ThreadRepository.getSettings(board.id, d.form.key, e)
         val ownerF = stub.getOwner().toFuture
         datF.zip(settingsF).zip(ownerF).map { case ((dat, settings), owner) =>
-          if dat.isEmpty then reject(PostingError.ThreadMissing(str(g.logFile)))
+          if dat.isEmpty then reject(PostingError.ThreadMissing(logFile(d)))
           val lines = dat.split("\n", -1)
           if lines(0).isEmpty then reject(PostingError.BrokenLog(BrokenLogKind.Empty))
           g.subject = lines(0).split("<>", -1).last
@@ -163,7 +165,7 @@ object PostingHandler {
       if parts.length >= 2 && parts(0).nonEmpty && parts(1).nonEmpty then g.cookies.updateDynamic(parts(0))(parts(1))
     }
     hash(md5(d.identity.ip.getOrElse("null")) + d.identity.salt).flatMap(sha).map { pon =>
-      g.headers.updateDynamic("Set-Cookie")(s"PON=$pon; Max-Age=63072000; path=/; ${if !d.form.isMonazilla then "Secure;" else ""} HttpOnly")
+      d.ponCookie = Some(s"PON=$pon; Max-Age=63072000; path=/; ${if !d.form.isMonazilla then "Secure;" else ""} HttpOnly")
     }
   }
 
@@ -219,19 +221,19 @@ object PostingHandler {
   }
 
   /** スレ立てなら保存するスレ主情報を返し、返信でスレ主なら名前欄に (主) を付ける。キャップは対象外（docs/トリップ・ID廃止とスレ主表示.md §2.4） */
-  private def markNusi(g: js.Dynamic, d: Draft, user: Option[PostingUser], boardSettings: BbsSettings): Future[js.UndefOr[js.Dynamic]] =
-    if d.cap.isDefined then Future.successful(js.undefined) else {
+  private def markNusi(g: js.Dynamic, d: Draft, user: Option[PostingUser], boardSettings: BbsSettings): Future[Option[ThreadOwner]] =
+    if d.cap.isDefined then Future.successful(None) else {
       val ip = d.identity.ip.fold("")(KeyIp.of)
       for {
         ipHash <- digest(d, ip)
         accountHash <- digest(d, user.fold("")(_.accountKey))
       } yield {
         val poster = ThreadOwner(ipHash, d.shikibetsu, accountHash)
-        if number(g.number) == 1 then ThreadOwnerCodec.encode(poster)
+        if number(g.number) == 1 then Some(poster)
         else {
           if NusiMark.applies(isReply = true, cap = false, noNusi = d.form.noNusi, boardDisabled = boardSettings.checked("BBS_DISABLE_NUSI"),
             threadDisabled = d.settings.checked("BBS_DISABLE_NUSI"), owner = d.threadOwner(), poster = poster) then d.form = d.form.copy(name = d.form.name + NusiMark.suffix)
-          js.undefined
+          None
         }
       }
     }
@@ -243,12 +245,12 @@ object PostingHandler {
       if d.settings.checked("BBS_LIVE") && js.Math.random() * 10 >= 1 then g.sage = 1
     }
 
-  private def threadCreationLimit(g: js.Dynamic, d: Draft, req: PostingRequest, boardSettings: BbsSettings): Future[js.UndefOr[js.Dynamic]] = {
-    if (number(g.number) != 1) Future.successful(js.undefined)
+  private def threadCreationLimit(g: js.Dynamic, d: Draft, req: PostingRequest, boardSettings: BbsSettings): Future[Option[ThreadCreationLimit]] = {
+    if (number(g.number) != 1) Future.successful(None)
     else {
       val board = BoardId.create(d.form.bbs).fold(_ => reject(PostingError.ForbiddenBoard), identity)
       val key = d.form.key.toLongOption.toRight("").flatMap(ThreadKey.create).fold(_ => reject(PostingError.InvalidKey), identity)
-      if (d.cap.isDefined) return Future.successful(js.undefined)
+      if (d.cap.isDefined) return Future.successful(None)
       val settings = ThreadCreationSettings.fromSettings(boardSettings).fold(reason => reject(PostingError.InvalidCreationSettings(reason)), identity)
       val country = req.country.getOrElse("").trim.toUpperCase
       val asn = req.asn.getOrElse("").trim.toLongOption.filter(n => n > 0 && n <= 4294967295L).map(_.toString).getOrElse("")
@@ -268,9 +270,7 @@ object PostingHandler {
         uaHash <- digest(d, context.identity.userAgent)
         networkHash <- digest(d, context.identity.networkGroup)
         titleHash <- digest(d, context.title)
-      } yield js.Dynamic.literal(ip = ipHash, userAgent = uaHash, networkGroup = networkHash, title = titleHash,
-        tatesugi = settings.limits.threadTatesugi, tatesugiResetSeconds = settings.limits.threadTatesugiResetSeconds,
-        junban = settings.limits.threadJunban, junbanResetSeconds = settings.limits.threadJunbanResetSeconds)
+      } yield Some(ThreadCreationLimit(settings.limits, ThreadCreationRequest(ClientIdentity(ipHash, uaHash, networkHash), titleHash)))
     }
   }
 
@@ -278,19 +278,18 @@ object PostingHandler {
     def unapply(error: Throwable): Option[ThreadCreationRejection] = ThreadCreationRejection.fromCode(errorText(error).stripPrefix("Error: "))
   }
 
-  private def updateThread(g: js.Dynamic, d: Draft, e: WorkerEnv, creationLimit: js.UndefOr[js.Dynamic], owner: js.UndefOr[js.Dynamic], userInfo: UserInfo): Future[Unit] = {
-    val stub = thread(d, e)
+  private def updateThread(g: js.Dynamic, d: Draft, board: LoadedBoard, e: WorkerEnv, creationLimit: Option[ThreadCreationLimit], owner: Option[ThreadOwner], userInfo: UserInfo): Future[Unit] =
     guarded(g, d, PostingStage.ThreadWrite, FailureClock.Unixtime) {
-      val initial: js.UndefOr[String] = if number(g.number) == 1 then initialSettings(d.settings) else js.undefined
-      val formatter = js.Dynamic.newInstance(js.Dynamic.global.Intl.DateTimeFormat)("ja-JP", js.Dynamic.literal(year = "numeric", month = "2-digit", day = "2-digit", weekday = "short", hour = "2-digit", minute = "2-digit", second = "2-digit", timeZone = "Asia/Tokyo"))
-      val date = formatter.format(new js.Date(int(g.unixtime) * 1000)).asInstanceOf[String]
-      d.form = d.form.copy(message = d.form.message.jsReplace("<br>", " <br> "))
-      val dat = s"${d.form.name}<><>$date<> ${d.form.message} <>${if number(g.number) == 1 then str(g.subject) else ""}"
-      stub.addRes(dat, s"${str(g.number)}<>${userInfo.text}", js.Dynamic.literal(bbs = d.form.bbs, key = d.form.key, title = g.subject, sage = truth(g.sage), maxThreads = d.settings.int("BBS_MAX_MENU_THREAD", "700"), create = number(g.number) == 1, initialSettings = initial, creationLimit = creationLimit, owner = owner)).toFuture.map(n => g.number = n).recover {
+      val create = number(g.number) == 1
+      d.form = d.form.copy(message = DatLineFormatter.spaceFirstBreak(d.form.message))
+      val dat = DatLineFormatter.datLine(d.form.name, clock.datDate(int(g.unixtime)), d.form.message, if create then str(g.subject) else "")
+      val posting = ThreadPosting(bbs = Some(d.form.bbs), key = Some(d.form.key), title = Some(str(g.subject)), sage = truth(g.sage),
+        maxThreads = Some(d.settings.int("BBS_MAX_MENU_THREAD", "700")), create = create,
+        initialSettings = if create then Some(initialSettings(d.settings)) else None, creationLimit = creationLimit, owner = owner)
+      ThreadRepository.addRes(board.id, d.form.key, dat, DatLineFormatter.logLine(str(g.number), userInfo.text), posting, e).map(n => g.number = n).recover {
         case CreationRejected(rejection) => reject(PostingError.ThreadCreation(rejection))
       }
     }
-  }
 
   /** スレ立て時に保存する初期スレ設定。キーは JavaScript のオブジェクトと同じ順（整数のキーが先） */
   private def initialSettings(settings: BbsSettings): String = {
@@ -300,44 +299,38 @@ object PostingHandler {
 
   private def updateSubback(g: js.Dynamic, d: Draft, e: WorkerEnv): Future[Unit] =
     if number(g.number) > 1 then Future.unit else guarded(g, d, PostingStage.Subback, FailureClock.Unixtime) {
-      val bucket = e.ch3www.asInstanceOf[js.Dynamic]
-      def get(file: String): Future[js.Dynamic] = bucket.get(file).asInstanceOf[js.Promise[js.Dynamic]].toFuture
-      def text(obj: js.Dynamic): Future[String] = if obj == null then Future.successful("") else obj.text().asInstanceOf[js.Promise[String]].toFuture.map(_.split("\n", -1).drop(1).mkString("\n"))
-      def save(file: String, value: String, etag: js.Any, label: String): Future[Unit] = {
-        val condition = if truth(etag) then js.Dynamic.literal(etagMatches = etag) else js.Dynamic.literal(doesNotExist = true)
-        bucket.put(file, value, js.Dynamic.literal(onlyIf = condition)).asInstanceOf[js.Promise[js.Dynamic]].toFuture.map { result =>
-          if result == null || !truth(result.uploaded) then reject(PostingError.ArchiveConflict(label, site(g, d, FailureClock.Unixtime, g.nowTime)))
+      def body(stored: Option[ArchiveIndexRepository.Stored]): String = stored.fold("")(_.text.split("\n", -1).drop(1).mkString("\n"))
+      def save(file: String, value: String, etag: Option[String], label: String): Future[Unit] =
+        ArchiveIndexRepository.writeIndex(file, value, etag, e).map { written =>
+          if !written then reject(PostingError.ArchiveConflict(label, site(g, d, FailureClock.Unixtime, g.nowTime)))
         }
-      }
-      val subFile = str(g.logPath) + "subject.txt"
-      val archive = str(g.path) + "thread/subject.txt"
+      val subFile = ArchiveIndexRepository.subjectFile(d.form.bbs, d.form.key)
+      val archive = ArchiveIndexRepository.archiveListFile(d.form.bbs)
       for {
-        obj <- get(subFile)
-        old <- text(obj)
-        sub = s"${str(g.unixtime)}\n${d.form.key}<>${d.form.subject}<>${d.form.name}<>${d.shikibetsu}<><>${d.form.message}\n$old"
-        _ <- if obj == null then
-          for {
-            arch <- get(archive)
-            list <- text(arch)
-            _ <- save(archive, s"${str(g.unixtime)}\n${d.form.key.take(4)}<>${d.form.key}\n$list", if arch == null then js.undefined else arch.etag, "kakologList")
-            _ <- save(subFile, sub, js.undefined, "SubbackFIle")
-          } yield ()
-        else save(subFile, sub, obj.etag, "SubbackFIle")
+        current <- ArchiveIndexRepository.read(subFile, e)
+        sub = s"${str(g.unixtime)}\n${d.form.key}<>${d.form.subject}<>${d.form.name}<>${d.shikibetsu}<><>${d.form.message}\n${body(current)}"
+        _ <- current match {
+          case None =>
+            for {
+              list <- ArchiveIndexRepository.read(archive, e)
+              _ <- save(archive, s"${str(g.unixtime)}\n${d.form.key.take(4)}<>${d.form.key}\n${body(list)}", list.flatMap(_.etag), "kakologList")
+              _ <- save(subFile, sub, None, "SubbackFIle")
+            } yield ()
+          case Some(stored) => save(subFile, sub, stored.etag, "SubbackFIle")
+        }
       } yield ()
     }
 
   private def updateHeadline(g: js.Dynamic, d: Draft, e: WorkerEnv): Future[Unit] =
     if truth(g.sage) then Future.unit else guarded(g, d, PostingStage.Headline, FailureClock.Unixtime) {
-      val bucket = e.ch3www.asInstanceOf[js.Dynamic]
       for {
-        obj <- bucket.get("headline.txt").asInstanceOf[js.Promise[js.Dynamic]].toFuture
-        old <- if obj == null then Future.successful("") else obj.text().asInstanceOf[js.Promise[String]].toFuture
+        current <- ArchiveIndexRepository.read(ArchiveIndexRepository.HeadlineFile, e)
         text = new StringBuilder(s"${str(g.unixtime)}\n${d.form.bbs}<>${d.settings.get("BBS_TITLE").getOrElse("undefined")}<>${str(g.unixtime)}<>${d.form.key}<>${d.form.message.take(30)}\n")
-        _ = if obj != null then old.split("\n", -1).slice(1, 301).foreach { line =>
+        _ = current.foreach(_.text.split("\n", -1).slice(1, 301).foreach { line =>
           val f = trim(line).split("<>", -1)
           if f.length >= 5 && matches(f(0), "^[a-zA-Z0-9\\-_]+$") && f(1).nonEmpty && d.form.bbs != f(0) then text.append(f.take(5).mkString("<>")).append('\n')
-        }
-        _ <- bucket.put("headline.txt", text.toString, js.Dynamic.literal(onlyIf = js.Dynamic.literal(etagMatches = if obj == null then js.undefined else obj.etag))).asInstanceOf[js.Promise[js.Any]].toFuture
+        })
+        _ <- ArchiveIndexRepository.writeHeadline(text.toString, current.flatMap(_.etag), e)
       } yield ()
     }
 }

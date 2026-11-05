@@ -13,7 +13,8 @@ object Responses {
     new Response(body, init)
   }
 
-  def plain(text: String, kind: String, encoding: String = "UTF-8", range: String = "", modified: js.Date = new js.Date(), since: String = "", extra: js.Dictionary[String] = js.Dictionary.empty[String]): Response = {
+  /** 本文を指定の文字コードで返す。extra は同名の既存ヘッダを置き換え、同名を複数並べれば複数出す */
+  def plain(text: String, kind: String, encoding: String = "UTF-8", range: String = "", modified: js.Date = new js.Date(), since: String = "", extra: Seq[(String, String)] = Nil): Response = {
     if since.nonEmpty && modified.getTime() <= new js.Date(since).getTime() then
       return response(null, 304, js.Dictionary("Last-Modified" -> modified.toUTCString()))
     val sjis = encoding == "Shift_JIS"
@@ -45,7 +46,8 @@ object Responses {
       }
       response(if sjis then bytes else text, 200, headers)
     }
-    extra.foreach((name, value) => result.headers.set(name, value))
+    extra.map(_._1.toLowerCase).distinct.foreach(result.headers.delete)
+    extra.foreach((name, value) => result.headers.append(name, value))
     result
   }
 }

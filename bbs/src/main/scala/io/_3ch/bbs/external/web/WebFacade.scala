@@ -19,6 +19,8 @@ class Response(body: js.UndefOr[js.Any] = js.native, init: js.UndefOr[ResponseIn
 trait Headers extends js.Object {
   def get(name: String): String = js.native
   def set(name: String, value: String): Unit = js.native
+  def append(name: String, value: String): Unit = js.native
+  def delete(name: String): Unit = js.native
 }
 
 @js.native

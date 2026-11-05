@@ -2,7 +2,7 @@
 
 2026-11-01。[認証・PHOEBE・連投規制 設計](auth-phoebe-rate-limit-design.md)（以下「設計書」）を載せる前提として、
 `bbs.cgi` の投稿処理（`bbs/src/main/scala/io/_3ch/bbs/handler/PostingHandler.scala`）を
-ドメインモデル・ドメインサービス・アプリケーションサービス・リポジトリ・DO に分ける。**状態: 段 4 まで完了（段 0a・0b・1・2・3・4。検証・レビュー記録は [bbs-cgi-ddd-refactoring-review.md](bbs-cgi-ddd-refactoring-review.md)）。**
+ドメインモデル・ドメインサービス・アプリケーションサービス・リポジトリ・DO に分ける。**状態: 段 6 まで完了（段 0a・0b・1・2・3・4・5・6。検証・レビュー記録は [bbs-cgi-ddd-refactoring-review.md](bbs-cgi-ddd-refactoring-review.md)）。**
 2026-11-02 の Opus 5 セルフレビュー（[auth-phoebe-review.md](auth-phoebe-review.md)）の指摘を反映した。
 2026-11-05、`develop` の取り込みに合わせて前提を改めた（`develop_v6s` と `feature/board_top` は PR #37 で統合済み、パッケージは `io._3ch.*`）。
 同日、トリップと ID の廃止・`!id`・スレ主表示・全板共通スレ（develop 3775f12）の取り込みに合わせて §2〜§5 を改めた。
@@ -34,7 +34,8 @@ common/src/main/scala/io/_3ch/common/
   domain/
     BoardId, ThreadKey, ThreadTitle, BbsSettings（統合後の唯一の設定モデル）
     posting/   PostKind（NewThread / Reply）, PostForm（サニタイズ済み入力）, DatLine, DatLineFormatter,
-               NameField（名前＋`(@ユーザーID)`＋識別子＋` (主)` の連結規則）, CapHandle（★・強キャップ・表示名）
+               NameField（名前＋`(@ユーザーID)`＋識別子＋` (主)` の連結規則）, CapHandle（★・強キャップ・表示名）,
+               UserInfo（log の userInfo 文字列）
     identity/  ShikibetsuSeeds（県・市・AS・UA の種文字列）, ShikibetsuMode（checked / raw / ken / city / as / d / phoebe）,
                ShikibetsuFormat（書式）, DateSalt（BBS_ID_RESET 境界。識別子の日付窓に残る）
                （設計書 §5.2 の UA 解析 `UserAgentProfile` は v3 の正規表現表を使うため bbs/domain に置く）
@@ -43,8 +44,8 @@ common/src/main/scala/io/_3ch/common/
 bbs/src/main/scala/io/_3ch/bbs/
   domain/posting/
     PostingContext（既存を拡張）, PostingError（拒否理由の enum。文言は持たない）, PostingOutcome,
-    FormSanitizer / PostRouting（js.RegExp を内部に閉じ込めた純粋関数）, UserInfo（log の userInfo 文字列）
-    moderation/  ThreadCreationRateLimit / ThreadCreationHistory（既存）, ModerationRuleSet / ModerationDecision,
+    FormSanitizer / PostRouting（js.RegExp を内部に閉じ込めた純粋関数）, ThreadPosting（addRes の付帯情報）
+    moderation/  ThreadCreationRateLimit / ThreadCreationHistory（既存）, ModerationRuleSet / ModerationService / ModerationDecision,
                  PostRateLimit / PostRateHistory / CopipeGuard（設計書 §8。段 10）
   application/posting/
     PostingService（ユースケース。段の並びを 1 か所で定義）, ports/（ThreadStore, BoardStore, SettingsStore,
@@ -87,8 +88,8 @@ bbs/src/main/scala/io/_3ch/bbs/
 | 2 | **入力の型付け**: `PostingRequest.from(Request)`、HTTP 境界の `PostingFormDecoder`（バイト列・パーセント符号化の復号、`submit=書` 判定）、ドメインの `FormSanitizer`（置換列・名前欄コマンド）、`PostRouting`（`!newthread`、924 / 900、禁止板、スレ立て/返信の判定）。`g.form` を `PostForm` に置き換える | `handler/PostingFormDecoder.scala`、`bbs/domain/posting/{FormSanitizer, PostRouting}.scala`、復号と純粋な整形を分けた単体テスト |
 | 3 | **設定**: `BoardRepository.getBoardSettings` と新設 `ThreadRepository.getSettings` から `BbsSettings` を取り、合成する（段 3 ではハンドラ内に置き、段 7 で `PostingContext.settings` に移す）。`BbsSettings` に型付き読み（`orElse`、`checked(name)`、JavaScript の `Number` / `parseInt` と同じに読む `number` / `int`、`merged`）を足す。KB-12（既定値とのマージ無し）は維持 | `common/domain/BbsSettings` 拡張、`repository/ThreadRepository.scala` |
 | 4 | **投稿者の構成要素**（トリップと ID は develop で廃止済み）: `CapHandle`（`processCap` の表示名規則）と `CapRepository`（KV）、`ShikibetsuSeeds` と `DateSalt`（`makeShikibetsu` の種）、`ShikibetsuMode` / `ShikibetsuFormat`（識別子書式）、`NameField`（名前＋ ` </b>(@ユーザーID)<b>` ＋ ` </b>(識別子)<b>` ＋ ` (主)` の連結。KB-09 の空括弧も再現。既存の `NameCommands` / `PostingUser` / `NusiMark` / `ThreadOwner` を使う）、全板共通スレの判定（`GlobalThread`、`checkGlobalThread`） | `common/domain/posting/{CapHandle, NameField}.scala`、`common/domain/identity/*`、`repository/CapRepository.scala`、単体テスト |
-| 5 | **規制**: `Moderation.parseRules` → `ModerationRuleSet.parse`（`js.RegExp` を内包）、`Moderation.check(gb)` → `ModerationService.check(context, rules): ModerationDecision`（`Deny(kind)` / `Mark` / `Pass`。`Mark` の名前・本文加工は `PostingContext` の `copy` で返す）、`UserInfo`（log の `userInfo` 書式。設計書 §5.3 の `UID:` / `Device:` 実値化の差し込み口）、`ModerationRuleRepository`（R2 `deny.cgi` `ngwords.cgi`） | `bbs/domain/posting/moderation/{ModerationRuleSet, ModerationDecision}.scala`、`ModerationSuite` の移設 |
-| 6 | **保存**: `DatLineFormatter`（dat 行・log 行。`Intl.DateTimeFormat` の日付は `Clock` 経由で文字列にして渡す）、`ThreadRepository.addRes` と `durable/codec/PostingCodec`（`posting: js.Dynamic` を DO 側で case class に変換。RPC の外形は変えず、旧形式も読む）、`ArchiveIndexRepository`（`updateSubback` / `updateHeadline` の R2 ETag 条件付き書き込み。KB-25 維持）。応答ヘッダを `Seq[(String, String)]` にして `Set-Cookie` を複数出せるようにする（`Headers.append`。現行の `js.Dictionary` では 1 本に上書きされる） | `common/domain/posting/DatLineFormatter.scala`、`durable/codec/PostingCodec.scala`、`repository/ArchiveIndexRepository.scala`、dat / log のバイト一致テスト |
+| 5 | **規制**: `Moderation.parseRules` → `ModerationRuleSet.parse`（`js.RegExp` を内包）、`Moderation.check(gb)` → `ModerationService.check(input, load): Future[ModerationDecision]`（`Pass(form)` / `Deny(denial, form)`。mark の名前・本文加工は拒否時にも残るので、どちらも `PostForm` の `copy` で返す）、`UserInfo`（log の `userInfo` 書式。設計書 §5.3 の `UID:` / `Device:` 実値化の差し込み口）、`ModerationRuleRepository`（R2 `deny.cgi` `ngwords.cgi`） | `bbs/domain/posting/moderation/{ModerationRuleSet, ModerationService}.scala`、`common/domain/posting/UserInfo`、`repository/ModerationRuleRepository`、`ModerationSuite` の移設 |
+| 6 | **保存**: `DatLineFormatter`（dat 行・log 行。`Intl.DateTimeFormat` の日付は `Clock` 経由で文字列にして渡す）、`ThreadRepository.addRes` と `durable/codec/PostingCodec`（`posting: js.Dynamic` を DO 側で case class に変換。RPC の外形は変えず、旧形式も読む）、`ArchiveIndexRepository`（`updateSubback` / `updateHeadline` の R2 ETag 条件付き書き込み。KB-25 維持）。応答ヘッダを `Seq[(String, String)]` にして `Set-Cookie` を複数出せるようにする（`Headers.append`。現行の `js.Dictionary` では 1 本に上書きされる） | `common/domain/posting/DatLineFormatter.scala`、`application/posting/ports/Clock`、`domain/posting/ThreadPosting`、`durable/codec/PostingCodec.scala`、`repository/ArchiveIndexRepository.scala`、dat / log のバイト一致テスト |
 | 7 | **アプリケーションサービス**: `PostingService.post(request): Future[PostingOutcome]` に段の並びを集約し、`Posting.entry` を「`PostingRequest` 化 → サービス → `PostingPages` で描画」だけにする。`g` を削除。`PostingPages` は `PostingContext` / `PostingOutcome` を受ける | `application/posting/PostingService.scala`、`ports/*`、`PostingServiceSuite`（メモリ上のポート実装で段の順序と `copy` の内容を検証） |
 | 8 | **Thread DO の整理**（3.5）: `addRes` 内の 1000 件上限・`BBS_HEISA`・同一 key・スレ不在の判定を `common/domain/posting/ThreadWriteGuard.check(datLineCount, settings, create): Option[code]` に出し、DO はコード文字列を返す。handler 側は現行と同じ文言に戻す（`errmsg:updateThreadFile->…` の中身まで一致させる）。現行の `BBS_HEISA` 判定は設定文字列への正規表現（`Thread.scala` の `(?:^|<>)BBS_HEISA=checked(?:<>|$)`）で、解析済み設定とは空白入りの値などで読み方が違うので、スナップショットに境界ケース（`BBS_HEISA= checked`・値に `<>` を含む等）を足してから統一する | `ThreadWriteGuard`、`ThreadSuite` の更新（DO の責務は直列化・一括保存・失敗時の予約取消しに限定） |
 | 9 | **テストの再配置**: ドメインは `common/src/test`（JVM / JS）と `bbs/src/test/.../domain`、サービスは `PostingServiceSuite`、HTTP は `PostingHandlerSuite` を縮退させず保持。`Clock` / `Random` をポートにしたことで `withFixedTime` / `withRandom` 依存の段を減らし、`Test / parallelExecution := false` の対象を `HandlerTestKit` を使うスイートだけに絞れるか確認する | テスト構成、`docs/v6s実装メモ.md` 4 章の更新 |

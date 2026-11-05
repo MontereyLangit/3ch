@@ -111,3 +111,14 @@
 | 管理画面 | 規制ルールの保存時の検証は ModerationRuleSet.parse を使い、文言は AdminText.ruleError で従来どおり「N行目: …」にする |
 | テスト | ModerationSuite を ModerationRuleSetSuite・ModerationServiceSuite（読んだファイルの記録、saku 板、対象欄の書式、文字参照の境界を追加）・ModerationRuleRepositorySuite に移設。UserInfoSuite（JVM / JS）、AdminHandlerSuite に規制ルールの誤りの文言を追加 |
 | 計画との差分 | 計画書は ModerationDecision を Deny / Mark / Pass としていたが、mark は拒否時にも残るので、Pass と Deny がどちらも加工後のフォームを持つ形にした。UserInfo は正規表現を使わないので計画書 §2 の bbs/domain ではなく common に置いた。Main の parseRules / checkModeration の書き出し（v5 互換の名残で、どこからも使われていない）を削除した |
+
+## 段 6: 保存
+
+| 項目 | 内容 |
+| --- | --- |
+| 実施 | common/domain/posting/DatLineFormatter（最初の <br> の前後の空白、dat 行、log 行）、application/posting/ports/Clock（現在時刻と Intl.DateTimeFormat による dat の日付欄。段 7 のポートの先行分）、bbs/domain/posting/ThreadPosting（addRes の付帯情報）、durable/codec/PostingCodec、ThreadRepository.addRes、repository/ArchiveIndexRepository（過去ログ目次と headline.txt の読込と ETag 条件付き書き込み）を追加。ThreadCreationCodec に encodeRequest と ThreadCreationLimit を足し、Thread DO の addRes は PostingCodec.decode で case class にしてから使う。g.headers・g.path・g.logPath・g.logFile・g.logData を削除した |
+| 応答ヘッダ | Responses.plain と RendererShell の extra を Seq[(String, String)] にした。名前ごとに既存の値を消してから append するので、1 本なら従来の set と同じで、同名を並べれば Set-Cookie も複数出る |
+| 振る舞いの保存 | RPC の外形（プレーンオブジェクトと同じ項目名）は変えず、DO スタブの署名も変わらないので codegen の生成物はそのまま。旧形式は従来の読み方に合わせ、null と省略は付帯情報なし、真偽は JavaScript の真偽判定、板名・key が無ければ String(undefined) の名前で Board DO を呼ぶ。初期スレ設定・スレ立て規制・スレ主は create が真で値が真のときだけ読む。subject.txt の空 ETag と未作成時の doesNotExist（KB-25）、headline の条件と結果を見ない扱いも維持。スナップショット差分なし |
+| テスト | DatLineFormatterSuite（JVM / JS）、PostingCodecSuite（往復、外形、旧形式・真偽判定・create でない場合）、ArchiveIndexRepositorySuite（ETag 競合、空 ETag と KB-25、headline）、ResponsesSuite（Set-Cookie の複数と 1 本のときの出力）。ThreadSuite・ThreadCreationSuite は変更なしで通る |
+| 計画との差分 | 計画書は日付文字列を Clock 経由で渡すとしているので、ポートの Clock だけを段 6 で入れ、ハンドラは Clock.system を使う。Thread DO の旧ログ変換（convertLegacy）の日付整形は対象外のまま。旧形式で title が null のときは undefined として渡す（スレ一覧に既存行があれば既存の題名を使う従来の扱いに揃う。既存行が無い場合だけ従来の "null" が "undefined" になるが、ハンドラは常に文字列を渡す） |
+| 未解決 | subject.txt と headline.txt の本文の組み立て、sage の判定、g.subject・g.number・g.sage・g.time・g.unixtime・g.nowTime・g.cookies は段 7 でサービスへ移す |

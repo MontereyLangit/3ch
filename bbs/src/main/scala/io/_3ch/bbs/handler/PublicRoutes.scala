@@ -61,7 +61,7 @@ object PublicRoutes {
     else if path == "/auth.js" then Future.successful(Responses.response("/* test */", headers = js.Dictionary("content-type" -> "application/javascript;charset=UTF-8")))
     else if path == "/bbsmenu.html" then
       read(e, "bbsmenu.html").flatMap {
-        case Some(custom) => Future.successful(RendererShell.legacyHtml(custom, extra = js.Dictionary("cache-control" -> "no-store")))
+        case Some(custom) => Future.successful(RendererShell.legacyHtml(custom, extra = Seq("cache-control" -> "no-store")))
         case None => cached { guard("/bbsmenu.html") {
           // v5 captures `lastModified = new Date()` before the R2 fetch below (main.js); mirror that timing.
           val fallback = new js.Date()
@@ -72,7 +72,7 @@ object PublicRoutes {
               val modified = if rows.length > 1 then date(rows(0), true) else fallback
               val boards = rows.drop(1).map(row => trim(row).split("<>", -1)).filter(validHead).map(f => f(0) -> f(1)).toSeq
               val page = BbsMenuPage.render(boards, modified.asInstanceOf[js.Dynamic].toLocaleString("ja-JP").asInstanceOf[String])
-              RendererShell.legacyReact(page, modified = modified, since = h("if-modified-since"), extra = js.Dictionary("max-age" -> "60", "s-maxage" -> "60"))
+              RendererShell.legacyReact(page, modified = modified, since = h("if-modified-since"), extra = Seq("max-age" -> "60", "s-maxage" -> "60"))
           }
         }}
       } else if path == "/headline/subject.txt" then guard("headline.txt") {
@@ -82,7 +82,7 @@ object PublicRoutes {
           val rows = text.split("\n", -1)
           val modified = if rows.length > 1 then date(rows(0), true) else new js.Date()
           val lines = rows.drop(1).map(row => trim(row).split("<>", -1)).filter(validHead)
-          lines.foldLeft(Future.successful("")) { (acc, f) => acc.flatMap(s => board(e, f(0)).getRemoved().toFuture.map(removed => s"$s${if removed.contains(f(3)) then "" else s"${f.take(5).mkString("<>")}\n"}")) }.map(text => Responses.plain(text, "plain", modified = modified, extra = js.Dictionary("cache-control" -> "no-store")))
+          lines.foldLeft(Future.successful("")) { (acc, f) => acc.flatMap(s => board(e, f(0)).getRemoved().toFuture.map(removed => s"$s${if removed.contains(f(3)) then "" else s"${f.take(5).mkString("<>")}\n"}")) }.map(text => Responses.plain(text, "plain", modified = modified, extra = Seq("cache-control" -> "no-store")))
       }
     } else {
       val route = RouteTable.publicPatterns.iterator.map { (kind, regex) => (kind, new js.RegExp(regex).exec(path)) }.find(_._2 != null)
@@ -102,7 +102,7 @@ object PublicRoutes {
                   val dat = str(data.dat)
                   if !truth(data.dat) then {
                     if oldDomain && key == DomainMigration.key then
-                      Responses.plain(DomainMigration.dat(bbs), "plain", "Shift_JIS", h("range"), new js.Date(DomainMigration.modifiedMillis), h("if-modified-since"), js.Dictionary("cache-control" -> "no-store"))
+                      Responses.plain(DomainMigration.dat(bbs), "plain", "Shift_JIS", h("range"), new js.Date(DomainMigration.modifiedMillis), h("if-modified-since"), Seq("cache-control" -> "no-store"))
                     else notFound(canonical)
                   } else {
                     var modified: js.Date = if truth(data.modifiedAt) then new js.Date(data.modifiedAt.asInstanceOf[Double]) else null
@@ -110,7 +110,7 @@ object PublicRoutes {
                     val dateMatch = new js.RegExp("(\\d{4}/\\d{2}/\\d{2}\\([日月火水木金土]\\) \\d{2}:\\d{2}:\\d{2})").exec(last)
                     if dateMatch != null && modified == null then modified = new js.Date(dateMatch(1).get)
                     val edited = truth(data.edited)
-                    Responses.plain(if oldDomain then DomainMigration.annotateDat(dat, bbs, key) else dat, "plain", "Shift_JIS", if edited || oldDomain then "" else h("range"), if modified == null then new js.Date() else modified, if edited || oldDomain then "" else h("if-modified-since"), js.Dictionary("cache-control" -> "no-store", "s-maxage" -> "1", "Accept-Ranges" -> (if oldDomain then "none" else "bytes")))
+                    Responses.plain(if oldDomain then DomainMigration.annotateDat(dat, bbs, key) else dat, "plain", "Shift_JIS", if edited || oldDomain then "" else h("range"), if modified == null then new js.Date() else modified, if edited || oldDomain then "" else h("if-modified-since"), Seq("cache-control" -> "no-store", "s-maxage" -> "1", "Accept-Ranges" -> (if oldDomain then "none" else "bytes")))
                   }
                 }
               }
@@ -122,7 +122,7 @@ object PublicRoutes {
               ownF.zip(globalF).map { (own, global) =>
                 val merged = GlobalThread.mergeSubject(rows(global), if bbs == GlobalThread.board then Nil else rows(own))
                 val body = merged.map(_ + "\n").mkString
-                Responses.plain(if oldDomain then DomainMigration.subject(body) else body, "plain", "Shift_JIS", since = h("if-modified-since"), extra = js.Dictionary("max-age" -> "5", "s-maxage" -> "1"))
+                Responses.plain(if oldDomain then DomainMigration.subject(body) else body, "plain", "Shift_JIS", since = h("if-modified-since"), extra = Seq("max-age" -> "5", "s-maxage" -> "1"))
               }
             }
             case "archive" | "archives" =>
@@ -139,7 +139,7 @@ object PublicRoutes {
                     val fields = rows.drop(1).map(row => trim(row).split("<>", -1))
                     val body = if single then fields.filter(f => f.length >= 6 && f(0).matches("^[0-9]{10}$") && !removed.contains(f(0))).map(_.take(6).mkString("<>") + "\n").mkString
                       else fields.filter(f => f.length >= 2 && f(0).matches("^[0-9]{4}$") && f(1).matches("^[0-9]{10}$")).map(_.take(2).mkString("<>") + "\n").mkString
-                    Responses.plain(body, "plain", modified = modified, since = if single then "" else h("if-modified-since"), extra = if single then js.Dictionary("cache-control" -> "no-store") else js.Dictionary("max-age" -> "86400", "s-maxage" -> "86400"))
+                    Responses.plain(body, "plain", modified = modified, since = if single then "" else h("if-modified-since"), extra = if single then Seq("cache-control" -> "no-store") else Seq("max-age" -> "86400", "s-maxage" -> "86400"))
                 }}
               }
               if single then work else cached(work)

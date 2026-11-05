@@ -41,7 +41,7 @@ object RendererShell {
     encoding: String = "Shift_JIS",
     modified: js.Date = new js.Date(),
     since: String = "",
-    extra: js.Dictionary[String] = js.Dictionary.empty[String]
+    extra: Seq[(String, String)] = Nil
   ): Response = {
     legacyHtml(renderToStaticMarkup(page), encoding, modified, since, extra)
   }
@@ -52,7 +52,7 @@ object RendererShell {
     encoding: String = "Shift_JIS",
     modified: js.Date = new js.Date(),
     since: String = "",
-    extra: js.Dictionary[String] = js.Dictionary.empty[String]
+    extra: Seq[(String, String)] = Nil
   ): Response = {
     Responses.plain(html, "html", encoding, modified = modified, since = since, extra = extra)
   }
