@@ -43,6 +43,22 @@ lazy val common = crossProject(JSPlatform, JVMPlatform)
 lazy val commonJVM = common.jvm
 lazy val commonJS  = common.js
 
+// DO の公開メソッドから RPC スタブを生成する（docs/durable-object-stubs.md）。bbs の sourceGenerators から呼ぶ。
+// 生成器は JVM の codegen にあり、bbs のソースだけを入力に取るのでタスクグラフは循環しない。
+val durableObjectStubsFile = settingKey[File]("生成する RPC スタブ（src_managed 配下）")
+val generateDurableObjectStubs = taskKey[Seq[File]]("DO の公開メソッドから RPC スタブを生成する")
+
+lazy val generateDurableObjectStubsTask: Def.Initialize[Task[Seq[File]]] = Def.taskDyn {
+  val durableDir = (Compile / scalaSource).value / "io" / "_3ch" / "bbs" / "durable"
+  val output = (Compile / durableObjectStubsFile).value
+  // パスに空白が含まれても 1 引数として渡るよう引用符で囲む（spaceDelimited は引用符を解釈する）
+  val arguments = s""" io._3ch.codegen.GenerateDurableObjectStubsMain "${durableDir.getAbsolutePath}" "${output.getAbsolutePath}""""
+  Def.task {
+    (codegen / Compile / runMain).toTask(arguments).value
+    Seq((Compile / durableObjectStubsFile).value)
+  }
+}
+
 // --- bbs: Scala.js — Durable Object と、HonoXから呼ばれるサーバ側ロジック（Workersバンドル専用） ---
 lazy val bbs = project
   .in(file("bbs"))
@@ -68,6 +84,10 @@ lazy val bbs = project
     libraryDependencies += "com.github.japgolly.scalajs-react" %%% "core" % "4.0.0",
     // ブラウザへサーバ処理を混入させないため、bbsClient とは別にリンクする
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
+    // DO の公開メソッドから RPC スタブ（BoardDoStub 等）を生成する（上記 generateDurableObjectStubsTask）
+    Compile / durableObjectStubsFile := (Compile / sourceManaged).value / "io" / "_3ch" / "bbs" / "external" / "cloudflare" / "DurableObjectStubs.scala",
+    Compile / generateDurableObjectStubs := generateDurableObjectStubsTask.value,
+    Compile / sourceGenerators += (Compile / generateDurableObjectStubs).taskValue,
     // テストが Date / Math.random / caches 等のグローバルを一時的に差し替えるため、スイート間は直列に実行する
     Test / parallelExecution := false,
     // 参照実装からの既知の地雷: `@JSImport("cloudflare:workers", "DurableObject")` を extends した
@@ -105,13 +125,15 @@ lazy val bbsClient = project
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) }
   )
 
-// --- codegen: JVM — Main のアノテーションから配線、DO の Scala 宣言から TS 型を生成 ---
+// --- codegen: JVM — Main のアノテーションから配線、DO の Scala 宣言から TS 型と Scala RPC スタブを生成 ---
 lazy val codegen = project
   .in(file("codegen"))
   .dependsOn(commonJVM)
   .settings(commonSettings)
   .settings(
-    libraryDependencies += ("org.scalameta" %% "scalameta" % "4.17.4").cross(CrossVersion.for3Use2_13)
+    libraryDependencies += ("org.scalameta" %% "scalameta" % "4.17.4").cross(CrossVersion.for3Use2_13),
+    // `sbt codegen/run`（npm run v6:generate）はルートと TS 型の生成。Scala スタブは bbs の sourceGenerators から runMain で呼ぶ
+    Compile / mainClass := Some("io._3ch.codegen.GenerateAppFiles")
   )
 
 lazy val root = project

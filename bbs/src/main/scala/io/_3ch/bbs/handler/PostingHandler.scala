@@ -36,7 +36,7 @@ object PostingHandler {
   private def sha(s: String): Future[String] = WebHash.sha1Base64(s).toFuture
   private def hash(s: String): Future[String] = WebHash.hash("SHA-256", s).toFuture
   private def md5(s: String): String = Md5.md5(s)
-  private def thread(g: js.Dynamic, e: WorkerEnv): ThreadDoStub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"${str(g.form.bbs)}/${str(g.form.key)}")).asInstanceOf[ThreadDoStub]
+  private def thread(g: js.Dynamic, e: WorkerEnv): ThreadDoStub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"${str(g.form.bbs)}/${str(g.form.key)}"))
   private def errorText(e: Throwable): String = e match {
     case x: js.JavaScriptException => str(x.exception.asInstanceOf[js.Any])
     case _ => e.toString
