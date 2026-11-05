@@ -41,3 +41,15 @@
 | 衝突の解決 | 「develop の振る舞いが正」とし、`PostingHandler.scala` は develop の版に段 0b（`ThreadCreationSettings.fromSettings`）と段 1（`reject(PostingError)`・`PostingText.message`）を当て直した。トリップ廃止で `PostingError.TripKeyTooLong` を削除し、全板共通スレの拒否を `GlobalThreadCreateCapOnly`（`global-thread:create-cap-only`）・`GlobalThreadCapOnly`（`global-thread:cap-only`）として追加。`PostingText` は develop の定数と段 1 の文言表を併せた |
 | スナップショット | 段 0a のスナップショットは develop（3775f12）上で取り直した。develop を別の作業ツリーに出し、`PostingSnapshotSuite` を develop 向けに改訂して（トリップの方式別・`BBS_ID` 系のケースを外し、トリップ入力が捨てられる確認・`!id`（解決済み利用者・未解決・キャップ・`showid` 欄・エスケープ）・スレ主表示（IP / アカウント / IPv6 /64 / `!no` / キャップ / 板・スレの `BBS_DISABLE_NUSI`）・924 / 900 のスレ立てと書き込みを加え、Thread DO の `owner` も照合対象にした。計 196 ケース）生成し、その生成物とスイートを本ブランチに持ち込んだ。本ブランチ（段 0b・1 適用後）は全件一致し、差分はない |
 | 計画書の訂正 | §1・§2・§3・段 4・§5・§6・§7 のトリップ・ID 関連（`TripAlgorithm`、`IdSeeds` の ID 部分、`BBS_ID` 系、`TripKeyTooLong`）を削り、`!id`・スレ主表示・全板共通スレを段 4 の対象に加えた |
+
+## 段 2: 入力の型付け
+
+| 項目 | 内容 |
+| --- | --- |
+| 実施 | `handler/PostingRequest.scala`（`PostingRequest.from(Request)`。投稿処理が読むヘッダと `cf` を 1 回で取り出し、`validate` で method → Content-Type → Referer → UA → client-ip の順に検査。`host`・`browserUserAgent`・`isMonazilla` も持つ）、`common/.../domain/posting/PostForm.scala`（`PostForm` と `PostKind`）、`bbs/.../domain/posting/FormSanitizer.scala`（submit 判定・Shift_JIS 復号・置換列・`★◆＃` 変換・名前の `#` 以降の切り捨て・`!id` / `!no` / `showid`）、`PostRouting.scala`（`!newthread`、`<br>` 除去、板名・key・time の文字除去、共通スレ 924 / 900 の板付け替え、禁止板・本文・題名・time の検査、スレ立て／返信の決定と `!924` / `!900`）を追加。`g.form`・`g.isSJIS`・`g.isMonazilla`・`g.showId`・`g.noNusi` を削除し、ハンドラ内の `Draft(var form: PostForm)` に置き換えた。`PostingPages.respondEndHtml` / `respondError` は `PostForm` を受ける。`TextDecoder` の facade を追加 |
+| 正規表現 | `FormSanitizer` / `PostRouting` の `js.RegExp` はオブジェクト内の定数に閉じ、`JSStringOps.jsReplace` で使う（`js.Dynamic` なし）。グローバルフラグ付きは `replace` にだけ使い、`test` には使わない |
+| エラー画面 | 拒否時はその時点のフォームをエラー画面に出す（従来の `g.form` と同じ）。`FormSanitizer.decode` / `PostRouting.route` は `Either[(PostingError, PostForm), PostForm]` で、左にその時点のフォームを添える |
+| 規制 | `Moderation.decide(gb, form, env)` は mark 適用後の `PostForm` を返す。`Moderation.check(gb)` は `ModerationSuite` 用の包み（`gb.form` に書き戻す）として残した |
+| 検証 | `FormSanitizerSuite`（エスケープ・制御文字・`★☆` 変換・名前の `#` 切り捨て・`!id` / `!no`・KB-03 の前段・後勝ち・共通スレ・必須項目の順）を追加。スナップショット差分なし |
+| 計画との差分 | `PostingRequest` に本文は含めない（ヘッダ検査の前に本文を読むと、本文の読み込み失敗が検査より先に出うるため、従来どおり検査後に読む）。`PostRouting` は計画の「振り分け」に加え、従来 `readForm` 後半にあった文字除去と必須項目の検査も受け持つ（順序依存のため）。`PostForm.kind` は振り分け後にだけ意味を持つ |
+| 未解決 | `g.ip` / `g.host` / `g.userAgent` / `g.browserInfo` / `g.asn` 等の識別系は段 4 の対象として `g` に残る（`PostingRequest` から初期化） |

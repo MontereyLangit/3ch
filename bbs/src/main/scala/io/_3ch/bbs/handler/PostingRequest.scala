@@ -1,0 +1,91 @@
+package io._3ch.bbs.handler
+
+import io._3ch.bbs.domain.posting.PostingError
+import io._3ch.bbs.external.web.Request
+
+import scala.scalajs.js
+
+/**
+  * bbs.cgi へのリクエストのうち投稿処理が読むヘッダと `cf` の値。無いヘッダは空文字列。
+  * 本文はヘッダの検査を通ってから読むので含めない。
+  */
+final case class PostingRequest(
+  method: String,
+  contentType: String,
+  referer: String,
+  userAgent: String,
+  secChUa: String,
+  secChUaFullVersionList: Option[String],
+  accept: String,
+  acceptLanguage: String,
+  acceptEncoding: String,
+  deviceInformation: String,
+  clientIp: String,
+  connectingIp: Option[String],
+  forwardedFor: String,
+  forwarded: String,
+  via: String,
+  cookie: String,
+  asn: Option[String],
+  country: Option[String],
+  region: Option[String],
+  city: Option[String]
+) {
+
+  /** UA に Client Hints（完全版があればそちら）を連結した文字列。 */
+  def browserUserAgent: String = userAgent + secChUaFullVersionList.getOrElse(secChUa)
+
+  def browserInfo: String = "Accept:" + accept + "Accept-Language:" + acceptLanguage + "Accept-Encoding:" + acceptEncoding
+
+  def isMonazilla: Boolean = new js.RegExp("^Monazilla/1.00").test(browserUserAgent)
+
+  /** 表示用のホスト。接続元 IP に、それと異なる最初の転送ヘッダを `<…>` で付ける（IP が無ければ `null`）。 */
+  def host: String = {
+    val ip = connectingIp.getOrElse("null")
+    Seq(forwardedFor, forwarded, via).find(v => v.nonEmpty && !connectingIp.contains(v)).fold(ip)(v => s"$ip<$v>")
+  }
+
+  /** ヘッダの検査。複数あてはまるときは従来の判定順で最初のものを返す。 */
+  def validate: Option[PostingError] = {
+    def matches(s: String, pattern: String): Boolean = new js.RegExp(pattern).test(s)
+    if (method != "POST") Some(PostingError.MethodNotPost)
+    else if (!contentType.contains("application/x-www-form-urlencoded")) Some(PostingError.BrokenBody(contentType))
+    else if (!matches(referer, "^https?://www\\.(3ch\\.io|3chbbs\\.com)(:[0-9]+)?([/?#]|$)") && !matches(referer, "^http://127\\.0\\.0\\.1:878[78]([/?#]|$)")) Some(PostingError.InvalidReferer(referer))
+    else if (userAgent.length < 7 || userAgent.length > 384 || matches(userAgent, "[^ -~]")) Some(PostingError.InvalidUserAgent(userAgent))
+    else if (clientIp.nonEmpty) Some(PostingError.ProxyHeader(clientIp))
+    else None
+  }
+}
+
+object PostingRequest {
+  def from(request: Request): PostingRequest = {
+    def header(name: String): String = Option(request.headers.get(name)).getOrElse("")
+    val cf = request.cf.toOption
+    def metadata(name: String): Option[String] = cf.flatMap { c =>
+      val value = c.selectDynamic(name)
+      if (value == null || js.isUndefined(value)) None else Some(js.Dynamic.global.String(value).asInstanceOf[String])
+    }
+    PostingRequest(
+      method = request.method,
+      contentType = header("content-type"),
+      referer = header("referer"),
+      userAgent = header("user-agent"),
+      secChUa = header("sec-ch-ua"),
+      secChUaFullVersionList = Option(request.headers.get("sec-ch-ua-full-version-list")),
+      accept = header("accept"),
+      acceptLanguage = header("accept-language"),
+      acceptEncoding = header("accept-encoding"),
+      deviceInformation = header("x-ch3-device-information"),
+      clientIp = header("client-ip"),
+      connectingIp = Option(request.headers.get("CF-Connecting-IP")),
+      forwardedFor = header("x-forwarded-for"),
+      forwarded = header("forwarded"),
+      via = header("via"),
+      cookie = header("cookie"),
+      asn = metadata("asn"),
+      country = metadata("country"),
+      region = metadata("region"),
+      city = metadata("city")
+    )
+  }
+}

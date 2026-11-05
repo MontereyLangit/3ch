@@ -5,7 +5,7 @@ import scala.scalajs.js.annotation.JSGlobal
 import scala.scalajs.js.typedarray.{ArrayBuffer, Uint8Array}
 
 /**
- * `TextEncoder` / `crypto.subtle` / `btoa` の手書きfacade。
+ * `TextEncoder` / `TextDecoder` / `crypto.subtle` / `btoa` の手書きfacade。
  * `WebFacade.scala` と同じ方針（scalajs-dom不使用、必要なメンバだけを`@JSGlobal`で直接宣言）。
  * Cloudflare Workers / Node（テスト実行環境） の両方に実在するグローバルAPI。
  */
@@ -13,6 +13,12 @@ import scala.scalajs.js.typedarray.{ArrayBuffer, Uint8Array}
 @JSGlobal("TextEncoder")
 class TextEncoder() extends js.Object {
   def encode(input: String): Uint8Array = js.native
+}
+
+@js.native
+@JSGlobal("TextDecoder")
+class TextDecoder(label: String = js.native) extends js.Object {
+  def decode(input: Uint8Array): String = js.native
 }
 
 @js.native

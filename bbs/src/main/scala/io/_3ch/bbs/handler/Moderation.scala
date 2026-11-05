@@ -2,6 +2,7 @@ package io._3ch.bbs.handler
 
 import io._3ch.bbs.domain.posting.{ModerationDenial, PostingError}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
+import io._3ch.common.domain.posting.PostForm
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -29,19 +30,28 @@ object Moderation {
 
   private def truth(v: js.Any): Boolean = js.Dynamic.global.Boolean(v).asInstanceOf[Boolean]
   private def str(v: js.Any): String = js.Dynamic.global.String(v).asInstanceOf[String]
-  /** 規制を評価し、拒否なら `gb.error` に文言を入れて 0、通過なら 1 を返す。 */
-  def check(gb: js.Dynamic, env: WorkerEnv): js.Promise[Int] =
-    decide(gb, env).map {
-      case Some(denial) => gb.error = PostingText.message(PostingError.Moderated(denial)); 0
-      case None => 1
+  /** 規制を評価し、`gb.form` の名前・本文を更新する。拒否なら `gb.error` に文言を入れて 0、通過なら 1 を返す。 */
+  def check(gb: js.Dynamic, env: WorkerEnv): js.Promise[Int] = {
+    val form = PostForm(name = str(gb.form.FROM), mail = str(gb.form.mail), message = str(gb.form.MESSAGE), subject = str(gb.form.subject), bbs = str(gb.form.bbs))
+    decide(gb, form, env).map { (denial, marked) =>
+      if marked != form then {
+        gb.form.FROM = marked.name
+        gb.form.MESSAGE = marked.message
+      }
+      denial.fold(1) { d => gb.error = PostingText.message(PostingError.Moderated(d)); 0 }
     }.toJSPromise
+  }
 
-  /** 規制を評価し、拒否理由を返す。mark は `gb.form` の名前・本文を書き換えて通過させる。 */
-  def decide(gb: js.Dynamic, env: WorkerEnv): Future[Option[ModerationDenial]] = {
-    if truth(gb.cap) || gb.form.bbs.asInstanceOf[String] == "saku" then Future.successful(None)
-    else if gb.country.asInstanceOf[String] == "T1" then Future.successful(Some(ModerationDenial.Tor))
+  /**
+    * 規制を評価し、拒否理由と mark 適用後のフォームを返す。
+    * `gb` からはキャップ・国・userInfo・板設定・レス番号を読む。
+    */
+  def decide(gb: js.Dynamic, form: PostForm, env: WorkerEnv): Future[(Option[ModerationDenial], PostForm)] = {
+    if truth(gb.cap) || form.bbs == "saku" then Future.successful((None, form))
+    else if gb.country.asInstanceOf[String] == "T1" then Future.successful((Some(ModerationDenial.Tor), form))
     else {
-      val content = s"FROM=${str(gb.form.FROM)} mail=${str(gb.form.mail)} MESSAGE=${str(gb.form.MESSAGE)} subject=${str(gb.form.subject)}"
+      var current = form
+      val content = s"FROM=${form.name} mail=${form.mail} MESSAGE=${form.message} subject=${form.subject}"
       val replaceNumeric: js.Function2[String, String, String] = (entity, digits) => {
         val code = if digits(0).toLower == 'x' then js.Dynamic.global.parseInt(digits.drop(1), 16).asInstanceOf[Double] else js.Dynamic.global.Number(digits).asInstanceOf[Double]
         if code > 0 && code <= 0x10ffff then js.Dynamic.global.String.fromCodePoint(code).asInstanceOf[String] else entity
@@ -61,12 +71,12 @@ object Moderation {
                   def matches(field: String, value: String) = rule.selectDynamic(field).asInstanceOf[js.RegExp].test(value)
                   val isWord = rule.isWord.asInstanceOf[Boolean]
                   val action = rule.action.asInstanceOf[String]
-                  if !matches("board", str(gb.form.bbs)) || !matches("target", str(gb.userInfo)) || !(matches("word", content) || matches("word", decoded)) then None
+                  if !matches("board", form.bbs) || !matches("target", str(gb.userInfo)) || !(matches("word", content) || matches("word", decoded)) then None
                   else if isWord && gb.settings.BBS_NGWORD_PASS.asInstanceOf[js.Any] == "checked".asInstanceOf[js.Any] then None
                   else if action == "TateDame" && gb.number.asInstanceOf[Int] != 1 then None
                   else if action == "mark" || gb.settings.BBS_NO_MADAKANA.asInstanceOf[js.Any] == "checked".asInstanceOf[js.Any] then {
-                    if !isWord && !str(gb.form.FROM).startsWith("</b>[´・ω・｀]<b> ") then gb.form.FROM = "</b>[´・ω・｀]<b> " + str(gb.form.FROM)
-                    gb.form.MESSAGE = str(gb.form.MESSAGE) + " <small>👀 Madakana: Caution</small>"
+                    if !isWord && !current.name.startsWith("</b>[´・ω・｀]<b> ") then current = current.copy(name = "</b>[´・ω・｀]<b> " + current.name)
+                    current = current.copy(message = current.message + " <small>👀 Madakana: Caution</small>")
                     None
                   } else Some(if isWord then ModerationDenial.NgWord else if action == "TateDame" then ModerationDenial.TateDame else ModerationDenial.Host)
                 }.collectFirst { case Some(d) => d }
@@ -74,7 +84,7 @@ object Moderation {
             }
         }
       }
-      fileLoop(List("deny.cgi", "ngwords.cgi"))
+      fileLoop(List("deny.cgi", "ngwords.cgi")).map(denial => (denial, current))
     }
   }
 }

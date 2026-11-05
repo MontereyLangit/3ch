@@ -1,5 +1,6 @@
 package io._3ch.bbs.handler
 
+import io._3ch.common.domain.posting.PostForm
 import japgolly.scalajs.react.facade.React
 import scala.scalajs.js
 
@@ -15,13 +16,13 @@ object PostingPages {
     React.createElement(tag, js.Dynamic.literal(dangerouslySetInnerHTML = js.Dynamic.literal(__html = content)))
   }
 
-  def respondEndHtml(gb: js.Dynamic, charset: String): React.Element = {
+  def respondEndHtml(form: PostForm, charset: String): React.Element = {
     element("html", js.Dictionary("lang" -> "ja"))(
       element("head")(
         element("title")("書きこみました。"),
         RendererShell.clientScript(),
         element("meta", js.Dictionary("httpEquiv" -> "Content-Type", "content" -> ("text/html; charset=" + charset)))(),
-        element("meta", js.Dictionary("content" -> ("5;URL=/test/read.cgi/" + str(gb.form.bbs) + "/" + str(gb.form.key) + "/"), "httpEquiv" -> "refresh"))()
+        element("meta", js.Dictionary("content" -> ("5;URL=/test/read.cgi/" + form.bbs + "/" + form.key + "/"), "httpEquiv" -> "refresh"))()
       ),
       element("body")(
         "書きこみが終わりました。",
@@ -104,7 +105,7 @@ object PostingPages {
     )
   }
 
-  def respondError(gb: js.Dynamic, message: String, charset: String): React.Element = {
+  def respondError(form: PostForm, host: String, message: String, charset: String): React.Element = {
     element("html")(
       element("head")(
         element("title")("ＥＲＲＯＲ！"),
@@ -119,18 +120,18 @@ object PostingPages {
         element("ul")(
           element("br")(),
           "ホスト",
-          raw("b", str(gb.host)),
+          raw("b", host),
           element("br")(),
-          raw("b", str(gb.form.subject) + " "),
+          raw("b", form.subject + " "),
           element("br")(),
           "\n名前： ",
-          raw("b", str(gb.form.FROM)),
+          raw("b", form.name),
           element("br")(),
-          raw("span", "E-mail： " + str(gb.form.mail)),
+          raw("span", "E-mail： " + form.mail),
           element("br")(),
           "\n内容：",
           element("br")(),
-          raw("span", str(gb.form.MESSAGE)),
+          raw("span", form.message),
           element("br")(),
           element("br")()
         ),
@@ -139,7 +140,7 @@ object PostingPages {
         element("br")(),
         element("hr")(),
         "\nこちらでリロードしてください。",
-        element("a", js.Dictionary("href" -> ("/test/read.cgi/" + str(gb.form.bbs) + "/" + str(gb.form.key) + "/")))(" GO! "),
+        element("a", js.Dictionary("href" -> ("/test/read.cgi/" + form.bbs + "/" + form.key + "/")))(" GO! "),
         element("br")(),
         "\n自分で解決してみよう! ",
         element("a", js.Dictionary("href" -> "https://wiki.3chbbs.com/index.php/%E6%9B%B8%E3%81%8D%E8%BE%BC%E3%82%81%E3%81%AA%E3%81%84%E6%99%82%E3%81%AE%E6%97%A9%E8%A6%8B%E8%A1%A8"))("書き込めない時の早見表"),
