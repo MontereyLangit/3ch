@@ -9,32 +9,42 @@ Scala.js 実装（`bbs/`）の doc コメントから移した背景情報。コ
 
 HonoX のルート（`app/routes` 配下、codegen 生成の TypeScript）から `scalajs:server.js` 経由で
 import されるエントリポイント関数群。TS 側はここで export した関数を1行呼ぶだけの薄い配線にする
-（参照実装 ch3s-migration の `ch3s.bbs.Main` と同じ方針）。
+（参照実装 ch3s-migration の `io._3ch.bbs.Main` と同じ方針）。
+
+生成対象は `bbs.Main` の `@route` と `bbsclient.Main` の `@islands` で指定し、
+同じ宣言の `@JSExportTopLevel` から export 名を取得する。既存 fetch の振り分けは
+`app/routes/index.ts` に手書きで保持する。SSR の `rawElement` と Islands の違いは
+[ルート・Islands アノテーション化レビュー](route-annotations-review.md)を参照。
+
+`@islands` から SSR 用の `io._3ch.bbs.generated.IslandComponents` も生成する。
+`IslandComponents.<export名>(props).rawElement` で HonoX の hydration 境界を付けた React 要素を取得できる。
+生成 TSX を SSR 側から import する必要はない。利用方法と制約は [Scala からの Islands SSR](islands-ssr.md)を参照。
+
+```scala
+// bbs.Main（io._3ch.common.routes.route を import）
+@route("_v6/health.ts")
+@JSExportTopLevel("healthHandler", "server")
+def healthHandler(c: js.Any): js.Promise[Response] = { /* handler 呼び出し */ }
+
+// bbsclient.Main（io._3ch.common.routes.islands を import）
+@islands("thread-view.tsx")
+@JSExportTopLevel("ThreadView", "client")
+val threadView = /* JS props を受ける React コンポーネント */
+```
+
+`@route` の第2引数は HTTP メソッド（省略時 `"GET"`）。同じファイルの GET / POST は
+別の export 宣言に付けてまとめて生成できる。引数は文字列リテラルとし、export 名を
+アノテーション側に重複して書かない。新しい Islands がない場合は `@islands` 宣言も不要。
 
 `extends DurableObject` した DO クラスはクラス自体が JS 向けクラスになるため、公開メソッドが
 `@JSExport` なしで素の名前のまま export される。`Main` のような独立関数にはこの仕組みが働かないため
 `@JSExportTopLevel` が必要。
 
-### 1.2 `V6PlaceholderDurableObject`
+### 1.2 `V6PlaceholderDurableObject`（削除済み）
 
-v6s ビルド骨格の動作確認専用 DO で、BBS ロジックは持たない。次の2点を実機（`wrangler dev` ローカル）で
-証明するために存在する。
-
-1. Scala.js で定義した `DurableObject` サブクラスが `@JSExportTopLevel(..., "server")` で
-   `scalajs:server.js` から export され、`app/server.ts` の named re-export ワークアラウンド
-   （`vite.config.ts` の `entryContentAfterHooks`）を経て `wrangler.jsonc` の
-   `durable_objects.bindings` から解決できること。
-2. 追加したファサードメンバ `DurableObjectState.blockConcurrencyWhile` が実際に排他制御として
-   機能すること（`Thread.addRes` の移植がこれに依存する）。
-
-Scala 側のメソッド名（例: `state()`）がそのまま RPC の呼び出し名になる。
-これは参照実装 v6-s / ch3s-migration で実測済み。
-
-### 1.3 `HealthHandler`（`GET /_v6/health`）
-
-骨格がリクエストを処理できることを示すだけの固定文字列レスポンスで、BBS ロジックは持たない。
-`V6PlaceholderDurableObject.ping()` を RPC 経由で呼んで結果を含めることで、named export ワークアラウンドと
-DO バインディングが、一覧登録だけでなく実インスタンス化・実 RPC 呼び出しまで機能することを実機で証明する。
+ビルド骨格の動作確認専用 DO（`ping` / `increment` のみ）と、それを呼ぶ `HealthHandler`（`GET /_v6/health`）は
+役目を終えたため削除した（2026-11-03）。DO の named export ワークアラウンド（`vite.config.ts` の
+`entryContentAfterHooks`）と `blockConcurrencyWhile` の実機検証は、現在は `Board` / `Thread` が担う。
 
 ## 2. Cloudflare facade（`external/cloudflare/Bindings.scala`）
 
@@ -59,7 +69,6 @@ v5 `Thread.addRes` は、複数の投稿が同時に届いても「読み込み�
 前提にしている。参照実装の `isLoaded` フラグだけでは、`storage.get` の await 中に別の呼び出しが割り込み、
 初期値を2回読む競合が起こり得る。Workers 組み込みの `blockConcurrencyWhile` はコールバック完了まで同じ
 DO インスタンスへの他のリクエスト処理をブロックするので、この競合が起きない。
-`V6PlaceholderDurableObject.ensureLoaded` はこれを実機で確かめるための最小例。
 
 ### 2.3 `DurableObjectStorage` の複数キー版
 
@@ -166,7 +175,7 @@ npm ライブラリへの薄い facade に置き換えた。自作実装は v5 �
 
 ### 4.4 `WebHashSuite`
 
-golden JSON の読み込みに `common` のテスト専用ユーティリティ（`ch3s.common.golden.{Json, GoldenFile}`）を
+golden JSON の読み込みに `common` のテスト専用ユーティリティ（`io._3ch.common.golden.{Json, GoldenFile}`）を
 `"test->test"` 依存で再利用している（`build.sbt` の `bbs` プロジェクト設定）。
 
 ### 4.5 `SjisEncodingSuite`
