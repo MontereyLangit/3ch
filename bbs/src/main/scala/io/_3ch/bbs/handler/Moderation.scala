@@ -1,5 +1,6 @@
 package io._3ch.bbs.handler
 
+import io._3ch.bbs.domain.posting.{ModerationDenial, PostingError}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -28,10 +29,17 @@ object Moderation {
 
   private def truth(v: js.Any): Boolean = js.Dynamic.global.Boolean(v).asInstanceOf[Boolean]
   private def str(v: js.Any): String = js.Dynamic.global.String(v).asInstanceOf[String]
-  def check(gb: js.Dynamic, env: WorkerEnv): js.Promise[Int] = {
-    def deny(message: String): Int = { gb.error = message; 0 }
-    if truth(gb.cap) || gb.form.bbs.asInstanceOf[String] == "saku" then js.Promise.resolve(1)
-    else if gb.country.asInstanceOf[String] == "T1" then js.Promise.resolve(deny("変なホスト規制中！！ Tor is not allowed."))
+  /** 規制を評価し、拒否なら `gb.error` に文言を入れて 0、通過なら 1 を返す。 */
+  def check(gb: js.Dynamic, env: WorkerEnv): js.Promise[Int] =
+    decide(gb, env).map {
+      case Some(denial) => gb.error = PostingText.message(PostingError.Moderated(denial)); 0
+      case None => 1
+    }.toJSPromise
+
+  /** 規制を評価し、拒否理由を返す。mark は `gb.form` の名前・本文を書き換えて通過させる。 */
+  def decide(gb: js.Dynamic, env: WorkerEnv): Future[Option[ModerationDenial]] = {
+    if truth(gb.cap) || gb.form.bbs.asInstanceOf[String] == "saku" then Future.successful(None)
+    else if gb.country.asInstanceOf[String] == "T1" then Future.successful(Some(ModerationDenial.Tor))
     else {
       val content = s"FROM=${str(gb.form.FROM)} mail=${str(gb.form.mail)} MESSAGE=${str(gb.form.MESSAGE)} subject=${str(gb.form.subject)}"
       val replaceNumeric: js.Function2[String, String, String] = (entity, digits) => {
@@ -42,34 +50,31 @@ object Moderation {
       val replaceNamed: js.Function1[String, String] = entity => entities(entity)
       val decoded = content.asInstanceOf[js.Dynamic].replace(new js.RegExp("&#(x[0-9a-f]+|\\d+);", "gi"), replaceNumeric)
         .replace(new js.RegExp("&(?:amp|lt|gt|quot|apos);", "g"), replaceNamed).asInstanceOf[String]
-      def fileLoop(files: List[String]): Future[Int] = files match {
-        case Nil => Future.successful(1)
+      def fileLoop(files: List[String]): Future[Option[ModerationDenial]] = files match {
+        case Nil => Future.successful(None)
         case file :: rest => env.ch3www.get(file).toFuture.flatMap { obj =>
           if obj == null then fileLoop(rest) else
             obj.text().toFuture.map(parseRules).map(Some(_)).recover { case _ => None }.flatMap {
-              case None => Future.successful(deny("規制設定に問題があります。管理者にお問い合わせください。"))
+              case None => Future.successful(Some(ModerationDenial.BrokenRules))
               case Some(rules) =>
-                val blocked = rules.find { rule =>
+                val denial = rules.iterator.map { rule =>
                   def matches(field: String, value: String) = rule.selectDynamic(field).asInstanceOf[js.RegExp].test(value)
                   val isWord = rule.isWord.asInstanceOf[Boolean]
                   val action = rule.action.asInstanceOf[String]
-                  if !matches("board", str(gb.form.bbs)) || !matches("target", str(gb.userInfo)) || !(matches("word", content) || matches("word", decoded)) then false
-                  else if isWord && gb.settings.BBS_NGWORD_PASS.asInstanceOf[js.Any] == "checked".asInstanceOf[js.Any] then false
-                  else if action == "TateDame" && gb.number.asInstanceOf[Int] != 1 then false
+                  if !matches("board", str(gb.form.bbs)) || !matches("target", str(gb.userInfo)) || !(matches("word", content) || matches("word", decoded)) then None
+                  else if isWord && gb.settings.BBS_NGWORD_PASS.asInstanceOf[js.Any] == "checked".asInstanceOf[js.Any] then None
+                  else if action == "TateDame" && gb.number.asInstanceOf[Int] != 1 then None
                   else if action == "mark" || gb.settings.BBS_NO_MADAKANA.asInstanceOf[js.Any] == "checked".asInstanceOf[js.Any] then {
                     if !isWord && !str(gb.form.FROM).startsWith("</b>[´・ω・｀]<b> ") then gb.form.FROM = "</b>[´・ω・｀]<b> " + str(gb.form.FROM)
                     gb.form.MESSAGE = str(gb.form.MESSAGE) + " <small>👀 Madakana: Caution</small>"
-                    false
-                  } else {
-                    deny(if isWord then "NGワード禁止！" else if action == "TateDame" then "このホストではスレッドを立てられません。" else "アクセス規制中です！！")
-                    true
-                  }
-                }
-                if blocked.isDefined then Future.successful(0) else fileLoop(rest)
+                    None
+                  } else Some(if isWord then ModerationDenial.NgWord else if action == "TateDame" then ModerationDenial.TateDame else ModerationDenial.Host)
+                }.collectFirst { case Some(d) => d }
+                if denial.isDefined then Future.successful(denial) else fileLoop(rest)
             }
         }
       }
-      fileLoop(List("deny.cgi", "ngwords.cgi")).toJSPromise
+      fileLoop(List("deny.cgi", "ngwords.cgi"))
     }
   }
 }

@@ -21,3 +21,14 @@
 | 実施 | `PostingHandler.threadCreationLimit` が `BbsSettings.toString` を `ThreadCreationSettings.parseText` で解析し直していたのをやめ、`boardSettings` 段が返す `BbsSettings` を `ThreadCreationSettings.fromSettings` に渡す形にした。`g.boardSettingsText` を削除。`guarded` を値を返せる形（`Future[A]`）にした |
 | 振る舞い | スナップショット差分なし。`BbsSettings.parse` はキー末尾の空白を残す（` BBS_THREAD_TATESUGI = 0` のキーは `BBS_THREAD_TATESUGI `）一方、旧経路の `settingsMap` は前後空白を除いていたので、`fromSettings` はキーの前後空白を除いて後勝ちにする（`error-creation-spaced-keys` で固定） |
 | 計画との差分 | なし。管理画面の検証（`AdminHandler`）は SETTING.TXT 本文を直接受けるので `parseText` / `settingsMap` は残した |
+
+## 段 1: エラーモデル
+
+| 項目 | 内容 |
+| --- | --- |
+| 実施 | `bbs/.../domain/posting/PostingError.scala` に `PostingError`（enum、`code` を持つ）と補助の `PostField` / `BrokenLogKind` / `ModerationDenial` / `FailureSite` を追加。`PostingHandler` の `deny(g, 文言)` をすべて `reject(PostingError)` に置き換え、`Rejected(error)` 例外はハンドラ内に閉じた。文言は `PostingText.message(error)` に集約し、`PostingPages.respondError` は文言を引数で受ける。`g.error` を削除 |
+| 内部エラー | `guarded` は `PostingError.Internal(stage, description, FailureSite(clock, time, bbs, key, number), cause)` を作る。`time` は従来どおり段によって `g.time` か `g.nowTime`（未設定なので `undefined`。KB-39）を文字列化して渡す。subject.txt / 過去ログ目次の ETag 競合は書式が違うので `ArchiveConflict(target, site)` として分けた |
+| 規制 | `Moderation.decide` が `Option[ModerationDenial]` を返し、ハンドラは `PostingError.Moderated` にする。`Moderation.check`（`gb.error` に文言を入れて 0/1 を返す）は `ModerationSuite` が使うので `decide` の薄い包みとして残した（段 5 で `ModerationService` に移すときに整理する） |
+| コード | 設計書 §8.9 の表に既存エラーのコードはないので、`request:*` / `form:*` / `size:*` / `thread:*` / `moderation:*` / `thread-creation:settings` / `internal:<段名の kebab-case>` とした。スレ立て規制は既存の `ThreadCreationRejection.code`。まだ応答ヘッダには載せない（振る舞いを変えないため。`x-post-error` は設計書の段で入れる） |
+| 検証 | `PostingTextSuite` で全拒否理由の文言一致とコードの一意性を確認。スナップショット差分なし |
+| 計画との差分 | 計画書 §3 の `DuplicateKey` は「同時スレ立て」（handler 側の `別の人が同時刻に…`）に充てた。DO 側の `同じkeyのスレッドが存在します。` は段 8 まで DO の例外文字列のまま（`Internal` の `cause` に出る） |

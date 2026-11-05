@@ -104,7 +104,7 @@ object PostingPages {
     )
   }
 
-  def respondError(gb: js.Dynamic, charset: String): React.Element = {
+  def respondError(gb: js.Dynamic, message: String, charset: String): React.Element = {
     element("html")(
       element("head")(
         element("title")("ＥＲＲＯＲ！"),
@@ -114,7 +114,7 @@ object PostingPages {
       element("body", js.Dictionary("bgcolor" -> "#FFFFFF"))(
         raw("span", "<!-- 2ch_X:error -->"),
         element("font", js.Dictionary("size" -> "+1", "color" -> "#FF0000"))(
-          raw("b", "ERROR: " + str(gb.error))
+          raw("b", "ERROR: " + message)
         ),
         element("ul")(
           element("br")(),

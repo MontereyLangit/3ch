@@ -4,7 +4,7 @@ import io._3ch.bbs.external.cloudflare.*
 import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.hash.WebHash
 import io._3ch.bbs.repository.BoardRepository
-import io._3ch.bbs.domain.posting.{ClientIdentity, PostingContext}
+import io._3ch.bbs.domain.posting.{BrokenLogKind, ClientIdentity, FailureSite, PostField, PostingContext, PostingError}
 import io._3ch.bbs.domain.posting.moderation.ThreadCreationRejection
 import io._3ch.bbs.util.SjisEncoding
 import io._3ch.common.crypt.UnixCrypt
@@ -21,7 +21,7 @@ import scala.scalajs.js.typedarray.Uint8Array
   * bbs.cgi書き込み処理ハンドラ
   */
 object PostingHandler {
-  private case object Rejected extends RuntimeException
+  private final case class Rejected(error: PostingError) extends RuntimeException
   private def str(v: js.Any): String = js.Dynamic.global.String(v).asInstanceOf[String]
   private def truth(v: js.Any): Boolean = js.Dynamic.global.Boolean(v).asInstanceOf[Boolean]
   private def number(v: js.Any): Double = js.Dynamic.global.Number(v).asInstanceOf[Double]
@@ -32,7 +32,7 @@ object PostingHandler {
   private def replace(s: String, pattern: String, replacement: String, flags: String = "g"): String =
     s.asInstanceOf[js.Dynamic].replace(new js.RegExp(pattern, flags), replacement).asInstanceOf[String]
   private def matches(s: String, pattern: String): Boolean = new js.RegExp(pattern).test(s)
-  private def deny(g: js.Dynamic, message: String): Nothing = { g.error = message; throw Rejected }
+  private def reject(error: PostingError): Nothing = throw Rejected(error)
   private def sha(s: String): Future[String] = WebHash.sha1Base64(s).toFuture
   private def hash(s: String): Future[String] = WebHash.hash("SHA-256", s).toFuture
   private def md5(s: String): String = Md5.md5(s)
@@ -41,9 +41,11 @@ object PostingHandler {
     case x: js.JavaScriptException => str(x.exception.asInstanceOf[js.Any])
     case _ => e.toString
   }
+  private def site(g: js.Dynamic, clock: String, time: js.Any): FailureSite = FailureSite(clock, str(time), str(g.form.bbs), str(g.form.key), str(g.number))
   private def guarded[A](g: js.Dynamic, stage: String, description: String, clock: String)(f: => Future[A]): Future[A] =
-    Future.unit.flatMap(_ => f).recover { case Rejected => throw Rejected; case e =>
-      deny(g, s"$stage error. $description($clock:${str(if clock == "time" || stage == "getThreadDataAndThreadSettings" || stage == "updateThreadFile" then g.time else g.nowTime)} bbs:${str(g.form.bbs)} key:${str(g.form.key)} number:${str(g.number)} errmsg:$stage->${errorText(e)})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。")
+    Future.unit.flatMap(_ => f).recover { case rejected: Rejected => throw rejected; case e =>
+      val time = if clock == "time" || stage == "getThreadDataAndThreadSettings" || stage == "updateThreadFile" then g.time else g.nowTime
+      reject(PostingError.Internal(stage, description, site(g, clock, time), errorText(e)))
     }
 
   def entry(request: Request, env: WorkerEnv): js.Promise[Response] = {
@@ -52,7 +54,7 @@ object PostingHandler {
     def header(name: String): String = Option(request.headers.get(name)).getOrElse("")
     def fallback(v: js.Any, value: String): js.Any = if v == null || js.isUndefined(v) then value else v
     val g = js.Dynamic.literal(
-      version = "2025/7/31", error = "", time = str(js.Date.now()), unixtime = str(math.floor(js.Date.now() / 1000)),
+      version = "2025/7/31", time = str(js.Date.now()), unixtime = str(math.floor(js.Date.now() / 1000)),
       form = js.Dynamic.literal(FROM = "", mail = "", MESSAGE = "", subject = "", bbs = "", key = "", time = "", submit = ""),
       cookies = js.Dynamic.literal(HAP = "", D = "", U = "", PON = "", time = "", PIN = "", cert = ""),
       host = request.headers.get("CF-Connecting-IP"), ip = request.headers.get("CF-Connecting-IP"), userAgent = header("user-agent"), browserInfo = "", deviceInfo = header("x-ch3-device-information"),
@@ -72,8 +74,8 @@ object PostingHandler {
       _ <- threadSettings(g, env)
       _ <- identify(g, request)
       _ = g.userInfo = s"UID:${str(g.uid)} IP:${str(g.host)} AS${str(g.asn)}-${str(g.country)},${str(g.ken)},${str(g.city)}Device:${str(g.deviceInfo)} UA:${str(g.userAgent)}"
-      allowed <- Moderation.check(g, env).toFuture
-      _ = if allowed == 0 then throw Rejected
+      allowed <- Moderation.decide(g, env)
+      _ = allowed.foreach(denial => reject(PostingError.Moderated(denial)))
       _ = checkSizes(g)
       creationLimit <- threadCreationLimit(g, request, board)
       _ <- makeId(g)
@@ -81,24 +83,24 @@ object PostingHandler {
       _ <- updateThread(g, env, creationLimit)
       _ <- updateSubback(g, env)
       _ <- updateHeadline(g, env)
-    } yield respond(g, success = true)).recover { case Rejected => respond(g, success = false) }.toJSPromise
+    } yield respond(g, None)).recover { case Rejected(error) => respond(g, Some(error)) }.toJSPromise
   }
 
-  private def respond(g: js.Dynamic, success: Boolean): Response = {
+  private def respond(g: js.Dynamic, error: Option[PostingError]): Response = {
     val charset = if truth(g.isSJIS) then "Shift_JIS" else "UTF-8"
     val headers = g.headers.asInstanceOf[js.Dictionary[String]]
-    if success then { headers("x-threadkey") = str(g.form.key); headers("x-resnum") = str(g.number) }
-    val html = if success then PostingPages.respondEndHtml(g, charset) else PostingPages.respondError(g, charset)
+    if error.isEmpty then { headers("x-threadkey") = str(g.form.key); headers("x-resnum") = str(g.number) }
+    val html = error.fold(PostingPages.respondEndHtml(g, charset))(e => PostingPages.respondError(g, PostingText.message(e), charset))
     RendererShell.legacyReact(html, encoding = charset, extra = headers)
   }
 
   private def checkRequest(g: js.Dynamic, r: Request): Unit = {
     def h(name: String) = Option(r.headers.get(name)).getOrElse("")
-    if r.method != "POST" then deny(g, "POST メソッドを使ってください。<br>\nRecieve GET METHOD")
-    if !h("content-type").contains("application/x-www-form-urlencoded") then deny(g, "送信された内容が破損しています。->" + h("content-type") + "<br>\nBroken request body. ")
-    if !matches(h("referer"), "^https?://www\\.(3ch\\.io|3chbbs\\.com)(:[0-9]+)?([/?#]|$)") && !matches(h("referer"), "^http://127\\.0\\.0\\.1:878[78]([/?#]|$)") then deny(g, "ERROR: あなた騙されてますよ？->" + h("referer") + "<br>\nReferer is invalid.")
+    if r.method != "POST" then reject(PostingError.MethodNotPost)
+    if !h("content-type").contains("application/x-www-form-urlencoded") then reject(PostingError.BrokenBody(h("content-type")))
+    if !matches(h("referer"), "^https?://www\\.(3ch\\.io|3chbbs\\.com)(:[0-9]+)?([/?#]|$)") && !matches(h("referer"), "^http://127\\.0\\.0\\.1:878[78]([/?#]|$)") then reject(PostingError.InvalidReferer(h("referer")))
     val ua = str(g.userAgent)
-    if ua.length < 7 || ua.length > 384 || matches(ua, "[^ -~]") then deny(g, "ERROR: ブラウザ変ですよん。(ua)<br>UserAgent: " + ua + "<br>\nUserAgent is invalid.")
+    if ua.length < 7 || ua.length > 384 || matches(ua, "[^ -~]") then reject(PostingError.InvalidUserAgent(ua))
     g.userAgent = ua + Option(r.headers.get("sec-ch-ua-full-version-list")).getOrElse(h("sec-ch-ua"))
     g.browserInfo = "Accept:" + h("accept") + "Accept-Language:" + h("accept-language") + "Accept-Encoding:" + h("accept-encoding")
     if matches(str(g.userAgent), "^Monazilla/1.00") then g.isMonazilla = 1
@@ -107,7 +109,7 @@ object PostingHandler {
       val parts = str(g.ip).split(":", -1)
       g.idnotane = (0 until 4).map(i => parts.lift(i).getOrElse("undefined")).mkString(":")
     } else g.idnotane = g.ip
-    if h("client-ip").nonEmpty then deny(g, "変な情報が送られて来ました。<br>Client_IP: " + h("client-ip"))
+    if h("client-ip").nonEmpty then reject(PostingError.ProxyHeader(h("client-ip")))
     g.host = g.ip
     List("x-forwarded-for", "forwarded", "via").find(name => h(name).nonEmpty && !eq(g.ip, h(name))).foreach(name => g.host = str(g.host) + "<" + h(name) + ">")
   }
@@ -115,10 +117,10 @@ object PostingHandler {
   private def readForm(g: js.Dynamic, r: Request): Future[Unit] = r.arrayBuffer().toFuture.map { buffer =>
     val decoder = js.Dynamic.newInstance(js.Dynamic.global.TextDecoder)("utf-8")
     val body = decoder.decode(new Uint8Array(buffer)).asInstanceOf[String]
-    if !matches(body, "submit=([^&]+)") then deny(g, "書き込みボタンを押忍べし<br>\nNo submit")
+    if !matches(body, "submit=([^&]+)") then reject(PostingError.NoSubmit)
     if !body.toLowerCase.contains("submit=%e6%9b%b8") then {
       g.isSJIS = 1
-      if !truth(g.isMonazilla) then deny(g, "書き込みボタンを押忍べし<br>2ch専用ブラウザからの書き込みでこのエラーが出た場合、お使いの専用ブラウザはMonazilla/1.00で始まるUserAgentを使用していません。<br>認証時の問題などもありますので、2ch専用ブラウザではMonazilla/1.00で始まるUserAgentを使用してください。<br>(Monazilla/1.00以外のUserAgentでsubmit=%E6%9B%B8…でない場合にこのエラーが出ます。)<br>\n&apos;Submit&apos; must require &apos;書&apos; with Web browser&apos;s post.")
+      if !truth(g.isMonazilla) then reject(PostingError.SjisFromWeb)
     }
     body.split("&", -1).foreach { pair =>
       val parts = pair.split("=", -1)
@@ -134,7 +136,7 @@ object PostingHandler {
     val trip = new js.RegExp("^([^#]*?)(?<!&#[xX]?[0-9a-fA-F]{1,8});?#(.+)$").exec(str(g.form.FROM))
     if trip != null then {
       g.form.FROM = trip(1); g.tripKey = trip(2)
-      if trip(2).get.length > 1023 then deny(g, "トリップキー長杉！<br>\nYour tripkey must be less than 1023 bytes.")
+      if trip(2).get.length > 1023 then reject(PostingError.TripKeyTooLong)
     }
     val next = new js.RegExp("^!newthread([^\\r\\t\\n\\f\\v<]+)(.*)$").exec(str(g.form.MESSAGE))
     if str(g.form.key).startsWith("9") && next != null then {
@@ -144,10 +146,10 @@ object PostingHandler {
     g.form.bbs = replace(str(g.form.bbs), "[^a-zA-Z0-9_-]", "")
     for name <- List("key", "time") do g.form.updateDynamic(name)(replace(str(g.form.selectDynamic(name)), "\\D", ""))
     if matches(str(g.form.key), "^(924|900)") then g.form.bbs = "924"
-    if Set("", "test", "js", "css", "html", "images").contains(str(g.form.bbs)) then deny(g, "板の指定が不正です。<br>\nThe board directory is incorrect...")
-    if eq(g.form.MESSAGE, "") then deny(g, "本文がありません！")
-    if (eq(g.form.key, "") || !matches(str(g.form.key), "^[0-9]+$")) && eq(g.form.subject, "") then deny(g, "subjectが存在しないかキー情報が不正です。key=" + str(g.form.key) + "<br>\nThe subject is empty and key is wrong.")
-    if eq(g.form.time, "") || !matches(str(g.form.time), "^[0-9]+$") then deny(g, "ブラウザ変ですよん。(time)<br>\ntime is empty. time=" + str(g.form.time))
+    if Set("", "test", "js", "css", "html", "images").contains(str(g.form.bbs)) then reject(PostingError.ForbiddenBoard)
+    if eq(g.form.MESSAGE, "") then reject(PostingError.EmptyMessage)
+    if (eq(g.form.key, "") || !matches(str(g.form.key), "^[0-9]+$")) && eq(g.form.subject, "") then reject(PostingError.MissingSubject(str(g.form.key)))
+    if eq(g.form.time, "") || !matches(str(g.form.time), "^[0-9]+$") then reject(PostingError.InvalidTime(str(g.form.time)))
     if !eq(g.form.key, "") then g.form.subject = ""
     if truth(g.form.subject) then g.form.key = g.unixtime
   }
@@ -205,7 +207,7 @@ object PostingHandler {
     }
 
   private def boardSettings(g: js.Dynamic, e: WorkerEnv): Future[BbsSettings] = guarded(g, "getBoardSettings", "不明なエラーが発生しました。", "time") {
-    val board = BoardId.create(str(g.form.bbs)).fold(_ => deny(g, "板の指定が不正です。<br>\nThe board directory is incorrect..."), identity)
+    val board = BoardId.create(str(g.form.bbs)).fold(_ => reject(PostingError.ForbiddenBoard), identity)
     BoardRepository.getBoardSettings(board, e).map { boardSettings =>
       g.settings = boardSettings.value.toJSDictionary.asInstanceOf[js.Dynamic]
       g.boardSettings = g.settings
@@ -215,23 +217,23 @@ object PostingHandler {
   private def threadSettings(g: js.Dynamic, e: WorkerEnv): Future[Unit] = {
     val stub = thread(g, e)
     guarded(g, "getThreadDataAndThreadSettings", "不明なエラーが発生しました。", "unixtime") {
-      if eq(g.settings.BBS_HEISA, "checked") then deny(g, "この板・スレッドは停止されています。")
+      if eq(g.settings.BBS_HEISA, "checked") then reject(PostingError.Closed)
       if truth(g.form.subject) then stub.getDat().toFuture.map { dat =>
-        if dat.nonEmpty then deny(g, "別の人が同時刻にスレッドを立てようとしています。ごめんなさい。")
+        if dat.nonEmpty then reject(PostingError.DuplicateKey)
         g.logData = str(g.form.subject) + "\n"; g.number = 1; g.subject = g.form.subject
       } else {
         val datF = stub.getDat(str(g.form.bbs), str(g.form.key)).toFuture
         val settingsF = stub.getSettings().toFuture
         datF.zip(settingsF).map { (dat, settings) =>
-          if dat.isEmpty then deny(g, "該当するスレッドがありません。" + str(g.logFile))
+          if dat.isEmpty then reject(PostingError.ThreadMissing(str(g.logFile)))
           val lines = dat.split("\n", -1)
-          if lines(0).isEmpty then deny(g, "スレッドのログファイルが壊れています。(空です)")
+          if lines(0).isEmpty then reject(PostingError.BrokenLog(BrokenLogKind.Empty))
           g.subject = lines(0).split("<>", -1).last
-          if !truth(g.subject) then deny(g, "スレッドのログファイルが壊れています。(タイトル取得失敗)")
+          if !truth(g.subject) then reject(PostingError.BrokenLog(BrokenLogKind.NoTitle))
           g.number = lines.length
           BbsSettings.parse(settings, "<>").value.foreach((k, v) => g.settings.updateDynamic(k)(v))
-          if lines.length >= 1000 then deny(g, "このスレッドは1000を超えたのでもう書けません。")
-          if eq(g.settings.BBS_HEISA, "checked") then deny(g, "この板・スレッドは停止されています。")
+          if lines.length >= 1000 then reject(PostingError.ThreadFull)
+          if eq(g.settings.BBS_HEISA, "checked") then reject(PostingError.Closed)
         }
       }
     }
@@ -253,19 +255,19 @@ object PostingHandler {
       val v = g.settings.selectDynamic(name)
       if v == null || js.isUndefined(v) then fallback else v
     }
-    for (field, settingName, default, message) <- List(("subject", "BBS_SUBJECT_COUNT", 64, "サブジェクト"), ("FROM", "BBS_NAME_COUNT", 64, "名前"), ("mail", "BBS_MAIL_COUNT", 64, "メールアドレス")) do {
+    for (field, settingName, default, kind) <- List(("subject", "BBS_SUBJECT_COUNT", 64, PostField.Subject), ("FROM", "BBS_NAME_COUNT", 64, PostField.Name), ("mail", "BBS_MAIL_COUNT", 64, PostField.Mail)) do {
       val len = str(g.form.selectDynamic(field)).length
       val limit = setting(settingName, default)
-      if len > number(limit) then deny(g, s"$message が長すぎます！($len/${str(limit)})".replace(" が", "が"))
+      if len > number(limit) then reject(PostingError.FieldTooLong(kind, len, str(limit)))
     }
     val message = str(g.form.MESSAGE)
     if message.startsWith("!ADMIN:") then return
     var limit = setting("BBS_MESSAGE_COUNT", 4096)
     if number(g.number) == 1 && number(limit) < 65536 then limit = 65536
-    if message.length > number(limit) then deny(g, s"本文が長すぎます！(${message.length}/${str(limit)})")
+    if message.length > number(limit) then reject(PostingError.FieldTooLong(PostField.Message, message.length, str(limit)))
     val lines = message.split("<br>", -1).length
     val lineLimit = number(setting("BBS_LINE_NUMBER", 30)) * 2
-    if number(g.number) >= 2 && lines > lineLimit then deny(g, s"改行が多すぎます！($lines/${str(lineLimit)})")
+    if number(g.number) >= 2 && lines > lineLimit then reject(PostingError.TooManyLines(lines, str(lineLimit)))
     if !truth(g.form.FROM) then g.form.FROM = or(g.settings.BBS_NONAME_NAME, "名無しさん＠３ちゃんねる")
   }
 
@@ -310,10 +312,10 @@ object PostingHandler {
   private def threadCreationLimit(g: js.Dynamic, request: Request, boardSettings: BbsSettings): Future[js.UndefOr[js.Dynamic]] = {
     if (number(g.number) != 1) Future.successful(js.undefined)
     else {
-      val board = BoardId.create(str(g.form.bbs)).fold(_ => deny(g, "板の指定が不正です。<br>\nThe board directory is incorrect..."), identity)
-      val key = str(g.form.key).toLongOption.toRight("").flatMap(ThreadKey.create).fold(_ => deny(g, "キー情報が不正です。"), identity)
+      val board = BoardId.create(str(g.form.bbs)).fold(_ => reject(PostingError.ForbiddenBoard), identity)
+      val key = str(g.form.key).toLongOption.toRight("").flatMap(ThreadKey.create).fold(_ => reject(PostingError.InvalidKey), identity)
       if (truth(g.cap)) return Future.successful(js.undefined)
-      val settings = ThreadCreationSettings.fromSettings(boardSettings).fold(message => deny(g, message), identity)
+      val settings = ThreadCreationSettings.fromSettings(boardSettings).fold(message => reject(PostingError.InvalidCreationSettings(message)), identity)
       val cf = request.cf.getOrElse(js.Dynamic.literal())
       def metadata(name: String): String = {
         val value = cf.selectDynamic(name)
@@ -349,11 +351,6 @@ object PostingHandler {
     def unapply(error: Throwable): Option[ThreadCreationRejection] = ThreadCreationRejection.fromCode(errorText(error).stripPrefix("Error: "))
   }
 
-  private def creationRejectionText(rejection: ThreadCreationRejection): String = rejection match {
-    case ThreadCreationRejection.Broad(_) => PostingText.threadCreationBroad
-    case _ => PostingText.threadCreationNarrow
-  }
-
   private def updateThread(g: js.Dynamic, e: WorkerEnv, creationLimit: js.UndefOr[js.Dynamic]): Future[Unit] = {
     val stub = thread(g, e)
     guarded(g, "updateThreadFile", "ログファイルに書けませんでした。", "unixtime") {
@@ -363,7 +360,7 @@ object PostingHandler {
       g.form.MESSAGE = str(g.form.MESSAGE).asInstanceOf[js.Dynamic].replace("<br>", " <br> ")
       val dat = s"${str(g.form.FROM)}<><>$date ${str(g.id)}<> ${str(g.form.MESSAGE)} <>${if number(g.number) == 1 then str(g.subject) else ""}"
       stub.addRes(dat, s"${str(g.number)}<>${str(g.userInfo)}", js.Dynamic.literal(bbs = g.form.bbs, key = g.form.key, title = g.subject, sage = truth(g.sage), maxThreads = int(or(g.boardSettings.BBS_MAX_MENU_THREAD, "700")), create = number(g.number) == 1, initialSettings = initial, creationLimit = creationLimit)).toFuture.map(n => g.number = n).recover {
-        case CreationRejected(rejection) => deny(g, creationRejectionText(rejection))
+        case CreationRejected(rejection) => reject(PostingError.ThreadCreation(rejection))
       }
     }
   }
@@ -376,7 +373,7 @@ object PostingHandler {
       def save(file: String, value: String, etag: js.Any, label: String): Future[Unit] = {
         val condition = if truth(etag) then js.Dynamic.literal(etagMatches = etag) else js.Dynamic.literal(doesNotExist = true)
         bucket.put(file, value, js.Dynamic.literal(onlyIf = condition)).asInstanceOf[js.Promise[js.Dynamic]].toFuture.map { result =>
-          if result == null || !truth(result.uploaded) then deny(g, s"updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(unixtime:${str(g.nowTime)} bbs:${str(g.form.bbs)} key:${str(g.form.key)} number:${str(g.number)} errmsg:updateSubback->${label}_update_conflicted!)")
+          if result == null || !truth(result.uploaded) then reject(PostingError.ArchiveConflict(label, site(g, "unixtime", g.nowTime)))
         }
       }
       val subFile = str(g.logPath) + "subject.txt"
