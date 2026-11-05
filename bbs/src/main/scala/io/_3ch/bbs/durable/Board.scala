@@ -95,10 +95,10 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
    * @param sage - sage投稿の場合はtrue
    * @param maxThreads - 板の最大スレッド数
    */
-  def updateThread(data: js.Dynamic, sage: js.Any = js.undefined, maxThreads: js.UndefOr[Double] = js.undefined): js.Promise[Unit] =
+  def updateThread(data: js.Dynamic, sage: js.UndefOr[Boolean] = js.undefined, maxThreads: js.UndefOr[Double] = js.undefined): js.Promise[Unit] =
     state.blockConcurrencyWhile(() => updateThreadUnlocked(data, sage, maxThreads))
 
-  private def updateThreadUnlocked(data: js.Dynamic, sage: js.Any = js.undefined, maxThreads: js.UndefOr[Double] = js.undefined): js.Promise[Unit] =
+  private def updateThreadUnlocked(data: js.Dynamic, sage: js.UndefOr[Boolean], maxThreads: js.UndefOr[Double]): js.Promise[Unit] =
     getSubject().toFuture.flatMap { subject =>
       var lines = if subject.isEmpty then Vector.empty[String] else subject.split("\n", -1).toVector
       if lines.lastOption.contains("") then lines = lines.dropRight(1) // 最後の空行を除外

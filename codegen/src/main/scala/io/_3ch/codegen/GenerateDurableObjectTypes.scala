@@ -6,33 +6,17 @@ import scala.meta.*
 object GenerateDurableObjectTypes {
   def render(sources: Seq[(String, String)]): String = {
     val declarations = sources.flatMap { case (path, source) =>
-      val tree = dialects.Scala3(Input.VirtualFile(path, source)).parse[Source].get
-      tree.collect { case cls: Defn.Class => cls }.flatMap { cls =>
-        cls.mods.collect {
-          case annotation: Mod.Annot if Set("JSExportTopLevel", "scala.scalajs.js.annotation.JSExportTopLevel")(
-              annotation.init.tpe.syntax
-            ) => annotation
-        }.flatMap { annotation =>
-          annotation.init.argClauses.flatMap(_.values) match {
-            case List(Lit.String(name), Lit.String("server")) =>
-              require(cls.templ.inits.exists(parent => Set(
-                "DurableObject", "io._3ch.bbs.external.cloudflare.DurableObject"
-              )(parent.tpe.syntax)), s"$path: exported DO must directly extend DurableObject")
-              require(cls.tparamClause.values.isEmpty, s"$path: generic DO classes are not supported")
-              require(cls.ctor.paramClauses.size == 1, s"$path: expected one DO constructor parameter list")
-              val parameters = cls.ctor.paramClauses.head.values.map { parameter =>
-                require(parameter.default.isEmpty, s"$path: DO constructor defaults are not supported")
-                val tpe = parameter.decltpe.getOrElse(
-                  throw new IllegalArgumentException(s"$path: missing constructor parameter type")
-                )
-                s"${identifier(parameter.name.value)}: ${typeScriptType(tpe)}"
-              }
-              Some(name -> (s"  export class ${identifier(name)} {\n" +
-                s"    constructor(${parameters.mkString(", ")});\n  }\n"))
-            case List(_, Lit.String(module)) if module != "server" => None
-            case _ => throw new IllegalArgumentException(s"$path: expected literal export name and module")
-          }
+      DurableObjectSources.serverExports(path, DurableObjectSources.parse(path, source)).map { case (name, cls) =>
+        require(cls.ctor.paramClauses.size == 1, s"$path: expected one DO constructor parameter list")
+        val parameters = cls.ctor.paramClauses.head.values.map { parameter =>
+          require(parameter.default.isEmpty, s"$path: DO constructor defaults are not supported")
+          val tpe = parameter.decltpe.getOrElse(
+            throw new IllegalArgumentException(s"$path: missing constructor parameter type")
+          )
+          s"${identifier(parameter.name.value)}: ${typeScriptType(tpe)}"
         }
+        name -> (s"  export class ${identifier(name)} {\n" +
+          s"    constructor(${parameters.mkString(", ")});\n  }\n")
       }
     }.sortBy(_._1)
     require(declarations.map(_._1).distinct.size == declarations.size, "Duplicate Durable Object export names")

@@ -21,7 +21,7 @@ object PublicRoutes {
   }
   private def notFound(path: String): Response = Responses.response(PublicText.respond404(path), 404, js.Dictionary("content-type" -> "text/html;charset=UTF-8"))
   private def failed(message: String): Response = Responses.response(PublicText.respond500(message), 500, js.Dictionary("content-type" -> "text/html;charset=UTF-8"))
-  private def board(e: WorkerEnv, bbs: String): BoardDoStub = e.BOARD_DO.get(e.BOARD_DO.idFromName(bbs)).asInstanceOf[BoardDoStub]
+  private def board(e: WorkerEnv, bbs: String): BoardDoStub = e.BOARD_DO.get(e.BOARD_DO.idFromName(bbs))
   private def validHead(f: Array[String]): Boolean = f.length >= 5 && f(0).matches("^[a-zA-Z0-9\\-_]+$") && f(1).nonEmpty
   private def read(e: WorkerEnv, file: String): Future[Option[String]] = e.ch3www.get(file).toFuture.flatMap(o => if o == null then Future.successful(None) else o.text().toFuture.map(Option(_)))
   private def date(s: String, parse: Boolean = false): js.Date = new js.Date((if parse then js.Dynamic.global.parseInt(s).asInstanceOf[Double] else js.Dynamic.global.Number(s).asInstanceOf[Double]) * 1000)
@@ -94,8 +94,8 @@ object PublicRoutes {
               val key = matched(2).get
               val canonical = s"/$bbs/dat/$key.dat"
               guard(canonical) {
-                val stub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$key")).asInstanceOf[js.Dynamic]
-                stub.getPublicData(bbs, key).asInstanceOf[js.Promise[js.Dynamic]].toFuture.map { data =>
+                val stub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$key"))
+                stub.getPublicData(bbs, key).toFuture.map { data =>
                   val dat = str(data.dat)
                   if !truth(data.dat) then {
                     if oldDomain && key == DomainMigration.key then

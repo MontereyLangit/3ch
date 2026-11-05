@@ -63,16 +63,16 @@ bbs/
     handler/           PublicRoutes（dat, subject.txt, SETTING.TXT, bbsmenu 等）, Posting（投稿パイプライン）,
                        Moderation, AdminHandler（/admin/*）, Responses
     durable/           Board DO, Thread DO
-    external/cloudflare/  Workers / DO / R2 / KV の facade
+    external/cloudflare/  Workers / DO / R2 / KV の facade（DO の RPC スタブ `*DoStub` はコンパイル時に codegen が生成。docs/durable-object-stubs.md）
     hash/, util/       Web Crypto ハッシュ・MD5 の npm facade（`@noble/hashes`）, Shift_JIS 変換
   src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
   test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ
 bbs-client/            クライアント側（hydration）Scala
-codegen/               Main の @route / @islands から app/routes/・app/islands/・bbs の IslandComponents を生成
+codegen/               Main の @route / @islands から app/routes/・app/islands/・bbs の IslandComponents を、DO から TS 型と Scala RPC スタブを生成
 app/                   HonoX（server.ts がエントリ。routes/index.ts と _renderer.tsx は手書き）
 public/
   3chiko.html          3chiko.html本体。Vite の publicDir として dist/ へコピーされ Workers Static Assets で配信
-tests/                 実workerdを使う統合テスト（要 dist/）用ディレクトリ。admin.integration.test.js（実 workerd）。golden/ は言語中立の入出力表（Scala 側が読む）
+tests/                 実workerdを使う統合テスト（要 dist/）用ディレクトリ。admin.integration.test.js・rpc.integration.test.js（実 workerd。support/ はテスト専用 Worker）。golden/ は言語中立の入出力表（Scala 側が読む）
 docs/                  仕様書・設計メモ（後述）
 wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 ```
@@ -86,6 +86,12 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 | `docs/v6s実装メモ.md`                                                                  | Scala.js 実装（`bbs/`）の設計背景。doc コメントから参照される                                                                                                                  |
 | `docs/トリップ・ID廃止とスレ主表示.md`                                                 | 2026-11-02 の仕様変更（トリップ・ID 廃止、`!id`、スレ主表示 ` (主)`）。認証ブランチとの差分を含む                                                                                      |
 | `docs/admin.md`                                                                        | 管理画面の利用手順・規制ルール書式                                                                                                                                                    |
+| `docs/auth-phoebe-rate-limit-design.md`                                                | 認証・PHOEBE（Lv）・連投規制と新 UI での Web 版認証の設計案（2026-11-01、未実装）                                                                                                               |
+| `docs/bbs-cgi-ddd-refactoring-plan.md`                                                 | bbs.cgi 投稿処理の DDD 化リファクタリング計画（2026-11-01、未着手。設計書を載せる前提作業）                                                                                                            |
+| `docs/auth-phoebe-review.md`                                                           | 上記 2 文書の Opus 5 セルフレビュー記録（2026-11-02）                                                                                                                                |
+| `docs/admin-spa-auth-plan.md`                                                          | 管理画面の改修計画（アカウント認証化・新 UI・scalajs-react SPA。2026-11-02、未着手）                                                                                                            |
+| `docs/admin-spa-auth-review.md`                                                        | 管理画面改修計画の Opus 5 セルフレビュー記録（2026-11-02）                                                                                                                               |
+| `docs/durable-object-stubs.md`                                                         | DO の RPC スタブ（`*DoStub`）のコンパイル時生成の仕様・対応範囲・運用手順                                                                                                            |
 
 ### 1.6 開発コマンド
 

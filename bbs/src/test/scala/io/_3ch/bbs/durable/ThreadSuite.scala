@@ -293,7 +293,7 @@ class ThreadSuite extends FunSuite {
 
   test("deleteRes(resNum): 全5フィールドを丸ごとあぼーん化し、resNum==lines.lengthの境界は無視する") {
     val env = newEnv()
-    // deleteRes(Int) はRPCスタブ(ThreadDoStub)に生えていない管理用メソッドなので、生インスタンスを使う。
+    // deleteRes(Int) は管理用メソッド。storage を直接仕込むため生インスタンスで呼ぶ。
     val instance = env.threadInstance("board1/7")
     for {
       _ <- seed(instance, "dat" -> "1<>a<><>msg1<>title\n2<>b<><>msg2<>\n")

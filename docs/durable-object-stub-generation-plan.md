@@ -1,6 +1,6 @@
 # Durable Object の Scala RPC Stub 自動生成計画
 
-作成日: 2026-10-16。状態: 将来実施する計画。実装・ビルド設定の変更は未実施。
+作成日: 2026-10-16。状態: **実施済み（2026-11-01）**。実装結果と生成仕様は [durable-object-stubs.md](durable-object-stubs.md) を参照。
 
 ## 目的
 
@@ -100,5 +100,11 @@ DO クラス自体へのキャストで代用しない。
 
 ## 今回の記録
 
-計画文書のみ追加。実装・テスト実行・外部 CLI レビューは行っていない。
-実装時にはその時点のソースと Scala.js / Cloudflare RPC の仕様を再確認する。
+- 2026-10-16: 計画文書のみ追加。
+- 2026-11-01: 実装。手順 1〜5 を実施し、結果を [durable-object-stubs.md](durable-object-stubs.md) に記録した。
+  計画からの確定事項: `getPublicData` / `deleteRes` は公開メソッドなので生成対象に含める（DO 側で既に JS から
+  見えており、生成で公開範囲は変わらない）。`Thread.inspect` の戻り値は本体を `js.Promise[ThreadInspectResult]` に
+  揃えた。`Board.updateThread` の `sage` は手書き Stub と同じ `js.UndefOr[Boolean]` に揃えた（実行時の真偽判定は不変）。
+  戻り値は `js.Promise[T]` のみ対応し、それ以外は生成エラーにする。
+- 2026-11-05: develop（パッケージ名 `io._3ch.*` への変更、`V6PlaceholderDurableObject` と `HealthHandler` の削除、
+  アノテーション駆動の `GenerateAppFiles`）を取り込んだ。生成対象は `Board` と `Thread` の 2 クラスになった。

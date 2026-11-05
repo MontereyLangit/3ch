@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>板設定 - 管理画面 | 3ch モック</title><link rel="stylesheet" href="auth-admin.css"></head>
+<body>
+<!-- モック: /admin/boards/zatsudan（docs/admin-spa-auth-plan.md §4.1〜§4.3）。kanri.html の 2 列構成を板トップの見た目で組み直した -->
+<header class="site-header">
+  <a class="site-logo" href="#"><img src="3ch_logo.png" alt="３ちゃんねる"></a>
+  <nav aria-label="管理メニュー"><b>管理画面</b><span>|</span><a href="#">掲示板へ戻る</a></nav>
+  <nav class="account-nav" aria-label="アカウント"><span class="uid">@m7p2c8dz</span> <span class="role">admin</span>
+    <small>管理者セッション 残り 27 分</small><span>|</span><a href="#">管理画面を出る</a></nav>
+</header>
+<div class="layout admin">
+<aside class="admin-nav" aria-label="管理メニュー">
+  <section><h2>■ 板</h2>
+    <select style="width:100%"><option>zatsudan（雑談掲示板）</option><option>news</option><option>saku</option></select>
+    <div class="links" style="margin-top:6px"><a class="cur" href="#">板設定</a><a href="admin-thread.html">スレ一覧・スレ管理</a></div></section>
+  <section><h2>■ 全体</h2><div class="links">
+    <a href="#">規制ルール（アクセス）</a><a href="#">規制ルール（NGワード）</a><a href="#">板一覧（bbsmenu）</a></div></section>
+  <section><h2>■ アカウント</h2><div class="links">
+    <a href="#">アカウント・役割</a><a href="#">キャップ</a><a class="off" href="#">PHOEBE・エッジ防御</a><a href="#">監査ログ</a></div></section>
+</aside>
+
+<main>
+  <h1>板設定: 雑談掲示板 <small>zatsudan</small></h1>
+  <nav class="tabs" style="padding-top:4px"><a class="tab active" href="#">板設定</a><a class="tab" href="admin-thread.html">スレ一覧</a><a class="tab" href="#">この板の規制ルール</a></nav>
+
+  <div class="banner warn save-bar">
+    <span>未保存の変更が <b>3 件</b> あります。</span><span class="err">1 件の入力に誤りがあります。</span>
+    <span class="spacer"></span><button class="btn">元に戻す</button><button class="btn primary">適用</button>
+  </div>
+
+  <div class="settings-grid">
+  <div>
+    <div class="group g-basic"><h2>■ 基本</h2>
+      <div class="row"><div class="lbl"><b>掲示板タイトル</b></div><div class="ctl"><input class="input" value="雑談掲示板"><span class="tag explicit">設定済み</span></div></div>
+      <div class="row"><div class="lbl"><b>名前未入力時の名前</b></div><div class="ctl"><input class="input" value="名無しさん＠３ちゃんねる"><a class="reset" href="#">既定に戻す</a></div></div>
+      <div class="row"><div class="lbl"><b>スレ一覧に載せるスレ数</b><small>超えた分は一覧から外れるだけで、過去ログにはなりません</small></div><div class="ctl"><input class="input" placeholder="未設定（既定 700）"></div></div>
+      <div class="row"><div class="lbl"><b>強制 sage までの秒数</b><small>スレ立てから指定秒を過ぎると、上がらなくなります</small></div><div class="ctl"><input class="input" placeholder="未設定（無効）"></div></div>
+    </div>
+
+    <div class="group g-count"><h2>■ 文字数・行数</h2>
+      <div class="row"><div class="lbl"><b>タイトル・名前・メールの文字数</b></div><div class="ctl"><div class="pair"><input class="input" value="64"><input class="input" value="64"><input class="input" value="64"></div></div></div>
+      <div class="row"><div class="lbl"><b>本文の文字数</b><small>&gt;&gt;1 は 65536 文字まで</small></div><div class="ctl"><input class="input" value="4096"></div></div>
+      <div class="row"><div class="lbl"><b>本文の行数</b><small>&gt;&gt;2 以降。この値の 2 倍までの改行</small></div><div class="ctl"><input class="input" value="30"></div></div>
+    </div>
+
+    <div class="group g-id"><h2>■ ID・識別子</h2>
+      <div class="row"><div class="lbl"><b>ID の方式</b></div><div class="ctl radios">
+        <label><input type="radio" name="id" checked> ID（IP から生成）</label><label><input type="radio" name="id"> 発信元の IP を表示</label><label><input type="radio" name="id"> 表示しない</label></div></div>
+      <div class="row"><div class="lbl"><b>名前欄の識別子</b><small>県・回線・端末</small></div><div class="ctl radios">
+        <label><input type="radio" name="sk" checked> 簡易表示（ハッシュ）</label><label><input type="radio" name="sk"> 県＋AS（生）</label><label><input type="radio" name="sk"> 県</label><label><input type="radio" name="sk"> 県＋市</label><label><input type="radio" name="sk"> AS</label><label><input type="radio" name="sk"> 表示しない</label>
+        <label style="color:#6b4fa0"><input type="radio" name="sk" disabled> 新書式（Lv 付き） <span class="tag later">PHOEBE 導入後</span></label></div></div>
+      <div class="row"><div class="lbl"><b>ID のグループ・リセット周期</b><small>グループ未設定時は板名</small></div><div class="ctl"><div class="pair"><input class="input" style="width:100px" placeholder="板名"><input class="input" style="width:80px" placeholder="86400"></div></div></div>
+    </div>
+
+    <div class="group g-reg"><h2>■ 規制・スイッチ</h2>
+      <div class="row"><div class="lbl"><b>規制に該当したとき</b></div><div class="ctl radios"><label><input type="radio" name="mk" checked> 拒否する</label><label><input type="radio" name="mk"> 注意表示を付けて許可</label></div></div>
+      <div class="row"><div class="lbl"><b>NG ワード規制</b></div><div class="ctl radios"><label><input type="radio" name="ng" checked> 適用する</label><label><input type="radio" name="ng"> 適用しない</label></div></div>
+      <div class="row"><div class="lbl"><b>実況モード</b><small>9 割の書き込みを強制 sage。連投規制の導入後は連投規制も適用しない</small></div><div class="ctl radios"><label><input type="radio" name="lv" checked> 無効</label><label><input type="radio" name="lv"> 有効</label></div></div>
+      <div class="row"><div class="lbl"><b>書き込みを停止</b><small>新規スレ作成・返信とも拒否。キャップも拒否</small></div><div class="ctl radios"><label><input type="checkbox"> 停止する</label></div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="group g-thread"><h2>■ スレ立て規制</h2>
+      <div class="row"><div class="lbl"><b>同一 IP・タイトル</b><small>直近 n 件のスレ立てを s 秒照合</small></div><div class="ctl"><div class="pair"><input class="input" value="1"><span>件</span><input class="input" value="3600"><span>秒</span></div></div></div>
+      <div class="row"><div class="lbl"><b>同一 UA・回線（広域）</b></div><div class="ctl"><div class="pair"><input class="input" value="1"><span>件</span><input class="input" value="3600"><span>秒</span></div></div></div>
+      <div class="row bad"><div class="lbl"><b>県で分けず AS 全体を対象にする ASN</b></div><div class="ctl"><input class="input" value="2516, AS0"><span class="err">ASN は 1 以上で指定してください。</span></div></div>
+    </div>
+
+    <div class="group g-rate"><h2>■ 連投規制 <span class="tag later">連投規制の導入後</span></h2>
+      <div class="row"><div class="lbl"><b>動作</b></div><div class="ctl radios"><label><input type="radio" name="rm"> 無効</label><label><input type="radio" name="rm" checked> 記録のみ（試行）</label><label><input type="radio" name="rm"> 有効</label></div></div>
+      <div class="row"><div class="lbl"><b>板全体の連続投稿</b><small>直近 n 件中 m 件以上で規制（24 時間以内）</small></div><div class="ctl"><div class="pair"><input class="input" placeholder="18"><span>件中</span><input class="input" placeholder="10"><span>件</span></div></div></div>
+      <div class="row"><div class="lbl"><b>短時間投稿（Samba24）</b></div><div class="ctl"><div class="pair"><input class="input" placeholder="10"><span>秒</span></div></div></div>
+      <div class="row"><div class="lbl"><b>スレ内の連続投稿</b></div><div class="ctl"><div class="pair"><input class="input" placeholder="40"><span>件 /</span><input class="input" placeholder="3600"><span>秒</span></div></div></div>
+      <div class="row"><div class="lbl"><b>同一とみなす条件</b></div><div class="ctl radios"><label><input type="checkbox" checked> IP</label><label><input type="checkbox" checked> ID</label><label><input type="checkbox" checked> 識別子</label><label><input type="checkbox" checked> アカウント</label></div></div>
+    </div>
+
+    <div class="group g-phoebe"><h2>■ PHOEBE（Lv） <span class="tag later">PHOEBE 導入後</span></h2>
+      <div class="row"><div class="lbl"><b>書き込みに必要な最低 Lv</b><small>Web 版は常にログインが必要。この値は専ブラの未ログインと Lv に効きます</small></div><div class="ctl"><input class="input" placeholder="未設定（0）"></div></div>
+      <div class="row"><div class="lbl"><b>スレ立て人のコマンド（!バルサン 等）</b></div><div class="ctl radios"><label><input type="radio" name="nu" checked> 有効</label><label><input type="radio" name="nu"> 無効</label></div></div>
+    </div>
+
+    <div class="group" style="border-left-color:#f66"><h2>■ ヘッダー（head.txt） <small>板トップとサイドバーに表示</small></h2>
+      <textarea rows="6">雑談用の板です。&lt;br&gt;
+荒らしはスルーしてください。&lt;br&gt;
+&lt;a href="/saku/"&gt;削除依頼&lt;/a&gt;</textarea></div>
+
+    <div class="group" style="border-left-color:#b9c4d0"><h2>■ この板に適用される規制ルール <small>全板共通のファイルのうち、この板に一致する行</small></h2>
+      <pre class="rules">^zatsudan$&lt;&gt;IP:192\.0\.2\.1(?: |$)&lt;&gt;&lt;&gt;deny
+.*&lt;&gt;AS1234-&lt;&gt;&lt;&gt;TateDame
+^(zatsudan|news)$&lt;&gt;&lt;&gt;宣伝サイト&lt;&gt;deny</pre>
+      <p class="notice" style="margin:6px 0 0"><a href="#">アクセス規制を編集</a>・<a href="#">NG ワードを編集</a>（規制担当の権限が必要）</p></div>
+
+    <div class="group" style="border-left-color:#b9c4d0"><h2>■ その他の設定（直接編集） <small>上の項目に無いキー。そのまま保存されます</small></h2>
+      <textarea rows="5">BBS_ADD_THREAD=on
+BBS_COPIPE=3/86400
+BBS_FORCE_NONAME=
+timecover=3600
+# 旧設定のメモ</textarea>
+      <div class="help" style="margin-top:6px"><b>書き方</b>: 1 行に <code>キー=値</code>。上の項目と同じキーは書けません。<code>=</code> の無い行はそのまま残ります。</div></div>
+  </div>
+  </div>
+
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin:4px 0 12px"><button class="btn">元に戻す</button><button class="btn primary">適用</button></div>
+</main>
+</div>
+<footer class="site-footer"><a href="#">3ch</a> ver 0.6.x 2026-11-05 <span class="author">†Monterey Langit ★</span></footer>
+</body></html>
