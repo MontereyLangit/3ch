@@ -32,3 +32,12 @@
 | コード | 設計書 §8.9 の表に既存エラーのコードはないので、`request:*` / `form:*` / `size:*` / `thread:*` / `moderation:*` / `thread-creation:settings` / `internal:<段名の kebab-case>` とした。スレ立て規制は既存の `ThreadCreationRejection.code`。まだ応答ヘッダには載せない（振る舞いを変えないため。`x-post-error` は設計書の段で入れる） |
 | 検証 | `PostingTextSuite` で全拒否理由の文言一致とコードの一意性を確認。スナップショット差分なし |
 | 計画との差分 | 計画書 §3 の `DuplicateKey` は「同時スレ立て」（handler 側の `別の人が同時刻に…`）に充てた。DO 側の `同じkeyのスレッドが存在します。` は段 8 まで DO の例外文字列のまま（`Internal` の `cause` に出る） |
+
+## develop（3775f12）の取り込み
+
+| 項目 | 内容 |
+| --- | --- |
+| 経緯 | 段 2 の途中で develop にトリップ・ID の廃止、`!id` のユーザー ID 表示、スレ主表示 `(主)`、全板共通スレ 924 / 900（`GlobalThread`・`checkGlobalThread`）、DO の RPC スタブ自動生成、MD5 / crypt の npm ライブラリ化が入ったため取り込んだ。段 2 の作業はローカルブランチ `wip-stage2` に退避し、段 1 の時点（1bd13a8）に develop をマージした |
+| 衝突の解決 | 「develop の振る舞いが正」とし、`PostingHandler.scala` は develop の版に段 0b（`ThreadCreationSettings.fromSettings`）と段 1（`reject(PostingError)`・`PostingText.message`）を当て直した。トリップ廃止で `PostingError.TripKeyTooLong` を削除し、全板共通スレの拒否を `GlobalThreadCreateCapOnly`（`global-thread:create-cap-only`）・`GlobalThreadCapOnly`（`global-thread:cap-only`）として追加。`PostingText` は develop の定数と段 1 の文言表を併せた |
+| スナップショット | 段 0a のスナップショットは develop（3775f12）上で取り直した。develop を別の作業ツリーに出し、`PostingSnapshotSuite` を develop 向けに改訂して（トリップの方式別・`BBS_ID` 系のケースを外し、トリップ入力が捨てられる確認・`!id`（解決済み利用者・未解決・キャップ・`showid` 欄・エスケープ）・スレ主表示（IP / アカウント / IPv6 /64 / `!no` / キャップ / 板・スレの `BBS_DISABLE_NUSI`）・924 / 900 のスレ立てと書き込みを加え、Thread DO の `owner` も照合対象にした。計 196 ケース）生成し、その生成物とスイートを本ブランチに持ち込んだ。本ブランチ（段 0b・1 適用後）は全件一致し、差分はない |
+| 計画書の訂正 | §1・§2・§3・段 4・§5・§6・§7 のトリップ・ID 関連（`TripAlgorithm`、`IdSeeds` の ID 部分、`BBS_ID` 系、`TripKeyTooLong`）を削り、`!id`・スレ主表示・全板共通スレを段 4 の対象に加えた |

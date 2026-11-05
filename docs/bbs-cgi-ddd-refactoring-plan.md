@@ -2,9 +2,10 @@
 
 2026-11-01。[認証・PHOEBE・連投規制 設計](auth-phoebe-rate-limit-design.md)（以下「設計書」）を載せる前提として、
 `bbs.cgi` の投稿処理（`bbs/src/main/scala/io/_3ch/bbs/handler/PostingHandler.scala`）を
-ドメインモデル・ドメインサービス・アプリケーションサービス・リポジトリ・DO に分ける。**状態: 計画（未着手）。**
+ドメインモデル・ドメインサービス・アプリケーションサービス・リポジトリ・DO に分ける。**状態: 段 1 まで完了（段 2 以降は実施中）。**
 2026-11-02 の Opus 5 セルフレビュー（[auth-phoebe-review.md](auth-phoebe-review.md)）の指摘を反映した。
 2026-11-05、`develop` の取り込みに合わせて前提を改めた（`develop_v6s` と `feature/board_top` は PR #37 で統合済み、パッケージは `io._3ch.*`）。
+同日、トリップと ID の廃止・`!id`・スレ主表示・全板共通スレ（develop 3775f12）の取り込みに合わせて §2〜§5 を改めた。
 
 ## 0. 前提と不変条件
 
@@ -18,10 +19,10 @@
 
 ## 1. 現状の問題
 
-- **`g: js.Dynamic` の可変バッグ**: 40 個超のフィールドを 15 段の関数が読み書きする。型がなく、段の順序依存（`makeId` は `identify` の後、`threadCreationLimit` は `checkSizes` の後）がコードに現れない。
+- **`g: js.Dynamic` の可変バッグ**: 40 個超のフィールドを 15 段の関数が読み書きする。型がなく、段の順序依存（`makeShikibetsu` は `identify` の後、`markNusi` は `makeShikibetsu` の後、`threadCreationLimit` は `checkSizes` の後）がコードに現れない。
 - **エラーの表現**: `deny(g, 文言)` が `g.error` に文言を入れて `Rejected` を投げる。文言の組み立てが各段に散らばり、判定（ドメイン）と文言（表示）が分かれていない。
 - **設定の読み方の名残**: 統合前は 3 通りの読み方があり、KB-34〜36 はその差から生じた。`develop` では `BbsSettings` にほぼ揃ったが、スレ立て規制だけが `BbsSettings` の出力を `ThreadCreationSettings.settingsMap` で読み直している。
-- **ドメイン規則の置き場所**: ID・識別子の種の組み立て、トリップの分岐、キャップ表示名、dat 行の整形、sage 判定が handler の中にあり、Thread DO の `addRes` にも 1000 件上限・`BBS_HEISA`・同一 key・スレ不在の判定が入っている（3.5 の「DO はインフラ操作だけ」に反する）。
+- **ドメイン規則の置き場所**: 識別子の種の組み立て、キャップ表示名、名前欄コマンド（`!id` / `!no`）とスレ主表示の連結、dat 行の整形、sage 判定が handler の中にあり、Thread DO の `addRes` にも 1000 件上限・`BBS_HEISA`・同一 key・スレ不在の判定が入っている（3.5 の「DO はインフラ操作だけ」に反する）。
 - **I/O の混在**: R2 の `SETTING.TXT` / `deny.cgi` / 過去ログ目次 / `headline.txt`、KV `CAP`、Thread / Board DO の呼び出しが handler に直書きで、テストはすべて HTTP レベル（`HandlerTestKit` で `Date` / `Math.random` / `caches` を差し替えるため `parallelExecution := false`）。
 - **`js.Dynamic` が RPC 境界を越える**: `Thread.addRes(dat, log, posting: js.Dynamic)` の `posting` に板名・key・sage・初期設定・スレ立て規制の材料が入り、DO 側で `truth(p.create)` のように読む。
 - **設計書の載せ先がない**: 認証主体の決定（§3.4）、PHOEBE ゲート（§4.4）、識別子の新書式（§5）、回避レベル（§7）、連投規制（§8）はいずれも「段」として差し込む必要があり、現状ではまた `g` にフィールドを増やすしかない。
@@ -33,9 +34,9 @@ common/src/main/scala/io/_3ch/common/
   domain/
     BoardId, ThreadKey, ThreadTitle, BbsSettings（統合後の唯一の設定モデル）
     posting/   PostKind（NewThread / Reply）, PostForm（サニタイズ済み入力）, DatLine, DatLineFormatter,
-               NameField（名前＋トリップ＋識別子の連結規則）, CapHandle（★・強キャップ・表示名）, TripAlgorithm
-    identity/  IdSeeds（ID・県・市・AS・UA の種文字列）, ShikibetsuMode（checked / raw / ken / city / as / d / phoebe）,
-               ShikibetsuFormat（書式）, DateSalt（BBS_ID_RESET 境界）
+               NameField（名前＋`(@ユーザーID)`＋識別子＋` (主)` の連結規則）, CapHandle（★・強キャップ・表示名）
+    identity/  ShikibetsuSeeds（県・市・AS・UA の種文字列）, ShikibetsuMode（checked / raw / ken / city / as / d / phoebe）,
+               ShikibetsuFormat（書式）, DateSalt（BBS_ID_RESET 境界。識別子の日付窓に残る）
                （設計書 §5.2 の UA 解析 `UserAgentProfile` は v3 の正規表現表を使うため bbs/domain に置く）
     account/   設計書 §9.1 の Level / Phoebe / Roles / BypassLevel（段 10 で追加）
   text/        Utf8（既存）, HtmlEntity（正規表現を使わない文字参照の復元）
@@ -56,9 +57,9 @@ bbs/src/main/scala/io/_3ch/bbs/
 ```
 
 **`common` と `bbs/domain` の線引き**: 現行コードは JS の `RegExp` を意図して使う（JVM の正規表現と受理言語が違う。`Moderation` のコメント参照）。
-正規表現に依存する純粋ロジック（`readForm` のサニタイズ、トリップ抽出、`!newthread`、deny.cgi のルール照合）は **`bbs/domain`** に置き、
+正規表現に依存する純粋ロジック（`readForm` のサニタイズ、名前欄の `#` 以降の切り捨て、`!newthread`、deny.cgi のルール照合）は **`bbs/domain`** に置き、
 `js.RegExp` をオブジェクト内部に閉じる（`js.Dynamic` は使わない）。正規表現を使わないもの（dat 行整形、種の組み立て、設定の型付き読み、
-名前欄の連結、トリップ方式の分類、ID 計算の日付境界）は **`common`** に置き、JVM でもテストする。
+名前欄の連結、識別子計算の日付境界）は **`common`** に置き、JVM でもテストする。
 
 **非同期ハッシュ**: Web Crypto（`WebHash`）は非同期なので、ドメイン関数は「種の文字列」や「ハッシュ済みの値」を受け取る純粋関数にし、
 ハッシュの実行は `Hasher` ポート経由でアプリケーションサービスが行う（スレ立て規制の `digest` と同じ分け方）。
@@ -69,8 +70,8 @@ bbs/src/main/scala/io/_3ch/bbs/
 | --- | --- | --- |
 | `PostingRequest` | handler → application | メソッド・Content-Type・Referer・UA・`cf`（asn / country / region / city）・Cookie・Client Hints・`CF-Connecting-IP`・forwarded 系・本文バイト列。`Request` から 1 回で作る |
 | `PostForm` | domain | `FROM` `mail` `MESSAGE` `subject` `bbs` `key` `time` `submit` のサニタイズ済み値と `isSJIS` `isMonazilla`。`FormSanitizer.decode(bytes, isMonazilla)` が `Either[PostingError, PostForm]` で返す |
-| `PostingContext` | domain | 既存の `board` `threadKey` `creatingThread` `title` `identity` に、`kind`、`number`、`unixtime`、`settings: BbsSettings`（板＋スレの合成）、`poster`（名前欄の構成要素: 名前・トリップ・キャップ・識別子）、`id`、`sage` を足す。段が進むたびに `copy` で埋める不変オブジェクト |
-| `PostingError` | domain | `enum`。`MethodNotPost`、`BrokenBody(contentType)`、`InvalidReferer(referer)`、`InvalidUserAgent(ua)`、`ProxyHeader(clientIp)`、`NoSubmit`、`SjisFromWeb`、`TripKeyTooLong`、`ForbiddenBoard`、`EmptyMessage`、`MissingSubject(key)`、`InvalidTime(time)`、`FieldTooLong(field, len, limit)`、`TooManyLines(lines, limit)`、`Closed`、`ThreadMissing(logFile)`、`BrokenLog(kind)`、`ThreadFull`、`DuplicateKey`、`Moderated(kind)`、`ThreadCreation(rejection)`、`Internal(stage, description, clock, cause)` …。動的な部分（UA・件数など）はフィールドで持ち、文言は `PostingText.message(error, context)` が組み立てる。現行文言と 1 字違わないことを既存テストで固定 |
+| `PostingContext` | domain | 既存の `board` `threadKey` `creatingThread` `title` `identity` に、`kind`、`number`、`unixtime`、`settings: BbsSettings`（板＋スレの合成）、`poster`（名前欄の構成要素: 名前・キャップ・`!id` / `!no`・識別子・スレ主）、`sage` を足す。段が進むたびに `copy` で埋める不変オブジェクト |
+| `PostingError` | domain | `enum`。`MethodNotPost`、`BrokenBody(contentType)`、`InvalidReferer(referer)`、`InvalidUserAgent(ua)`、`ProxyHeader(clientIp)`、`NoSubmit`、`SjisFromWeb`、`ForbiddenBoard`、`EmptyMessage`、`MissingSubject(key)`、`InvalidTime(time)`、`FieldTooLong(field, len, limit)`、`TooManyLines(lines, limit)`、`Closed`、`ThreadMissing(logFile)`、`BrokenLog(kind)`、`ThreadFull`、`DuplicateKey`、`GlobalThreadCreateCapOnly`、`GlobalThreadCapOnly`、`Moderated(kind)`、`ThreadCreation(rejection)`、`Internal(stage, description, clock, cause)` …。動的な部分（UA・件数など）はフィールドで持ち、文言は `PostingText.message(error, context)` が組み立てる。現行文言と 1 字違わないことを既存テストで固定 |
 | `PostingOutcome` | application → handler | `Posted(key, number, headers)`、`Rejected(error, headers)`、`Swallowed(key, number, headers)`。`headers` は `Seq[(String, String)]`（同名複数可）。`PostingError` は `code: String` を持ち、設計書 §8.9 のコード表と `x-post-error` の値になる。`Swallowed` は最初から定義する（採番予定の番号は DO の戻り値 `{count, swallowed}` から得る） |
 | ports | application | `trait ThreadStore { def readForReply(board, key): Future[ThreadSnapshot]; def addRes(…): Future[Either[code, Int]] }` のように Future を返す薄いインターフェース。`Clock.nowMillis`、`Random.next` も同じ扱い |
 
@@ -85,7 +86,7 @@ bbs/src/main/scala/io/_3ch/bbs/
 | 1 | **エラーモデル**: `deny(g, 文言)` を `PostingError` と `PostingText.message` に置き換える。`Rejected` 例外は `PostingService` の内部実装に閉じる。`guarded` の内部エラー文言は `Internal` の文言化で同じ書式を再現する | `domain/posting/PostingError.scala`、`PostingText` の文言表、`PostingTextSuite`（全エラーの文言一致） |
 | 2 | **入力の型付け**: `PostingRequest.from(Request)`、`FormSanitizer`（`readForm` の置換列・Shift_JIS 復号・`submit=書` 判定）、`PostRouting`（`!newthread`、924 / 900、禁止板、スレ立て/返信の判定）。`g.form` を `PostForm` に置き換える | `bbs/domain/posting/{FormSanitizer, PostRouting}.scala`、`FormSanitizerSuite`（エスケープ・制御文字・`★☆` 変換・KB-03 の固定） |
 | 3 | **設定**: `BoardRepository.getBoardSettings` と新設 `ThreadRepository.getSettings` から `BbsSettings` を取り、`PostingContext.settings` に合成。`BbsSettings` に型付き読み（`int(name, default)`、`checked(name)`）を足す。KB-12（既定値とのマージ無し）は維持 | `common/domain/BbsSettings` 拡張、`repository/ThreadRepository.scala` |
-| 4 | **投稿者の構成要素**: `Trip`（`processTrip`。方式の分類 `TripAlgorithm.classify(sjisBytes)` は正規表現を使わず文字単位で書いて `common` に置き、golden で現行の正規表現と同値を示す。DES / SHA-1 の実行はサービス）、`CapHandle`（`processCap` の表示名規則）と `CapRepository`（KV）、`IdSeeds` と `DateSalt`（`makeId` の種）、`ShikibetsuMode` / `ShikibetsuFormat`（識別子書式）、`NameField`（名前＋ `</b>◆trip</b>` ＋ ` </b>(識別子)<b>` の連結。KB-09 の空括弧も再現） | `common/domain/posting/{TripAlgorithm, CapHandle, NameField}.scala`、`common/domain/identity/*`、`repository/CapRepository.scala`、golden 照合の単体テスト |
+| 4 | **投稿者の構成要素**（トリップと ID は develop で廃止済み）: `CapHandle`（`processCap` の表示名規則）と `CapRepository`（KV）、`ShikibetsuSeeds` と `DateSalt`（`makeShikibetsu` の種）、`ShikibetsuMode` / `ShikibetsuFormat`（識別子書式）、`NameField`（名前＋ ` </b>(@ユーザーID)<b>` ＋ ` </b>(識別子)<b>` ＋ ` (主)` の連結。KB-09 の空括弧も再現。既存の `NameCommands` / `PostingUser` / `NusiMark` / `ThreadOwner` を使う）、全板共通スレの判定（`GlobalThread`、`checkGlobalThread`） | `common/domain/posting/{CapHandle, NameField}.scala`、`common/domain/identity/*`、`repository/CapRepository.scala`、単体テスト |
 | 5 | **規制**: `Moderation.parseRules` → `ModerationRuleSet.parse`（`js.RegExp` を内包）、`Moderation.check(gb)` → `ModerationService.check(context, rules): ModerationDecision`（`Deny(kind)` / `Mark` / `Pass`。`Mark` の名前・本文加工は `PostingContext` の `copy` で返す）、`UserInfo`（log の `userInfo` 書式。設計書 §5.3 の `UID:` / `Device:` 実値化の差し込み口）、`ModerationRuleRepository`（R2 `deny.cgi` `ngwords.cgi`） | `bbs/domain/posting/moderation/{ModerationRuleSet, ModerationDecision}.scala`、`ModerationSuite` の移設 |
 | 6 | **保存**: `DatLineFormatter`（dat 行・log 行。`Intl.DateTimeFormat` の日付は `Clock` 経由で文字列にして渡す）、`ThreadRepository.addRes` と `durable/codec/PostingCodec`（`posting: js.Dynamic` を DO 側で case class に変換。RPC の外形は変えず、旧形式も読む）、`ArchiveIndexRepository`（`updateSubback` / `updateHeadline` の R2 ETag 条件付き書き込み。KB-25 維持）。応答ヘッダを `Seq[(String, String)]` にして `Set-Cookie` を複数出せるようにする（`Headers.append`。現行の `js.Dictionary` では 1 本に上書きされる） | `common/domain/posting/DatLineFormatter.scala`、`durable/codec/PostingCodec.scala`、`repository/ArchiveIndexRepository.scala`、dat / log のバイト一致テスト |
 | 7 | **アプリケーションサービス**: `PostingService.post(request): Future[PostingOutcome]` に段の並びを集約し、`Posting.entry` を「`PostingRequest` 化 → サービス → `PostingPages` で描画」だけにする。`g` を削除。`PostingPages` は `PostingContext` / `PostingOutcome` を受ける | `application/posting/PostingService.scala`、`ports/*`、`PostingServiceSuite`（メモリ上のポート実装で段の順序と `copy` の内容を検証） |
@@ -99,7 +100,7 @@ bbs/src/main/scala/io/_3ch/bbs/
 ## 5. 検証
 
 - `sbt test` 全件。`PostingHandlerSuite` は対象の改名（`PostingHandler` → `Posting`）以外は変更しない。golden（`tests/golden/*.json`）は変更しない。
-- **入出力スナップショット**（段 0a で追加、`bbs/src/test/.../handler/PostingSnapshotSuite`）: スレ立て / 返信 × 通常 / キャップ / 強キャップ / トリップ × sage / age × UTF-8 / Shift_JIS、エラー各種（§3 の `PostingError` 全ケース）、`BBS_HEISA` と設定値の境界ケースを固定時刻・固定乱数で実行し、応答本文・ヘッダ・dat・log・subject・R2 書き込み（過去ログ目次・headline）を `tests/snapshots/posting/*.json` と完全一致で照合する。
+- **入出力スナップショット**（段 0a で追加、`bbs/src/test/.../handler/PostingSnapshotSuite`）: スレ立て / 返信 × 通常 / キャップ / 強キャップ × sage / age × UTF-8 / Shift_JIS、`!id`・スレ主表示・全板共通スレ（924 / 900）、エラー各種（§3 の `PostingError` 全ケース）、`BBS_HEISA` と設定値の境界ケースを固定時刻・固定乱数で実行し、応答本文・ヘッダ・dat・log・subject・R2 書き込み（過去ログ目次・headline）を `tests/snapshots/posting/*.json` と完全一致で照合する。
   - `tests/golden/` とは分ける（golden は v5 由来で手で編集しない表。スナップショットは v6 の現行コードから生成し、意図した変更時に再生成する）。
   - Shift_JIS の本文・バイト列は base64 で載せる。`Last-Modified` と `Date` は固定時刻から決まるので正規化しない。
   - 現行の内部エラー文言に出る `undefined`（`g.nowTime` 未設定。KB-39）はそのまま固定する。
@@ -115,7 +116,7 @@ bbs/src/main/scala/io/_3ch/bbs/
 | `guarded` の内部エラー文言（段名・時刻・板名・key・番号・原因文字列）が一致しない | `PostingError.Internal` に段名・説明・時計種別・原因を持たせ、文言化を 1 関数に集約。スナップショットで固定 |
 | DO の RPC 境界を越えるエラー文字列（`fail("…")`）を段 8 でコード化すると handler 側の文言が変わる | コード → 従来文言の対応表を `PostingText` に持ち、`errmsg:updateThreadFile->Error: …` までスナップショットで一致を確認 |
 | 並行する UI 作業との競合 | 板トップの統合は済んだ。`PostingHandler.scala` に触る UI 側の作業（投稿欄の fetch 送信など）と並行する場合は、段ごとに `develop` を取り込んでから進める |
-| 非同期ハッシュの順序変更で ID・識別子が変わる | ハッシュの入力文字列（種）を純粋関数にして golden で固定し、サービス側は種を渡すだけにする |
+| 非同期ハッシュの順序変更で識別子・スレ主判定が変わる | ハッシュの入力文字列（種）を純粋関数にして golden で固定し、サービス側は種を渡すだけにする |
 | テスト実行時間の増加 | ドメインテストは JVM で速く回る。HTTP レベルのテストは件数を増やさず、スナップショット 1 本に集約する |
 | `Thread.addRes` の引数を変えると管理画面・移動（`receiveMove`）の経路が壊れる | 段 8 まで RPC 署名を変えず、`PostingCodec` で旧形式も読めるようにする |
 
@@ -131,7 +132,7 @@ bbs/src/main/scala/io/_3ch/bbs/
 | §7 回避レベル | `ModerationRuleSet`（5 列目）と `BypassLevel.exempts(principal)`。連投規制・スレ立て規制の免除判定も同じ関数 |
 | §8 連投規制 | `PostRateLimit`（純粋）、`PostRateHistory`（集約）、`CopipeGuard`。`ThreadRepository.addRes` の引数と `PostingCodec` に `rateLimit` を追加。`PostingOutcome.Swallowed` |
 | §8.6 パイプライン位置 | `PostingService` の段の並びに 1 行ずつ追加。順序はサービスの 1 か所で読める |
-| §5.3 `!uid`、§4.4 `!バルサン` / `!SETTING` | `PostingService` の「コマンド解釈」段（`makeId` の後）。`NameField` が `@uid` を連結し、`ThreadRepository.addRes` の `commands` でスレ設定を書く |
+| §5.3 `!uid`、§4.4 `!バルサン` / `!SETTING` | `PostingService` の「コマンド解釈」段（`makeShikibetsu` の後）。`NameField` が `@uid` を連結し、`ThreadRepository.addRes` の `commands` でスレ設定を書く |
 | §4.2 `Account.recordPost` | `addRes` 成功後の段。失敗は無視（投稿は成功） |
 | §3.6 エッジ防御 | `identify` の直後に `EdgeDefense.check(request.cf, principal, rules)`（規則は `RuleStore` から） |
 | §12 段 A〜E | 本計画の段 10 以降。段 A（連投規制）は本計画の段 7 完了後に着手する |
