@@ -119,8 +119,8 @@ SPA が GET /admin/api/me
 | スレ詳細 | `/admin/boards/:bbs/threads/:key` | `delete` | 停止・再開・削除・移動・レス編集・レス削除・dat と投稿者ログの閲覧（投稿者ログの閲覧は監査ログに残す） |
 | 規制ルール | `/admin/rules/access`・`/admin/rules/ngwords` | `regulate` | `deny.cgi`・`ngwords.cgi`。書式の説明はモックの「書き方」枠の体裁で現行の書式を書く |
 | 板一覧 | `/admin/menu` | `admin` | `bbsmenu.html` |
-| ユーザー一覧 | `/admin/accounts` | `admin`・`regulate` | 直近書き込み順（ほかに登録順・Lv 順・24 時間の書き込み数順）。各行に最終書き込みの日時・書き込み先・本文の先頭・接続元、24 時間の書き込み数、UA・端末・キーの数。種別・状態・役割で絞り込み、`uid`・ログイン ID・メール・AS・UA・端末・識別子で検索。乱造検知の要確認を色で示す。モック `docs/ui/admin-users.html` |
-| ユーザー詳細 | `/admin/accounts/:uid` | `admin`・`regulate`（役割ありのアカウントの操作は `admin` だけ） | アカウントの概要と操作（凍結・BAN・Lv 固定・役割・全キー無効化・メモ）、使われた AS・地域、UA（生の文字列も）、端末情報、日ごとの識別子と ID、認証キーの一覧（キーごとの書き込み数と無効化）、書き込み一覧（すべて・Web・キーごとのタブ）。閲覧は監査ログに残す。役割の付与・剥奪は段 M2 から（§7）。モック `docs/ui/admin-user.html` |
+| ユーザー一覧 | `/admin/accounts` | `admin`・`regulate` | 直近書き込み順（ほかに登録順・Lv 順・24 時間の書き込み数順）。各行に最終書き込みの日時・書き込み先・本文の先頭・接続元、24 時間の書き込み数、UA・端末・キーの数。種別・状態・役割で絞り込み、ユーザー ID（`uid`。ID/Password はログイン ID と同じ値）・メール・AS・UA・端末・識別子で検索。乱造検知の要確認を色で示す。モック `docs/ui/admin-users.html` |
+| ユーザー詳細 | `/admin/accounts/:uid` | `admin`・`regulate`（役割ありのアカウントの操作は `admin` だけ） | アカウントの概要と操作（凍結・BAN・Lv 固定・役割・全キー無効化・メモ）、使われた AS・地域、UA（生の文字列も）、端末情報、日ごとの識別子、認証キーの一覧（キーごとの書き込み数と無効化）、書き込み一覧（すべて・Web・キーごとのタブ）。閲覧は監査ログに残す。役割の付与・剥奪は段 M2 から（§7）。モック `docs/ui/admin-user.html` |
 | キャップ | `/admin/caps` | `admin` | 全件の一覧・他アカウント宛の発行・失効・旧キャップ（KV `CAP`）の紐づけ。自分のキャップ（1 個まで）は `/auth/account` で扱う（設計書 §6.2・§10） |
 | PHOEBE・エッジ防御 | `/admin/phoebe` | `regulate` | `phoebe.cgi`・`edge-rules.json`・乱造の要確認一覧 |
 | 監査ログ | `/admin/audit` | `admin` | §3.6 |
@@ -135,6 +135,9 @@ SPA が GET /admin/api/me
 **2026-11-05 改訂**: 見た目は現行の板トップ（ヘッダー・配色・入力欄・タブ・サイドバー・フッター）に揃える。`kanri.html` からは 2 列構成・項目の並び・「書き方」枠・上下の「適用」を引き継ぎ、色の帯は各グループ左端の色線に置き換える。
 モックは `docs/ui/admin-board.html`（板設定）・`admin-thread.html`（スレ管理）・`admin-reauth.html`（再認証）で、共通 CSS は `docs/ui/auth-admin.css`。
 実装では `a.css` ではなく板トップと同じ Tailwind のクラスで書き、下の表の `a.css` 由来の記述は構成の対応として読む。
+
+**UI の方針**（設計書 §3.8 と同じ）: 角丸を使わない（`border-radius` を付けず四角にする）。部品と文言は既存画面（板トップ・スレ画面）に合わせ、
+文言は全角と半角英数字の間に空白を入れない（例「残り27分」「Lvを固定」）。説明は短くする。
 
 モックの構造を次のように写す。CSS は `a.css` を元にした `admin-web/admin.css` 1 本にし、色や余白はすべてクラスで指定する。
 HTML の `style` 属性は CSP（`style-src 'self'`）で弾かれ、`bgcolor` 属性は HTML5 で廃止されているため使わない（React の `style` プロパティは CSSOM 経由で CSP の対象外だが、見た目の定義を CSS に集めるために使わない）。
@@ -169,9 +172,9 @@ HTML の `style` 属性は CSP（`style-src 'self'`）で弾かれ、`bgcolor` �
 | 強制sageまでの秒数 | `BBS_FORCE_SAGE` | 数値 | 対応 |
 | スレッドタイトル・名前・メール・本文の文字数制限 | `BBS_SUBJECT_COUNT`・`BBS_NAME_COUNT`・`BBS_MAIL_COUNT`・`BBS_MESSAGE_COUNT` | 数値 | 対応 |
 | 投稿行数制限 | `BBS_LINE_NUMBER` | 数値 | 対応。補足は v6 の規則（「>>2 以降、この値の 2 倍の `<br>` 区切り数まで」）に書き換える |
-| IDの方式・発信元表示 | `BBS_ID` | ラジオ（`checked` / `ip` / `siberia` / `off`） | 対応。選択肢の文言は v6 の意味にする |
+| IDの方式・発信元表示 | `BBS_ID` | — | 対応なし。日付欄の ID は廃止済みで v6 は読まない（[トリップ・ID廃止とスレ主表示](トリップ・ID廃止とスレ主表示.md)）。キーが残っていれば「その他」に回す |
 | 県名・回線表示 | `BBS_ID_SHIKIBETSU` | ラジオ（`checked` / `raw` / `ken` / `city` / `as` / 非表示、設計書 段 C 以降は `phoebe`） | 対応。非表示は `d` を書く（コードは 5 値以外をすべて非表示として扱う） |
-| （モックに無い） | `BBS_ID_GROUP`・`BBS_ID_RESET`・`BBS_ID_LV` | テキスト・数値・チェック | 同じ体裁で追加 |
+| （モックに無い） | `BBS_ID_GROUP`・`BBS_ID_RESET` | テキスト・数値 | 「識別子のグループ・リセット周期」として同じ体裁で追加。`BBS_ID_LV` は ID とともに廃止済みなので「その他」に回す |
 | 個別規制 | `BBS_NO_MADAKANA` | ラジオ | 対応（`checked` で規制の代わりに注意表示） |
 | （モックに無い） | `BBS_NGWORD_PASS` | チェック | 同じ体裁で追加 |
 | 連投規制の緩和（実況モード） | `BBS_LIVE` | ラジオ | 対応。補足は「現在は 9 割の投稿を強制 sage。設計書 段 A 以降は連投規制の適用除外も加わる」 |
@@ -182,7 +185,7 @@ HTML の `style` 属性は CSP（`style-src 'self'`）で弾かれ、`bgcolor` �
 | 各スレッド内での連続投稿規制 | `BBS_THREAD_RENTOU`・`BBS_THREAD_RENTOU_RESET` | 数値 2 つ | 設計書 §8.4。設計書 段 A 以降 |
 | 連投規制類（レベル） | `BBS_RENTOU_MODE`・`BBS_RENTOU_KEYS`・`BBS_RENTOU_PASS` | ラジオ・チェック群・選択 | 設計書 §8.1・§7。設計書 段 A 以降 |
 | 投稿時のログインを必須にする | `BBS_PHOEBE` | 数値（0〜10） | 設計書 §4.4。設計書 段 C 以降。ラベルは「書き込みに必要な最低 Lv」に変える（Web 版は常にログイン必須で、この値が効くのは専ブラの未ログインと Lv。設計書 §3.5） |
-| スレッド作成主機能 | `BBS_DISABLE_NUSI` | ラジオ | 設計書 §4.4 で使う。設計書 段 C 以降 |
+| スレッド作成主機能 | `BBS_DISABLE_NUSI` | ラジオ | 対応。ラベルは「スレ主の機能」。名前欄のスレ主表示 ` (主)`（実装済み）と、設計書 §4.4 のスレ主のコマンド（段 C 以降）を止める |
 | （モックに無い） | `BBS_THREAD_PASS` | 選択 | 設計書 §7。設計書 段 D 以降 |
 | ヘッダー（textarea） | `head.txt` | textarea | 対応 |
 | 投稿規制設定・NGワード（textarea） | `deny.cgi`・`ngwords.cgi` | 読み取り表示 | 両ファイルは全板共通なので板設定画面では編集しない。板の正規表現がこの板に一致する行だけを表示し、規制ルール画面（`regulate`）へのリンクを置く |
