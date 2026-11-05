@@ -322,7 +322,7 @@ M0 と M1 は認証基盤を待たずに進められる。M2 は設計書の認�
 - `docs/admin.md`: 段 M2 で書き換える（ログイン手順、bootstrap、役割、開発時の `localhost` と Turnstile のテスト用キー）。
 - AGENTS.md 1.6: 段 M2 で `.dev.vars` の `ADMIN_PASSWORD` の記述を `ADMIN_BOOTSTRAP_TOKEN` 等に改める。
 - 設計書 §9.1・§9.3: `describeForAdmin`・`adminGen`・`claimFirstAdmin`、secret `ADMIN_SESSION_SECRET`(`_PREV`)・`ADMIN_BOOTSTRAP_TOKEN`、vars `ADMIN_BREAK_GLASS_UNTIL`、migration v3 を足す（本コミット）。
-- `docs/既知不具合台帳.md`: レス編集で名前欄のトリップ・識別子のタグが壊れる件を KB-39 として記録（本コミット）。
+- `docs/既知不具合台帳.md`: レス編集で名前欄のトリップ・識別子のタグが壊れる件を KB-40 として記録（本コミット）。
 - AGENTS.md 3.6: 段 M2 で「管理画面は再認証付きの管理者セッション＋役割＋Origin 検証＋no-store＋CSP 前提」に改める（利用者の承認後）。
 - `docs/auth-phoebe-review.md` 設計 #8 の判断（`/mod` 分離・`/admin` は Basic のまま）は、2026-11-02 の利用者指示で本書の方針に置き換わった旨を追記する（本コミット）。
 

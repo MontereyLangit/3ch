@@ -7,7 +7,7 @@
 
 ## 生成元と対応範囲
 
-`bbs/src/main/scala/ch3s/bbs/durable/` 以下の Scala ファイルを Scalameta の Scala 3
+`bbs/src/main/scala/io/_3ch/bbs/durable/` 以下の Scala ファイルを Scalameta の Scala 3
 パーサで構文解析し、`@JSExportTopLevel("名前", "server")` を持つクラスを抽出する。
 annotation の export 名と、コンストラクタの引数名・型を使用する。
 コメント・文字列内の疑似宣言は対象にしない。出力は export 名順で固定し、

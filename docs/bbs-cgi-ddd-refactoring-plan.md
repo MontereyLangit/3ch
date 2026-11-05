@@ -101,7 +101,7 @@ bbs/src/main/scala/ch3s/bbs/
 - **入出力スナップショット**（段 0a で追加、`bbs/src/test/.../handler/PostingSnapshotSuite`）: スレ立て / 返信 × 通常 / キャップ / 強キャップ / トリップ × sage / age × UTF-8 / Shift_JIS、エラー各種（§3 の `PostingError` 全ケース）、`BBS_HEISA` と設定値の境界ケースを固定時刻・固定乱数で実行し、応答本文・ヘッダ・dat・log・subject・R2 書き込み（過去ログ目次・headline）を `tests/snapshots/posting/*.json` と完全一致で照合する。
   - `tests/golden/` とは分ける（golden は v5 由来で手で編集しない表。スナップショットは v6 の現行コードから生成し、意図した変更時に再生成する）。
   - Shift_JIS の本文・バイト列は base64 で載せる。`Last-Modified` と `Date` は固定時刻から決まるので正規化しない。
-  - 現行の内部エラー文言に出る `undefined`（`g.nowTime` 未設定。KB-38）はそのまま固定する。
+  - 現行の内部エラー文言に出る `undefined`（`g.nowTime` 未設定。KB-39）はそのまま固定する。
   - 生成は `sbt "bbs/testOnly ch3s.bbs.handler.PostingSnapshotSuite -- --update"`（環境変数ではなく引数で更新モードにする）。再生成した差分はレビュー記録に理由を書いてからコミットする。
 - `sbt 'set ThisBuild / scalacOptions += "-no-indent"' Test/compile`、`npm run v6:build`、`npm run v6:typecheck`、`npm test`（実 workerd）、`git diff --check`。
 - 各段でレビュー連鎖（AGENTS.md 3.2）。記録は `docs/bbs-cgi-ddd-refactoring-review.md` に段ごとの表で残す。

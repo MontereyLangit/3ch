@@ -90,8 +90,8 @@ AS全体対象リストの変更前後ではネットワークグループの値
 ### 検証結果
 
 - 追加したScalaテスト36件は成功（ドメイン7、DO14、管理画面3、設定・投稿12）。
-- Claudeレビュー後のドメイン・DO・AdminSuite再実行は26件成功。PostingSuiteの最終再実行は62件中61件成功、既存のmeta refresh期待値不一致1件が失敗（KB-32）。
-- `sbt test` 全体実行では上記に加え、既存のRouteTableSuiteがCRLF依存でJVM・JS各5件失敗（KB-31）。今回の規制追加とは独立して台帳へ記録した。
+- Claudeレビュー後のドメイン・DO・AdminSuite再実行は26件成功。PostingSuiteの最終再実行は62件中61件成功、既存のmeta refresh期待値不一致1件が失敗（KB-31）。
+- `sbt test` 全体実行では上記に加え、既存のRouteTableSuiteがCRLF依存でJVM・JS各5件失敗（KB-38）。今回の規制追加とは独立して台帳へ記録した。
 - `sbt 'set ThisBuild / scalacOptions += "-no-indent"' Test/compile`: 成功。Windows PowerShellでは引用符のエスケープを加えて実行した。
 - `npm run v6:build` / `npm run v6:typecheck`: 成功。
 - Claudeレビュー後に `npm run v6:build:server` を再実行して成功。
@@ -136,7 +136,7 @@ AS全体対象リストの変更前後ではネットワークグループの値
 | Medium: 追加テストが「履歴に残らない」ことを検証できていない | 採用。キャップが先に立て、同条件の通常スレ立てが成功するテストを追加。 |
 | Low: 設定不正時の免除・偽キャップでの回避不可のテストがない | 採用。設定不正でも通常・強キャップは作成でき、名前欄の★や誤パスワードでは規制されるテストを追加。 |
 
-修正後、`PostingHandlerSuite` は68件中67件成功。失敗1件は既存のmeta refresh期待値不一致（KB-32）。
+修正後、`PostingHandlerSuite` は68件中67件成功。失敗1件は既存のmeta refresh期待値不一致（KB-31）。
 
 ### Codex CLI（ブランチ全体）
 

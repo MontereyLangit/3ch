@@ -48,7 +48,7 @@ Codex CLI / Gemini CLI レビューは未実施。
 | 2 | Medium | 「`PostingHandlerSuite` を改名以外変えない」は両ブランチで件数・期待値が違い実行できない | 採用。段 0b の終わりに統合スイートを基準として確定する記述に変更 |
 | 3 | Medium | 段 A が段 8 の `PostingCodec` に依存し、デプロイ時期が決まらない | 採用。`PostingCodec` を段 6 に移し、段 A は段 7 の後。段 0b〜9 はどの段の後でもデプロイ可と明記 |
 | 4 | Medium | 正規表現を使う `TripAlgorithm` と `UserAgentProfile` を `common` に置いている | 採用。`TripAlgorithm.classify` は文字単位で書き直して `common`（golden で同値確認）、`UserAgentProfile` は `bbs/domain` |
-| 5 | Medium | スナップショットの形式・正規化・`nowTime` の `undefined`・再生成手順・置き場所 | 採用。`tests/snapshots/` に分離、base64、生成コマンド、再生成の承認手順を追記。`g.nowTime` 未設定は KB-38 として台帳に記録 |
+| 5 | Medium | スナップショットの形式・正規化・`nowTime` の `undefined`・再生成手順・置き場所 | 採用。`tests/snapshots/` に分離、base64、生成コマンド、再生成の承認手順を追記。`g.nowTime` 未設定は KB-39 として台帳に記録 |
 | 6 | Medium | `Rejected` にヘッダが無い、`Set-Cookie` 複数、`PostingError.code`、`Swallowed` の番号 | 採用。`PostingOutcome` の定義を修正（§3） |
 | 7 | Low | `BBS_HEISA` の正規表現判定との差、§7 の対応表の不足 | 採用。段 8 に境界ケースの追加、§7 に `!uid`・コマンド・`recordPost`・エッジ防御の行を追加 |
 

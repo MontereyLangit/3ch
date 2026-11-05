@@ -7,7 +7,4 @@ declare module "scalajs:server.js" {
   export class Thread {
     constructor(state: object, env: object);
   }
-  export class V6PlaceholderDurableObject {
-    constructor(ctx: object, env: unknown);
-  }
 }
