@@ -53,3 +53,13 @@
 | 検証 | `FormSanitizerSuite`（エスケープ・制御文字・`★☆` 変換・名前の `#` 切り捨て・`!id` / `!no`・KB-03 の前段・後勝ち・共通スレ・必須項目の順）を追加。スナップショット差分なし |
 | 計画との差分 | `PostingRequest` に本文は含めない（ヘッダ検査の前に本文を読むと、本文の読み込み失敗が検査より先に出うるため、従来どおり検査後に読む）。`PostRouting` は計画の「振り分け」に加え、従来 `readForm` 後半にあった文字除去と必須項目の検査も受け持つ（順序依存のため）。`PostForm.kind` は振り分け後にだけ意味を持つ |
 | 未解決 | `g.ip` / `g.host` / `g.userAgent` / `g.browserInfo` / `g.asn` 等の識別系は段 4 の対象として `g` に残る（`PostingRequest` から初期化） |
+
+## 段 3: 設定
+
+| 項目 | 内容 |
+| --- | --- |
+| 実施 | `BbsSettings` に型付き読み（`get`、`orElse`（空なら既定値。従来の `or`）、`checked`（ちょうど `checked`）、`number(name, default)`（JavaScript の `Number`）、`int(name, default)`（`orElse` の値を JavaScript の `parseInt`）、`updated`、`merged`（既存キーの位置を保って上書き、新キーは末尾。既定値とのマージはしない＝KB-12 維持））を追加。数値の解釈は `common/text/JsNumber`（`Number` / `parseInt` の文字列解釈を JVM でも同じに書いたもの）。`repository/ThreadRepository.scala`（`getSettings(board, key, env)`）を新設。`PostingHandler` の `g.settings` / `g.boardSettings` / `g.boardDisableNusi` を削除し、`Draft.settings`（板設定、返信ならスレ設定で上書き、`BBS_SHIKIBETSU=off` を足す）と、板設定だけを使う箇所（スレ立て規制・板の `BBS_DISABLE_NUSI`）用の `LoadedBoard` に置き換えた。`Moderation.decide` は `BbsSettings` を受ける |
+| 振る舞いの保存 | 従来 `g.boardSettings` は `g.settings` と同じオブジェクトだったので、`BBS_MAX_MENU_THREAD` と headline の `BBS_TITLE` はスレ設定で上書きされた値を読む（そのまま）。`BBS_TITLE` が無いときの `undefined` も維持。文字数上限の文言には設定値の文字列そのもの（無ければ既定値）を出す。初期スレ設定のキー順は JavaScript のオブジェクトと同じ（整数のキーが先）になるよう、保存直前に `js.Dictionary` を通して並べる |
+| 検証 | `BbsSettingsSuite` に型付き読み・`merged` を追加（JVM / JS）。`JsNumberSuite`（JVM / JS）と、実行環境の `Number` / `parseInt` と突き合わせる `JsNumberRuntimeSuite`（JS のみ）を追加。スナップショット差分なし |
+| 計画との差分 | 計画書は合成した設定を `PostingContext.settings` に置くとしているが、`PostingContext` はまだスレ立て規制の入力としてしか作られていない（実行中の状態を持つ不変オブジェクトにするのは段 7）。段 3 ではハンドラ内の `Draft.settings` に置き、段 7 で `PostingContext` に移す。`int(name, default)` の既定値は従来の `or` に合わせて文字列で受ける |
+| 未解決 | `Moderation.check(gb)`（`ModerationSuite` 用の包み）は `gb.settings` から `BbsSettings` を組み立てる。段 5 で整理する |

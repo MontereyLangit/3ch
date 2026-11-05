@@ -1,5 +1,7 @@
 package io._3ch.common.domain
 
+import io._3ch.common.text.JsNumber
+
 import scala.collection.immutable.ListMap
 
 /**
@@ -16,6 +18,25 @@ case class BbsSettings (
     * @return `"BBS_TITLE=テスト板＠3ch掲示板\nBBS_THREAD_TATESUGI=16"` …
     */
   override def toString: String = value.map { case (k, v) => s"$k=$v" }.mkString("", "\n", "\n")
+
+  def get(name: String): Option[String] = value.get(name)
+
+  /** 値が空でなければその値、無いか空なら `default`。 */
+  def orElse(name: String, default: String): String = get(name).filter(_.nonEmpty).getOrElse(default)
+
+  /** 値がちょうど `checked` か。 */
+  def checked(name: String): Boolean = get(name).contains("checked")
+
+  /** 値を JavaScript の `Number` で読む。無ければ `default`（空文字列は 0、数でなければ NaN）。 */
+  def number(name: String, default: Double): Double = get(name).fold(default)(JsNumber.parse)
+
+  /** [[orElse]] の値を JavaScript の `parseInt` で読む。 */
+  def int(name: String, default: String): Double = JsNumber.parseInt(orElse(name, default))
+
+  def updated(name: String, v: String): BbsSettings = BbsSettings(value.updated(name, v))
+
+  /** `other` の値で上書きする。既存のキーは位置を保ち、新しいキーは末尾に足す（既定値とのマージはしない）。 */
+  def merged(other: BbsSettings): BbsSettings = BbsSettings(other.value.foldLeft(value) { case (acc, (k, v)) => acc.updated(k, v) })
 }
 
 object BbsSettings {

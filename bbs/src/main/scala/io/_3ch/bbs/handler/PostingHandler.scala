@@ -3,13 +3,15 @@ package io._3ch.bbs.handler
 import io._3ch.bbs.external.cloudflare.*
 import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.hash.{Md5, WebHash}
-import io._3ch.bbs.repository.BoardRepository
+import io._3ch.bbs.repository.{BoardRepository, ThreadRepository}
 import io._3ch.bbs.domain.posting.{BrokenLogKind, ClientIdentity, FailureSite, FormSanitizer, GlobalThread, KeyIp, NusiMark, PostField, PostRouting, PostingContext, PostingError, PostingUser, ThreadOwner}
 import io._3ch.bbs.domain.posting.moderation.ThreadCreationRejection
 import io._3ch.bbs.durable.codec.ThreadOwnerCodec
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
+import io._3ch.common.text.JsNumber
 import io._3ch.common.domain.posting.{PostForm, PostKind}
 
+import scala.collection.immutable.ListMap
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
@@ -26,8 +28,6 @@ object PostingHandler {
   private def truth(v: js.Any): Boolean = js.Dynamic.global.Boolean(v).asInstanceOf[Boolean]
   private def number(v: js.Any): Double = js.Dynamic.global.Number(v).asInstanceOf[Double]
   private def int(v: js.Any): Double = js.Dynamic.global.parseInt(v).asInstanceOf[Double]
-  private def eq(v: js.Any, s: String): Boolean = v == s.asInstanceOf[js.Any]
-  private def or(v: js.Any, default: String): String = if truth(v) then str(v) else default
   private def trim(s: String): String = s.asInstanceOf[js.Dynamic].trim().asInstanceOf[String]
   private def replace(s: String, pattern: String, replacement: String, flags: String = "g"): String =
     s.asInstanceOf[js.Dynamic].replace(new js.RegExp(pattern, flags), replacement).asInstanceOf[String]
@@ -49,13 +49,13 @@ object PostingHandler {
       reject(PostingError.Internal(stage, description, site(g, d, clock, time), errorText(e)))
     }
 
-  /** 投稿処理中のフォーム。エラー画面にはその時点の値を出す。 */
-  private final class Draft(var form: PostForm)
+  /** 投稿処理中のフォームと設定（板設定、返信ならスレ設定で上書き）。エラー画面にはその時点のフォームを出す。 */
+  private final class Draft(var form: PostForm, var settings: BbsSettings)
 
   def entry(request: Request, env: WorkerEnv, resolveUser: PostingUserResolver.Resolver = PostingUserResolver.unresolved): js.Promise[Response] = {
     val rawEnv = env.asInstanceOf[js.Dynamic]
     val req = PostingRequest.from(request)
-    val d = new Draft(PostForm())
+    val d = new Draft(PostForm(), BbsSettings(ListMap.empty))
     val ip: js.Any = req.connectingIp.orNull
     val g = js.Dynamic.literal(
       version = "2025/7/31", time = str(js.Date.now()), unixtime = str(math.floor(js.Date.now() / 1000)),
@@ -63,9 +63,9 @@ object PostingHandler {
       host = ip, ip = ip, userAgent = req.userAgent, browserInfo = "", deviceInfo = req.deviceInformation,
       asn = req.asn.getOrElse("0000"), country = req.country.getOrElse("unknown"), ken = req.region.getOrElse("catv?"), city = req.city.getOrElse(""),
       uid = "", userInfo = "", shikibetsuId = "",
-      md5Salt = md5(str(rawEnv.salt)), boardDisableNusi = false, threadOwner = null, cap = 0, strongCap = 0, sage = 0,
+      md5Salt = md5(str(rawEnv.salt)), threadOwner = null, cap = 0, strongCap = 0, sage = 0,
       path = "PATH", logPath = "LOGPATH", logFile = "LOGDAT", logData = "", subject = "", number = 0,
-      settings = js.Dynamic.literal(), boardSettings = js.Dynamic.literal(), headers = js.Dictionary.empty[String]
+      headers = js.Dictionary.empty[String]
     )
     (for {
       _ <- Future { checkRequest(g, req) }
@@ -74,17 +74,17 @@ object PostingHandler {
       _ = checkGlobalThread(g, d)
       _ = { g.path = d.form.bbs + "/"; g.logPath = str(g.path) + "thread/" + d.form.key.take(4) + "/"; g.logFile = str(g.logPath) + d.form.key + ".cgi" }
       board <- boardSettings(g, d, env)
-      _ <- threadSettings(g, d, env)
+      _ <- threadSettings(g, d, board, env)
       _ <- identify(g, d, req)
       user <- resolveUser(request, env)
       _ = g.userInfo = s"UID:${str(g.uid)} IP:${str(g.host)} AS${str(g.asn)}-${str(g.country)},${str(g.ken)},${str(g.city)}Device:${str(g.deviceInfo)} UA:${str(g.userAgent)}"
-      moderated <- Moderation.decide(g, d.form, env)
+      moderated <- Moderation.decide(g, d.form, d.settings, env)
       _ = d.form = moderated._2
       _ = moderated._1.foreach(denial => reject(PostingError.Moderated(denial)))
       _ = checkSizes(g, d)
-      creationLimit <- threadCreationLimit(g, d, req, board)
+      creationLimit <- threadCreationLimit(g, d, req, board.settings)
       _ <- makeShikibetsu(g, d, user)
-      owner <- markNusi(g, d, user)
+      owner <- markNusi(g, d, user, board.settings)
       _ = prepare(g, d)
       _ <- updateThread(g, d, env, creationLimit, owner)
       _ <- updateSubback(g, d, env)
@@ -137,25 +137,25 @@ object PostingHandler {
     }
   }
 
-  private def boardSettings(g: js.Dynamic, d: Draft, e: WorkerEnv): Future[BbsSettings] = guarded(g, d, "getBoardSettings", "不明なエラーが発生しました。", "time") {
+  private final case class LoadedBoard(id: BoardId, settings: BbsSettings)
+
+  private def boardSettings(g: js.Dynamic, d: Draft, e: WorkerEnv): Future[LoadedBoard] = guarded(g, d, "getBoardSettings", "不明なエラーが発生しました。", "time") {
     val board = BoardId.create(d.form.bbs).fold(_ => reject(PostingError.ForbiddenBoard), identity)
     BoardRepository.getBoardSettings(board, e).map { boardSettings =>
-      g.settings = boardSettings.value.toJSDictionary.asInstanceOf[js.Dynamic]
-      g.boardSettings = g.settings
-      g.boardDisableNusi = eq(g.settings.BBS_DISABLE_NUSI, "checked")
-      boardSettings
+      d.settings = boardSettings
+      LoadedBoard(board, boardSettings)
     }
   }
-  private def threadSettings(g: js.Dynamic, d: Draft, e: WorkerEnv): Future[Unit] = {
+  private def threadSettings(g: js.Dynamic, d: Draft, board: LoadedBoard, e: WorkerEnv): Future[Unit] = {
     val stub = thread(d, e)
     guarded(g, d, "getThreadDataAndThreadSettings", "不明なエラーが発生しました。", "unixtime") {
-      if eq(g.settings.BBS_HEISA, "checked") then reject(PostingError.Closed)
+      if d.settings.checked("BBS_HEISA") then reject(PostingError.Closed)
       if d.form.kind == PostKind.NewThread then stub.getDat().toFuture.map { dat =>
         if dat.nonEmpty then reject(PostingError.DuplicateKey)
         g.logData = d.form.subject + "\n"; g.number = 1; g.subject = d.form.subject
       } else {
         val datF = stub.getDat(d.form.bbs, d.form.key).toFuture
-        val settingsF = stub.getSettings().toFuture
+        val settingsF = ThreadRepository.getSettings(board.id, d.form.key, e)
         val ownerF = stub.getOwner().toFuture
         datF.zip(settingsF).zip(ownerF).map { case ((dat, settings), owner) =>
           if dat.isEmpty then reject(PostingError.ThreadMissing(str(g.logFile)))
@@ -164,16 +164,16 @@ object PostingHandler {
           g.subject = lines(0).split("<>", -1).last
           if !truth(g.subject) then reject(PostingError.BrokenLog(BrokenLogKind.NoTitle))
           g.number = lines.length
-          BbsSettings.parse(settings, "<>").value.foreach((k, v) => g.settings.updateDynamic(k)(v))
+          d.settings = d.settings.merged(settings)
           g.threadOwner = owner
           if lines.length >= 1000 then reject(PostingError.ThreadFull)
-          if eq(g.settings.BBS_HEISA, "checked") then reject(PostingError.Closed)
+          if d.settings.checked("BBS_HEISA") then reject(PostingError.Closed)
         }
       }
     }
   }
   private def identify(g: js.Dynamic, d: Draft, req: PostingRequest): Future[Unit] = {
-    g.settings.BBS_SHIKIBETSU = "off"
+    d.settings = d.settings.updated("BBS_SHIKIBETSU", "off")
     req.cookie.split("[;,]\\s*", -1).foreach { pair =>
       val parts = pair.split("=", -1)
       if parts.length >= 2 && parts(0).nonEmpty && parts(1).nonEmpty then g.cookies.updateDynamic(parts(0))(parts(1))
@@ -185,31 +185,30 @@ object PostingHandler {
 
   private def checkSizes(g: js.Dynamic, d: Draft): Unit = {
     if truth(g.strongCap) then return
-    def setting(name: String, fallback: Int): js.Any = {
-      val v = g.settings.selectDynamic(name)
-      if v == null || js.isUndefined(v) then fallback else v
-    }
-    for (value, settingName, default, kind) <- List((d.form.subject, "BBS_SUBJECT_COUNT", 64, PostField.Subject), (d.form.name, "BBS_NAME_COUNT", 64, PostField.Name), (d.form.mail, "BBS_MAIL_COUNT", 64, PostField.Mail)) do {
-      val len = value.length
-      val limit = setting(settingName, default)
-      if len > number(limit) then reject(PostingError.FieldTooLong(kind, len, str(limit)))
+    /** 上限値と、文言に出す上限の文字列（設定値そのもの、無ければ既定値）。 */
+    def limit(name: String, default: Int): (Double, String) = (d.settings.number(name, default), d.settings.get(name).getOrElse(default.toString))
+    for (value, settingName, kind) <- List((d.form.subject, "BBS_SUBJECT_COUNT", PostField.Subject), (d.form.name, "BBS_NAME_COUNT", PostField.Name), (d.form.mail, "BBS_MAIL_COUNT", PostField.Mail)) do {
+      val (max, shown) = limit(settingName, 64)
+      if value.length > max then reject(PostingError.FieldTooLong(kind, value.length, shown))
     }
     val message = d.form.message
     if message.startsWith("!ADMIN:") then return
-    var limit = setting("BBS_MESSAGE_COUNT", 4096)
-    if number(g.number) == 1 && number(limit) < 65536 then limit = 65536
-    if message.length > number(limit) then reject(PostingError.FieldTooLong(PostField.Message, message.length, str(limit)))
+    val (messageMax, messageShown) = {
+      val configured = limit("BBS_MESSAGE_COUNT", 4096)
+      if number(g.number) == 1 && configured._1 < 65536 then (65536d, "65536") else configured
+    }
+    if message.length > messageMax then reject(PostingError.FieldTooLong(PostField.Message, message.length, messageShown))
     val lines = message.split("<br>", -1).length
-    val lineLimit = number(setting("BBS_LINE_NUMBER", 30)) * 2
+    val lineLimit = d.settings.number("BBS_LINE_NUMBER", 30) * 2
     if number(g.number) >= 2 && lines > lineLimit then reject(PostingError.TooManyLines(lines, str(lineLimit)))
-    if d.form.name.isEmpty then d.form = d.form.copy(name = or(g.settings.BBS_NONAME_NAME, "名無しさん＠３ちゃんねる"))
+    if d.form.name.isEmpty then d.form = d.form.copy(name = d.settings.orElse("BBS_NONAME_NAME", "名無しさん＠３ちゃんねる"))
   }
 
   private def makeShikibetsu(g: js.Dynamic, d: Draft, user: Option[PostingUser]): Future[Unit] = {
-    val group = or(g.settings.BBS_ID_GROUP, d.form.bbs)
-    val date = str(math.floor((int(g.unixtime) + 32400) / number(or(g.settings.BBS_ID_RESET, "86400"))))
+    val group = d.settings.orElse("BBS_ID_GROUP", d.form.bbs)
+    val date = str(math.floor((int(g.unixtime) + 32400) / JsNumber.parse(d.settings.orElse("BBS_ID_RESET", "86400"))))
     def id(seed: String, len: Int) = sha(md5(seed + group + date + str(g.md5Salt))).map(_.take(len))
-    val shiki = if truth(g.cap) then Future.successful("★") else or(g.settings.BBS_ID_SHIKIBETSU, "checked") match {
+    val shiki = if truth(g.cap) then Future.successful("★") else d.settings.orElse("BBS_ID_SHIKIBETSU", "checked") match {
       case "checked" =>
         for {
           ken <- id(str(g.ken), 2)
@@ -229,7 +228,7 @@ object PostingHandler {
   }
 
   /** スレ立てなら保存する `owner` を返し、返信なら該当時に名前欄へ ` (主)` を付ける。キャップは対象外（docs/トリップ・ID廃止とスレ主表示.md §2.4）。 */
-  private def markNusi(g: js.Dynamic, d: Draft, user: Option[PostingUser]): Future[js.UndefOr[js.Dynamic]] =
+  private def markNusi(g: js.Dynamic, d: Draft, user: Option[PostingUser], boardSettings: BbsSettings): Future[js.UndefOr[js.Dynamic]] =
     if truth(g.cap) then Future.successful(js.undefined) else {
       val ip = if g.ip == null || js.isUndefined(g.ip) then "" else KeyIp.of(str(g.ip))
       for {
@@ -240,8 +239,8 @@ object PostingHandler {
         if number(g.number) == 1 then ThreadOwnerCodec.encode(poster)
         else {
           val owner = if truth(g.threadOwner) then Some(ThreadOwnerCodec.decode(g.threadOwner)) else None
-          if NusiMark.applies(isReply = true, cap = false, noNusi = d.form.noNusi, boardDisabled = truth(g.boardDisableNusi),
-            threadDisabled = eq(g.settings.BBS_DISABLE_NUSI, "checked"), owner = owner, poster = poster) then d.form = d.form.copy(name = d.form.name + NusiMark.suffix)
+          if NusiMark.applies(isReply = true, cap = false, noNusi = d.form.noNusi, boardDisabled = boardSettings.checked("BBS_DISABLE_NUSI"),
+            threadDisabled = d.settings.checked("BBS_DISABLE_NUSI"), owner = owner, poster = poster) then d.form = d.form.copy(name = d.form.name + NusiMark.suffix)
           js.undefined
         }
       }
@@ -250,8 +249,8 @@ object PostingHandler {
   private def prepare(g: js.Dynamic, d: Draft): Unit =
     if number(g.number) >= 2 then {
       if d.form.mail.contains("sage") then g.sage = 1
-      if int(d.form.key) + int(or(g.settings.BBS_FORCE_SAGE, "9999999999")) < int(g.unixtime) then g.sage = 1
-      if eq(g.settings.BBS_LIVE, "checked") && js.Math.random() * 10 >= 1 then g.sage = 1
+      if int(d.form.key) + d.settings.int("BBS_FORCE_SAGE", "9999999999") < int(g.unixtime) then g.sage = 1
+      if d.settings.checked("BBS_LIVE") && js.Math.random() * 10 >= 1 then g.sage = 1
     }
 
   private def threadCreationLimit(g: js.Dynamic, d: Draft, req: PostingRequest, boardSettings: BbsSettings): Future[js.UndefOr[js.Dynamic]] = {
@@ -292,15 +291,21 @@ object PostingHandler {
   private def updateThread(g: js.Dynamic, d: Draft, e: WorkerEnv, creationLimit: js.UndefOr[js.Dynamic], owner: js.UndefOr[js.Dynamic]): Future[Unit] = {
     val stub = thread(d, e)
     guarded(g, d, "updateThreadFile", "ログファイルに書けませんでした。", "unixtime") {
-      val initial: js.UndefOr[String] = if number(g.number) == 1 then js.Object.keys(g.settings.asInstanceOf[js.Object]).map(k => k + "=" + str(g.settings.selectDynamic(k)) + "<>").mkString else js.undefined
+      val initial: js.UndefOr[String] = if number(g.number) == 1 then initialSettings(d.settings) else js.undefined
       val formatter = js.Dynamic.newInstance(js.Dynamic.global.Intl.DateTimeFormat)("ja-JP", js.Dynamic.literal(year = "numeric", month = "2-digit", day = "2-digit", weekday = "short", hour = "2-digit", minute = "2-digit", second = "2-digit", timeZone = "Asia/Tokyo"))
       val date = formatter.format(new js.Date(int(g.unixtime) * 1000)).asInstanceOf[String]
       d.form = d.form.copy(message = d.form.message.jsReplace("<br>", " <br> "))
       val dat = s"${d.form.name}<><>$date<> ${d.form.message} <>${if number(g.number) == 1 then str(g.subject) else ""}"
-      stub.addRes(dat, s"${str(g.number)}<>${str(g.userInfo)}", js.Dynamic.literal(bbs = d.form.bbs, key = d.form.key, title = g.subject, sage = truth(g.sage), maxThreads = int(or(g.boardSettings.BBS_MAX_MENU_THREAD, "700")), create = number(g.number) == 1, initialSettings = initial, creationLimit = creationLimit, owner = owner)).toFuture.map(n => g.number = n).recover {
+      stub.addRes(dat, s"${str(g.number)}<>${str(g.userInfo)}", js.Dynamic.literal(bbs = d.form.bbs, key = d.form.key, title = g.subject, sage = truth(g.sage), maxThreads = d.settings.int("BBS_MAX_MENU_THREAD", "700"), create = number(g.number) == 1, initialSettings = initial, creationLimit = creationLimit, owner = owner)).toFuture.map(n => g.number = n).recover {
         case CreationRejected(rejection) => reject(PostingError.ThreadCreation(rejection))
       }
     }
+  }
+
+  /** スレ立て時に保存する初期スレ設定。キーの順は JavaScript のオブジェクトと同じ（整数のキーが先）。 */
+  private def initialSettings(settings: BbsSettings): String = {
+    val dictionary = settings.value.toJSDictionary
+    js.Object.keys(dictionary.asInstanceOf[js.Object]).map(k => k + "=" + dictionary(k) + "<>").mkString
   }
 
   private def updateSubback(g: js.Dynamic, d: Draft, e: WorkerEnv): Future[Unit] =
@@ -337,7 +342,7 @@ object PostingHandler {
       for {
         obj <- bucket.get("headline.txt").asInstanceOf[js.Promise[js.Dynamic]].toFuture
         old <- if obj == null then Future.successful("") else obj.text().asInstanceOf[js.Promise[String]].toFuture
-        text = new StringBuilder(s"${str(g.unixtime)}\n${d.form.bbs}<>${str(g.boardSettings.BBS_TITLE)}<>${str(g.unixtime)}<>${d.form.key}<>${d.form.message.take(30)}\n")
+        text = new StringBuilder(s"${str(g.unixtime)}\n${d.form.bbs}<>${d.settings.get("BBS_TITLE").getOrElse("undefined")}<>${str(g.unixtime)}<>${d.form.key}<>${d.form.message.take(30)}\n")
         _ = if obj != null then old.split("\n", -1).slice(1, 301).foreach { line =>
           val f = trim(line).split("<>", -1)
           if f.length >= 5 && matches(f(0), "^[a-zA-Z0-9\\-_]+$") && f(1).nonEmpty && d.form.bbs != f(0) then text.append(f.take(5).mkString("<>")).append('\n')

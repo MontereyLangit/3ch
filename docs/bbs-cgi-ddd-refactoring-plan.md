@@ -2,7 +2,7 @@
 
 2026-11-01。[認証・PHOEBE・連投規制 設計](auth-phoebe-rate-limit-design.md)（以下「設計書」）を載せる前提として、
 `bbs.cgi` の投稿処理（`bbs/src/main/scala/io/_3ch/bbs/handler/PostingHandler.scala`）を
-ドメインモデル・ドメインサービス・アプリケーションサービス・リポジトリ・DO に分ける。**状態: 段 1 まで完了（段 2 以降は実施中）。**
+ドメインモデル・ドメインサービス・アプリケーションサービス・リポジトリ・DO に分ける。**状態: 段 3 まで完了（段 0a・0b・1・2・3。記録は [bbs-cgi-ddd-refactoring-review.md](bbs-cgi-ddd-refactoring-review.md)）。**
 2026-11-02 の Opus 5 セルフレビュー（[auth-phoebe-review.md](auth-phoebe-review.md)）の指摘を反映した。
 2026-11-05、`develop` の取り込みに合わせて前提を改めた（`develop_v6s` と `feature/board_top` は PR #37 で統合済み、パッケージは `io._3ch.*`）。
 同日、トリップと ID の廃止・`!id`・スレ主表示・全板共通スレ（develop 3775f12）の取り込みに合わせて §2〜§5 を改めた。
@@ -85,7 +85,7 @@ bbs/src/main/scala/io/_3ch/bbs/
 | 0b | **設定の読み方の仕上げ**: ブランチ統合は PR #37 で済み、板設定は `BoardRepository` → `BbsSettings.create`、スレ設定は `BbsSettings.parse` で読むようになった。残るのは、スレ立て規制が `BbsSettings` の出力を `ThreadCreationSettings.settingsMap` で読み直している二重の解析で、これを `BbsSettings` の値を直接使う形にする。振る舞いが変わる場合はスナップショットの差分を意図した変更として記録し、独立コミットにする（AGENTS.md 3.3） | `ThreadCreationSettings` の整理、差分の記録 |
 | 1 | **エラーモデル**: `deny(g, 文言)` を `PostingError` と `PostingText.message` に置き換える。`Rejected` 例外は `PostingService` の内部実装に閉じる。`guarded` の内部エラー文言は `Internal` の文言化で同じ書式を再現する | `domain/posting/PostingError.scala`、`PostingText` の文言表、`PostingTextSuite`（全エラーの文言一致） |
 | 2 | **入力の型付け**: `PostingRequest.from(Request)`、`FormSanitizer`（`readForm` の置換列・Shift_JIS 復号・`submit=書` 判定）、`PostRouting`（`!newthread`、924 / 900、禁止板、スレ立て/返信の判定）。`g.form` を `PostForm` に置き換える | `bbs/domain/posting/{FormSanitizer, PostRouting}.scala`、`FormSanitizerSuite`（エスケープ・制御文字・`★☆` 変換・KB-03 の固定） |
-| 3 | **設定**: `BoardRepository.getBoardSettings` と新設 `ThreadRepository.getSettings` から `BbsSettings` を取り、`PostingContext.settings` に合成。`BbsSettings` に型付き読み（`int(name, default)`、`checked(name)`）を足す。KB-12（既定値とのマージ無し）は維持 | `common/domain/BbsSettings` 拡張、`repository/ThreadRepository.scala` |
+| 3 | **設定**: `BoardRepository.getBoardSettings` と新設 `ThreadRepository.getSettings` から `BbsSettings` を取り、合成する（段 3 ではハンドラ内に置き、段 7 で `PostingContext.settings` に移す）。`BbsSettings` に型付き読み（`orElse`、`checked(name)`、JavaScript の `Number` / `parseInt` と同じに読む `number` / `int`、`merged`）を足す。KB-12（既定値とのマージ無し）は維持 | `common/domain/BbsSettings` 拡張、`repository/ThreadRepository.scala` |
 | 4 | **投稿者の構成要素**（トリップと ID は develop で廃止済み）: `CapHandle`（`processCap` の表示名規則）と `CapRepository`（KV）、`ShikibetsuSeeds` と `DateSalt`（`makeShikibetsu` の種）、`ShikibetsuMode` / `ShikibetsuFormat`（識別子書式）、`NameField`（名前＋ ` </b>(@ユーザーID)<b>` ＋ ` </b>(識別子)<b>` ＋ ` (主)` の連結。KB-09 の空括弧も再現。既存の `NameCommands` / `PostingUser` / `NusiMark` / `ThreadOwner` を使う）、全板共通スレの判定（`GlobalThread`、`checkGlobalThread`） | `common/domain/posting/{CapHandle, NameField}.scala`、`common/domain/identity/*`、`repository/CapRepository.scala`、単体テスト |
 | 5 | **規制**: `Moderation.parseRules` → `ModerationRuleSet.parse`（`js.RegExp` を内包）、`Moderation.check(gb)` → `ModerationService.check(context, rules): ModerationDecision`（`Deny(kind)` / `Mark` / `Pass`。`Mark` の名前・本文加工は `PostingContext` の `copy` で返す）、`UserInfo`（log の `userInfo` 書式。設計書 §5.3 の `UID:` / `Device:` 実値化の差し込み口）、`ModerationRuleRepository`（R2 `deny.cgi` `ngwords.cgi`） | `bbs/domain/posting/moderation/{ModerationRuleSet, ModerationDecision}.scala`、`ModerationSuite` の移設 |
 | 6 | **保存**: `DatLineFormatter`（dat 行・log 行。`Intl.DateTimeFormat` の日付は `Clock` 経由で文字列にして渡す）、`ThreadRepository.addRes` と `durable/codec/PostingCodec`（`posting: js.Dynamic` を DO 側で case class に変換。RPC の外形は変えず、旧形式も読む）、`ArchiveIndexRepository`（`updateSubback` / `updateHeadline` の R2 ETag 条件付き書き込み。KB-25 維持）。応答ヘッダを `Seq[(String, String)]` にして `Set-Cookie` を複数出せるようにする（`Headers.append`。現行の `js.Dictionary` では 1 本に上書きされる） | `common/domain/posting/DatLineFormatter.scala`、`durable/codec/PostingCodec.scala`、`repository/ArchiveIndexRepository.scala`、dat / log のバイト一致テスト |
@@ -104,7 +104,7 @@ bbs/src/main/scala/io/_3ch/bbs/
   - `tests/golden/` とは分ける（golden は v5 由来で手で編集しない表。スナップショットは v6 の現行コードから生成し、意図した変更時に再生成する）。
   - Shift_JIS の本文・バイト列は base64 で載せる。`Last-Modified` と `Date` は固定時刻から決まるので正規化しない。
   - 現行の内部エラー文言に出る `undefined`（`g.nowTime` 未設定。KB-39）はそのまま固定する。
-  - 生成は `sbt "bbs/testOnly io._3ch.bbs.handler.PostingSnapshotSuite -- --update"`（環境変数ではなく引数で更新モードにする）。再生成した差分はレビュー記録に理由を書いてからコミットする。
+  - 生成は `sbt "bbs/testOnly io._3ch.bbs.handler.PostingSnapshotSuite -- --include-tags=update"`（環境変数ではなく引数で更新モードにする。munit が `--update` のような独自引数をスイートに渡さないため、タグ指定を使う）。再生成した差分はレビュー記録に理由を書いてからコミットする。
 - `sbt 'set ThisBuild / scalacOptions += "-no-indent"' Test/compile`、`npm run v6:build`、`npm run v6:typecheck`、`npm test`（実 workerd）、`git diff --check`。
 - 各段でレビュー連鎖（AGENTS.md 3.2）。記録は `docs/bbs-cgi-ddd-refactoring-review.md` に段ごとの表で残す。
 
