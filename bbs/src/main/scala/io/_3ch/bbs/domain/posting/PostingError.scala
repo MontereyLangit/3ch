@@ -1,6 +1,6 @@
 package io._3ch.bbs.domain.posting
 
-import io._3ch.bbs.domain.posting.moderation.ThreadCreationRejection
+import io._3ch.bbs.domain.posting.moderation.{ThreadCreationRejection, ThreadCreationSettingError}
 
 /** 文字数を検査する入力欄。 */
 enum PostField(val code: String) {
@@ -23,6 +23,15 @@ enum ModerationDenial(val code: String) {
   case NgWord extends ModerationDenial("ngword")
   case TateDame extends ModerationDenial("tatedame")
   case Host extends ModerationDenial("host")
+}
+
+/** 内部エラーが起きた投稿処理の段階。 */
+enum PostingStage(val code: String) {
+  case BoardSettings extends PostingStage("get-board-settings")
+  case ThreadDataAndSettings extends PostingStage("get-thread-data-and-thread-settings")
+  case ThreadWrite extends PostingStage("update-thread-file")
+  case Subback extends PostingStage("update-subback")
+  case Headline extends PostingStage("update-headline")
 }
 
 /** 内部エラーが起きた段の状況。`time` は文言に出す時刻の文字列（未設定なら `undefined`）。 */
@@ -52,10 +61,10 @@ enum PostingError {
   case GlobalThreadCreateCapOnly
   case GlobalThreadCapOnly
   case Moderated(denial: ModerationDenial)
-  case InvalidCreationSettings(detail: String)
+  case InvalidCreationSettings(reason: ThreadCreationSettingError)
   case ThreadCreation(rejection: ThreadCreationRejection)
   case ArchiveConflict(target: String, site: FailureSite)
-  case Internal(stage: String, description: String, site: FailureSite, cause: String)
+  case Internal(stage: PostingStage, site: FailureSite, cause: String)
 
   def code: String = this match {
     case MethodNotPost => "request:method"
@@ -83,6 +92,6 @@ enum PostingError {
     case InvalidCreationSettings(_) => "thread-creation:settings"
     case ThreadCreation(rejection) => rejection.code
     case ArchiveConflict(_, _) => "internal:archive-conflict"
-    case Internal(stage, _, _, _) => "internal:" + stage.flatMap(c => if c.isUpper then "-" + c.toLower else c.toString)
+    case Internal(stage, _, _) => "internal:" + stage.code
   }
 }

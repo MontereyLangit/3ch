@@ -1,7 +1,7 @@
 package io._3ch.bbs.handler
 
-import io._3ch.bbs.domain.posting.{BrokenLogKind, ModerationDenial, PostField, PostingError}
-import io._3ch.bbs.domain.posting.moderation.ThreadCreationRejection
+import io._3ch.bbs.domain.posting.{BrokenLogKind, ModerationDenial, PostField, PostingError, PostingStage}
+import io._3ch.bbs.domain.posting.moderation.{ThreadCreationRejection, ThreadCreationSettingError}
 
 /** 投稿処理の既定の板設定と、拒否理由の文言。 */
 object PostingText {
@@ -20,6 +20,21 @@ object PostingText {
     case PostField.Name => "名前"
     case PostField.Mail => "メールアドレス"
     case PostField.Message => "本文"
+  }
+
+  def creationSettingsMessage(reason: ThreadCreationSettingError): String = reason match {
+    case ThreadCreationSettingError.NonNegativeIntegerRequired(setting) => s"$setting は0以上の整数で指定してください。"
+    case ThreadCreationSettingError.AboveMaximum(setting, maximum) => s"$setting は $maximum 以下で指定してください。"
+    case ThreadCreationSettingError.InvalidFormat(setting) => s"$setting の形式が不正です。"
+    case ThreadCreationSettingError.PositiveAsnRequired => "BBS_THREAD_JUNBAN_AS_ONLY のASNは1以上で指定してください。"
+  }
+
+  private def stageLabel(stage: PostingStage): String = stage match {
+    case PostingStage.BoardSettings => "getBoardSettings"
+    case PostingStage.ThreadDataAndSettings => "getThreadDataAndThreadSettings"
+    case PostingStage.ThreadWrite => "updateThreadFile"
+    case PostingStage.Subback => "updateSubback"
+    case PostingStage.Headline => "updateHeadline"
   }
 
   /** 拒否理由をエラー画面の文言にする。 */
@@ -51,12 +66,14 @@ object PostingText {
     case PostingError.Moderated(ModerationDenial.Host) => "アクセス規制中です！！"
     case PostingError.GlobalThreadCreateCapOnly => globalThreadCreateCapOnly
     case PostingError.GlobalThreadCapOnly => globalThreadCapOnly
-    case PostingError.InvalidCreationSettings(detail) => detail
+    case PostingError.InvalidCreationSettings(reason) => creationSettingsMessage(reason)
     case PostingError.ThreadCreation(ThreadCreationRejection.Broad(_)) => threadCreationBroad
     case PostingError.ThreadCreation(_) => threadCreationNarrow
     case PostingError.ArchiveConflict(target, site) =>
       s"updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(${site.clock}:${site.time} bbs:${site.bbs} key:${site.key} number:${site.number} errmsg:updateSubback->${target}_update_conflicted!)"
-    case PostingError.Internal(stage, description, site, cause) =>
-      s"$stage error. $description(${site.clock}:${site.time} bbs:${site.bbs} key:${site.key} number:${site.number} errmsg:$stage->$cause)<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。"
+    case PostingError.Internal(stage, site, cause) =>
+      val label = stageLabel(stage)
+      val description = if stage == PostingStage.ThreadWrite then "ログファイルに書けませんでした。" else "不明なエラーが発生しました。"
+      s"$label error. $description(${site.clock}:${site.time} bbs:${site.bbs} key:${site.key} number:${site.number} errmsg:$label->$cause)<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。"
   }
 }

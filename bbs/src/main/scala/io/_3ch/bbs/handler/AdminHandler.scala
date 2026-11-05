@@ -37,7 +37,7 @@ object AdminHandler {
     "BBS_THREAD_JUNBAN_AS_ONLY" -> "県で分けずAS全体を対象にするASN（空白・カンマ区切り）"
   )
   private def validateCreationSettings(value: String): ThreadCreationSettings.Parsed =
-    ThreadCreationSettings.parseText(value).fold(fail, identity)
+    ThreadCreationSettings.parseText(value).fold(reason => fail(PostingText.creationSettingsMessage(reason)), identity)
   private def creationForm(settings: String): String = {
     val parsed = ThreadCreationSettings.parseText(settings)
     val values = parsed.toOption.map { p => Map(
@@ -51,7 +51,7 @@ object AdminHandler {
       s"""<label>$label <input name="$name" value="${escape(values.getOrElse(name, ""))}"></label>"""
     }.mkString
     "<h2>スレ立て規制</h2><p>通常は同一IP・スレタイ、広域は同一UA・AS＋県（海外は海外全体）。件数0でその規制を無効にします。</p>" +
-      parsed.left.toOption.map(message => s"<p>${escape(message)}</p>").getOrElse("") + form(fields, "saveCreationLimit", "スレ立て規制を保存")
+      parsed.left.toOption.map(reason => s"<p>${escape(PostingText.creationSettingsMessage(reason))}</p>").getOrElse("") + form(fields, "saveCreationLimit", "スレ立て規制を保存")
   }
   private def editable(v: String): String = {
     val entities = Map("&lt;" -> "<", "&gt;" -> ">", "&quot;" -> "\"", "&apos;" -> "'", "&amp;" -> "&")

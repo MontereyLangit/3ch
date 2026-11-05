@@ -4,7 +4,7 @@ import io._3ch.bbs.external.cloudflare.*
 import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.hash.{Md5, WebHash}
 import io._3ch.bbs.repository.{BoardRepository, CapRepository, ThreadRepository}
-import io._3ch.bbs.domain.posting.{BrokenLogKind, ClientIdentity, FailureSite, FormSanitizer, GlobalThread, KeyIp, NusiMark, PostField, PostRouting, PostingContext, PostingError, PostingIdentity, PostingUser, ThreadOwner}
+import io._3ch.bbs.domain.posting.{BrokenLogKind, ClientIdentity, FailureSite, GlobalThread, KeyIp, NusiMark, PostField, PostRouting, PostingContext, PostingError, PostingIdentity, PostingStage, PostingUser, ThreadOwner}
 import io._3ch.bbs.domain.posting.moderation.ThreadCreationRejection
 import io._3ch.bbs.durable.codec.ThreadOwnerCodec
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
@@ -41,10 +41,10 @@ object PostingHandler {
     case _ => e.toString
   }
   private def site(g: js.Dynamic, d: Draft, clock: String, time: js.Any): FailureSite = FailureSite(clock, str(time), d.form.bbs, d.form.key, str(g.number))
-  private def guarded[A](g: js.Dynamic, d: Draft, stage: String, description: String, clock: String)(f: => Future[A]): Future[A] =
+  private def guarded[A](g: js.Dynamic, d: Draft, stage: PostingStage, clock: String)(f: => Future[A]): Future[A] =
     Future.unit.flatMap(_ => f).recover { case rejected: Rejected => throw rejected; case e =>
-      val time = if clock == "time" || stage == "getThreadDataAndThreadSettings" || stage == "updateThreadFile" then g.time else g.nowTime
-      reject(PostingError.Internal(stage, description, site(g, d, clock, time), errorText(e)))
+      val time = if clock == "time" || stage == PostingStage.ThreadDataAndSettings || stage == PostingStage.ThreadWrite then g.time else g.nowTime
+      reject(PostingError.Internal(stage, site(g, d, clock, time), errorText(e)))
     }
 
   /** 投稿処理中のフォームと設定（板設定、返信ならスレ設定で上書き）。エラー画面にはその時点のフォームを出す。 */
@@ -107,7 +107,7 @@ object PostingHandler {
   }
 
   private def readForm(g: js.Dynamic, d: Draft, r: Request, isMonazilla: Boolean): Future[Unit] = r.arrayBuffer().toFuture.map { buffer =>
-    FormSanitizer.decode(new Uint8Array(buffer), isMonazilla).flatMap(form => PostRouting.route(form, str(g.unixtime))) match {
+    PostingFormDecoder.decode(new Uint8Array(buffer), isMonazilla).flatMap(form => PostRouting.route(form, str(g.unixtime))) match {
       case Left((error, form)) => d.form = form; reject(error)
       case Right(form) => d.form = form
     }
@@ -125,7 +125,7 @@ object PostingHandler {
 
   private final case class LoadedBoard(id: BoardId, settings: BbsSettings)
 
-  private def boardSettings(g: js.Dynamic, d: Draft, e: WorkerEnv): Future[LoadedBoard] = guarded(g, d, "getBoardSettings", "不明なエラーが発生しました。", "time") {
+  private def boardSettings(g: js.Dynamic, d: Draft, e: WorkerEnv): Future[LoadedBoard] = guarded(g, d, PostingStage.BoardSettings, "time") {
     val board = BoardId.create(d.form.bbs).fold(_ => reject(PostingError.ForbiddenBoard), identity)
     BoardRepository.getBoardSettings(board, e).map { boardSettings =>
       d.settings = boardSettings
@@ -134,7 +134,7 @@ object PostingHandler {
   }
   private def threadSettings(g: js.Dynamic, d: Draft, board: LoadedBoard, e: WorkerEnv): Future[Unit] = {
     val stub = thread(d, e)
-    guarded(g, d, "getThreadDataAndThreadSettings", "不明なエラーが発生しました。", "unixtime") {
+    guarded(g, d, PostingStage.ThreadDataAndSettings, "unixtime") {
       if d.settings.checked("BBS_HEISA") then reject(PostingError.Closed)
       if d.form.kind == PostKind.NewThread then stub.getDat().toFuture.map { dat =>
         if dat.nonEmpty then reject(PostingError.DuplicateKey)
@@ -243,7 +243,7 @@ object PostingHandler {
       val board = BoardId.create(d.form.bbs).fold(_ => reject(PostingError.ForbiddenBoard), identity)
       val key = d.form.key.toLongOption.toRight("").flatMap(ThreadKey.create).fold(_ => reject(PostingError.InvalidKey), identity)
       if (d.cap.isDefined) return Future.successful(js.undefined)
-      val settings = ThreadCreationSettings.fromSettings(boardSettings).fold(message => reject(PostingError.InvalidCreationSettings(message)), identity)
+      val settings = ThreadCreationSettings.fromSettings(boardSettings).fold(reason => reject(PostingError.InvalidCreationSettings(reason)), identity)
       val country = req.country.getOrElse("").trim.toUpperCase
       val asn = req.asn.getOrElse("").trim.toLongOption.filter(n => n > 0 && n <= 4294967295L).map(_.toString).getOrElse("")
       val region = req.region.getOrElse("").trim
@@ -274,7 +274,7 @@ object PostingHandler {
 
   private def updateThread(g: js.Dynamic, d: Draft, e: WorkerEnv, creationLimit: js.UndefOr[js.Dynamic], owner: js.UndefOr[js.Dynamic]): Future[Unit] = {
     val stub = thread(d, e)
-    guarded(g, d, "updateThreadFile", "ログファイルに書けませんでした。", "unixtime") {
+    guarded(g, d, PostingStage.ThreadWrite, "unixtime") {
       val initial: js.UndefOr[String] = if number(g.number) == 1 then initialSettings(d.settings) else js.undefined
       val formatter = js.Dynamic.newInstance(js.Dynamic.global.Intl.DateTimeFormat)("ja-JP", js.Dynamic.literal(year = "numeric", month = "2-digit", day = "2-digit", weekday = "short", hour = "2-digit", minute = "2-digit", second = "2-digit", timeZone = "Asia/Tokyo"))
       val date = formatter.format(new js.Date(int(g.unixtime) * 1000)).asInstanceOf[String]
@@ -293,7 +293,7 @@ object PostingHandler {
   }
 
   private def updateSubback(g: js.Dynamic, d: Draft, e: WorkerEnv): Future[Unit] =
-    if number(g.number) > 1 then Future.unit else guarded(g, d, "updateSubback", "不明なエラーが発生しました。", "unixtime") {
+    if number(g.number) > 1 then Future.unit else guarded(g, d, PostingStage.Subback, "unixtime") {
       val bucket = e.ch3www.asInstanceOf[js.Dynamic]
       def get(file: String): Future[js.Dynamic] = bucket.get(file).asInstanceOf[js.Promise[js.Dynamic]].toFuture
       def text(obj: js.Dynamic): Future[String] = if obj == null then Future.successful("") else obj.text().asInstanceOf[js.Promise[String]].toFuture.map(_.split("\n", -1).drop(1).mkString("\n"))
@@ -321,7 +321,7 @@ object PostingHandler {
     }
 
   private def updateHeadline(g: js.Dynamic, d: Draft, e: WorkerEnv): Future[Unit] =
-    if truth(g.sage) then Future.unit else guarded(g, d, "updateHeadline", "不明なエラーが発生しました。", "unixtime") {
+    if truth(g.sage) then Future.unit else guarded(g, d, PostingStage.Headline, "unixtime") {
       val bucket = e.ch3www.asInstanceOf[js.Dynamic]
       for {
         obj <- bucket.get("headline.txt").asInstanceOf[js.Promise[js.Dynamic]].toFuture

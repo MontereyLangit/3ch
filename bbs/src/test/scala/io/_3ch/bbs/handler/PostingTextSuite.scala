@@ -1,8 +1,8 @@
 package io._3ch.bbs.handler
 
 import munit.FunSuite
-import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureSite, ModerationDenial, PostField, PostingError}
-import io._3ch.bbs.domain.posting.moderation.{ThreadCreationRejection, ThreadCreationRateLimit}
+import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureSite, ModerationDenial, PostField, PostingError, PostingStage}
+import io._3ch.bbs.domain.posting.moderation.{ThreadCreationRejection, ThreadCreationRateLimit, ThreadCreationSettingError}
 
 /** `PostingText.message` が拒否理由ごとに従来の文言を返すことの固定。 */
 class PostingTextSuite extends FunSuite {
@@ -39,12 +39,12 @@ class PostingTextSuite extends FunSuite {
     PostingError.Moderated(ModerationDenial.NgWord) -> "NGワード禁止！",
     PostingError.Moderated(ModerationDenial.TateDame) -> "このホストではスレッドを立てられません。",
     PostingError.Moderated(ModerationDenial.Host) -> "アクセス規制中です！！",
-    PostingError.InvalidCreationSettings("BBS_THREAD_TATESUGI は0以上の整数で指定してください。") -> "BBS_THREAD_TATESUGI は0以上の整数で指定してください。",
+    PostingError.InvalidCreationSettings(ThreadCreationSettingError.NonNegativeIntegerRequired("BBS_THREAD_TATESUGI")) -> "BBS_THREAD_TATESUGI は0以上の整数で指定してください。",
     PostingError.ThreadCreation(ThreadCreationRejection.Narrow(ThreadCreationRateLimit.Reason.Ip)) -> "スレッドを立てすぎです。しばらく待ってから投稿してください。",
     PostingError.ThreadCreation(ThreadCreationRejection.Capacity) -> "スレッドを立てすぎです。しばらく待ってから投稿してください。",
     PostingError.ThreadCreation(ThreadCreationRejection.Broad(ThreadCreationRateLimit.Reason.NetworkGroup)) -> "この接続環境ではスレッドを立てすぎです。しばらく待ってから投稿してください。",
     PostingError.ArchiveConflict("SubbackFIle", site) -> "updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(unixtime:undefined bbs:sample key:1700000000 number:1 errmsg:updateSubback->SubbackFIle_update_conflicted!)",
-    PostingError.Internal("getBoardSettings", "不明なエラーが発生しました。", FailureSite("time", "1700000000000", "sample", "1700000000", "0"), "Error: boom") ->
+    PostingError.Internal(PostingStage.BoardSettings, FailureSite("time", "1700000000000", "sample", "1700000000", "0"), "Error: boom") ->
       "getBoardSettings error. 不明なエラーが発生しました。(time:1700000000000 bbs:sample key:1700000000 number:0 errmsg:getBoardSettings->Error: boom)<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。"
   )
 
@@ -56,5 +56,35 @@ class PostingTextSuite extends FunSuite {
     val codes = expected.map(_._1).filterNot(_.isInstanceOf[PostingError.ThreadCreation]).map(_.code)
     codes.foreach(code => assert(code.matches("[a-z:-]+"), code))
     assertEquals(codes.distinct.size, codes.size)
+  }
+
+  test("スレ立て設定の失敗理由を管理画面と投稿画面で同じ文言にする") {
+    val cases = Seq(
+      ThreadCreationSettingError.NonNegativeIntegerRequired("BBS_THREAD_TATESUGI_RESET") -> "BBS_THREAD_TATESUGI_RESET は0以上の整数で指定してください。",
+      ThreadCreationSettingError.AboveMaximum("BBS_THREAD_JUNBAN", 1000) -> "BBS_THREAD_JUNBAN は 1000 以下で指定してください。",
+      ThreadCreationSettingError.InvalidFormat("BBS_THREAD_TATESUGI") -> "BBS_THREAD_TATESUGI の形式が不正です。",
+      ThreadCreationSettingError.PositiveAsnRequired -> "BBS_THREAD_JUNBAN_AS_ONLY のASNは1以上で指定してください。"
+    )
+    cases.foreach { (reason, text) =>
+      assertEquals(PostingText.creationSettingsMessage(reason), text)
+      assertEquals(PostingText.message(PostingError.InvalidCreationSettings(reason)), text)
+      assertEquals(PostingError.InvalidCreationSettings(reason).code, "thread-creation:settings")
+    }
+  }
+
+  test("内部エラーの段階ごとに診断名・説明・コードを保つ") {
+    val cases = Seq(
+      (PostingStage.BoardSettings, "getBoardSettings", "不明なエラーが発生しました。", "internal:get-board-settings"),
+      (PostingStage.ThreadDataAndSettings, "getThreadDataAndThreadSettings", "不明なエラーが発生しました。", "internal:get-thread-data-and-thread-settings"),
+      (PostingStage.ThreadWrite, "updateThreadFile", "ログファイルに書けませんでした。", "internal:update-thread-file"),
+      (PostingStage.Subback, "updateSubback", "不明なエラーが発生しました。", "internal:update-subback"),
+      (PostingStage.Headline, "updateHeadline", "不明なエラーが発生しました。", "internal:update-headline")
+    )
+    assertEquals(cases.map(_._1).toSet, PostingStage.values.toSet)
+    cases.foreach { (stage, label, description, code) =>
+      val error = PostingError.Internal(stage, site, "Error: boom")
+      assertEquals(error.code, code)
+      assertEquals(PostingText.message(error), s"$label error. $description(unixtime:undefined bbs:sample key:1700000000 number:1 errmsg:$label->Error: boom)<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。")
+    }
   }
 }

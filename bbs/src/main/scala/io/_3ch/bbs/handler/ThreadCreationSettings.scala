@@ -1,24 +1,24 @@
 package io._3ch.bbs.handler
 
-import io._3ch.bbs.domain.posting.moderation.ThreadCreationRateLimit
+import io._3ch.bbs.domain.posting.moderation.{ThreadCreationRateLimit, ThreadCreationSettingError}
 import io._3ch.common.domain.BbsSettings
 
 /** スレ立て設定を検証する。旧形式の件数/秒も受け付ける。 */
 object ThreadCreationSettings {
   final case class Parsed(limits: ThreadCreationRateLimit.Settings, asOnly: Set[String])
 
-  private def integer(value: String, name: String, maximum: Long): Either[String, Long] = {
-    if (!value.matches("[0-9]+")) Left(s"$name は0以上の整数で指定してください。")
-    else value.toLongOption.filter(_ <= maximum).toRight(s"$name は $maximum 以下で指定してください。")
+  private def integer(value: String, name: String, maximum: Long): Either[ThreadCreationSettingError, Long] = {
+    if (!value.matches("[0-9]+")) Left(ThreadCreationSettingError.NonNegativeIntegerRequired(name))
+    else value.toLongOption.filter(_ <= maximum).toRight(ThreadCreationSettingError.AboveMaximum(name, maximum))
   }
 
-  def parseAsOnly(value: String): Either[String, Set[String]] = {
-    value.trim.split("[,\\s]+", -1).filter(_.nonEmpty).foldLeft[Either[String, Set[String]]](Right(Set.empty)) { (acc, token) =>
+  def parseAsOnly(value: String): Either[ThreadCreationSettingError, Set[String]] = {
+    value.trim.split("[,\\s]+", -1).filter(_.nonEmpty).foldLeft[Either[ThreadCreationSettingError, Set[String]]](Right(Set.empty)) { (acc, token) =>
       val digits = token.toUpperCase.stripPrefix("AS")
       for {
         result <- acc
         asn <- integer(digits, "BBS_THREAD_JUNBAN_AS_ONLY", 4294967295L)
-        _ <- Either.cond(asn > 0, (), "BBS_THREAD_JUNBAN_AS_ONLY のASNは1以上で指定してください。")
+        _ <- Either.cond(asn > 0, (), ThreadCreationSettingError.PositiveAsnRequired)
       } yield result + asn.toString
     }
   }
@@ -29,16 +29,16 @@ object ThreadCreationSettings {
     if (parts.length == 2) Some(parts(0).trim -> parts(1).trim) else None
   }.toMap
 
-  def parseText(text: String): Either[String, Parsed] = parse(settingsMap(text))
+  def parseText(text: String): Either[ThreadCreationSettingError, Parsed] = parse(settingsMap(text))
 
-  /** 解析済みの板設定から読む。`BbsSettings` はキー末尾の空白を残すので、[[settingsMap]] と同じくキーの前後空白を除いて後勝ちにする。 */
-  def fromSettings(settings: BbsSettings): Either[String, Parsed] =
+  /** 設定名の前後空白を除き、重複は後勝ちで読む。 */
+  def fromSettings(settings: BbsSettings): Either[ThreadCreationSettingError, Parsed] =
     parse(settings.value.foldLeft(Map.empty[String, String]) { case (acc, (k, v)) => acc.updated(k.trim, v) })
 
-  def parse(values: Map[String, String]): Either[String, Parsed] = {
-    def limit(name: String, default: Int): Either[String, (Int, Double)] = {
+  def parse(values: Map[String, String]): Either[ThreadCreationSettingError, Parsed] = {
+    def limit(name: String, default: Int): Either[ThreadCreationSettingError, (Int, Double)] = {
       val parts = values.get(name).filter(_.nonEmpty).getOrElse(default.toString).split("/", -1)
-      if (parts.length > 2) Left(s"$name の形式が不正です。")
+      if (parts.length > 2) Left(ThreadCreationSettingError.InvalidFormat(name))
       else for {
         count <- integer(parts(0), name, 1000)
         reset <- integer(values.get(name + "_RESET").filter(_.nonEmpty).getOrElse(parts.lift(1).getOrElse("3600")), name + "_RESET", 315360000L)

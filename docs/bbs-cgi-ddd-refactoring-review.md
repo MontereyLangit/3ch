@@ -76,3 +76,14 @@
 | 検証 | `sbt test`（JVM 43・common JS 45・codegen 27・bbs 505、計 620 件）、`sbt 'set ThisBuild / scalacOptions += "-no-indent"' Test/compile`、`npm run v6:build`、`npm run v6:typecheck`、`npm test`（実 workerd を含む 46 件、スキップなし）、`git diff --check` が成功。投稿スナップショット 196 ケースは全件一致。クリーンなチェックアウトでは `IslandComponents` が未生成なので、先に `sbt codegen/run` を実行した |
 | 計画との差分 | 既存 `PostingUser`・`NusiMark`・`ThreadOwner` は `bbs/domain` に置いたまま利用し、`NameField` には `PostingUser.nameSuffix` の結果を渡す。` (主)` は従来の段で既存 `NusiMark` を使って付ける。`Moderation.decide` は投稿者情報の入力だけを型付き引数に変更し、ルールの分離（段 5）は行っていない |
 | 次の段 | 段 5（規制・`UserInfo`・R2 の規制ルール読込の分離）。アプリケーションサービスへの集約と `g` 全廃は段 7 |
+
+## 段 0a〜4 の再レビュー（2026-11-05）
+
+| 観点 | 指摘と対応 |
+| --- | --- |
+| 数値の互換性・テスト | `JsNumber` の `BigDecimal` による変換で負のゼロの符号が失われ、Scala.js では巨大な指数が例外になっていた（KB-41）。十進構文を検査して `Double.parseDouble` で読むように変更。負のゼロは逆数の符号も比較し、指数・非正規化数・丸め境界と日付窓を JVM / JS で検証する。HTTP 回帰テストは巨大指数の文字数設定と負のゼロの日付窓を扱う |
+| DDD・エラーモデル | `InvalidCreationSettings` の日本語文字列を `ThreadCreationSettingError` に、`Internal` の文字列段名と説明を `PostingStage` に置換。表示文言と診断用の段名は `PostingText` に集約した。管理画面も同じ設定エラーの変換を使い、表示内容を維持する |
+| 純粋関数・依存方向 | `handler/PostingFormDecoder` がバイト列・パーセント符号化を復号し、ドメインの `FormSanitizer.fromFields` が文字列を整形する。ドメインから `TextDecoder` と `SjisEncoding` への依存を削除。復号前の submit 検査、不正なパーセント符号化、重複項目、UTF-8 / Shift_JIS を別スイートで検証する |
+| Scaladoc・コメント | `ThreadCreationSettings.fromSettings` などを現在の契約の説明に絞り、互換化の経緯はこの記録に残した。型付きエラーが表示文言を保持しなくなり、Scaladoc と実装の食い違いも解消した |
+| レビュー | 実装者のセルフレビュー、独立レビュー、オーケストレーターの統合レビューを実施。追加の修正指摘なし。既存 `PostingHandlerSuite`・スナップショット・golden は変更していない |
+| 検証 | `sbt test` 計 634 件、`npm run pretest`、`npm run test`（実 workerd を含む 46 件、スキップなし）、`npm run v6:typecheck`、`sbt 'set ThisBuild / scalacOptions += "-no-indent"' Test/compile`、`git diff --check` が成功。既存の投稿スナップショット 196 ケースは全件一致。`npm run dev` はローカル専用の salt を指定して起動し、トップと投稿エラー応答の HTTP 200、管理者パスワード未設定時の既定の HTTP 503 を確認して停止した |
