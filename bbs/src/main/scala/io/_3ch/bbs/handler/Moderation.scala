@@ -32,7 +32,7 @@ object Moderation {
 
   private def truth(v: js.Any): Boolean = js.Dynamic.global.Boolean(v).asInstanceOf[Boolean]
   private def str(v: js.Any): String = js.Dynamic.global.String(v).asInstanceOf[String]
-  /** 規制を評価し、`gb.form` の名前・本文を更新する。拒否なら `gb.error` に文言を入れて 0、通過なら 1 を返す。 */
+  /** 規制を評価して gb.form の名前・本文を書き換える。拒否なら gb.error に文言を入れて 0、通過なら 1 */
   def check(gb: js.Dynamic, env: WorkerEnv): js.Promise[Int] = {
     val form = PostForm(name = str(gb.form.FROM), mail = str(gb.form.mail), message = str(gb.form.MESSAGE), subject = str(gb.form.subject), bbs = str(gb.form.bbs))
     val settings = BbsSettings(ListMap.from(gb.settings.asInstanceOf[js.Dictionary[js.Any]].toSeq.map((k, v) => k -> str(v))))
@@ -45,12 +45,11 @@ object Moderation {
     }.toJSPromise
   }
 
-  /** 規制を評価し、拒否理由と mark 適用後のフォームを返す。 */
+  /** 規制を評価し、拒否理由と mark を付けた後のフォームを返す。最初の拒否で評価をやめる */
   def decide(cap: Boolean, country: String, userInfo: String, number: Double, form: PostForm, settings: BbsSettings, env: WorkerEnv): Future[(Option[ModerationDenial], PostForm)] = {
     if cap || form.bbs == "saku" then Future.successful((None, form))
     else if country == "T1" then Future.successful((Some(ModerationDenial.Tor), form))
     else {
-      var current = form
       val content = s"FROM=${form.name} mail=${form.mail} MESSAGE=${form.message} subject=${form.subject}"
       val replaceNumeric: js.Function2[String, String, String] = (entity, digits) => {
         val code = if digits(0).toLower == 'x' then js.Dynamic.global.parseInt(digits.drop(1), 16).asInstanceOf[Double] else js.Dynamic.global.Number(digits).asInstanceOf[Double]
@@ -60,31 +59,35 @@ object Moderation {
       val replaceNamed: js.Function1[String, String] = entity => entities(entity)
       val decoded = content.asInstanceOf[js.Dynamic].replace(new js.RegExp("&#(x[0-9a-f]+|\\d+);", "gi"), replaceNumeric)
         .replace(new js.RegExp("&(?:amp|lt|gt|quot|apos);", "g"), replaceNamed).asInstanceOf[String]
-      def fileLoop(files: List[String]): Future[Option[ModerationDenial]] = files match {
-        case Nil => Future.successful(None)
+      type Outcome = (Option[ModerationDenial], PostForm)
+      def evaluate(outcome: Outcome, rule: js.Dynamic): Outcome = outcome match {
+        case (Some(_), _) => outcome
+        case (None, marked) =>
+          def matches(field: String, value: String) = rule.selectDynamic(field).asInstanceOf[js.RegExp].test(value)
+          val isWord = rule.isWord.asInstanceOf[Boolean]
+          val action = rule.action.asInstanceOf[String]
+          if !matches("board", form.bbs) || !matches("target", userInfo) || !(matches("word", content) || matches("word", decoded)) then outcome
+          else if isWord && settings.checked("BBS_NGWORD_PASS") then outcome
+          else if action == "TateDame" && number != 1 then outcome
+          else if action == "mark" || settings.checked("BBS_NO_MADAKANA") then {
+            val name = if !isWord && !marked.name.startsWith("</b>[´・ω・｀]<b> ") then "</b>[´・ω・｀]<b> " + marked.name else marked.name
+            (None, marked.copy(name = name, message = marked.message + " <small>👀 Madakana: Caution</small>"))
+          } else (Some(if isWord then ModerationDenial.NgWord else if action == "TateDame" then ModerationDenial.TateDame else ModerationDenial.Host), marked)
+      }
+      def fileLoop(files: List[String], marked: PostForm): Future[Outcome] = files match {
+        case Nil => Future.successful((None, marked))
         case file :: rest => env.ch3www.get(file).toFuture.flatMap { obj =>
-          if obj == null then fileLoop(rest) else
+          if obj == null then fileLoop(rest, marked) else
             obj.text().toFuture.map(parseRules).map(Some(_)).recover { case _ => None }.flatMap {
-              case None => Future.successful(Some(ModerationDenial.BrokenRules))
-              case Some(rules) =>
-                val denial = rules.iterator.map { rule =>
-                  def matches(field: String, value: String) = rule.selectDynamic(field).asInstanceOf[js.RegExp].test(value)
-                  val isWord = rule.isWord.asInstanceOf[Boolean]
-                  val action = rule.action.asInstanceOf[String]
-                  if !matches("board", form.bbs) || !matches("target", userInfo) || !(matches("word", content) || matches("word", decoded)) then None
-                  else if isWord && settings.checked("BBS_NGWORD_PASS") then None
-                  else if action == "TateDame" && number != 1 then None
-                  else if action == "mark" || settings.checked("BBS_NO_MADAKANA") then {
-                    if !isWord && !current.name.startsWith("</b>[´・ω・｀]<b> ") then current = current.copy(name = "</b>[´・ω・｀]<b> " + current.name)
-                    current = current.copy(message = current.message + " <small>👀 Madakana: Caution</small>")
-                    None
-                  } else Some(if isWord then ModerationDenial.NgWord else if action == "TateDame" then ModerationDenial.TateDame else ModerationDenial.Host)
-                }.collectFirst { case Some(d) => d }
-                if denial.isDefined then Future.successful(denial) else fileLoop(rest)
+              case None => Future.successful((Some(ModerationDenial.BrokenRules), marked))
+              case Some(rules) => rules.foldLeft[Outcome]((None, marked))(evaluate) match {
+                case (None, next) => fileLoop(rest, next)
+                case denied => Future.successful(denied)
+              }
             }
         }
       }
-      fileLoop(List("deny.cgi", "ngwords.cgi")).map(denial => (denial, current))
+      fileLoop(List("deny.cgi", "ngwords.cgi"), form)
     }
   }
 }

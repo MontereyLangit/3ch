@@ -2,7 +2,7 @@ package io._3ch.bbs.domain.posting
 
 import io._3ch.bbs.domain.posting.moderation.{ThreadCreationRejection, ThreadCreationSettingError}
 
-/** 文字数を検査する入力欄。 */
+/** 文字数を検査する入力欄 */
 enum PostField(val code: String) {
   case Subject extends PostField("subject")
   case Name extends PostField("name")
@@ -10,13 +10,13 @@ enum PostField(val code: String) {
   case Message extends PostField("message")
 }
 
-/** スレのログが壊れている理由。 */
+/** スレのログが壊れている理由 */
 enum BrokenLogKind(val code: String) {
   case Empty extends BrokenLogKind("empty")
   case NoTitle extends BrokenLogKind("title")
 }
 
-/** deny.cgi / ngwords.cgi などの規制で拒否した理由。 */
+/** deny.cgi・ngwords.cgi などの規制で拒否した理由 */
 enum ModerationDenial(val code: String) {
   case Tor extends ModerationDenial("tor")
   case BrokenRules extends ModerationDenial("rules")
@@ -25,7 +25,7 @@ enum ModerationDenial(val code: String) {
   case Host extends ModerationDenial("host")
 }
 
-/** 内部エラーが起きた投稿処理の段階。 */
+/** 内部エラーが起きた投稿処理の段階 */
 enum PostingStage(val code: String) {
   case BoardSettings extends PostingStage("get-board-settings")
   case ThreadDataAndSettings extends PostingStage("get-thread-data-and-thread-settings")
@@ -34,10 +34,16 @@ enum PostingStage(val code: String) {
   case Headline extends PostingStage("update-headline")
 }
 
-/** 内部エラーが起きた段の状況。`time` は文言に出す時刻の文字列（未設定なら `undefined`）。 */
-final case class FailureSite(clock: String, time: String, bbs: String, key: String, number: String)
+/** 内部エラーの文言に出す時刻の種類 */
+enum FailureClock(val label: String) {
+  case Time extends FailureClock("time")
+  case Unixtime extends FailureClock("unixtime")
+}
 
-/** 投稿の拒否理由。文言は持たず、`code` は英小文字の識別子。 */
+/** 内部エラーが起きたときの時刻・板・スレキー・レス番号。時刻が未設定なら undefined */
+final case class FailureSite(clock: FailureClock, time: String, bbs: String, key: String, number: String)
+
+/** 投稿の拒否理由。文言は持たず、code で種別を英小文字の識別子にする */
 enum PostingError {
   case MethodNotPost
   case BrokenBody(contentType: String)

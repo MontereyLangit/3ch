@@ -3,7 +3,7 @@ package io._3ch.bbs.handler
 import io._3ch.bbs.domain.posting.{BrokenLogKind, ModerationDenial, PostField, PostingError, PostingStage}
 import io._3ch.bbs.domain.posting.moderation.{ThreadCreationRejection, ThreadCreationSettingError}
 
-/** 投稿処理の既定の板設定と、拒否理由の文言。 */
+/** 投稿処理の既定の板設定と、拒否理由の文言 */
 object PostingText {
   val settingTxtDefault: String = "BBS_TITLE=<DIR_NAME>＠3ch掲示板\nBBS_NONAME_NAME=名無しさん＠３ちゃんねる\nBBS_MAX_MENU_THREAD=300\nBBS_FORCE_SAGE=\nBBS_ADD_THREAD=on\nBBS_SHIKIBETSU=checked\nBBS_ID_GROUP=\nBBS_ID_RESET=86400\nBBS_ID_SHIKIBETSU=checked\nBBS_SUBJECT_COUNT=64\nBBS_NAME_COUNT=64\nBBS_MAIL_COUNT=64\nBBS_MESSAGE_COUNT=4096\nBBS_LINE_NUMBER=30\nBBS_THREAD_TATESUGI=1\nBBS_THREAD_TATESUGI_RESET=3600\nBBS_THREAD_JUNBAN=1\nBBS_THREAD_JUNBAN_RESET=3600\nBBS_THREAD_JUNBAN_AS_ONLY=\nBBS_CREATETHREAD_INTERVAL=5\nBBS_COPIPE=3/86400\ntimecount=18\ntimeclose=10\ntimecover=3600\nBBS_COOK82=10\nBBS_COOK82_POST_LIMIT=60\nBBS_LIVE=\nBBS_KISEIOFF=\nBBS_NO_MADAKANA=\nBBS_THREAD_SETTINGS=on\nBBS_DISABLE_NUSI=\nBBS_FORCE_NONAME=\nBBS_ARR=\nBBS_HEISA=\n"
 
@@ -37,7 +37,7 @@ object PostingText {
     case PostingStage.Headline => "updateHeadline"
   }
 
-  /** 拒否理由をエラー画面の文言にする。 */
+  /** 拒否理由をエラー画面の文言にする */
   def message(error: PostingError): String = error match {
     case PostingError.MethodNotPost => "POST メソッドを使ってください。<br>\nRecieve GET METHOD"
     case PostingError.BrokenBody(contentType) => "送信された内容が破損しています。->" + contentType + "<br>\nBroken request body. "
@@ -70,10 +70,10 @@ object PostingText {
     case PostingError.ThreadCreation(ThreadCreationRejection.Broad(_)) => threadCreationBroad
     case PostingError.ThreadCreation(_) => threadCreationNarrow
     case PostingError.ArchiveConflict(target, site) =>
-      s"updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(${site.clock}:${site.time} bbs:${site.bbs} key:${site.key} number:${site.number} errmsg:updateSubback->${target}_update_conflicted!)"
+      s"updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(${site.clock.label}:${site.time} bbs:${site.bbs} key:${site.key} number:${site.number} errmsg:updateSubback->${target}_update_conflicted!)"
     case PostingError.Internal(stage, site, cause) =>
       val label = stageLabel(stage)
       val description = if stage == PostingStage.ThreadWrite then "ログファイルに書けませんでした。" else "不明なエラーが発生しました。"
-      s"$label error. $description(${site.clock}:${site.time} bbs:${site.bbs} key:${site.key} number:${site.number} errmsg:$label->$cause)<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。"
+      s"$label error. $description(${site.clock.label}:${site.time} bbs:${site.bbs} key:${site.key} number:${site.number} errmsg:$label->$cause)<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。"
   }
 }

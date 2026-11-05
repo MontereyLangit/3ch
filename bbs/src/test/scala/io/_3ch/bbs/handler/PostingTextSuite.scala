@@ -1,12 +1,12 @@
 package io._3ch.bbs.handler
 
 import munit.FunSuite
-import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureSite, ModerationDenial, PostField, PostingError, PostingStage}
+import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureClock, FailureSite, ModerationDenial, PostField, PostingError, PostingStage}
 import io._3ch.bbs.domain.posting.moderation.{ThreadCreationRejection, ThreadCreationRateLimit, ThreadCreationSettingError}
 
-/** `PostingText.message` が拒否理由ごとに従来の文言を返すことの固定。 */
+/** 拒否理由ごとの文言が従来どおりか */
 class PostingTextSuite extends FunSuite {
-  private val site = FailureSite("unixtime", "undefined", "sample", "1700000000", "1")
+  private val site = FailureSite(FailureClock.Unixtime, "undefined", "sample", "1700000000", "1")
 
   private val expected: Seq[(PostingError, String)] = Seq(
     PostingError.MethodNotPost -> "POST メソッドを使ってください。<br>\nRecieve GET METHOD",
@@ -44,7 +44,7 @@ class PostingTextSuite extends FunSuite {
     PostingError.ThreadCreation(ThreadCreationRejection.Capacity) -> "スレッドを立てすぎです。しばらく待ってから投稿してください。",
     PostingError.ThreadCreation(ThreadCreationRejection.Broad(ThreadCreationRateLimit.Reason.NetworkGroup)) -> "この接続環境ではスレッドを立てすぎです。しばらく待ってから投稿してください。",
     PostingError.ArchiveConflict("SubbackFIle", site) -> "updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(unixtime:undefined bbs:sample key:1700000000 number:1 errmsg:updateSubback->SubbackFIle_update_conflicted!)",
-    PostingError.Internal(PostingStage.BoardSettings, FailureSite("time", "1700000000000", "sample", "1700000000", "0"), "Error: boom") ->
+    PostingError.Internal(PostingStage.BoardSettings, FailureSite(FailureClock.Time, "1700000000000", "sample", "1700000000", "0"), "Error: boom") ->
       "getBoardSettings error. 不明なエラーが発生しました。(time:1700000000000 bbs:sample key:1700000000 number:0 errmsg:getBoardSettings->Error: boom)<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。"
   )
 

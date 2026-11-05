@@ -1,7 +1,11 @@
 package io._3ch.bbs.handler
 
 import munit.FunSuite
+import io._3ch.bbs.domain.posting.ModerationDenial
 import io._3ch.bbs.external.cloudflare.WorkerEnv
+import io._3ch.common.domain.BbsSettings
+import io._3ch.common.domain.posting.PostForm
+import scala.collection.immutable.ListMap
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
@@ -90,5 +94,39 @@ class ModerationSuite extends FunSuite {
       invalid <- check(context(), env("invalid"))
       _ = assertEquals(invalid, 0)
     } yield ()
+  }
+
+  private val form = PostForm(name = "name", message = "hello", subject = "title", bbs = "sample")
+  private val mark = "</b>[´・ω・｀]<b> "
+  private val caution = " <small>👀 Madakana: Caution</small>"
+  private def decide(e: WorkerEnv): Future[(Option[ModerationDenial], PostForm)] =
+    Moderation.decide(false, "JP", "IP:192.0.2.1 AS1234-JP", 2, form, BbsSettings(ListMap.empty), e)
+
+  test("mark が重なると名前の印は 1 回だけ、本文の注意書きはルールごとに付く") {
+    for {
+      twice <- decide(env("<><><>mark\n<><><>mark"))
+      _ = assertEquals(twice, (None, form.copy(name = mark + "name", message = "hello" + caution + caution)))
+      word <- decide(env("", "<><>hello<>mark"))
+      _ = assertEquals(word, (None, form.copy(message = "hello" + caution)))
+    } yield ()
+  }
+
+  test("拒否で評価をやめ、それまでの mark は残る") {
+    for {
+      markThenDeny <- decide(env("<><><>mark\n<><><>deny\n<><><>mark"))
+      _ = assertEquals(markThenDeny, (Some(ModerationDenial.Host), form.copy(name = mark + "name", message = "hello" + caution)))
+      denyThenMark <- decide(env("<><><>deny\n<><><>mark"))
+      _ = assertEquals(denyThenMark, (Some(ModerationDenial.Host), form))
+      acrossFiles <- decide(env("<><><>mark", "<><>hello<>deny"))
+      _ = assertEquals(acrossFiles, (Some(ModerationDenial.NgWord), form.copy(name = mark + "name", message = "hello" + caution)))
+      broken <- decide(env("<><><>mark", "invalid"))
+      _ = assertEquals(broken, (Some(ModerationDenial.BrokenRules), form.copy(name = mark + "name", message = "hello" + caution)))
+    } yield ()
+  }
+
+  test("ルールの照合には mark を付ける前の内容を使う") {
+    decide(env("<><><>mark", "<><>Caution<>deny")).map { result =>
+      assertEquals(result, (None, form.copy(name = mark + "name", message = "hello" + caution)))
+    }
   }
 }

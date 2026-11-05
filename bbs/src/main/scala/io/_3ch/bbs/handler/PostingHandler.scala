@@ -4,7 +4,7 @@ import io._3ch.bbs.external.cloudflare.*
 import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.hash.{Md5, WebHash}
 import io._3ch.bbs.repository.{BoardRepository, CapRepository, ThreadRepository}
-import io._3ch.bbs.domain.posting.{BrokenLogKind, ClientIdentity, FailureSite, GlobalThread, KeyIp, NusiMark, PostField, PostRouting, PostingContext, PostingError, PostingIdentity, PostingStage, PostingUser, ThreadOwner}
+import io._3ch.bbs.domain.posting.{BrokenLogKind, ClientIdentity, FailureClock, FailureSite, GlobalThread, KeyIp, NusiMark, PostField, PostRouting, PostingContext, PostingError, PostingIdentity, PostingStage, PostingUser, ThreadOwner}
 import io._3ch.bbs.domain.posting.moderation.ThreadCreationRejection
 import io._3ch.bbs.durable.codec.ThreadOwnerCodec
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
@@ -40,14 +40,14 @@ object PostingHandler {
     case x: js.JavaScriptException => str(x.exception.asInstanceOf[js.Any])
     case _ => e.toString
   }
-  private def site(g: js.Dynamic, d: Draft, clock: String, time: js.Any): FailureSite = FailureSite(clock, str(time), d.form.bbs, d.form.key, str(g.number))
-  private def guarded[A](g: js.Dynamic, d: Draft, stage: PostingStage, clock: String)(f: => Future[A]): Future[A] =
+  private def site(g: js.Dynamic, d: Draft, clock: FailureClock, time: js.Any): FailureSite = FailureSite(clock, str(time), d.form.bbs, d.form.key, str(g.number))
+  private def guarded[A](g: js.Dynamic, d: Draft, stage: PostingStage, clock: FailureClock)(f: => Future[A]): Future[A] =
     Future.unit.flatMap(_ => f).recover { case rejected: Rejected => throw rejected; case e =>
-      val time = if clock == "time" || stage == PostingStage.ThreadDataAndSettings || stage == PostingStage.ThreadWrite then g.time else g.nowTime
+      val time = if clock == FailureClock.Time || stage == PostingStage.ThreadDataAndSettings || stage == PostingStage.ThreadWrite then g.time else g.nowTime
       reject(PostingError.Internal(stage, site(g, d, clock, time), errorText(e)))
     }
 
-  /** 投稿処理中のフォームと設定（板設定、返信ならスレ設定で上書き）。エラー画面にはその時点のフォームを出す。 */
+  /** 処理中のフォームと設定（板設定を返信ならスレ設定で上書き）。エラー画面にはその時点のフォームを出す */
   private final class Draft(var form: PostForm, var settings: BbsSettings, var identity: PostingIdentity) {
     var cap: Option[CapHandle] = None
     var shikibetsu: String = ""
@@ -125,7 +125,7 @@ object PostingHandler {
 
   private final case class LoadedBoard(id: BoardId, settings: BbsSettings)
 
-  private def boardSettings(g: js.Dynamic, d: Draft, e: WorkerEnv): Future[LoadedBoard] = guarded(g, d, PostingStage.BoardSettings, "time") {
+  private def boardSettings(g: js.Dynamic, d: Draft, e: WorkerEnv): Future[LoadedBoard] = guarded(g, d, PostingStage.BoardSettings, FailureClock.Time) {
     val board = BoardId.create(d.form.bbs).fold(_ => reject(PostingError.ForbiddenBoard), identity)
     BoardRepository.getBoardSettings(board, e).map { boardSettings =>
       d.settings = boardSettings
@@ -134,7 +134,7 @@ object PostingHandler {
   }
   private def threadSettings(g: js.Dynamic, d: Draft, board: LoadedBoard, e: WorkerEnv): Future[Unit] = {
     val stub = thread(d, e)
-    guarded(g, d, PostingStage.ThreadDataAndSettings, "unixtime") {
+    guarded(g, d, PostingStage.ThreadDataAndSettings, FailureClock.Unixtime) {
       if d.settings.checked("BBS_HEISA") then reject(PostingError.Closed)
       if d.form.kind == PostKind.NewThread then stub.getDat().toFuture.map { dat =>
         if dat.nonEmpty then reject(PostingError.DuplicateKey)
@@ -171,7 +171,7 @@ object PostingHandler {
 
   private def checkSizes(g: js.Dynamic, d: Draft): Unit = {
     if d.cap.exists(_.strong) then return
-    /** 上限値と、文言に出す上限の文字列（設定値そのもの、無ければ既定値）。 */
+    /** 上限値と、文言に出す上限の文字列（設定値そのもの、無ければ既定値） */
     def limit(name: String, default: Int): (Double, String) = (d.settings.number(name, default), d.settings.get(name).getOrElse(default.toString))
     for (value, settingName, kind) <- List((d.form.subject, "BBS_SUBJECT_COUNT", PostField.Subject), (d.form.name, "BBS_NAME_COUNT", PostField.Name), (d.form.mail, "BBS_MAIL_COUNT", PostField.Mail)) do {
       val (max, shown) = limit(settingName, 64)
@@ -212,7 +212,7 @@ object PostingHandler {
     }
   }
 
-  /** スレ立てなら保存する `owner` を返し、返信なら該当時に名前欄へ ` (主)` を付ける。キャップは対象外（docs/トリップ・ID廃止とスレ主表示.md §2.4）。 */
+  /** スレ立てなら保存するスレ主情報を返し、返信でスレ主なら名前欄に (主) を付ける。キャップは対象外（docs/トリップ・ID廃止とスレ主表示.md §2.4） */
   private def markNusi(g: js.Dynamic, d: Draft, user: Option[PostingUser], boardSettings: BbsSettings): Future[js.UndefOr[js.Dynamic]] =
     if d.cap.isDefined then Future.successful(js.undefined) else {
       val ip = d.identity.ip.fold("")(KeyIp.of)
@@ -274,7 +274,7 @@ object PostingHandler {
 
   private def updateThread(g: js.Dynamic, d: Draft, e: WorkerEnv, creationLimit: js.UndefOr[js.Dynamic], owner: js.UndefOr[js.Dynamic]): Future[Unit] = {
     val stub = thread(d, e)
-    guarded(g, d, PostingStage.ThreadWrite, "unixtime") {
+    guarded(g, d, PostingStage.ThreadWrite, FailureClock.Unixtime) {
       val initial: js.UndefOr[String] = if number(g.number) == 1 then initialSettings(d.settings) else js.undefined
       val formatter = js.Dynamic.newInstance(js.Dynamic.global.Intl.DateTimeFormat)("ja-JP", js.Dynamic.literal(year = "numeric", month = "2-digit", day = "2-digit", weekday = "short", hour = "2-digit", minute = "2-digit", second = "2-digit", timeZone = "Asia/Tokyo"))
       val date = formatter.format(new js.Date(int(g.unixtime) * 1000)).asInstanceOf[String]
@@ -286,21 +286,21 @@ object PostingHandler {
     }
   }
 
-  /** スレ立て時に保存する初期スレ設定。キーの順は JavaScript のオブジェクトと同じ（整数のキーが先）。 */
+  /** スレ立て時に保存する初期スレ設定。キーは JavaScript のオブジェクトと同じ順（整数のキーが先） */
   private def initialSettings(settings: BbsSettings): String = {
     val dictionary = settings.value.toJSDictionary
     js.Object.keys(dictionary.asInstanceOf[js.Object]).map(k => k + "=" + dictionary(k) + "<>").mkString
   }
 
   private def updateSubback(g: js.Dynamic, d: Draft, e: WorkerEnv): Future[Unit] =
-    if number(g.number) > 1 then Future.unit else guarded(g, d, PostingStage.Subback, "unixtime") {
+    if number(g.number) > 1 then Future.unit else guarded(g, d, PostingStage.Subback, FailureClock.Unixtime) {
       val bucket = e.ch3www.asInstanceOf[js.Dynamic]
       def get(file: String): Future[js.Dynamic] = bucket.get(file).asInstanceOf[js.Promise[js.Dynamic]].toFuture
       def text(obj: js.Dynamic): Future[String] = if obj == null then Future.successful("") else obj.text().asInstanceOf[js.Promise[String]].toFuture.map(_.split("\n", -1).drop(1).mkString("\n"))
       def save(file: String, value: String, etag: js.Any, label: String): Future[Unit] = {
         val condition = if truth(etag) then js.Dynamic.literal(etagMatches = etag) else js.Dynamic.literal(doesNotExist = true)
         bucket.put(file, value, js.Dynamic.literal(onlyIf = condition)).asInstanceOf[js.Promise[js.Dynamic]].toFuture.map { result =>
-          if result == null || !truth(result.uploaded) then reject(PostingError.ArchiveConflict(label, site(g, d, "unixtime", g.nowTime)))
+          if result == null || !truth(result.uploaded) then reject(PostingError.ArchiveConflict(label, site(g, d, FailureClock.Unixtime, g.nowTime)))
         }
       }
       val subFile = str(g.logPath) + "subject.txt"
@@ -321,7 +321,7 @@ object PostingHandler {
     }
 
   private def updateHeadline(g: js.Dynamic, d: Draft, e: WorkerEnv): Future[Unit] =
-    if truth(g.sage) then Future.unit else guarded(g, d, PostingStage.Headline, "unixtime") {
+    if truth(g.sage) then Future.unit else guarded(g, d, PostingStage.Headline, FailureClock.Unixtime) {
       val bucket = e.ch3www.asInstanceOf[js.Dynamic]
       for {
         obj <- bucket.get("headline.txt").asInstanceOf[js.Promise[js.Dynamic]].toFuture

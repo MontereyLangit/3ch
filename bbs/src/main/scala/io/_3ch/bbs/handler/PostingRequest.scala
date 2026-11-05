@@ -5,10 +5,7 @@ import io._3ch.bbs.external.web.Request
 
 import scala.scalajs.js
 
-/**
-  * bbs.cgi へのリクエストのうち投稿処理が読むヘッダと `cf` の値。無いヘッダは空文字列。
-  * 本文はヘッダの検査を通ってから読むので含めない。
-  */
+/** bbs.cgi へのリクエストのうち投稿処理が読むヘッダと cf の値。無いヘッダは空文字列、本文は含めない */
 final case class PostingRequest(
   method: String,
   contentType: String,
@@ -32,32 +29,36 @@ final case class PostingRequest(
   city: Option[String]
 ) {
 
-  /** UA に Client Hints（完全版があればそちら）を連結した文字列。 */
+  /** UA に Client Hints（完全版があればそちら）を連結したもの */
   def browserUserAgent: String = userAgent + secChUaFullVersionList.getOrElse(secChUa)
 
   def browserInfo: String = "Accept:" + accept + "Accept-Language:" + acceptLanguage + "Accept-Encoding:" + acceptEncoding
 
-  def isMonazilla: Boolean = new js.RegExp("^Monazilla/1.00").test(browserUserAgent)
+  def isMonazilla: Boolean = PostingRequest.Monazilla.test(browserUserAgent)
 
-  /** 表示用のホスト。接続元 IP に、それと異なる最初の転送ヘッダを `<…>` で付ける（IP が無ければ `null`）。 */
+  /** 表示用のホスト。接続元 IP（無ければ null）に、それと異なる最初の転送ヘッダを <…> で付ける */
   def host: String = {
     val ip = connectingIp.getOrElse("null")
     Seq(forwardedFor, forwarded, via).find(v => v.nonEmpty && !connectingIp.contains(v)).fold(ip)(v => s"$ip<$v>")
   }
 
-  /** ヘッダの検査。複数あてはまるときは従来の判定順で最初のものを返す。 */
+  /** ヘッダの検査。複数あてはまるときは従来の判定順で最初のものを返す */
   def validate: Option[PostingError] = {
-    def matches(s: String, pattern: String): Boolean = new js.RegExp(pattern).test(s)
     if (method != "POST") Some(PostingError.MethodNotPost)
     else if (!contentType.contains("application/x-www-form-urlencoded")) Some(PostingError.BrokenBody(contentType))
-    else if (!matches(referer, "^https?://www\\.(3ch\\.io|3chbbs\\.com)(:[0-9]+)?([/?#]|$)") && !matches(referer, "^http://127\\.0\\.0\\.1:878[78]([/?#]|$)")) Some(PostingError.InvalidReferer(referer))
-    else if (userAgent.length < 7 || userAgent.length > 384 || matches(userAgent, "[^ -~]")) Some(PostingError.InvalidUserAgent(userAgent))
+    else if (!PostingRequest.Referer.test(referer) && !PostingRequest.LocalReferer.test(referer)) Some(PostingError.InvalidReferer(referer))
+    else if (userAgent.length < 7 || userAgent.length > 384 || PostingRequest.NonAscii.test(userAgent)) Some(PostingError.InvalidUserAgent(userAgent))
     else if (clientIp.nonEmpty) Some(PostingError.ProxyHeader(clientIp))
     else None
   }
 }
 
 object PostingRequest {
+  private val Monazilla = new js.RegExp("^Monazilla/1.00")
+  private val Referer = new js.RegExp("^https?://www\\.(3ch\\.io|3chbbs\\.com)(:[0-9]+)?([/?#]|$)")
+  private val LocalReferer = new js.RegExp("^http://127\\.0\\.0\\.1:878[78]([/?#]|$)")
+  private val NonAscii = new js.RegExp("[^ -~]")
+
   def from(request: Request): PostingRequest = {
     def header(name: String): String = Option(request.headers.get(name)).getOrElse("")
     val cf = request.cf.toOption

@@ -36,10 +36,10 @@ object GlobalThread {
     case Kind.Open => true
   }
 
-  /** 共通スレのスレ立てと返信で、最初に拒否する理由。 */
+  /** 共通スレのスレ立て・返信で最初にあてはまる拒否理由 */
   def postingError(key: String, creatingThread: Boolean, cap: Boolean): Option[PostingError] = kindOf(key).flatMap { kind =>
-    if (creatingThread && !cap) Some(PostingError.GlobalThreadCreateCapOnly)
-    else if (!canPost(kind, cap)) Some(PostingError.GlobalThreadCapOnly)
+    if creatingThread && !cap then Some(PostingError.GlobalThreadCreateCapOnly)
+    else if !canPost(kind, cap) then Some(PostingError.GlobalThreadCapOnly)
     else None
   }
 
