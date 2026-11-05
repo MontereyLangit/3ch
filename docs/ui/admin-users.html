@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ユーザー一覧 - 管理画面 | 3ch モック</title><link rel="stylesheet" href="auth-admin.css"></head>
+<body>
+<!-- モック: /admin/accounts（docs/admin-spa-auth-plan.md §4.1・§6.1、設計書 §9.1 AccountDirectory）。直近書き込み順 -->
+<header class="site-header">
+  <a class="site-logo" href="#"><img src="3ch_logo.png" alt="３ちゃんねる"></a>
+  <nav aria-label="管理メニュー"><b>管理画面</b><span>|</span><a href="#">掲示板へ戻る</a></nav>
+  <nav class="account-nav" aria-label="アカウント"><span class="uid">@m7p2c8dz</span> <span class="role">admin</span>
+    <small>管理者セッション 残り 27 分</small><span>|</span><a href="#">管理画面を出る</a></nav>
+</header>
+<div class="layout admin">
+<aside class="admin-nav" aria-label="管理メニュー">
+  <section><h2>■ 板</h2>
+    <select style="width:100%"><option>zatsudan（雑談掲示板）</option></select>
+    <div class="links" style="margin-top:6px"><a href="admin-board.html">板設定</a><a href="admin-thread.html">スレ一覧・スレ管理</a></div></section>
+  <section><h2>■ 全体</h2><div class="links"><a href="#">規制ルール（アクセス）</a><a href="#">規制ルール（NGワード）</a><a href="#">板一覧（bbsmenu）</a></div></section>
+  <section><h2>■ アカウント</h2><div class="links"><a class="cur" href="admin-users.html">ユーザー一覧</a><a href="#">キャップ</a><a class="off" href="#">PHOEBE・エッジ防御</a><a href="#">監査ログ</a></div></section>
+</aside>
+<main>
+  <h1>ユーザー一覧 <small>登録 12,408 件</small></h1>
+  <form class="toolbar-form" onsubmit="return false">
+    <input class="input sm" type="search" style="width:280px" placeholder="@uid・ログインID・メール・AS・端末・識別子で検索">
+    <select><option>すべての種別</option><option>かんたん登録</option><option>ID・パスワード</option><option>Google</option></select>
+    <select><option>すべての状態</option><option>有効</option><option>凍結</option><option>BAN</option></select>
+    <label class="check" style="align-items:center"><input type="checkbox"> 役割あり</label>
+    <select><option>直近書き込み順</option><option>登録順</option><option>Lv 順</option><option>24 時間の書き込み数順</option></select>
+    <button class="btn">表示</button>
+  </form>
+  <nav class="tabs" style="padding-top:4px"><a class="tab active" href="#">すべて</a><a class="tab" href="#">直近 1 時間に書き込み 214</a><a class="tab" href="#">要確認 3</a></nav>
+
+  <table class="list users">
+    <thead><tr><th>最終書き込み</th><th>ユーザー</th><th>最終書き込み先・本文</th><th>接続元</th><th class="num">24h</th><th class="num">UA</th><th class="num">端末</th><th class="num">キー</th></tr></thead>
+    <tbody>
+      <tr><td class="t">13:40<small>11/05</small></td><td><a href="admin-user.html"><b>@k3x9q2ab</b></a> <span class="lv">Lv3</span><small>かんたん · 有効</small></td>
+        <td><a href="#">雑談掲示板 › 雑談スレッド Part 12</a> <span class="resno">&gt;&gt;131</span><div class="ex">&gt;&gt;124 駅前のパン屋って北口のほう？</div></td>
+        <td>docomo<small>東京都</small></td><td class="num">12</td><td class="num">3</td><td class="num">1</td><td class="num">3</td></tr>
+      <tr class="flag"><td class="t">13:39<small>11/05</small></td><td><a href="#"><b>@q2v7m0tx</b></a> <span class="lv">Lv1</span><small>かんたん · 有効 · <span class="err">要確認: 端末ハッシュ 5 種</span></small></td>
+        <td><a href="#">ニュース速報板 › 新型端末の発表</a> <span class="resno">&gt;&gt;77</span><div class="ex">【激安】ブランド品はこちら http://example.invalid/</div></td>
+        <td>海外（US）<small>AS16509 Amazon</small></td><td class="num">41</td><td class="num">6</td><td class="num">5</td><td class="num">0</td></tr>
+      <tr><td class="t">13:37<small>11/05</small></td><td><a href="#"><b>@taro2026</b></a> <span class="lv">Lv7</span><small>ID・パスワード · 有効</small></td>
+        <td><a href="#">今日の出来事を書いていくスレ</a> <span class="resno">&gt;&gt;61</span><div class="ex">雨が止んだ</div></td>
+        <td>KDDI<small>神奈川県</small></td><td class="num">5</td><td class="num">2</td><td class="num">2</td><td class="num">1</td></tr>
+      <tr><td class="t">13:31<small>11/05</small></td><td><a href="#"><b>@r4n8w1hs</b></a> <span class="lv">Lv10</span> <span class="role">delete</span><small>Google · 有効</small></td>
+        <td><a href="#">削除依頼板 › 削除依頼スレ</a> <span class="resno">&gt;&gt;903</span><div class="ex">対応しました</div></td>
+        <td>NTT<small>大阪府</small></td><td class="num">3</td><td class="num">1</td><td class="num">1</td><td class="num">0</td></tr>
+      <tr class="dead"><td class="t">12:58<small>11/05</small></td><td><a href="#"><b>@zz91kq3a</b></a> <span class="lv">Lv2</span><small>かんたん · <span class="err">凍結</span></small></td>
+        <td><a href="#">雑談掲示板 › 好きな音楽を教えてください</a> <span class="resno">&gt;&gt;88</span><div class="ex">同じ文章の連投</div></td>
+        <td>楽天モバイル<small>東京都</small></td><td class="num">60</td><td class="num">1</td><td class="num">1</td><td class="num">0</td></tr>
+    </tbody>
+  </table>
+  <div style="text-align:center;margin:12px 0"><button class="btn">さらに読み込む</button></div>
+  <p class="notice">「要確認」は乱造検知（端末ハッシュの種類・認証の回数）に引っかかったアカウントです。一覧の並びは書き込みのたびに更新されます（同じアカウントは 1 分に 1 回まで）。</p>
+</main>
+</div>
+<footer class="site-footer"><a href="#">3ch</a> ver 0.6.x 2026-11-05 <span class="author">†Monterey Langit ★</span></footer>
+</body></html>

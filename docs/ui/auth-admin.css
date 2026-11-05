@@ -173,3 +173,34 @@ h3.sub{font-size:13px;margin:8px 0 2px}h3.sub small{font-weight:400}
   .ua-head small{display:block;margin-left:0}
 }
 .net{font-size:11.5px;color:#697785;margin-left:6px;white-space:nowrap}
+/* 管理画面: ユーザー一覧・詳細 */
+.toolbar-form{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin:4px 0}
+table.list .num{text-align:right;font-variant-numeric:tabular-nums}
+table.list td small{display:block;color:#697785;font-size:11.5px}
+table.list.users td{vertical-align:top}
+table.users .t{white-space:nowrap;font-variant-numeric:tabular-nums}
+table.users .ex,table.posts td:nth-child(3){color:#222;font-size:12.5px}
+table.users .ex{margin-top:2px}
+table.list tr.flag td{background:#fff6f6}
+table.list tr.dead td{color:#9aa5b1}
+table.list tr.hl td{background:#fff8f1}
+table.list.sm{font-size:12.5px}table.list.sm td,table.list.sm th{padding:6px 8px}
+table.list small.raw{font-family:ui-monospace,monospace;font-size:10.5px;word-break:break-all}
+.user-top{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:12px}
+.obs-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 12px}
+.ops-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.st.on{color:#1a7f37;border-color:#b5dfc3;background:#e7f5ec}
+.st.off{color:#7a8794;border-color:#d6dce3;background:#f4f6f8}
+@media (max-width:767px){
+  .user-top,.obs-grid{display:block}
+  table.users thead{display:none}
+  table.users tr{display:grid;grid-template-columns:minmax(0,1fr) auto;border-bottom:1px solid #dce1e6;padding:6px 0}
+  table.list.users td{border:0;padding:2px 6px}
+  table.users td.num{display:none}
+  table.users td:nth-child(1){grid-column:2;grid-row:1;text-align:right}
+  table.users td:nth-child(2){grid-column:1;grid-row:1}
+  table.users td:nth-child(3),table.users td:nth-child(4){grid-column:1/-1}
+  .panel{overflow-x:auto}
+}
+table.list th{white-space:nowrap}
+table.ua-obs td:not(:first-child){white-space:nowrap}

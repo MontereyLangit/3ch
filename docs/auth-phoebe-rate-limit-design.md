@@ -424,7 +424,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 - 保存: `Account.caps[]`＝`{capId, name, hash, strong, issuedBy, issuedAt, revokedAt}`。`hash` は現行の照合値 `SHA-1(SHA-256(MD5(pass)+salt))` 先頭 27 文字をそのまま使う。
 - 互換: KV `CAP`（hash → 表示名）は現行どおり読み書きし、所有者は `AccountIndex("cap")`（hash → `aid`）で引く。所有者のない既存エントリは「旧キャップ」として動き続ける（ログ無し・Lv 無し）。管理画面から既存キャップをアカウントに紐づけられる。
 - 強キャップ（表示名末尾 `★`、サイズ検証スキップ）は `admin` だけが発行できる。
-- 利用ログ: `Account.log` に `{t, kind: "cap", capId, ipHash, uaHash, bbs, key}` を追記（最大 1,000 件、古い順に切り捨て）。所有者と `admin` が閲覧でき、失効（`revokedAt`）と再発行（新 hash）ができる。失効時は KV `CAP` からも削除する。
+- 利用ログ: `Account.log`（§9.1 の書き込み記録）に `via: "cap"` と `capId` 付きで残る。所有者と `admin` が閲覧でき、失効（`revokedAt`）と再発行（新 hash）ができる。失効時は KV `CAP` からも削除する。
 - キャップ投稿は所有アカウントとしてログイン扱い（§3.4）。dat 上の表示（`名前＠ハンドル ★`、`ID:???`、識別子 `★`）は現行のまま。
 
 ### 6.3 専ブラ用認証キー
@@ -575,7 +575,7 @@ checkRequest → readForm → processCap → processTrip → boardSettings → t
      ├ コピペ判定（§8.5）                ← 吸い込みなら Board.completePost して `{swallowed}` で終了
      ├ storage.put（dat・log・recentPosts・ownerAid（>>1 のみ）・settings（コマンドがあれば））  失敗なら Board.cancelPost
      └ Board.updateThread（既存。引数に予約 key を足して completePost を兼ねる）
-→ Account.recordPost（Lv 昇格 §4.2。失敗しても投稿は成功扱い）
+→ Account.recordPost（Lv 昇格 §4.2・書き込み記録と観測の追記 §9.1・AccountDirectory の更新。失敗しても投稿は成功扱い）
 → updateSubback → updateHeadline
 ```
 
@@ -669,9 +669,11 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | `tokens` | 専ブラ用認証キーの一覧（§6.3 の「保存」） |
 | `pending:email` / `pending:reset` | §3.9 の保留トークン（種別ごとに別キー） |
 | `devices` | `[{hash, firstSeen, lastSeen, keyIpHash}]` 最大 10 件。超えたら `lastSeen` が最も古いものを捨てる |
-| `log:<n>` | 利用ログ 64 件ページ。16 ページ（1,024 件）を超えたら最古のページを消す |
+| `log:<n>` | 書き込み記録。1 件は `{t, via: web\|token\|cap, tokenId?, capId?, result, bbs, key, title, resNum, excerpt, asn, asName, country, region, uaLabel, deviceHash?, id, shikibetsu}`。`result` は `posted` か拒否コード（キーの UA 不一致など、アカウントに結びつく拒否だけ）。`excerpt` は本文の先頭 40 文字。64 件ごとのページで、16 ページ（1,024 件）を超えたら最古のページを消す |
+| `seen` | 観測の集計。`as`・`region`・`ua`・`device` は値ごとに `{value, label, count, firstSeen, lastSeen}` を最大 50 件（`lastSeen` が古いものから捨てる）。`ua` の `value` は生の UA（管理画面の詳細でだけ出す。本人の画面には表示名だけ）。`ident` は（日付, 板）ごとに `{date, bbs, id, shikibetsu, count}` を 60 日分 |
+| `directorySyncedAt` | `AccountDirectory` へ最後に反映した時刻 |
 
-RPC: `create`, `describeForPosting(aid, gen)`, `describeForAdmin(aid, gen, adminGen)`, `bumpAdminGen`, `recordPost(now)`, `verifyPassword(password, now)`, `setPassword`, `issuePending(kind, hash, expiresAt, email?)` / `consumePending(kind, hash, now)`, `bindGoogle(subHash)`, `convert(kind, uid)`, `issueCap` / `revokeCap`, `issueToken` / `useToken(tokenId, uaHash, now)` / `revokeToken`, `bindDevice`, `setLevel`, `setRoles`, `setStatus`, `bumpGeneration`, `appendLog`, `inspect`。
+RPC: `create`, `describeForPosting(aid, gen)`, `describeForAdmin(aid, gen, adminGen)`, `bumpAdminGen`, `recordPost(now, post, observation)`, `verifyPassword(password, now)`, `setPassword`, `issuePending(kind, hash, expiresAt, email?)` / `consumePending(kind, hash, now)`, `bindGoogle(subHash)`, `convert(kind, uid)`, `issueCap` / `revokeCap`, `issueToken` / `useToken(tokenId, uaHash, now)` / `revokeToken`, `bindDevice`, `setLevel`, `setRoles`, `setStatus`, `bumpGeneration`, `appendLog`, `inspect`。
 状態遷移（昇格・失効・移行）は `domain/account/` の純粋関数。
 
 **`AccountIndex`**（`idFromName(kind)`。`kind` ∈ `uid` / `login` / `email` / `google` / `cap` / `token` / `role:admin`）
@@ -681,6 +683,14 @@ RPC: `create`, `describeForPosting(aid, gen)`, `describeForAdmin(aid, gen, admin
 - キー `=` 正規化した値の `HMAC-SHA256(AUTH_SECRET, 種別 + ":" + 値)`（`wrangler.jsonc` の `salt` は `vars` にあり秘密ではないので、辞書攻撃を防ぐため secret で鍵付きにする）、値 `=` `{aid, state: pending|confirmed, createdAt}`。
 - `register(hash, aid, now)` は既存（`confirmed`、または `pending` で 10 分以内）なら失敗、`confirm(hash)`、`lookup(hash)`、`remove(hash)`。`register` / `confirm` / `remove` は `blockConcurrencyWhile` で直列化し、`lookup` はロックしない。`uid` 種別は `remove` を持たない。
 - 1 種別 1 DO にするのは一意性を単一の直列化点で保証するため。件数は数万件規模を想定し、ページ分割は不要。書き込みは登録・移行・退会時だけで、ホットスポットにはならない（`lookup` は読み取りのみ）。
+
+**`AccountDirectory`**（`idFromName("global")`。管理画面のユーザー一覧・検索用）
+
+- `Account` は 1 アカウント 1 DO なので、アカウントをまたいだ並べ替えと検索ができない。そのための写しを 1 つの DO に持つ。正は各 `Account` で、ここは表示用の写し。
+- SQLite バックエンドの SQL（`ctx.storage.sql`）を使う。表 `accounts(aid PRIMARY KEY, uid, kind, lv, status, roles, created_at, last_post_at, last_bbs, last_key, last_title, last_res, last_excerpt, last_as_name, last_region, posts_24h, ua_count, device_count, token_count, flagged)` に `last_post_at`・`created_at`・`lv` の索引を張る。表 `observations(kind, value_hash, aid, last_seen, PRIMARY KEY(kind, value_hash, aid))` で AS・UA・端末ハッシュ・識別子・IP ハッシュからアカウントを引く。
+- 更新は `Account.recordPost` の後に `ctx.waitUntil` で行い、同じアカウントは 1 分に 1 回まで（`directorySyncedAt`）。状態・役割・Lv の変更と乱造検知の要確認は即時に反映する。反映に失敗しても書き込みは成功扱いで、次の反映で追いつく。
+- 書き込みは「アクティブなアカウント数 × 1 回/分」が上限になる。1 つの DO で足りない規模になったら `aid` で分割する（データストレージ改修フェーズで再検討）。
+- RPC: `upsert(row, observations)`、`list(sort, filters, cursor, limit)`、`search(kind, valueHash)`。
 
 **`AuthRate`**（`idFromName(keyIp)`）
 
@@ -701,7 +711,7 @@ RPC: `create`, `describeForPosting(aid, gen)`, `describeForAdmin(aid, gen, admin
 | vars | `TURNSTILE_SITE_KEY`・`GOOGLE_CLIENT_ID`・`AGREEMENT_VERSION`・`ADMIN_BREAK_GLASS_UNTIL`（通常は未設定） | 公開値 |
 | secret | `AUTH_SECRET`・`TURNSTILE_SECRET_KEY`・`GOOGLE_CLIENT_SECRET`・`MAIL_API_KEY`・`ADMIN_SESSION_SECRET`（`_PREV`）・`ADMIN_BOOTSTRAP_TOKEN`（`ADMIN_PASSWORD`・`ADMIN_USER` は廃止） | `wrangler secret put`。`.dev.vars` で開発。コミットしない |
 
-`wrangler.jsonc` には `migrations` に `{tag: "v2", new_sqlite_classes: ["Account", "AccountIndex", "AuthRate"]}`、`durable_objects.bindings` に `ACCOUNT_DO`・`ACCOUNT_INDEX_DO`・`AUTH_RATE_DO` を足す。管理画面の監査ログは `{tag: "v3", new_sqlite_classes: ["AdminAudit"]}` と `ADMIN_AUDIT_DO`（改修計画 §3.6）。
+`wrangler.jsonc` には `migrations` に `{tag: "v2", new_sqlite_classes: ["Account", "AccountIndex", "AccountDirectory", "AuthRate"]}`、`durable_objects.bindings` に `ACCOUNT_DO`・`ACCOUNT_INDEX_DO`・`ACCOUNT_DIRECTORY_DO`・`AUTH_RATE_DO` を足す。管理画面の監査ログは `{tag: "v3", new_sqlite_classes: ["AdminAudit"]}` と `ADMIN_AUDIT_DO`（改修計画 §3.6）。
 
 ### 9.4 `deny.cgi` との接続
 
@@ -741,8 +751,8 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | --- | --- |
 | `/admin/boards/:bbs` | `BBS_PHOEBE`・`timecount`・`timeclose`・`BBS_SAMBA24`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_PASS`・`BBS_RENTOU_KEYS`・`BBS_RENTOU_MODE`・`BBS_THREAD_PASS`・`BBS_LIVE` の専用フォーム（既存のスレ立て規制フォームと同じ ETag 条件付き保存） |
 | `/admin/rules/access` / `/admin/rules/ngwords` | 5 列目の回避レベルを検証 |
-| `/admin/accounts` | `uid`・ログイン ID（検索条件にだけ使い一覧には出さない）・メール・端末ハッシュ・IP ハッシュで検索 |
-| `/admin/accounts/:uid` | 種別・Lv・`lvOverride`・権限・状態・端末履歴・キャップ・専ブラキー・利用ログ。旧キャップの紐づけ |
+| `/admin/accounts` | ユーザー一覧（既定は直近書き込み順）。`uid`・ログイン ID（検索条件にだけ使い一覧には出さない）・メール・AS・UA・端末ハッシュ・識別子・IP ハッシュで検索。モック `docs/ui/admin-users.html` |
+| `/admin/accounts/:uid` | ユーザー詳細。種別・Lv・`lvOverride`・権限・状態、使われた AS・地域・UA・端末情報・識別子と ID の一覧（`seen`）、アカウントの認証キーとキーごとの書き込み一覧、書き込み記録（`log`）。凍結・BAN・Lv 固定・キー無効化・旧キャップの紐づけ。モック `docs/ui/admin-user.html` |
 | `/admin/phoebe` | Lv 上限ルール（`phoebe.cgi`）、エッジ防御の規則（`edge-rules.json`）、乱造検知の「要確認」一覧 |
 | `/admin/boards/:bbs/threads/:key` | 投稿ログの `UID:` / `Device:` から該当アカウント・端末 BAN（`deny.cgi` へ行を追加）へのリンク |
 

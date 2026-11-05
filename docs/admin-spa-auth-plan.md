@@ -119,7 +119,8 @@ SPA が GET /admin/api/me
 | スレ詳細 | `/admin/boards/:bbs/threads/:key` | `delete` | 停止・再開・削除・移動・レス編集・レス削除・dat と投稿者ログの閲覧（投稿者ログの閲覧は監査ログに残す） |
 | 規制ルール | `/admin/rules/access`・`/admin/rules/ngwords` | `regulate` | `deny.cgi`・`ngwords.cgi`。書式の説明はモックの「書き方」枠の体裁で現行の書式を書く |
 | 板一覧 | `/admin/menu` | `admin` | `bbsmenu.html` |
-| アカウント | `/admin/accounts`・`/admin/accounts/:uid` | `admin`（検索と BAN は `regulate` も可。ただし役割ありのアカウントは `admin` だけが操作できる） | 設計書 §11 の項目（役割・Lv・状態・端末・キャップ・専ブラキー・利用ログ）。役割の付与・剥奪は段 M2 から（§7） |
+| ユーザー一覧 | `/admin/accounts` | `admin`・`regulate` | 直近書き込み順（ほかに登録順・Lv 順・24 時間の書き込み数順）。各行に最終書き込みの日時・書き込み先・本文の先頭・接続元、24 時間の書き込み数、UA・端末・キーの数。種別・状態・役割で絞り込み、`uid`・ログイン ID・メール・AS・UA・端末・識別子で検索。乱造検知の要確認を色で示す。モック `docs/ui/admin-users.html` |
+| ユーザー詳細 | `/admin/accounts/:uid` | `admin`・`regulate`（役割ありのアカウントの操作は `admin` だけ） | アカウントの概要と操作（凍結・BAN・Lv 固定・役割・全キー無効化・メモ）、使われた AS・地域、UA（生の文字列も）、端末情報、日ごとの識別子と ID、認証キーの一覧（キーごとの書き込み数と無効化）、書き込み一覧（すべて・Web・キーごとのタブ）。閲覧は監査ログに残す。役割の付与・剥奪は段 M2 から（§7）。モック `docs/ui/admin-user.html` |
 | キャップ | `/admin/caps` | `admin` | 全件の一覧・他アカウント宛の発行・失効・旧キャップ（KV `CAP`）の紐づけ。自分のキャップ（1 個まで）は `/auth/account` で扱う（設計書 §6.2・§10） |
 | PHOEBE・エッジ防御 | `/admin/phoebe` | `regulate` | `phoebe.cgi`・`edge-rules.json`・乱造の要確認一覧 |
 | 監査ログ | `/admin/audit` | `admin` | §3.6 |
@@ -283,7 +284,11 @@ bbs/src/main/scala/io/_3ch/bbs/
 | `GET`・`PUT /admin/api/menu` | `admin` | `bbsmenu.html`。ETag 条件付きで保存 |
 | `PUT /admin/api/accounts/:uid/roles` | `admin` | 役割の付与・剥奪（段 M2 から。自分の `admin` は外せない。最後の 1 人の `admin` も外せない） |
 | `GET /admin/api/audit?before=` | `admin` | 監査ログのページ |
-| アカウント・キャップ・PHOEBE | 設計書 §11 に従う | 段 M3 で定義 |
+| `GET /admin/api/accounts?sort=&kind=&status=&role=&q=&cursor=` | `admin`・`regulate` | ユーザー一覧（`AccountDirectory.list`）。`sort` は `recent`（既定）/ `created` / `lv` / `posts24h`。`q` は種類を判定して `AccountIndex` か `AccountDirectory.search` で引く |
+| `GET /admin/api/accounts/:uid` | `admin`・`regulate` | ユーザー詳細（`Account.inspect`: 概要・`seen`・`tokens`）。閲覧を監査ログに残す |
+| `GET /admin/api/accounts/:uid/posts?via=&tokenId=&before=` | `admin`・`regulate` | 書き込み記録のページ（`log`） |
+| `POST /admin/api/accounts/:uid/actions` | `admin`・`regulate` | `{action: "freeze"|"unfreeze"|"ban"|"setLv"|"revokeToken"|"revokeAllTokens"|"note", ...}`。役割ありのアカウントへは `admin` だけ |
+| キャップ・PHOEBE | 設計書 §11 に従う | 段 M3 で定義 |
 
 ### 6.2 共通規則
 
@@ -302,7 +307,7 @@ bbs/src/main/scala/io/_3ch/bbs/
 | M0 | **API 化**: `AdminService`・`AdminApi`・`AdminDto` / `AdminCodec`・`BoardSettingsForm`・`ResEditText` を作り、`/admin/api/*` を Basic 認証のまま追加する。既存の HTML 画面はそのまま残し、内部で `AdminService` を共用する。板設定・`head.txt`・`bbsmenu.html`・規制ルールの ETag 条件付き保存への変更は独立コミット | — | 既存の `AdminHandlerSuite`・統合テストが、条件付き保存の変更分を除いて通る。`AdminApiSuite` で全 API の正常系・検証エラー・ETag 競合・CR/LF 拒否・入力上限・未設定と明示値の往復を確認 |
 | M1 | **SPA 化**: `adminClient`・`admin-web`・`vite.admin.config.ts`、配信（`run_worker_first`・`AdminAssets`）、モックの見た目。全画面が現行と同じ操作をできたら、旧 HTML の描画（`AdminText` の画面部分）を削除する。認証は Basic 認証のまま、API に §3.5 の Origin 等の検査を加える。**着手前に Origin 検証の復活と CSP の変更について利用者の承認を得る**（§10-9） | M0、利用者の承認 | 現行の全操作を SPA から実行できることを実 workerd で確認（§8）。CSP 違反が出ない。`dist/admin/` が `/admin` 以外から取れない。`AdminHandlerSuite` の「Origin・Fetch Metadata によらず受け付ける」と `tests/admin.integration.test.js` の同趣旨の確認を、他オリジンからの変更を拒否する期待値に書き換える |
 | M2 | **アカウント認証へ切替**: 管理者セッション・再認証・役割検査・bootstrap・監査ログ・**最小限の役割付与 API と画面**（`PUT /admin/api/accounts/:uid/roles`。Basic 認証で作業していた人に役割を配れるようにするため）。Basic 認証・`ADMIN_PASSWORD`・`ADMIN_USER` を削除。AGENTS.md 1.6・3.6、`docs/admin.md`（ログイン・bootstrap・役割・開発時の手順）を更新 | 設計書の段 B（`Account` / `AccountIndex` DO・セッション）と、段 E-1（ID/Password ログインと Google ログイン） | 役割ごとの許可・拒否の表を全 API について `AdminAuthSuite` で確認。Basic 認証の資格情報では入れない。bootstrap の条件（0 件・非常用期限・同時実行で 1 人だけ）、`adminGen` による失効、パスワード規則の検査時点、Google 再認証の `aid` 照合を確認。`auth_time` の実機確認の結果を本書に反映 |
-| M3 | **認証機能の管理画面**: アカウント・キャップ・PHOEBE / エッジ防御・連投規制とスレ立て規制の各項目（§4.3 の「設計書 段 A / C / D 以降」） | 設計書の各段 | 各画面の API テスト。§4.3 の表示条件が各段の完了と一致する |
+| M3 | **認証機能の管理画面**: ユーザー一覧・ユーザー詳細（`AccountDirectory` を含む）・キャップ・PHOEBE / エッジ防御・連投規制とスレ立て規制の各項目（§4.3 の「設計書 段 A / C / D 以降」） | 設計書の各段 | 各画面の API テスト。§4.3 の表示条件が各段の完了と一致する |
 | M4 | **任意**: 管理者の TOTP、エラーログ閲覧（§10-3・§10-6） | — | — |
 
 M0 と M1 は認証基盤を待たずに進められる。M2 は設計書の認証基盤が先に要る。
