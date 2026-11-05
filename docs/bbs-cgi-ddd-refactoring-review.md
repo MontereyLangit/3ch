@@ -63,3 +63,16 @@
 | 検証 | `BbsSettingsSuite` に型付き読み・`merged` を追加（JVM / JS）。`JsNumberSuite`（JVM / JS）と、実行環境の `Number` / `parseInt` と突き合わせる `JsNumberRuntimeSuite`（JS のみ）を追加。スナップショット差分なし |
 | 計画との差分 | 計画書は合成した設定を `PostingContext.settings` に置くとしているが、`PostingContext` はまだスレ立て規制の入力としてしか作られていない（実行中の状態を持つ不変オブジェクトにするのは段 7）。段 3 ではハンドラ内の `Draft.settings` に置き、段 7 で `PostingContext` に移す。`int(name, default)` の既定値は従来の `or` に合わせて文字列で受ける |
 | 未解決 | `Moderation.check(gb)`（`ModerationSuite` 用の包み）は `gb.settings` から `BbsSettings` を組み立てる。段 5 で整理する |
+
+## 段 4: 投稿者の構成要素
+
+| 項目 | 内容 |
+| --- | --- |
+| 実施 | `common/domain/posting/CapHandle`（照合済みキャップの強弱・表示名・メールのパスワード部分）と `NameField`（名前・ユーザー ID 表示・識別子の連結）、`common/domain/identity/DateSalt`・`ShikibetsuSeeds`・`ShikibetsuMode`・`ShikibetsuFormat`、`repository/CapRepository`（KV 読込）を追加。全板共通スレの拒否判定は既存 `GlobalThread` の `postingError` に移した |
+| 型付き状態 | リクエスト由来の IP・host・UA・Client Hints・端末情報・地域・ハッシュ用ソルトを `PostingIdentity` に保持。`Draft` にキャップ・識別子・スレ主を置き、対応する `g` のフィールドを削除した。ヘッダ検査前は元の IP・UA を保持し、検査後にだけ表示用 host と Client Hints 連結済み UA に更新する |
+| 振る舞いの保存 | 通常・`!` 付きキャップの照合方式、PON・識別子・スレ主・スレ立て規制のハッシュ入力と実行順は維持。日付窓の計算は純粋関数、数値の文字列化はハンドラの JavaScript `String` に残した。強キャップは最初の `★` から最初の改行までを除く従来の `/★.*/` と同じ規則。KB-09 の空括弧も残す |
+| レビュー | 実装者のセルフレビューと独立レビュー、オーケストレーターの統合レビューを実施。スレ主のデコードを設定読込時へ前倒しした点を修正し、`Draft` の遅延変換を既存の `markNusi` の位置でだけ呼ぶようにした。キャップの迂回・閉鎖・満杯の拒否順が壊れた `owner` にも影響されないことを別スイートで確認する |
+| テスト | `CapHandleSuite`・`NameFieldSuite`・`ShikibetsuSuite`（JVM / JS）、`GlobalThreadSuite` の拒否優先順、`PostingOwnerCompatibilitySuite` を追加。既存 `PostingHandlerSuite`・スナップショット・golden の期待値は変更していない |
+| 検証 | `sbt test`（JVM 43・common JS 45・codegen 27・bbs 505、計 620 件）、`sbt 'set ThisBuild / scalacOptions += "-no-indent"' Test/compile`、`npm run v6:build`、`npm run v6:typecheck`、`npm test`（実 workerd を含む 46 件、スキップなし）、`git diff --check` が成功。投稿スナップショット 196 ケースは全件一致。クリーンなチェックアウトでは `IslandComponents` が未生成なので、先に `sbt codegen/run` を実行した |
+| 計画との差分 | 既存 `PostingUser`・`NusiMark`・`ThreadOwner` は `bbs/domain` に置いたまま利用し、`NameField` には `PostingUser.nameSuffix` の結果を渡す。` (主)` は従来の段で既存 `NusiMark` を使って付ける。`Moderation.decide` は投稿者情報の入力だけを型付き引数に変更し、ルールの分離（段 5）は行っていない |
+| 次の段 | 段 5（規制・`UserInfo`・R2 の規制ルール読込の分離）。アプリケーションサービスへの集約と `g` 全廃は段 7 |

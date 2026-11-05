@@ -36,6 +36,13 @@ object GlobalThread {
     case Kind.Open => true
   }
 
+  /** 共通スレのスレ立てと返信で、最初に拒否する理由。 */
+  def postingError(key: String, creatingThread: Boolean, cap: Boolean): Option[PostingError] = kindOf(key).flatMap { kind =>
+    if (creatingThread && !cap) Some(PostingError.GlobalThreadCreateCapOnly)
+    else if (!canPost(kind, cap)) Some(PostingError.GlobalThreadCapOnly)
+    else None
+  }
+
   /** subject.txt の行（`key.dat<>...`）を結合する。共通スレを 924 → 900 の順に先頭へ置き、板固有の行を続ける。各群の中では元の並びを保つ。 */
   def mergeSubject(global: Seq[String], own: Seq[String]): Seq[String] = {
     def kindOfLine(line: String): Option[Kind] = kindOf(line.takeWhile(_ != '.'))

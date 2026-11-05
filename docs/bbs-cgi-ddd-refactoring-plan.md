@@ -2,7 +2,7 @@
 
 2026-11-01。[認証・PHOEBE・連投規制 設計](auth-phoebe-rate-limit-design.md)（以下「設計書」）を載せる前提として、
 `bbs.cgi` の投稿処理（`bbs/src/main/scala/io/_3ch/bbs/handler/PostingHandler.scala`）を
-ドメインモデル・ドメインサービス・アプリケーションサービス・リポジトリ・DO に分ける。**状態: 段 3 まで完了（段 0a・0b・1・2・3。記録は [bbs-cgi-ddd-refactoring-review.md](bbs-cgi-ddd-refactoring-review.md)）。**
+ドメインモデル・ドメインサービス・アプリケーションサービス・リポジトリ・DO に分ける。**状態: 段 4 まで完了（段 0a・0b・1・2・3・4。検証・レビュー記録は [bbs-cgi-ddd-refactoring-review.md](bbs-cgi-ddd-refactoring-review.md)）。**
 2026-11-02 の Opus 5 セルフレビュー（[auth-phoebe-review.md](auth-phoebe-review.md)）の指摘を反映した。
 2026-11-05、`develop` の取り込みに合わせて前提を改めた（`develop_v6s` と `feature/board_top` は PR #37 で統合済み、パッケージは `io._3ch.*`）。
 同日、トリップと ID の廃止・`!id`・スレ主表示・全板共通スレ（develop 3775f12）の取り込みに合わせて §2〜§5 を改めた。

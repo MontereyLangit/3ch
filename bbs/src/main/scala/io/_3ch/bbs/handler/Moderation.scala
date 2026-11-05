@@ -36,7 +36,7 @@ object Moderation {
   def check(gb: js.Dynamic, env: WorkerEnv): js.Promise[Int] = {
     val form = PostForm(name = str(gb.form.FROM), mail = str(gb.form.mail), message = str(gb.form.MESSAGE), subject = str(gb.form.subject), bbs = str(gb.form.bbs))
     val settings = BbsSettings(ListMap.from(gb.settings.asInstanceOf[js.Dictionary[js.Any]].toSeq.map((k, v) => k -> str(v))))
-    decide(gb, form, settings, env).map { (denial, marked) =>
+    decide(truth(gb.cap), str(gb.country), str(gb.userInfo), gb.number.asInstanceOf[Double], form, settings, env).map { (denial, marked) =>
       if marked != form then {
         gb.form.FROM = marked.name
         gb.form.MESSAGE = marked.message
@@ -45,13 +45,10 @@ object Moderation {
     }.toJSPromise
   }
 
-  /**
-    * 規制を評価し、拒否理由と mark 適用後のフォームを返す。
-    * `gb` からはキャップ・国・userInfo・レス番号を読む。
-    */
-  def decide(gb: js.Dynamic, form: PostForm, settings: BbsSettings, env: WorkerEnv): Future[(Option[ModerationDenial], PostForm)] = {
-    if truth(gb.cap) || form.bbs == "saku" then Future.successful((None, form))
-    else if gb.country.asInstanceOf[String] == "T1" then Future.successful((Some(ModerationDenial.Tor), form))
+  /** 規制を評価し、拒否理由と mark 適用後のフォームを返す。 */
+  def decide(cap: Boolean, country: String, userInfo: String, number: Double, form: PostForm, settings: BbsSettings, env: WorkerEnv): Future[(Option[ModerationDenial], PostForm)] = {
+    if cap || form.bbs == "saku" then Future.successful((None, form))
+    else if country == "T1" then Future.successful((Some(ModerationDenial.Tor), form))
     else {
       var current = form
       val content = s"FROM=${form.name} mail=${form.mail} MESSAGE=${form.message} subject=${form.subject}"
@@ -74,9 +71,9 @@ object Moderation {
                   def matches(field: String, value: String) = rule.selectDynamic(field).asInstanceOf[js.RegExp].test(value)
                   val isWord = rule.isWord.asInstanceOf[Boolean]
                   val action = rule.action.asInstanceOf[String]
-                  if !matches("board", form.bbs) || !matches("target", str(gb.userInfo)) || !(matches("word", content) || matches("word", decoded)) then None
+                  if !matches("board", form.bbs) || !matches("target", userInfo) || !(matches("word", content) || matches("word", decoded)) then None
                   else if isWord && settings.checked("BBS_NGWORD_PASS") then None
-                  else if action == "TateDame" && gb.number.asInstanceOf[Int] != 1 then None
+                  else if action == "TateDame" && number != 1 then None
                   else if action == "mark" || settings.checked("BBS_NO_MADAKANA") then {
                     if !isWord && !current.name.startsWith("</b>[´・ω・｀]<b> ") then current = current.copy(name = "</b>[´・ω・｀]<b> " + current.name)
                     current = current.copy(message = current.message + " <small>👀 Madakana: Caution</small>")
