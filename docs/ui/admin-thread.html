@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>スレ管理 - 管理画面 | 3ch モック</title><link rel="stylesheet" href="auth-admin.css"></head>
+<body>
+<!-- モック: /admin/boards/zatsudan/threads/1730000000（docs/admin-spa-auth-plan.md §4.1・§6.1）。レス 3 を編集中 -->
+<header class="site-header">
+  <a class="site-logo" href="#"><img src="3ch_logo.png" alt="３ちゃんねる"></a>
+  <nav><b>管理画面</b><span>|</span><a href="#">掲示板へ戻る</a></nav>
+  <nav class="account-nav"><span class="uid">@r4n8w1hs</span> <span class="role">delete</span> <small>管理者セッション 残り 18 分</small><span>|</span><a href="#">管理画面を出る</a></nav>
+</header>
+<div class="layout admin">
+<aside class="admin-nav">
+  <section><h2>■ 板</h2><select style="width:100%"><option>zatsudan（雑談掲示板）</option></select>
+    <div class="links" style="margin-top:6px"><a class="off" href="#">板設定</a><a class="cur" href="#">スレ一覧・スレ管理</a></div></section>
+  <section><h2>■ 全体</h2><div class="links"><a class="off" href="#">規制ルール（アクセス）</a><a class="off" href="#">規制ルール（NGワード）</a><a class="off" href="#">板一覧（bbsmenu）</a></div></section>
+  <section><p class="notice" style="margin:0">削除担当の権限では、スレとレスの管理だけができます。</p></section>
+</aside>
+<main>
+  <p class="notice" style="margin:8px 0 0"><a href="#">スレ一覧</a> › zatsudan/1730000000</p>
+  <h1>雑談スレッド Part 12 <small>(124)</small> <span class="state">公開中</span></h1>
+
+  <div class="detail-buttons" style="margin-bottom:10px"><button>▸ 書き込みを停止</button><button>▸ 別の板・key へ移動</button><button style="color:#c00">▸ スレを削除</button><button>▾ 投稿者ログ</button><button>▸ dat を見る</button></div>
+
+  <div class="panel" style="padding:10px 15px">
+    <h2>■ 投稿者ログ <small>閲覧は監査ログに記録されます</small></h2>
+    <pre class="rules">1&lt;&gt;UID: IP:198.51.100.7 AS2516-JP,Tokyo,Shinjuku Device: UA:Mozilla/5.0 (Linux; Android 15; ...)
+2&lt;&gt;UID:k3x9q2ab IP:203.0.113.21 AS9605-JP,Tokyo,Minato Device:p3fa91c07be4d2a5e1 UA:Mozilla/5.0 (iPhone; ...)
+3&lt;&gt;UID: IP:192.0.2.55 AS17676-JP,Osaka,Osaka Device: UA:Monazilla/1.00 JaneStyle/4.23</pre>
+    <p class="notice" style="margin:6px 0 0">UID・Device から <a href="#">アカウントを開く</a>・<a href="#">端末で規制する</a>（規制担当の権限が必要）</p>
+  </div>
+
+  <div class="panel">
+    <h2>■ レス</h2>
+    <div class="res"><span class="ops"><a href="#">編集</a><a href="#" style="color:#c00">あぼーん</a></span>
+      <div class="h"><span class="num">1</span><span class="name">名無しさん＠３ちゃんねる</span><span class="date">2026/10/27(火) 09:13:20 ID:aB3dE5fG</span></div>
+      <div class="m">雑談スレッドの 12 本目です。<br>前スレ: zatsudan/1729500000</div></div>
+    <div class="res"><span class="ops"><a href="#">編集</a><a href="#" style="color:#c00">あぼーん</a></span>
+      <div class="h"><span class="num">2</span><span class="name">名無しさん＠３ちゃんねる ◆Xy7Qp2Lm9a</span><span class="date">2026/10/27(火) 09:20:02 ID:Qw9xYz12</span></div>
+      <div class="m">乙です</div></div>
+    <div class="res editing">
+      <div class="h"><span class="num">3</span><span class="name">宣伝屋</span><span class="date">2026/10/27(火) 09:41:57 ID:Zz0Zz0Zz</span> <b style="margin-left:8px;font-size:12px">編集中</b></div>
+      <div style="margin:8px 0 0 40px">
+        <div class="field"><label>名前</label><input class="input sm" value="宣伝屋" style="width:60%"> <small>トリップ: なし · 識別子: JP.Kq Xt-9f2c… は変更されません</small></div>
+        <div class="field"><label>メール</label><input class="input sm" value="" style="width:60%"></div>
+        <div class="field"><label>本文</label><textarea rows="3">（管理者により内容を変更しました）</textarea></div>
+        <button class="btn primary">保存</button> <button class="btn">取り消し</button>
+        <span class="notice">編集前後の本文は監査ログに残ります。投稿日時・ID・投稿者ログは変わりません。</span>
+      </div></div>
+    <div class="res aborn">
+      <div class="h"><span class="num">4</span><span class="name">あぼーん</span><span class="date">あぼーん</span></div><div class="m">あぼーん</div></div>
+    <div class="res"><span class="ops"><a href="#">編集</a><a href="#" style="color:#c00">あぼーん</a></span>
+      <div class="h"><span class="num">5</span><span class="name">名無しさん＠３ちゃんねる</span><span class="date">2026/10/27(火) 10:02:47 ID:Hn5Tg7Rk</span></div>
+      <div class="m">&gt;&gt;3 消されてて草</div></div>
+  </div>
+</main>
+</div>
+<footer class="site-footer"><a href="#">3ch</a> ver 0.6.x 2026-11-05 <span class="author">†Monterey Langit ★</span></footer>
+</body></html>

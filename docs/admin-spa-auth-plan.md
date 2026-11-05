@@ -4,7 +4,7 @@
 `/admin/*` を次の 3 点で作り直す計画。**状態: 計画（未着手）。**
 
 1. **認証**: HTTP Basic 認証をやめ、原案の管理者アカウント（ID/Password 方式または Google 連携）によるログインにする。
-2. **UI**: 利用者提示のモック（旧 delightly の板設定画面 `kanri.html` と `a.css`）の見た目に合わせる。
+2. **UI**: 利用者提示のモック（旧 delightly の板設定画面 `kanri.html` と `a.css`）の構成を採り、見た目は現行の板トップに揃える（2026-11-05 利用者指示）。モックは `docs/ui/admin-*.html`。
 3. **実装**: scalajs-react の SPA（クライアント描画）で作り直し、サーバは JSON API にする。
 
 構成の下敷きは `feature/spa_admin_page` の `docs/管理画面SPAメモ.md`（2026-10-09。scalajs-react 版の `adminClient` 案）。
@@ -131,6 +131,10 @@ SPA が GET /admin/api/me
 
 ### 4.2 見た目（モックの取り込み）
 
+**2026-11-05 改訂**: 見た目は現行の板トップ（ヘッダー・配色・入力欄・タブ・サイドバー・フッター）に揃える。`kanri.html` からは 2 列構成・項目の並び・「書き方」枠・上下の「適用」を引き継ぎ、色の帯は各グループ左端の色線に置き換える。
+モックは `docs/ui/admin-board.html`（板設定）・`admin-thread.html`（スレ管理）・`admin-reauth.html`（再認証）で、共通 CSS は `docs/ui/auth-admin.css`。
+実装では `a.css` ではなく板トップと同じ Tailwind のクラスで書き、下の表の `a.css` 由来の記述は構成の対応として読む。
+
 モックの構造を次のように写す。CSS は `a.css` を元にした `admin-web/admin.css` 1 本にし、色や余白はすべてクラスで指定する。
 HTML の `style` 属性は CSP（`style-src 'self'`）で弾かれ、`bgcolor` 属性は HTML5 で廃止されているため使わない（React の `style` プロパティは CSSOM 経由で CSP の対象外だが、見た目の定義を CSS に集めるために使わない）。
 モックで使われているクラスは `btn` 系と `notice mt5` だけで、`mt5`（上余白 5px）は `a.css` に無いので補う。モックの `@font-face`（Saitamaar。AA 用）は管理画面では使わない。
@@ -223,8 +227,8 @@ admin-client/src/main/scala/ch3s/admin/
 admin-web/
   index.html              マウント先と CSS・JS の参照だけ
   main.js                 import "./admin.css"; import "scalajs:main.js";
-  admin.css               a.css を元にしたスタイル
-vite.admin.config.ts      管理画面専用ビルド（HonoX・Tailwind なし）
+  admin.css               Tailwind の読み込み（app/style.css と同じ @source）と管理画面固有の少数の指定
+vite.admin.config.ts      管理画面専用ビルド（HonoX なし。Tailwind は板トップと同じ設定）
 bbs/src/main/scala/ch3s/bbs/
   handler/admin/AdminAuth.scala     管理者セッション・再認証・役割検査・Origin 検査
   handler/admin/AdminApi.scala      JSON の入出力とルーティング

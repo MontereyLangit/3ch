@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>管理画面への再認証 | 3ch モック</title><link rel="stylesheet" href="auth-admin.css"></head>
+<body>
+<!-- モック: 管理者セッションが無いときの再認証（docs/admin-spa-auth-plan.md §3.1〜§3.3）。ID・パスワードの管理者 -->
+<header class="site-header">
+  <a class="site-logo" href="#"><img src="3ch_logo.png" alt="３ちゃんねる"></a>
+  <nav><b>管理画面</b><span>|</span><a href="#">掲示板へ戻る</a></nav>
+  <nav class="account-nav"><span class="uid">@m7p2c8dz</span> <span class="lv">Lv10</span> <span class="role">admin</span></nav>
+</header>
+<div class="layout admin" style="grid-template-columns:minmax(0,1fr)">
+<main style="max-width:520px;margin:24px auto;padding:0">
+  <div class="panel" style="padding:20px 22px">
+    <h1 style="margin-top:0">管理画面に入る</h1>
+    <p style="margin:0 0 12px">安全のため、管理画面に入るたびにパスワードを確認します。</p>
+    <div class="field"><label>ログイン ID</label><input class="input" value="m_admin" disabled style="width:100%;background:#f4f6f8"></div>
+    <div class="field"><label>パスワード</label><input class="input" type="password" value="xxxxxxxxxx" style="width:100%">
+      <span class="err">管理画面の利用には 16 文字以上のパスワードが必要です。<a href="#">パスワードを変更する</a></span></div>
+    <button class="btn primary block">確認して管理画面に入る</button>
+    <hr style="border:0;border-top:1px solid #dce1e6;margin:16px 0">
+    <dl class="kv" style="font-size:12.5px">
+      <dt>有効時間</dt><dd>操作が無いと 30 分で終了。最長 8 時間</dd>
+      <dt>試行回数</dt><dd>失敗が続くと一時的に入れなくなります（1 日 20 回まで）</dd>
+      <dt>記録</dt><dd>入った日時と操作は監査ログに残ります</dd>
+    </dl>
+    <p class="notice" style="margin:12px 0 0">Google で登録した管理者は「Google で確認する」が表示されます。パスワードを忘れた場合は、ほかの管理者に再設定を依頼してください（メールでの再設定は使えません）。</p>
+  </div>
+</main>
+</div>
+<footer class="site-footer"><a href="#">3ch</a> ver 0.6.x 2026-11-05 <span class="author">†Monterey Langit ★</span></footer>
+</body></html>

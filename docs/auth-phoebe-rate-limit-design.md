@@ -157,6 +157,8 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 
 ### 3.8 新 UI での Web 版の挙動
 
+画面のモックは `docs/ui/auth.html`（`/auth/`）・`auth-modal.html`（板トップ上の認証モーダル）・`account.html`（`/auth/account`）。見た目は板トップに揃えている。
+
 新 UI（`feature/board_top` 以降）は scalajs-react の SSR コンポーネント（`bbs/.../components/`）と、`bbs-client` の
 `@islands` で hydrate するクライアント部品で構成される。投稿欄は板 top の各スレカードに `details` 方式で置き、
 `fetch` で bbs.cgi へ送って `x-threadkey` / `x-resnum` で成否を見る（上記の方針メモ 2 章）。認証はこの構成に次を足す。

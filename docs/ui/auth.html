@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>認証・登録 | 3ch モック</title><link rel="stylesheet" href="auth-admin.css"></head>
+<body>
+<!-- モック: /auth/（通常表示）。設計書 docs/auth-phoebe-rate-limit-design.md §3.2 B・§3.7・§3.9・§3.10 -->
+<header class="site-header">
+  <a class="site-logo" href="#"><img src="3ch_logo.png" alt="３ちゃんねる"></a>
+  <nav aria-label="メインメニュー"><a href="#">ホーム</a><span>|</span><a href="#">板一覧</a><span>|</span><a href="#">検索</a></nav>
+  <nav class="account-nav" aria-label="アカウント"><a href="auth.html"><b>認証・登録</b></a><span>|</span><a href="#login">ログイン</a><img src="icon_extend.png" alt=""></nav>
+</header>
+
+<div class="layout">
+<main>
+  <h1>認証・登録</h1>
+  <p class="notice" style="margin:0 0 4px">書き込みには認証・登録が必要です。認証が終わると <a href="#">雑談掲示板</a> に戻ります。</p>
+
+  <nav class="tabs" aria-label="登録・ログイン">
+    <a class="tab active" href="#">新しく登録する</a><a class="tab" id="login" href="#">ログイン</a>
+  </nav>
+
+  <form class="panel" onsubmit="return false">
+  <ol class="steps">
+    <li>
+      <h2>登録方法を選ぶ</h2>
+      <div class="method" role="radiogroup">
+        <label class="sel" data-m="client"><input type="radio" name="m" checked><b>かんたん登録</b><small>この端末だけで使う仮登録（クライアント ID）。Lv1 から。1 年で失効します。</small></label>
+        <label data-m="password"><input type="radio" name="m"><b>ID・パスワード</b><small>別の端末からもログインできます。Lv1 から。メール認証で Lv3。</small></label>
+        <label data-m="google"><input type="radio" name="m"><b>Google で続ける</b><small>Google アカウントで登録します。Lv10。</small></label>
+      </div>
+      <div id="pw-fields" hidden style="margin-top:12px">
+        <div class="field"><label>ログイン ID <small>（半角英小文字・数字・_ 3〜16 文字。ほかの人には表示されません）</small></label><input class="input" autocomplete="username" value="" placeholder="例: taro_2026"></div>
+        <div class="field"><label>パスワード <small>（8 文字以上）</small></label><input class="input" type="password" autocomplete="new-password"></div>
+        <div class="field"><label>パスワード（確認）</label><input class="input" type="password" autocomplete="new-password"></div>
+        <div class="field"><label>メールアドレス <small>（任意。認証すると Lv3 から始まり、パスワードの再設定ができます）</small></label><input class="input" type="email" placeholder="you@example.com"></div>
+      </div>
+    </li>
+    <li>
+      <h2>利用規約と投稿の責任</h2>
+      <div class="scrollbox">
+        投稿の内容に関する責任は投稿者にあります。他人の権利を侵害する投稿、法令に違反する投稿をしてはいけません。<br>
+        削除・規制の判断のため、投稿時の接続情報（IP アドレス・回線・端末情報）を記録します。法令に基づく開示請求に応じる場合があります。<br>
+        （利用規約の全文。第 2 版 2026-11-xx）
+      </div>
+      <label class="check" style="margin-top:8px"><input type="checkbox" checked> <span>利用規約を読み、投稿内容に責任を持つことに同意します</span></label>
+    </li>
+    <li>
+      <h2>認証の前にお読みください</h2>
+      <div class="notice-box">
+        <b>推奨環境</b>: Safari・Google Chrome・Microsoft Edge・Mozilla Firefox の最新版。これら以外では認証できないことがあります。<br>
+        <b>認証できないことがある例</b>
+        <ol>
+          <li>専用ブラウザ（専ブラ）の内蔵ブラウザ → このページの URL を推奨ブラウザで開き直してください。</li>
+          <li>一部のアプリ内ブラウザ（X・LINE・Discord など）→「ブラウザで開く」などで推奨ブラウザへ移ってください。</li>
+          <li>「PC 版サイトを見る」「デスクトップ表示」がオン → オフにして再読み込みしてください。</li>
+          <li>ユーザーエージェントを変更する拡張機能・アプリの設定 → 切ってから再読み込みしてください。</li>
+        </ol>
+      </div>
+    </li>
+    <li>
+      <h2>人間であることの確認</h2>
+      <div class="turnstile"><span class="box"></span><span>Turnstile のウィジェット<br><small>（Cloudflare が表示する確認欄）</small></span></div>
+    </li>
+  </ol>
+  <div style="padding-left:30px"><button class="btn primary">認証して登録する</button>
+    <p class="notice" style="margin:8px 0 0">登録すると、この端末に認証情報（Cookie）が保存されます。2 回目からは認証は不要です。</p></div>
+  </form>
+
+  <div class="panel" id="login-panel" hidden>
+    <h2>ログイン</h2>
+    <div class="field"><label>ログイン ID</label><input class="input" autocomplete="username"></div>
+    <div class="field"><label>パスワード</label><input class="input" type="password" autocomplete="current-password"></div>
+    <div class="turnstile" style="margin-bottom:10px"><span class="box"></span><span>Turnstile のウィジェット</span></div>
+    <button class="btn primary">ログイン</button> <button class="btn">Google でログイン</button>
+    <p class="notice"><a href="#">パスワードを忘れた場合</a>（メールアドレスを認証済みの方のみ）</p>
+  </div>
+</main>
+
+<aside class="side-panel" aria-label="認証の案内">
+  <section><h2>■ 登録方法の違い</h2>
+    <table class="list" style="font-size:12px">
+      <tr><th></th><th>開始 Lv</th><th>他の端末</th></tr>
+      <tr><td>かんたん</td><td>1</td><td>×（1 年で失効）</td></tr>
+      <tr><td>ID・パスワード</td><td>1（メール認証で 3）</td><td>○</td></tr>
+      <tr><td>Google</td><td>10</td><td>○</td></tr>
+    </table>
+    <p class="notice">かんたん登録は、あとから ID・パスワードや Google に切り替えられます。Lv と書き込み履歴は引き継ぎます。</p></section>
+  <section><h2>■ Lv（PHOEBE）とは</h2>
+    <p style="margin:0">書き込みの信頼度です。書き込みを続けると上がります。板やスレによっては、一定の Lv 以上でないと書き込めません。名前欄の識別子の末尾に表示されます。</p></section>
+  <section><h2>■ 専ブラをお使いの方</h2>
+    <p style="margin:0">登録後、<a href="account.html">アカウント設定</a>で「専ブラ用認証キー」を発行し、専ブラの初回の書き込みでメール欄に <code>!#キー</code> を入れてください。</p></section>
+</aside>
+</div>
+<footer class="site-footer"><a href="#">3ch</a> ver 0.6.x 2026-11-05 <span class="author">†Monterey Langit ★</span></footer>
+<script>
+document.querySelectorAll('.method label').forEach(l=>l.addEventListener('click',()=>{
+  document.querySelectorAll('.method label').forEach(x=>x.classList.toggle('sel',x===l));
+  document.getElementById('pw-fields').hidden = l.dataset.m!=='password';
+  document.querySelector('.btn.primary').textContent = l.dataset.m==='google' ? 'Google で登録する' : '認証して登録する';
+}));
+document.getElementById('login').addEventListener('click',e=>{e.preventDefault();
+  document.querySelector('form.panel').hidden=true;document.getElementById('login-panel').hidden=false;
+  document.querySelectorAll('.tabs .tab').forEach(t=>t.classList.toggle('active',t.id==='login'));});
+</script>
+</body></html>

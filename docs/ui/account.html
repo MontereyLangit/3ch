@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>アカウント設定 | 3ch モック</title><link rel="stylesheet" href="auth-admin.css"></head>
+<body>
+<!-- モック: /auth/account（設計書 §3.8・§3.9・§4.2・§6.2・§6.3）。かんたん登録・Lv3 の利用者。ヘッダーのアカウントメニューを開いた状態 -->
+<header class="site-header">
+  <a class="site-logo" href="#"><img src="3ch_logo.png" alt="３ちゃんねる"></a>
+  <nav><a href="#">ホーム</a><span>|</span><a href="#">板一覧</a><span>|</span><a href="#">検索</a></nav>
+  <nav class="account-nav" aria-label="アカウント"><span class="uid">@k3x9q2ab</span> <span class="lv">Lv3</span>
+    <img src="icon_extend.png" alt="" style="cursor:pointer">
+    <div class="menu" role="menu"><span class="notice">かんたん登録 · 2027/10/12 まで</span><hr>
+      <a href="account.html">アカウント設定</a><a href="#key">専ブラ用認証キー</a><a href="#upgrade">ID・パスワード／Google に切り替える</a><hr><a href="#">ログアウト</a></div>
+  </nav>
+</header>
+<div class="layout">
+<main>
+  <h1>アカウント設定</h1>
+  <div class="panel"><h2>■ アカウント</h2>
+    <dl class="kv">
+      <dt>表示名（@uid）</dt><dd><b>@k3x9q2ab</b> <small>名前欄に <code>!uid</code> と書くと表示されます</small></dd>
+      <dt>登録方法</dt><dd>かんたん登録（クライアント ID） <small>2027/10/12 に失効します</small></dd>
+      <dt>Lv</dt><dd><span class="lv">Lv3</span> → Lv4 まで
+        <div style="display:grid;grid-template-columns:70px minmax(0,1fr) 80px;gap:4px 8px;align-items:center;margin-top:6px;font-size:12px">
+          <span>経過時間</span><div class="progress"><span style="width:26%"></span></div><span>24h / 92h</span>
+          <span>書き込み</span><div class="progress"><span style="width:41%"></span></div><span>38 / 92 件</span>
+        </div></dd>
+      <dt>この端末</dt><dd>準個体（p）· Android / Chrome <small>登録した端末 1 台</small></dd>
+    </dl>
+  </div>
+
+  <div class="panel" id="upgrade"><h2>■ 登録方法の切り替え</h2>
+    <p style="margin:0 0 8px">ID・パスワードか Google に切り替えると、ほかの端末からもログインでき、失効しなくなります。Lv・書き込み履歴・@uid は引き継ぎます。</p>
+    <button class="btn">ID・パスワードにする</button> <button class="btn">Google にする</button>
+    <p class="notice">切り替えると、ほかの端末のかんたん登録はログアウトされます。元には戻せません。</p>
+  </div>
+
+  <div class="panel" id="key"><h2>■ 専ブラ用認証キー</h2>
+    <p style="margin:0 0 8px">専ブラ（専用ブラウザ）の初回の書き込みで、メール欄にこのキーを入れてください。2 回目からは不要です。</p>
+    <div class="banner warn" style="margin-bottom:8px"><b>今だけ表示されます。</b>この画面を閉じると再表示できません。<span class="spacer"></span></div>
+    <div class="keybox">!#q7m2xv4kp9ta3nc6wz5d</div>
+    <div style="margin-top:8px"><button class="btn">コピー</button> <button class="btn danger">再発行（いまのキーを無効にする）</button></div>
+    <p class="notice">発行日 2026/11/05 13:10 · 最終利用 —</p>
+  </div>
+
+  <div class="panel"><h2>■ 利用ログ</h2>
+    <table class="list"><tr><th>日時</th><th>種別</th><th>板・スレ</th><th>接続元</th></tr>
+      <tr><td>2026/11/05 13:12</td><td>専ブラ用キー</td><td>zatsudan/1730000000</td><td>docomo · 東京都</td></tr>
+      <tr><td>2026/11/05 12:58</td><td>Web</td><td>zatsudan/1730000000</td><td>docomo · 東京都</td></tr>
+      <tr><td>2026/11/04 22:31</td><td>Web</td><td>news/1729990000</td><td>楽天モバイル · 東京都</td></tr>
+    </table>
+    <p class="notice">心当たりの無い利用があれば、キーを再発行してください。</p>
+  </div>
+
+  <div class="panel"><h2>■ ログアウト・退会</h2>
+    <button class="btn">ログアウト（すべての端末）</button> <button class="btn danger">退会する</button>
+    <p class="notice">退会しても書き込みは消えません。@uid は再利用されません。</p>
+  </div>
+</main>
+<aside class="side-panel">
+  <section><h2>■ Lv の上がり方</h2><p style="margin:0">一定の時間がたち、その時間（時）と同じ件数を書き込むと 1 つ上がります。かんたん登録は上がり方がゆっくりです。</p></section>
+  <section><h2>■ キャップ</h2><p style="margin:0">削除・規制などの権限を持つ人だけが発行できます。</p></section>
+</aside>
+</div>
+<footer class="site-footer"><a href="#">3ch</a> ver 0.6.x 2026-11-05 <span class="author">†Monterey Langit ★</span></footer>
+</body></html>

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>認証モーダル | 3ch モック</title><link rel="stylesheet" href="auth-admin.css"></head>
+<body>
+<!-- モック: Web 版の初回書き込み時（設計書 §3.2 A・§3.8）。背景は板トップ、前面は /auth/?embed=1 を iframe で開いた AuthModal -->
+<header class="site-header">
+  <a class="site-logo" href="#"><img src="3ch_logo.png" alt="３ちゃんねる"></a>
+  <nav><a href="#">ホーム</a><span>|</span><a href="#">板一覧</a><span>|</span><a href="#">検索</a></nav>
+  <nav class="account-nav"><a href="auth.html">認証・登録</a><span>|</span><a href="#">ログイン</a><img src="icon_extend.png" alt=""></nav>
+</header>
+<div class="layout">
+<main>
+  <h1>雑談掲示板</h1>
+  <div class="detail-buttons"><button>▸ 板概要・ローカルルール</button><button>▸ 板設定</button><button>▸ 新着レス一覧</button><button>▸ 新規スレッド作成</button></div>
+  <nav class="tabs"><a class="tab active" href="#">スレッドフィード</a><a class="tab" href="#">スレ一覧</a><span class="tab" style="color:#777">おすすめ3ちゃんねる</span></nav>
+  <div class="panel">
+    <h2>雑談スレッド Part 12 <small>(124)</small></h2>
+    <div class="res"><div class="h"><span class="num">123</span><span class="name">名無しさん＠３ちゃんねる</span><span class="date">2026/11/05(木) 12:58:10 ID:aB3dE5fG</span></div><div class="m">昼休みに覗きに来た</div></div>
+    <div class="res"><div class="h"><span class="num">124</span><span class="name">名無しさん＠３ちゃんねる</span><span class="date">2026/11/05(木) 13:02:44 ID:Qw9xYz12</span></div><div class="m">駅前のパン屋が新装開店してた</div></div>
+    <div style="margin:10px 0 0 2em"><details><summary>名前・E-mail</summary></details>
+      <button class="btn" disabled>書き込む</button>
+      <textarea rows="3" style="margin-top:6px">&gt;&gt;124 どこの駅？</textarea></div>
+  </div>
+</main>
+<aside class="side-panel"><section><h2>■ 板概要・ローカルルール</h2>雑談用の板です。</section><section><h2>■ 板設定</h2>名無し: 名無しさん＠３ちゃんねる</section></aside>
+</div>
+
+<div class="dim"></div>
+<dialog class="auth" open aria-labelledby="t">
+  <div class="dhead"><b id="t">書き込みの前に認証・登録</b><button class="x" aria-label="閉じる">×</button></div>
+  <div class="dbody">
+    <p class="notice" style="margin:0 0 10px">はじめての書き込みです。認証が終わると、入力した内容を自動で書き込みます（下書きは保存されています）。</p>
+    <div class="field"><label>登録方法</label>
+      <select style="width:100%"><option>かんたん登録（この端末だけ・Lv1）</option><option>ID・パスワード</option><option>Google で続ける</option></select>
+      <small><a href="auth.html" target="_blank">登録方法の違い</a></small></div>
+    <label class="check" style="margin:8px 0"><input type="checkbox" checked><span><a href="#">利用規約</a>を読み、投稿内容に責任を持つことに同意します</span></label>
+    <div class="notice-box" style="margin-bottom:10px">
+      <b>推奨環境</b>: Safari・Chrome・Edge・Firefox の最新版。<br>
+      専ブラの内蔵ブラウザ・一部のアプリ内ブラウザ・「PC 版サイト」表示・UA 変更の拡張機能では認証できないことがあります。<a href="auth.html" target="_blank">詳しく</a>
+    </div>
+    <div class="turnstile" style="margin-bottom:12px"><span class="box"></span><span>Turnstile のウィジェット</span></div>
+    <button class="btn primary block">認証して書き込む</button>
+    <p class="notice" style="margin:8px 0 0;text-align:center">すでに登録済みの方は <a href="#">ログイン</a></p>
+  </div>
+</dialog>
+</body></html>
