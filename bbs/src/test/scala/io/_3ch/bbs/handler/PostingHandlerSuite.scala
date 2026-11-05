@@ -911,9 +911,7 @@ class PostingHandlerSuite extends FunSuite {
     }
   }
 
-  // ==================== 11b. 全板共通スレ (docs/global-thread.md) =============    }
-  }
-
+  // ==================== 11b. 全板共通スレ (docs/global-thread.md) ====================
 
   private def subjectOf(env: Env, bbs: String): Future[String] = env.board(bbs).getSubject().toFuture
 
