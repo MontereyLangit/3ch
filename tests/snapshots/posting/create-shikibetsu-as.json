@@ -29,9 +29,14 @@
   },
   "threads": {
     "sample/1700000000": {
-      "dat": "名無しさん＠３ちゃんねる </b>(2516)<b><><>2023/11/15(水) 07:13:20 ID:zyIjCtRI<> テスト本文 <>テストスレ [ID:zyIjCtRI★]\n",
+      "dat": "名無しさん＠３ちゃんねる </b>(2516)<b><><>2023/11/15(水) 07:13:20<> テスト本文 <>テストスレ\n",
       "log": "1<>UID: IP:192.0.2.1 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0 (TestBrowser)\n",
-      "settings": "BBS_ID_SHIKIBETSU=as<>BBS_SHIKIBETSU=off<>"
+      "settings": "BBS_ID_SHIKIBETSU=as<>BBS_SHIKIBETSU=off<>",
+      "owner": {
+        "ip": "74a18c10fbac664707ae6cac253104b3091764b56e9724080ce4ac78aa59572e",
+        "shikibetsu": "2516",
+        "account": ""
+      }
     },
     "sample/1699990000": {
       "dat": "",
@@ -40,10 +45,10 @@
     }
   },
   "boards": {
-    "sample": "1700000000.dat<>テストスレ [ID:zyIjCtRI★] (1)\n"
+    "sample": "1700000000.dat<>テストスレ (1)\n"
   },
   "r2": {
-    "sample/thread/1700/subject.txt": "1700000000\n1700000000<>テストスレ<>名無しさん＠３ちゃんねる </b>(2516)<b><>2516<>ID:zyIjCtRI<>テスト本文\n",
+    "sample/thread/1700/subject.txt": "1700000000\n1700000000<>テストスレ<>名無しさん＠３ちゃんねる </b>(2516)<b><>2516<><>テスト本文\n",
     "sample/thread/1699/subject.txt": null,
     "sample/thread/subject.txt": "1700000000\n1700<>1700000000\n",
     "headline.txt": "1700000000\nsample<>undefined<>1700000000<>1700000000<>テスト本文\n"

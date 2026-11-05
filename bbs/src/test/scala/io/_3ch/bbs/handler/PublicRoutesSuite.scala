@@ -337,6 +337,52 @@ class PublicRoutesSuite extends FunSuite {
     } yield assertEquals(status(res), 304)
   }
 
+  // ---------- 2b. 全板共通スレ (docs/global-thread.md) ----------
+
+  test("subject.txt: 板924の共通スレを 924 → 900 → 板固有 の順で先頭に載せる") {
+    val env = DurableTestKit.newEnv()
+    for {
+      _ <- updateThread(env, "924", "9000000001", "open-old", 2)
+      _ <- updateThread(env, "924", "9240000002", "cap-only", 5)
+      _ <- updateThread(env, "924", "9000000003", "open-new", 1)
+      _ <- updateThread(env, "board1", "1800000010", "own", 3)
+      res <- get(env, "/board1/subject.txt")
+      body <- sjisText(res)
+      empty <- get(env, "/emptyboard/subject.txt")
+      emptyBody <- sjisText(empty)
+      own <- get(env, "/924/subject.txt")
+      ownBody <- sjisText(own)
+    } yield {
+      assertEquals(status(res), 200)
+      assertEquals(body, "9240000002.dat<>cap-only (5)\n9000000003.dat<>open-new (1)\n9000000001.dat<>open-old (2)\n1800000010.dat<>own (3)\n")
+      // スレの無い板でも共通スレだけは載る
+      assertEquals(emptyBody, "9240000002.dat<>cap-only (5)\n9000000003.dat<>open-new (1)\n9000000001.dat<>open-old (2)\n")
+      // 板924自身は共通スレを並べ替えたものだけ
+      assertEquals(ownBody, "9240000002.dat<>cap-only (5)\n9000000003.dat<>open-new (1)\n9000000001.dat<>open-old (2)\n")
+    }
+  }
+
+  test("dat: 924/900始まりのキーはどの板のURLからでも板924のスレを返す") {
+    val env = DurableTestKit.newEnv()
+    for {
+      _ <- createThread(env, "924", "9240000002", title = "cap-only")
+      _ <- createThread(env, "924", "9000000003", title = "open")
+      viaBoard <- get(env, "/board1/dat/9240000002.dat")
+      viaBoardBody <- sjisText(viaBoard)
+      viaOwn <- get(env, "/924/dat/9000000003.dat")
+      viaOwnBody <- sjisText(viaOwn)
+      viaOther <- get(env, "/emptyboard/dat/9000000003.dat")
+      missing <- get(env, "/board1/dat/9240000009.dat")
+    } yield {
+      assertEquals(status(viaBoard), 200)
+      assertEquals(viaBoardBody, "name<><>2026/09/22(火) 12:00:00<>hello<>cap-only\n")
+      assertEquals(status(viaOwn), 200)
+      assertEquals(viaOwnBody, "name<><>2026/09/22(火) 12:00:00<>hello<>open\n")
+      assertEquals(status(viaOther), 200)
+      assertEquals(status(missing), 404)
+    }
+  }
+
   // ---------- 3. /{bbs}/SETTING.TXT ----------
 
   test("SETTING.TXT: R2に無ければデフォルト設定で<DIR_NAME>が板名に置換される") {

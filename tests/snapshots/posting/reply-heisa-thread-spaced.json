@@ -22,13 +22,13 @@
       "settings": ""
     },
     "sample/1699990000": {
-      "dat": "名無しさん＠３ちゃんねる </b>(JP.ab.cd ef-0123456789abcdef)<b><><>2023/11/14(火) 19:26:40 ID:abcdEFGH<> 最初の本文 <>既存スレ [ID:abcdEFGH★]\n",
+      "dat": "名無しさん＠３ちゃんねる </b>(JP.ab.cd ef-0123456789abcdef)<b><><>2023/11/14(火) 19:26:40<> 最初の本文 <>既存スレ\n",
       "log": "1<>UID: IP:192.0.2.100 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0\n",
       "settings": "BBS_HEISA= checked <>"
     }
   },
   "boards": {
-    "sample": "1699980000.dat<>別スレ (5)\n1699990000.dat<>既存スレ [ID:abcdEFGH★] (1)\n"
+    "sample": "1699980000.dat<>別スレ (5)\n1699990000.dat<>既存スレ (1)\n"
   },
   "r2": {
     "sample/thread/1700/subject.txt": null,

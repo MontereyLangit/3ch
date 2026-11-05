@@ -29,7 +29,7 @@
   },
   "threads": {
     "sample/1700000000": {
-      "dat": "キャップ ★ </b>(★)<b><><>2023/11/15(水) 07:13:20 ID:???<> テスト本文 <>テストスレ [ID:???★]\n",
+      "dat": "キャップ ★ </b>(★)<b><><>2023/11/15(水) 07:13:20<> テスト本文 <>テストスレ\n",
       "log": "1<>UID: IP:192.0.2.1 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0 (TestBrowser)\n",
       "settings": "BBS_THREAD_TATESUGI=invalid<>BBS_SHIKIBETSU=off<>"
     },
@@ -40,10 +40,10 @@
     }
   },
   "boards": {
-    "sample": "1700000000.dat<>テストスレ [ID:???★] (1)\n"
+    "sample": "1700000000.dat<>テストスレ (1)\n"
   },
   "r2": {
-    "sample/thread/1700/subject.txt": "1700000000\n1700000000<>テストスレ<>キャップ ★ </b>(★)<b><>★<>ID:???<>テスト本文\n",
+    "sample/thread/1700/subject.txt": "1700000000\n1700000000<>テストスレ<>キャップ ★ </b>(★)<b><>★<><>テスト本文\n",
     "sample/thread/1699/subject.txt": null,
     "sample/thread/subject.txt": "1700000000\n1700<>1700000000\n",
     "headline.txt": "1700000000\nsample<>undefined<>1700000000<>1700000000<>テスト本文\n"

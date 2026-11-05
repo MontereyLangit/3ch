@@ -32,11 +32,11 @@
     }
   },
   "boards": {
-    "sample": "1699999999.dat<>テストスレ [ID:uBBAGIbC★] (1)\n"
+    "sample": "1699999999.dat<>テストスレ (1)\n"
   },
   "r2": {
     "sample/thread/1700/subject.txt": null,
-    "sample/thread/1699/subject.txt": "1699999999\n1699999999<>テストスレ<>名無しさん＠３ちゃんねる </b>(JP.R5.o6 Kx-b0cc5d11d02b8fb1)<b><>JP.R5.o6 Kx-b0cc5d11d02b8fb1<>ID:uBBAGIbC<>テスト本文\n",
+    "sample/thread/1699/subject.txt": "1699999999\n1699999999<>テストスレ<>名無しさん＠３ちゃんねる </b>(JP.R5.o6 Kx-b0cc5d11d02b8fb1)<b><>JP.R5.o6 Kx-b0cc5d11d02b8fb1<><>テスト本文\n",
     "sample/thread/subject.txt": "1699999999\n1699<>1699999999\n",
     "headline.txt": "1699999999\nsample<>sample＠3ch掲示板<>1699999999<>1699999999<>テスト本文\n"
   }

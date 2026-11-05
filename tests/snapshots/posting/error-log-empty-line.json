@@ -28,7 +28,7 @@
     }
   },
   "boards": {
-    "sample": "1699980000.dat<>別スレ (5)\n1699990000.dat<>既存スレ [ID:abcdEFGH★] (1)\n"
+    "sample": "1699980000.dat<>別スレ (5)\n1699990000.dat<>既存スレ (1)\n"
   },
   "r2": {
     "sample/thread/1700/subject.txt": null,

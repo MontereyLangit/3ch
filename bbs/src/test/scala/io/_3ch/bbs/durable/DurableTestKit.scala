@@ -181,8 +181,8 @@ object DurableTestKit {
     /** R2 (`ch3www`) に旧形式スレッドログを仕込む。キーは `bbs/thread/head4/key.cgi` の形。 */
     def putR2(key: String, text: String): Unit = r2.update(key, (text, nextEtag()))
 
-    def thread(name: String): ThreadDoStub = worker.THREAD_DO.get(worker.THREAD_DO.idFromName(name)).asInstanceOf[ThreadDoStub]
-    def board(name: String): BoardDoStub = worker.BOARD_DO.get(worker.BOARD_DO.idFromName(name)).asInstanceOf[BoardDoStub]
+    def thread(name: String): ThreadDoStub = worker.THREAD_DO.get(worker.THREAD_DO.idFromName(name))
+    def board(name: String): BoardDoStub = worker.BOARD_DO.get(worker.BOARD_DO.idFromName(name))
 
     /** 直接 storage を触りたいテスト用に、生の `Thread` インスタンス（`state`フィールド公開）を返す。 */
     def threadInstance(name: String): Thread = threadInstances.getOrElseUpdate(name, new Thread(fakeState(), worker))

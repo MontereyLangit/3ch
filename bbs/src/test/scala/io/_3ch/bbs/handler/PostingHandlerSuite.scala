@@ -1,6 +1,7 @@
 package io._3ch.bbs.handler
 
 import munit.FunSuite
+import io._3ch.bbs.domain.posting.PostingUser
 import io._3ch.bbs.durable.DurableTestKit
 import io._3ch.bbs.durable.DurableTestKit.Env
 import io._3ch.bbs.external.web.{Request, TextEncoder}
@@ -52,16 +53,17 @@ class PostingHandlerSuite extends FunSuite {
     "FROM" -> "", "mail" -> "", "MESSAGE" -> "テスト本文", "subject" -> "テストスレ", "bbs" -> "sample", "key" -> "", "time" -> "9999999999"
   )
 
-  private def entry(env: Env, req: Request): Future[js.Dynamic] = fut[js.Dynamic](PostingHandler.entry(req, env.worker))
+  private def entry(env: Env, req: Request, resolveUser: PostingUserResolver.Resolver = PostingUserResolver.unresolved): Future[js.Dynamic] =
+    fut[js.Dynamic](PostingHandler.entry(req, env.worker, resolveUser))
 
   /** フィールドを与えて POST リクエストを投稿エントリへ渡す。submit は既定でWebブラウザ相当(UTF-8)。 */
   private def post(env: Env, fields: Seq[(String, String)] = Nil, headers: Seq[(String, String)] = Nil, cf: Seq[(String, String)] = Nil,
-                   sjisMode: Boolean = false, submitText: String = "書き込む"): Future[Posted] = {
+                   sjisMode: Boolean = false, submitText: String = "書き込む", user: Option[PostingUser] = None): Future[Posted] = {
     val submit = if sjisMode then sjisPercentEncode(submitText) else js.URIUtils.encodeURIComponent(submitText)
     val body = buildBody(merge(DefaultFields, fields), sjisMode) + s"&submit=$submit"
     val req = makeRequest(headers = merge(DefaultHeaders, headers), cf = merge(DefaultCf, cf), body = body)
     for {
-      res <- entry(env, req)
+      res <- entry(env, req, (_, _) => Future.successful(user))
       body <- text(res)
     } yield Posted(res, body)
   }
@@ -113,7 +115,6 @@ class PostingHandlerSuite extends FunSuite {
   }
   private def dat(env: Env, bbs: String, key: String): Future[String] = env.thread(s"$bbs/$key").getDat().toFuture
   private def fieldsOf(dat: String): Array[String] = dat.split("\n", -1)(0).split("<>", -1)
-  private def idOf(field: String): String = field.substring(field.indexOf("ID:"))
 
   test("スレ立て: BoardIdの制約外の板名は新規作成を拒否し、datを作らない") {
     val env = DurableTestKit.newEnv()
@@ -459,8 +460,8 @@ class PostingHandlerSuite extends FunSuite {
 
   // ==================== 4. dat行フォーマット ====================
 
-  test("dat行フォーマット: スレ立て(>>1)は<>5フィールド、本文前後に半角スペース、末尾フィールドにスレタイ+ID") {
-    // ID/識別IDは現在時刻に依存するため時刻を固定し、文字クラス・長さだけでなく実測した
+  test("dat行フォーマット: スレ立て(>>1)は<>5フィールド、本文前後に半角スペース、末尾フィールドにスレタイ") {
+    // 識別子は現在時刻に依存するため時刻を固定し、文字クラス・長さだけでなく実測した
     // 具体的な文字列そのもの(ハッシュ値込み)を検証する。文字クラスチェックだけでは、ハッシュの
     // 入力順序・ソルト・時刻窓が変わる移植ミスを検知できない。
     // また、mailに""(空文字)を渡すとKB-10(メール欄は常に空)の検証にならない
@@ -479,7 +480,7 @@ class PostingHandlerSuite extends FunSuite {
         // unixtime=1700000000固定)。末尾の改行1つも含めdat全体を厳密一致させる。
         assertEquals(
           d,
-          "名前太郎 </b>(JP.SA.h3 Kx-042e35264c7d19b9)<b><><>2023/11/15(水) 07:13:20 ID:zyIjCtRI<> テスト本文 <>たておき [ID:zyIjCtRI★]\n"
+          "名前太郎 </b>(JP.SA.h3 Kx-042e35264c7d19b9)<b><><>2023/11/15(水) 07:13:20<> テスト本文 <>たておき\n"
         )
         val fields = d.stripSuffix("\n").split("<>", -1)
         assertEquals(fields.length, 5)
@@ -501,12 +502,12 @@ class PostingHandlerSuite extends FunSuite {
         _ = assertEquals(header(p2.res, "x-resnum"), Some("2"))
         d <- dat(env, "sample", key)
       } yield {
-        // 実測値。1行目・2行目とも末尾に改行が1つずつ入り、2行目のメール欄(fields[1])とタイトル欄
+        // 実測値。同じIPからの返信なので名前欄の末尾に (主) が付く。1行目・2行目とも末尾に改行が1つずつ入り、2行目のメール欄(fields[1])とタイトル欄
         // (fields[4])はどちらも空文字になる。
         assertEquals(
           d,
-          "名無しさん＠３ちゃんねる </b>(JP.SA.h3 Kx-042e35264c7d19b9)<b><><>2023/11/15(水) 07:13:20 ID:zyIjCtRI<> テスト本文 <>たておき2 [ID:zyIjCtRI★]\n" +
-          "名無しさん＠３ちゃんねる </b>(JP.SA.h3 Kx-042e35264c7d19b9)<b><><>2023/11/15(水) 07:13:20 ID:zyIjCtRI<> 2番目の返信 <>\n"
+          "名無しさん＠３ちゃんねる </b>(JP.SA.h3 Kx-042e35264c7d19b9)<b><><>2023/11/15(水) 07:13:20<> テスト本文 <>たておき2\n" +
+          "名無しさん＠３ちゃんねる </b>(JP.SA.h3 Kx-042e35264c7d19b9)<b> (主)<><>2023/11/15(水) 07:13:20<> 2番目の返信 <>\n"
         )
         val lines = d.stripSuffix("\n").split("\n", -1)
         assertEquals(lines.length, 2)
@@ -566,8 +567,9 @@ class PostingHandlerSuite extends FunSuite {
   test("readForm: ★→☆, ◆→◇, ＃→#の偽キャップ・偽トリップ変換") {
     val env = DurableTestKit.newEnv()
     firstRow(env, "FROM" -> "★fake◆trip＃hash", "MESSAGE" -> "x", "subject" -> "sub2").map { fields =>
-      // FROM先頭が "☆fake◇trip" になり、"＃hash" 以降はトリップキーとして分離されトリップ生成に使われる
-      assert(new js.RegExp("^☆fake◇trip </b>◆[./0-9A-Za-z]{10}</b> ").test(fields(0)), fields(0))
+      // FROM先頭が "☆fake◇trip" になり、"＃hash" 以降はトリップキーとして捨てられる
+      assert(fields(0).startsWith("☆fake◇trip </b>("), fields(0))
+      assert(!fields(0).contains("hash"), fields(0))
     }
   }
 
@@ -640,77 +642,44 @@ class PostingHandlerSuite extends FunSuite {
     } yield assert(fieldsOf(dat2)(0).startsWith("カスタム名無し "))
   }
 
-  // ==================== 8. processTrip ====================
+  // ==================== 8. トリップ廃止 ====================
 
-  test("processTrip: 12バイト以上のトリップキーはSHA-1先頭12文字、+は.に置換される") {
+  test("トリップ廃止: 名前#キー は名前だけが残り、キーは保存されない") {
     firstRow(DurableTestKit.newEnv(), "FROM" -> "名前#abcdefghijklmnop", "subject" -> "triptest1").map { fields =>
-      assert(fields(0).startsWith("名前 </b>◆FPOZUois0Ynm</b> "), fields(0))
+      assert(fields(0).startsWith("名前 </b>("), fields(0))
+      assert(!fields(0).contains("abcdefghijklmnop") && !fields(0).contains("◆"), fields(0))
     }
   }
 
-  test("processTrip: 12バイト未満のトリップキーはDES crypt末尾10文字") {
-    firstRow(DurableTestKit.newEnv(), "FROM" -> "名前#abc", "subject" -> "triptest2").map { fields =>
-      assert(fields(0).startsWith("名前 </b>◆L8nEQyID76</b> "), fields(0))
+  test("トリップ廃止: 全角＃のキーも捨てられる") {
+    firstRow(DurableTestKit.newEnv(), "FROM" -> "名前＃secretkey", "subject" -> "triptest2").map { fields =>
+      assert(fields(0).startsWith("名前 </b>("), fields(0))
+      assert(!fields(0).contains("secretkey"), fields(0))
     }
   }
 
-  test("processTrip: #+16桁16進数の特殊トリップ（DES, ソルト省略時は\"..\"）") {
+  test("トリップ廃止: #+16桁16進数も捨てられる") {
     firstRow(DurableTestKit.newEnv(), "FROM" -> "名前##0123456789abcdef", "subject" -> "triptest3").map { fields =>
-      assert(fields(0).startsWith("名前 </b>◆ClNHFHdYIw</b> "), fields(0))
+      assert(fields(0).startsWith("名前 </b>("), fields(0))
+      assert(!fields(0).contains("0123456789abcdef"), fields(0))
     }
   }
 
-  test("processTrip: #+16桁16進数+ソルト2文字指定") {
-    firstRow(DurableTestKit.newEnv(), "FROM" -> "名前##0123456789abcdefXY", "subject" -> "triptest3b").map { fields =>
-      assert(fields(0).startsWith("名前 </b>◆MIe14Gpa2k</b> "), fields(0))
-    }
-  }
-
-  test("processTrip: 先頭が$の場合は16進フォーマットの正規表現に一致せず???になる（$は正規表現内で考慮されていない既知の癖）") {
-    firstRow(DurableTestKit.newEnv(), "FROM" -> "名前#$0123456789abcdef", "subject" -> "triptest4").map { fields =>
-      assert(fields(0).startsWith("名前 </b>◆???</b> "), fields(0))
-    }
-  }
-
-  test("processTrip: トリップキーが1023バイトを超えるとエラー") {
-    post(DurableTestKit.newEnv(), Seq("FROM" -> ("名前#" + "a" * 1024), "subject" -> "triptest5")).map { p =>
-      assertEquals(errorMessage(p.text), Some("トリップキー長杉！<br>\nYour tripkey must be less than 1023 bytes."))
-    }
-  }
-
-  // これまでのトリップの例はいずれもASCIIキーのみだった。processTripの分岐はSJISエンコードした
-  // 「バイト数」(gb.tripKey自体の文字数ではない)が12以上かどうかで決まるため、日本語キーで
-  // 11/12バイトの境界をまたぐケースが無いと、KB-14(SJISバイト列をUTF-8として再エンコードして
-  // SHA-1を取る3ch独自の癖)を素直なバイトハッシュで実装した移植ミスを検知できない
-  // (ASCIIキーはSJISでも1バイト/文字なのでUTF-8再エンコードの影響が出にくい)。
-  test("processTrip: 日本語トリップキー、SJISで11バイト(DES branch)と12バイト(SHA-1 branch)の境界") {
+  test("トリップ廃止: キーが1023バイトを超えてもエラーにならず捨てられる") {
     for {
-      // 'ぁ'(SJIS 2バイト)×5 + 'x'(1バイト) = 11バイト -> DES branch
-      fields11 <- firstRow(DurableTestKit.newEnv(), "FROM" -> "名前#ぁぁぁぁぁx", "subject" -> "trip-des-jp")
-      _ = assert(fields11(0).startsWith("名前 </b>◆f6w4Q5QyaY</b> "), fields11(0))
-      // 'ぁ'×6 = 12バイト -> ちょうど境界でSHA-1 branchに入る
-      fields12 <- firstRow(DurableTestKit.newEnv(), "FROM" -> "名前#ぁぁぁぁぁぁ", "subject" -> "trip-sha1-jp")
-    } yield assert(fields12(0).startsWith("名前 </b>◆5CrvAuK4nFvz</b> "), fields12(0))
-  }
-
-  test("processTrip: SHA-1 branchの出力に+が含まれる場合は.に置換される（日本語トリップキーで実際に検証）") {
-    // 元のASCIIキーの例(processTrip: 12バイト以上...)でも+の置換自体はコメントで説明されていたが、
-    // 実際に+を含む出力になるASCIIキーの具体例が示されていなかった。ここでは実際にSHA-1のBase64
-    // 先頭12文字に+を含む日本語トリップキーを実測して固定する。
-    // 'げ'(SJIS 2バイト)×6 = 12バイト。sha1Base64(...).slice(0,12) === '4Wz7VgvHRoe+' であることを実測済み。
-    firstRow(DurableTestKit.newEnv(), "FROM" -> "名前#げげげげげげ", "subject" -> "trip-plus-jp").map { fields =>
-      assert(fields(0).startsWith("名前 </b>◆4Wz7VgvHRoe.</b> "), fields(0)) // 末尾の+が.に置換されている
-    }
+      p <- post(DurableTestKit.newEnv(), Seq("FROM" -> ("名前#" + "a" * 1024), "subject" -> "triptest5"))
+      _ = assertEquals(errorMessage(p.text), None)
+    } yield assertEquals(header(p.res, "x-resnum"), Some("1"))
   }
 
   // ==================== 9. processCap ====================
 
-  test("processCap: 旧仕様(!接頭辞)の弱キャップは \"ハンドル ★\" になり、ID:???/識別ID:★になる") {
+  test("processCap: 旧仕様(!接頭辞)の弱キャップは \"ハンドル ★\" になり、識別ID:★になる") {
     val env = DurableTestKit.newEnv()
     env.putCap("weakpass", "ワイズハンドル")
     firstRow(env, "mail" -> "#!weakpass", "FROM" -> "", "subject" -> "captest1").map { fields =>
       assertEquals(fields(0), "ワイズハンドル ★ </b>(★)<b>")
-      assert(fields(2).endsWith("ID:???"), fields(2))
+      assert(!fields(2).contains("ID"), fields(2))
     }
   }
 
@@ -757,7 +726,7 @@ class PostingHandlerSuite extends FunSuite {
     for {
       fields <- firstRow(env, "mail" -> ("#" + rawPass), "FROM" -> "", "subject" -> "capnormal")
       _ = assertEquals(fields(0), "通常キャップハンドル ★ </b>(★)<b>")
-      _ = assert(fields(2).endsWith("ID:???"), fields(2))
+      _ = assert(!fields(2).contains("ID"), fields(2))
       // rawPassが1文字でも違えばKVキーも変わり、キャップとして認識されないことも合わせて確認する
       // (通常パスが本当にハッシュ計算を行っていることの反証)。
       fields2 <- firstRow(env2, "mail" -> ("#" + rawPass + "x"), "FROM" -> "", "subject" -> "capnormal2")
@@ -766,12 +735,22 @@ class PostingHandlerSuite extends FunSuite {
 
   // ==================== 10. ID・識別ID生成 ====================
 
-  test("makeIdAndShikibetuId: BBS_ID=off の場合、ID表示は日付のみでスレタイにID付与も無い") {
+  test("日付欄にIDは付かず、日付だけになる") {
+    withFixedTime(1700000000d * 1000) {
+      firstRow(DurableTestKit.newEnv(), "subject" -> "idfreetest").map { fields =>
+        assertEquals(fields(2), "2023/11/15(水) 07:13:20")
+        assertEquals(fields(4), "idfreetest") // スレタイにも[ID:...★]が付かない
+      }
+    }
+  }
+
+  test("BBS_ID/BBS_ID_LV は読まれず、日付欄は変わらない") {
     val env = DurableTestKit.newEnv()
-    env.putR2("sample/SETTING.TXT", "BBS_ID=off\n")
-    firstRow(env, "subject" -> "idofftest").map { fields =>
-      assert(!fields(2).contains("ID:")) // 日付のみ、IDは付かない
-      assertEquals(fields(4), "idofftest") // スレタイにも[ID:...★]が付かない
+    env.putR2("sample/SETTING.TXT", "BBS_ID=siberia\nBBS_ID_LV=checked\n")
+    withFixedTime(1700000000d * 1000) {
+      firstRow(env, "subject" -> "idsettingignored").map { fields =>
+        assertEquals(fields(2), "2023/11/15(水) 07:13:20")
+      }
     }
   }
 
@@ -783,7 +762,7 @@ class PostingHandlerSuite extends FunSuite {
     }
   }
 
-  test("makeIdAndShikibetuId: 同じ入力(IP・AS・地域・UA・時刻窓)なら同じIDと識別IDが再現される（決定性）、かつ実測した具体的な値と一致する") {
+  test("makeShikibetsu: 同じ入力(AS・地域・UA・時刻窓)なら同じ識別IDが再現される（決定性）、かつ実測した具体的な値と一致する") {
     // 単純な「2回実行して一致するか」だけの比較では、ハッシュの入力順序やソルト、時刻窓の取り方が
     // 違う実装(同じ入力に対して決定論的でありさえすれば良い実装)でも通ってしまい、移植の検証に
     // ならない。時刻を固定し、実測した具体的な文字列と一致することまで確認する。
@@ -797,11 +776,9 @@ class PostingHandlerSuite extends FunSuite {
         f2 <- firstRowWith(DurableTestKit.newEnv(), Seq("subject" -> "dettest2", "FROM" -> "samename"), headers, cf)
       } yield {
         assertEquals(f1(0), f2(0)) // 名前欄(識別ID込み)が一致
-        assertEquals(idOf(f1(2)), idOf(f2(2))) // IDが一致
-        // 実測値(salt='test-salt-12345', IP=203.0.113.9, asn=999, country=US, region=CA, city=LA,
+        // 実測値(salt='test-salt-12345', asn=999, country=US, region=CA, city=LA,
         // unixtime=1700000000固定)。
         assertEquals(f1(0), "samename </b>(US.3T.fb No-042e35264c7d19b9)<b>")
-        assertEquals(idOf(f1(2)), "ID:tAkuU2RS")
       }
     }
   }
@@ -812,7 +789,7 @@ class PostingHandlerSuite extends FunSuite {
       d <- dat(env, bbs, threadKey(p))
     } yield fieldsOf(d)
 
-  test("makeIdAndShikibetuId: BBS_ID_RESETの日付境界(JST)を1秒跨ぐとID・識別IDが変わる") {
+  test("makeShikibetsu: BBS_ID_RESETの日付境界(JST)を1秒跨ぐと識別IDが変わる") {
     // BBS_ID_RESET(既定86400秒)による時刻窓は Math.floor((unixtime+32400)/BBS_ID_RESET) で計算され、
     // 32400(=9時間, JSTオフセット)が加算されるためJST日付境界で切り替わる。
     // unixtime ≡ 54000 (mod 86400) が窓の切り替わり瞬間で、その1秒前(1699973999)と(1699974000)を比較する。
@@ -826,39 +803,14 @@ class PostingHandlerSuite extends FunSuite {
       before <- at(1699973999L)
       after <- at(1699974000L)
     } yield {
-      // 実測値。窓が変わるため、識別ID(地域/AS由来ハッシュ)・ID(IP由来ハッシュ)ともに変化する。
+      // 実測値。窓が変わるため、識別ID(地域/AS由来ハッシュ)が変化する。
       assertEquals(before(0), "boundary </b>(JP.ZV.ca L0-b48da058688f6871)<b>")
-      assertEquals(idOf(before(2)), "ID:tK/9evqe")
       assertEquals(after(0), "boundary </b>(JP.bR.9p tP-18b8714acc8fa8e6)<b>")
-      assertEquals(idOf(after(2)), "ID:vdth2D4W")
       assertNotEquals(before(0), after(0))
-      assertNotEquals(before(2), after(2))
     }
   }
 
-  test("makeIdAndShikibetuId: IPv6アドレスはコロン区切りの先頭4ブロックのみがID計算の種になる") {
-    // checkRequestのgb.idnotane生成 (`${octet[0]}:${octet[1]}:${octet[2]}:${octet[3]}`) により、
-    // IPv6アドレスは先頭4ブロックだけが使われ、残りのブロックが変わってもIDは変化しないはず。
-    def idFor(name: String, ip: String): Future[String] =
-      firstRowWith(DurableTestKit.newEnv(), Seq("FROM" -> name, "subject" -> name), Seq("CF-Connecting-IP" -> ip), Nil).map(f => idOf(f(2)))
-    withFixedTime(1700000000d * 1000) {
-      for {
-        idA <- idFor("ipv6a", "2001:0db8:85a3:0000:0000:8a2e:0370:7334")
-        // 先頭4ブロックが同じで、5ブロック目以降だけ異なるアドレス -> IDは同じになるはず
-        idB <- idFor("ipv6b", "2001:0db8:85a3:0000:ffff:ffff:ffff:ffff")
-        // 4番目のブロックが異なるアドレス -> IDは変わるはず
-        idC <- idFor("ipv6c", "2001:0db8:85a3:9999:0000:8a2e:0370:7334")
-      } yield {
-        assertEquals(idA, idB) // 5ブロック目以降の違いはIDに影響しない
-        assertNotEquals(idA, idC) // 4ブロック目までの違いはIDに影響する
-        // 実測値。
-        assertEquals(idA, "ID:rdEW987b")
-        assertEquals(idC, "ID:HWZr8V4Y")
-      }
-    }
-  }
-
-  test("makeIdAndShikibetuId: BBS_ID_GROUP/BBS_ID_RESETを明示指定した場合の実測値") {
+  test("makeShikibetsu: BBS_ID_GROUP/BBS_ID_RESETを明示指定した場合の実測値") {
     // BBS_ID_GROUPが空の場合はbbs名がグループとして使われるが、明示指定すると板名の代わりに使われる。
     // BBS_ID_RESETも既定の86400(1日)から変更できる。両方を明示指定した場合の実際の出力値を固定する。
     withFixedTime(1700000000d * 1000) {
@@ -867,8 +819,210 @@ class PostingHandlerSuite extends FunSuite {
       firstRowWith(env, Seq("FROM" -> "settingstest", "subject" -> "settingstest", "bbs" -> "idsettingsboard"), Nil, Nil, "idsettingsboard").map { fields =>
         // 実測値(BBS_ID_GROUP=customgroup, BBS_ID_RESET=3600, unixtime=1700000000固定)。
         assertEquals(fields(0), "settingstest </b>(JP.7S.93 ju-ed4575071d4e9f87)<b>")
-        assertEquals(idOf(fields(2)), "ID:ZnlBkMof")
       }
+    }
+  }
+
+  // ==================== 12. !id・!no・スレ主表示 ====================
+
+  private val Alice = Some(PostingUser("aid1", "alice"))
+  private val OtherHeaders = Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other")
+  private val OtherCf = Seq("region" -> "Osaka", "city" -> "Osaka")
+  private val Shiki = "(JP.SA.h3 Kx-042e35264c7d19b9)"
+
+  /** 識別子(Shiki)の実測値は時刻に依存するため、時刻を固定して実行する。 */
+  private def fixed[A](body: => Future[A]): Future[A] = withFixedTime(1700000000d * 1000)(body)
+
+  private def nameOf(d: String, n: Int): String = d.split("\n", -1)(n - 1).split("<>", -1)(0)
+
+  private def firstRowAs(env: Env, user: Option[PostingUser], fields: (String, String)*): Future[Array[String]] =
+    for {
+      p <- post(env, fields, user = user)
+      d <- dat(env, "sample", threadKey(p))
+    } yield fieldsOf(d)
+
+  /** スレを立て、返信し、返信行(>>2)の名前欄を返す。`before` は返信の直前に実行する。 */
+  private def replyName(env: Env, create: Seq[(String, String)] = Nil, createHeaders: Seq[(String, String)] = Nil,
+                        createUser: Option[PostingUser] = None, before: String => Future[Unit] = _ => Future.unit,
+                        reply: Seq[(String, String)] = Nil, replyHeaders: Seq[(String, String)] = Nil, replyCf: Seq[(String, String)] = Nil,
+                        replyUser: Option[PostingUser] = None): Future[String] =
+    for {
+      p1 <- post(env, merge(Seq("subject" -> "nusi"), create), createHeaders, user = createUser)
+      key = threadKey(p1)
+      _ <- before(key)
+      p2 <- post(env, merge(Seq("key" -> key, "subject" -> "", "MESSAGE" -> "返信"), reply), replyHeaders, replyCf, user = replyUser)
+      _ = assertEquals(errorMessage(p2.text), None)
+      d <- dat(env, "sample", key)
+    } yield nameOf(d, 2)
+
+  test("!id: 未認証では取り除くだけで何も付けない") {
+    fixed(firstRow(DurableTestKit.newEnv(), "FROM" -> "名前 !id", "subject" -> "idcmd1")).map { fields =>
+      assertEquals(fields(0), s"名前 </b>$Shiki<b>")
+    }
+  }
+
+  test("!id: 認証済なら名前の直後・識別子の前に </b>(@ユーザーID)<b> が付く") {
+    fixed(firstRowAs(DurableTestKit.newEnv(), Alice, "FROM" -> "名前!id", "subject" -> "idcmd2")).map { fields =>
+      assertEquals(fields(0), s"名前 </b>(@alice)<b> </b>$Shiki<b>")
+    }
+  }
+
+  test("!id: フォームのshowidが空でなければ !id と同じ扱い、空なら付かない") {
+    for {
+      on <- fixed(firstRowAs(DurableTestKit.newEnv(), Alice, "FROM" -> "名前", "showid" -> "on", "subject" -> "idcmd3"))
+      off <- fixed(firstRowAs(DurableTestKit.newEnv(), Alice, "FROM" -> "名前", "showid" -> "", "subject" -> "idcmd3b"))
+    } yield {
+      assertEquals(on(0), s"名前 </b>(@alice)<b> </b>$Shiki<b>")
+      assertEquals(off(0), s"名前 </b>$Shiki<b>")
+    }
+  }
+
+  test("!id: 表示IDはHTMLエスケープされる") {
+    firstRowAs(DurableTestKit.newEnv(), Some(PostingUser("aid2", "<b>\"x\"&'")), "FROM" -> "名前!id", "subject" -> "idcmd4").map { fields =>
+      assert(fields(0).startsWith("名前 </b>(@&lt;b&gt;&quot;x&quot;&amp;&apos;)<b> "), fields(0))
+    }
+  }
+
+  test("!id: キャップ投稿では付かない") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("idcap", "キャップ")
+    firstRowAs(env, Alice, "mail" -> "#!idcap", "FROM" -> "!id", "subject" -> "idcmd5").map { fields =>
+      assertEquals(fields(0), "キャップ ★ </b>(★)<b>")
+    }
+  }
+
+  test("!id: 直後が英数字・_ なら対象外（!idol は名前に残る）") {
+    fixed(firstRowAs(DurableTestKit.newEnv(), Alice, "FROM" -> "!idol !id_x", "subject" -> "idcmd6")).map { fields =>
+      assertEquals(fields(0), s"!idol !id_x </b>$Shiki<b>")
+    }
+  }
+
+  test("!id: BBS_NAME_COUNT の検査は付ける前の名前で行う") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("sample/SETTING.TXT", "BBS_NAME_COUNT=5\n")
+    for {
+      p <- post(env, Seq("FROM" -> "12345!id", "subject" -> "idcmd7"), user = Alice)
+      _ = assertEquals(errorMessage(p.text), None)
+      d <- dat(env, "sample", threadKey(p))
+    } yield assert(fieldsOf(d)(0).startsWith("12345 </b>(@alice)<b> "), fieldsOf(d)(0))
+  }
+
+  test("!no: 常に取り除かれる") {
+    fixed(firstRow(DurableTestKit.newEnv(), "FROM" -> "名前!no", "subject" -> "nocmd1")).map { fields =>
+      assertEquals(fields(0), s"名前 </b>$Shiki<b>")
+    }
+  }
+
+  test("主: 同じIP・同じ識別子の返信には (主) が付く") {
+    fixed(replyName(DurableTestKit.newEnv())).map { name =>
+      assertEquals(name, s"名無しさん＠３ちゃんねる </b>$Shiki<b> (主)")
+    }
+  }
+
+  test("主: IPが違っても識別子が同じなら (主) が付く") {
+    fixed(replyName(DurableTestKit.newEnv(), replyHeaders = Seq("CF-Connecting-IP" -> "192.0.2.2"))).map { name =>
+      assertEquals(name, s"名無しさん＠３ちゃんねる </b>$Shiki<b> (主)")
+    }
+  }
+
+  test("主: IPも識別子も違うがユーザーIDが同じなら (主) が付く") {
+    fixed(replyName(DurableTestKit.newEnv(), createUser = Alice, replyUser = Alice, replyHeaders = OtherHeaders, replyCf = OtherCf)).map { name =>
+      assert(name.endsWith("<b> (主)"), name)
+      assert(!name.contains(Shiki), name)
+    }
+  }
+
+  test("主: 識別子もユーザーIDも違うが同じIPなら (主) が付く") {
+    fixed(replyName(DurableTestKit.newEnv(), replyHeaders = Seq("user-agent" -> "Mozilla/5.0 Other"), replyCf = OtherCf)).map { name =>
+      assert(name.endsWith("<b> (主)"), name)
+      assert(!name.contains(Shiki), name)
+    }
+  }
+
+  test("主: 何も一致しなければ付かない") {
+    fixed(replyName(DurableTestKit.newEnv(), createUser = Alice, replyUser = Some(PostingUser("aid9", "bob")), replyHeaders = OtherHeaders, replyCf = OtherCf)).map { name =>
+      assert(!name.contains("(主)"), name)
+    }
+  }
+
+  test("主: IPv6は先頭4ブロック(/64)が同じなら (主) が付く") {
+    fixed(replyName(DurableTestKit.newEnv(),
+      createHeaders = Seq("CF-Connecting-IP" -> "2001:db8:85a3:0:1111:2222:3333:4444", "user-agent" -> "Mozilla/5.0 First"),
+      replyHeaders = Seq("CF-Connecting-IP" -> "2001:DB8:85A3::9", "user-agent" -> "Mozilla/5.0 Other"), replyCf = OtherCf)).map { name =>
+      assert(name.endsWith("<b> (主)"), name)
+    }
+  }
+
+  test("主: !no があれば付かず、!no も dat に残らない") {
+    fixed(replyName(DurableTestKit.newEnv(), reply = Seq("FROM" -> "名前!no"))).map { name =>
+      assertEquals(name, s"名前 </b>$Shiki<b>")
+    }
+  }
+
+  test("主: 板のBBS_DISABLE_NUSI=checkedなら付かない（スレ設定が空でも板設定を見る）") {
+    val env = DurableTestKit.newEnv()
+    fixed(replyName(env, before = _ => Future.successful(env.putR2("sample/SETTING.TXT", "BBS_DISABLE_NUSI=checked\n")))).map { name =>
+      assert(!name.contains("(主)"), name)
+    }
+  }
+
+  test("主: スレ設定のBBS_DISABLE_NUSI=checkedなら付かない") {
+    val env = DurableTestKit.newEnv()
+    fixed(replyName(env, before = key => env.thread(s"sample/$key").setSettings("BBS_DISABLE_NUSI=checked").toFuture)).map { name =>
+      assert(!name.contains("(主)"), name)
+    }
+  }
+
+  test("主: キャップの返信には付かない") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("nusicap", "キャップ")
+    fixed(replyName(env, reply = Seq("mail" -> "#!nusicap"))).map { name =>
+      assertEquals(name, "キャップ ★ </b>(★)<b>")
+    }
+  }
+
+  test("主: キャップが立てたスレにはownerが保存されず、同じIPの返信にも付かない") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("nusicap2", "キャップ")
+    fixed(for {
+      p1 <- post(env, Seq("subject" -> "capthread", "mail" -> "#!nusicap2"))
+      key = threadKey(p1)
+      owner <- env.thread(s"sample/$key").getOwner().toFuture
+      _ = assert(owner == null || js.isUndefined(owner), "capのスレはownerを保存しない")
+      _ <- post(env, Seq("key" -> key, "subject" -> "", "MESSAGE" -> "返信"))
+      d <- dat(env, "sample", key)
+    } yield assert(!nameOf(d, 2).contains("(主)"), nameOf(d, 2)))
+  }
+
+  test("主: >>1 には付かず、ownerにはIP・アカウントのハッシュと識別子が保存される") {
+    val env = DurableTestKit.newEnv()
+    fixed(for {
+      p1 <- post(env, Seq("subject" -> "ownerstore"), user = Alice)
+      key = threadKey(p1)
+      d <- dat(env, "sample", key)
+      owner <- env.thread(s"sample/$key").getOwner().toFuture
+    } yield {
+      assert(!nameOf(d, 1).contains("(主)"), nameOf(d, 1))
+      val o = owner.asInstanceOf[js.Dynamic]
+      assertEquals(o.shikibetsu.asInstanceOf[String], "JP.SA.h3 Kx-042e35264c7d19b9")
+      assertEquals(o.ip.asInstanceOf[String].length, 64)
+      assertEquals(o.account.asInstanceOf[String].length, 64)
+      assert(!o.ip.asInstanceOf[String].contains("192.0.2.1"))
+    })
+  }
+
+  test("主: 未認証のスレ立てではaccountが空で保存される") {
+    val env = DurableTestKit.newEnv()
+    fixed(for {
+      p1 <- post(env, Seq("subject" -> "ownerstore2"))
+      owner <- env.thread(s"sample/${threadKey(p1)}").getOwner().toFuture
+    } yield assertEquals(owner.asInstanceOf[js.Dynamic].account.asInstanceOf[String], ""))
+  }
+
+  test("主: ownerが無い既存スレには付かない") {
+    val env = DurableTestKit.newEnv()
+    fixed(replyName(env, before = key => env.threadInstance(s"sample/$key").state.storage.delete("owner").toFuture.map(_ => ()))).map { name =>
+      assert(!name.contains("(主)"), name)
     }
   }
 
@@ -883,15 +1037,20 @@ class PostingHandlerSuite extends FunSuite {
     } yield {
       val fields = fieldsOf(d)
       assertEquals(fields(3), "  <br> 本文本文 ") // subjectとして切り出された残りの本文（先頭<br>のぶん前後スペース重複）
-      assert(fields(4).startsWith("議題ですね [ID:") && fields(4).endsWith("★]"), fields(4))
+      assertEquals(fields(4), "議題ですね")
     }
   }
 
   test("特殊ルーティング: keyが924または900始まりだと板名が強制的に\"924\"へ書き換えられる") {
     val env = DurableTestKit.newEnv()
-    post(env, Seq("bbs" -> "othername", "key" -> "9240000005", "subject" -> "")).map { p =>
+    env.putCap("weakpass", "キャップ")
+    for {
+      open <- post(env, Seq("bbs" -> "othername", "key" -> "9000000005", "subject" -> ""))
+      capOnly <- post(env, Seq("bbs" -> "othername", "key" -> "9240000005", "subject" -> "", "mail" -> "#!weakpass"))
+    } yield {
       // 投稿されたbbs="othername"は無視され、"924"板のスレッドとして扱われるため該当スレ無しエラーのパスに"924"が現れる
-      assertEquals(errorMessage(p.text), Some("該当するスレッドがありません。924/thread/9240/9240000005.cgi"))
+      assertEquals(errorMessage(open.text), Some("該当するスレッドがありません。924/thread/9000/9000000005.cgi"))
+      assertEquals(errorMessage(capOnly.text), Some("該当するスレッドがありません。924/thread/9240/9240000005.cgi"))
     }
   }
 
@@ -903,6 +1062,114 @@ class PostingHandlerSuite extends FunSuite {
           assertEquals(errorMessage(p.text), Some("板の指定が不正です。<br>\nThe board directory is incorrect..."), s"""bbs="$bbs"""")
         }
       }
+    }
+  }
+
+  // ==================== 11b. 全板共通スレ (docs/global-thread.md) ====================
+
+  private def subjectOf(env: Env, bbs: String): Future[String] = env.board(bbs).getSubject().toFuture
+
+  test("全板共通スレ: ★が本文先頭の!924でスレ立てすると、キー先頭3桁が924になり板924に保存される") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    for {
+      p <- atSecond(1700000000d)(post(env, Seq("bbs" -> "sample", "subject" -> "共通スレ", "mail" -> "#!weakpass", "MESSAGE" -> "!924\n本文")))
+      d <- dat(env, "924", "9240000000")
+      own <- dat(env, "sample", "1700000000")
+      global <- subjectOf(env, "924")
+      sample <- subjectOf(env, "sample")
+    } yield {
+      assertEquals(header(p.res, "x-resnum"), Some("1"))
+      assertEquals(header(p.res, "x-threadkey"), Some("9240000000"))
+      val fields = fieldsOf(d)
+      assertEquals(fields(3), " 本文 ") // 命令と直後の改行は本文から取り除かれる
+      assert(fields(4).startsWith("共通スレ"), fields(4))
+      assertEquals(own, "")
+      assert(global.startsWith("9240000000.dat<>共通スレ"), global)
+      assertEquals(sample, "")
+    }
+  }
+
+  test("全板共通スレ: !900 はキー先頭3桁が900になる") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    for {
+      p <- atSecond(1700000000d)(post(env, Seq("subject" -> "共通スレ", "mail" -> "#!weakpass", "MESSAGE" -> "!900 本文")))
+      d <- dat(env, "924", "9000000000")
+    } yield {
+      assertEquals(header(p.res, "x-threadkey"), Some("9000000000"))
+      assertEquals(fieldsOf(d)(3), " 本文 ")
+    }
+  }
+
+  test("全板共通スレ: ★以外が !924 / !900 でスレ立てすると拒否され、datは作られない") {
+    val env = DurableTestKit.newEnv()
+    for {
+      a <- atSecond(1700000000d)(post(env, Seq("subject" -> "共通スレ", "MESSAGE" -> "!924 本文")))
+      b <- atSecond(1700000000d)(post(env, Seq("subject" -> "共通スレ", "MESSAGE" -> "!900 本文")))
+      d1 <- dat(env, "924", "9240000000")
+      d2 <- dat(env, "924", "9000000000")
+      own <- dat(env, "sample", "1700000000")
+    } yield {
+      assertEquals(errorMessage(a.text), Some(PostingText.globalThreadCreateCapOnly))
+      assertEquals(errorMessage(b.text), Some(PostingText.globalThreadCreateCapOnly))
+      assertEquals(d1, "")
+      assertEquals(d2, "")
+      assertEquals(own, "")
+    }
+  }
+
+  test("全板共通スレ: 命令だけで本文が無ければ「本文がありません！」") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    post(env, Seq("subject" -> "共通スレ", "mail" -> "#!weakpass", "MESSAGE" -> "!924\n")).map { p =>
+      assertEquals(errorMessage(p.text), Some("本文がありません！"))
+    }
+  }
+
+  test("全板共通スレ: !9240 のように数字が続くものは命令にならず通常のスレ立てになる") {
+    val env = DurableTestKit.newEnv()
+    for {
+      p <- atSecond(1700000000d)(post(env, Seq("subject" -> "ふつう", "MESSAGE" -> "!9240 本文")))
+      d <- dat(env, "sample", "1700000000")
+    } yield {
+      assertEquals(header(p.res, "x-threadkey"), Some("1700000000"))
+      assertEquals(fieldsOf(d)(3), " !9240 本文 ")
+    }
+  }
+
+  test("全板共通スレ: 924スレは★のみ書き込め、★以外は拒否される") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    for {
+      created <- atSecond(1700000000d)(post(env, Seq("subject" -> "共通スレ", "mail" -> "#!weakpass", "MESSAGE" -> "!924 本文")))
+      key = threadKey(created)
+      denied <- post(env, Seq("bbs" -> "sample", "key" -> key, "subject" -> "", "MESSAGE" -> "レス"))
+      allowed <- post(env, Seq("bbs" -> "sample", "key" -> key, "subject" -> "", "MESSAGE" -> "レス", "mail" -> "#!weakpass"))
+      d <- dat(env, "924", key)
+    } yield {
+      assertEquals(errorMessage(denied.text), Some(PostingText.globalThreadCapOnly))
+      assertEquals(header(allowed.res, "x-resnum"), Some("2"))
+      assertEquals(d.split("\n", -1).count(_.nonEmpty), 2)
+    }
+  }
+
+  test("全板共通スレ: 900スレは誰でも書き込め、どの板のURLから投稿しても板924のスレに追記される") {
+    val env = DurableTestKit.newEnv()
+    env.putCap("weakpass", "キャップ")
+    for {
+      created <- atSecond(1700000000d)(post(env, Seq("subject" -> "共通スレ", "mail" -> "#!weakpass", "MESSAGE" -> "!900 本文")))
+      key = threadKey(created)
+      first <- post(env, Seq("bbs" -> "sample", "key" -> key, "subject" -> "", "MESSAGE" -> "レス1"))
+      second <- post(env, Seq("bbs" -> "othername", "key" -> key, "subject" -> "", "MESSAGE" -> "レス2"))
+      d <- dat(env, "924", key)
+      global <- subjectOf(env, "924")
+    } yield {
+      assertEquals(header(first.res, "x-resnum"), Some("2"))
+      assertEquals(header(second.res, "x-resnum"), Some("3"))
+      assertEquals(d.split("\n", -1).count(_.nonEmpty), 3)
+      assert(global.startsWith(s"$key.dat<>共通スレ"), global)
+      assert(global.contains("(3)"), global)
     }
   }
 
@@ -1031,21 +1298,21 @@ class PostingHandlerSuite extends FunSuite {
         }
         // 実測値: スレ立て直後は新しい方(ThreadB)が先頭に来る。
         s1 <- subject()
-        _ = assertEquals(s1, "1700000001.dat<>ThreadB [ID:zxQ0miZR★] (1)\n1700000000.dat<>ThreadA [ID:zxQ0miZR★] (1)\n")
+        _ = assertEquals(s1, "1700000001.dat<>ThreadB (1)\n1700000000.dat<>ThreadA (1)\n")
         _ = assertEquals(env.r2Text("headline.txt"), Some("1700000001\nlivetest<>undefined<>1700000001<>1700000001<>first\n"))
 
         // 閾値以上(0.5 >= 0.1) -> 強制sage。板の並び順は変わらず(indexそのまま更新)、headlineも更新されない。
         high <- reply(1700000002d, 0.5, keyA, "reply-high")
         _ = assertEquals(header(high.res, "x-resnum"), Some("2"))
         s2 <- subject()
-        _ = assertEquals(s2, "1700000001.dat<>ThreadB [ID:zxQ0miZR★] (1)\n1700000000.dat<>ThreadA [ID:zxQ0miZR★] (2)\n")
+        _ = assertEquals(s2, "1700000001.dat<>ThreadB (1)\n1700000000.dat<>ThreadA (2)\n")
         _ = assertEquals(env.r2Text("headline.txt"), Some("1700000001\nlivetest<>undefined<>1700000001<>1700000001<>first\n"), "sage時はheadlineが更新されない")
 
         // 閾値未満(0.05 < 0.1) -> 通常age。ThreadAが先頭に移動し、headlineも更新される。
         low <- reply(1700000003d, 0.05, keyA, "reply-low")
         _ = assertEquals(header(low.res, "x-resnum"), Some("3"))
         s3 <- subject()
-        _ = assertEquals(s3, "1700000000.dat<>ThreadA [ID:zxQ0miZR★] (3)\n1700000001.dat<>ThreadB [ID:zxQ0miZR★] (1)\n")
+        _ = assertEquals(s3, "1700000000.dat<>ThreadA (3)\n1700000001.dat<>ThreadB (1)\n")
         _ = assertEquals(env.r2Text("headline.txt"), Some("1700000003\nlivetest<>undefined<>1700000003<>1700000000<>reply-low\n"), "age時はheadlineが更新される")
 
         // ちょうど閾値(Math.random()===0.1)は `0.1*10=1 >= 1` が真になるため、sage側(閾値含む)に入る。
@@ -1054,7 +1321,7 @@ class PostingHandlerSuite extends FunSuite {
         s4 <- subject()
       } yield assertEquals(
         s4,
-        "1700000000.dat<>ThreadA [ID:zxQ0miZR★] (3)\n1700000001.dat<>ThreadB [ID:zxQ0miZR★] (2)\n",
+        "1700000000.dat<>ThreadA (3)\n1700000001.dat<>ThreadB (2)\n",
         "Math.random()===0.1はsage側(閾値ぴったりでも強制sage)"
       )
     }

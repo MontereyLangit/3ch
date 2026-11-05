@@ -1,9 +1,8 @@
 package io._3ch.bbs.handler
 
 import io._3ch.bbs.external.cloudflare.*
-import io._3ch.bbs.external.web.{Request, Response}
+import io._3ch.bbs.external.web.{Request, Response, TextEncoder}
 import io._3ch.bbs.hash.WebHash
-import io._3ch.common.text.Utf8
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -65,7 +64,8 @@ object AdminHandler {
     val headers = js.Dictionary("content-type" -> "text/html; charset=utf-8", "cache-control" -> "no-store", "x-content-type-options" -> "nosniff", "referrer-policy" -> "no-referrer", "content-security-policy" -> "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
     if !truth(env.ADMIN_PASSWORD) then return js.Promise.resolve(Responses.response("管理者パスワードが未設定です。", 503, headers))
     val username = if truth(env.ADMIN_USER) then str(env.ADMIN_USER) else "admin"
-    val credentials = Utf8.encode(s"$username:${str(env.ADMIN_PASSWORD)}").map(_.toChar).mkString
+    val credentialBytes = new TextEncoder().encode(s"$username:${str(env.ADMIN_PASSWORD)}")
+    val credentials = (0 until credentialBytes.length).map(i => credentialBytes(i).toChar).mkString
     val expected = "Basic " + js.Dynamic.global.btoa(credentials).asInstanceOf[String]
     val a = WebHash.hash("SHA-256", expected).toFuture
     val b = WebHash.hash("SHA-256", Option(r.headers.get("authorization")).getOrElse("")).toFuture
@@ -83,7 +83,7 @@ object AdminHandler {
             val origin = r.headers.get("origin")
             if js.Dynamic.global.Number(r.headers.get("content-length")).asInstanceOf[Double] > 262144 then fail("入力が大きすぎます。")
             r.asInstanceOf[js.Dynamic].text().asInstanceOf[js.Promise[String]].toFuture.flatMap { body =>
-              if Utf8.encode(body).length > 262144 then fail("入力が大きすぎます。")
+              if new TextEncoder().encode(body).length > 262144 then fail("入力が大きすぎます。")
               val data = js.Dynamic.global.Object.fromEntries(js.Dynamic.newInstance(js.Dynamic.global.URLSearchParams)(body))
               val save: Future[Unit] = path match {
                 case "/admin/board" =>
@@ -122,7 +122,7 @@ object AdminHandler {
                 case "/admin/thread" =>
                   val bbs = board(url.searchParams.get("bbs")); val k = key(url.searchParams.get("key"))
                   if str(data.action) == "move" then { board(data.targetBoard); key(data.targetKey) }
-                  val stub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$k")).asInstanceOf[ThreadDoStub]
+                  val stub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$k"))
                   stub.inspect(bbs, k).toFuture.flatMap(_ => stub.moderate(str(data.action), js.Dynamic.global.Object.assign(js.Dynamic.literal(), data, js.Dynamic.literal(bbs = bbs, key = k))).toFuture)
                 case _ => fail("操作先が不正です。")
               }
@@ -152,7 +152,7 @@ object AdminHandler {
         } yield s"<h1>板管理: ${escape(bbs)}</h1>" + creationForm(settings) + form(area("head", head, "head.txt") + area("settings", settings, "SETTING.TXT"), "save")
       case "/admin/threads" =>
         val bbs = board(url.searchParams.get("bbs"))
-        val stub = e.BOARD_DO.get(e.BOARD_DO.idFromName(bbs)).asInstanceOf[BoardDoStub]
+        val stub = e.BOARD_DO.get(e.BOARD_DO.idFromName(bbs))
         for {
           subject <- stub.getSubject().toFuture
           removed <- stub.getRemoved().toFuture
@@ -165,7 +165,7 @@ object AdminHandler {
         }
       case "/admin/thread" =>
         val bbs = board(url.searchParams.get("bbs")); val k = key(url.searchParams.get("key"))
-        e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$k")).asInstanceOf[ThreadDoStub].inspect(bbs, k).toFuture.map { data =>
+        e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$k")).inspect(bbs, k).toFuture.map { data =>
           val dat = data.dat.getOrElse("")
           if dat.isEmpty then fail("スレッドがありません。")
           val stopped = data.stopped.getOrElse(false)

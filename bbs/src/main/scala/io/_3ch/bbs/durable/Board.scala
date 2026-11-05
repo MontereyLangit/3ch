@@ -6,7 +6,7 @@ import scala.scalajs.js.annotation.JSExportTopLevel
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
-import io._3ch.common.text.Utf8
+import io._3ch.bbs.external.web.TextEncoder
 import io._3ch.bbs.domain.posting.moderation.ThreadCreationHistory
 import io._3ch.bbs.durable.codec.ThreadCreationCodec
 import io._3ch.bbs.durable.support.DurableLock
@@ -95,10 +95,10 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
    * @param sage - sage投稿の場合はtrue
    * @param maxThreads - 板の最大スレッド数
    */
-  def updateThread(data: js.Dynamic, sage: js.Any = js.undefined, maxThreads: js.UndefOr[Double] = js.undefined): js.Promise[Unit] =
+  def updateThread(data: js.Dynamic, sage: js.UndefOr[Boolean] = js.undefined, maxThreads: js.UndefOr[Double] = js.undefined): js.Promise[Unit] =
     state.blockConcurrencyWhile(() => updateThreadUnlocked(data, sage, maxThreads))
 
-  private def updateThreadUnlocked(data: js.Dynamic, sage: js.Any = js.undefined, maxThreads: js.UndefOr[Double] = js.undefined): js.Promise[Unit] =
+  private def updateThreadUnlocked(data: js.Dynamic, sage: js.UndefOr[Boolean], maxThreads: js.UndefOr[Double]): js.Promise[Unit] =
     getSubject().toFuture.flatMap { subject =>
       var lines = if subject.isEmpty then Vector.empty[String] else subject.split("\n", -1).toVector
       if lines.lastOption.contains("") then lines = lines.dropRight(1) // 最後の空行を除外
@@ -126,7 +126,7 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
       }
       def render = if lines.isEmpty then "" else lines.mkString("\n") + "\n"
       var result = render
-      while Utf8.encode(result).length > 512 * 1024 && lines.nonEmpty do {
+      while new TextEncoder().encode(result).length > 512 * 1024 && lines.nonEmpty do {
         lines = lines.dropRight(1)
         result = render
       }

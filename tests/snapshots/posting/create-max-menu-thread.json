@@ -29,21 +29,26 @@
   },
   "threads": {
     "sample/1700000000": {
-      "dat": "名無しさん＠３ちゃんねる </b>(JP.SA.CG Kx-042e35264c7d19b9)<b><><>2023/11/15(水) 07:13:20 ID:zyIjCtRI<> テスト本文 <>テストスレ [ID:zyIjCtRI★]\n",
+      "dat": "名無しさん＠３ちゃんねる </b>(JP.SA.CG Kx-042e35264c7d19b9)<b><><>2023/11/15(水) 07:13:20<> テスト本文 <>テストスレ\n",
       "log": "1<>UID: IP:192.0.2.1 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0 (TestBrowser)\n",
-      "settings": "BBS_MAX_MENU_THREAD=2<>BBS_SHIKIBETSU=off<>"
+      "settings": "BBS_MAX_MENU_THREAD=2<>BBS_SHIKIBETSU=off<>",
+      "owner": {
+        "ip": "74a18c10fbac664707ae6cac253104b3091764b56e9724080ce4ac78aa59572e",
+        "shikibetsu": "JP.SA.CG Kx-042e35264c7d19b9",
+        "account": ""
+      }
     },
     "sample/1699990000": {
-      "dat": "名無しさん＠３ちゃんねる </b>(JP.ab.cd ef-0123456789abcdef)<b><><>2023/11/14(火) 19:26:40 ID:abcdEFGH<> 最初の本文 <>既存スレ [ID:abcdEFGH★]\n",
+      "dat": "名無しさん＠３ちゃんねる </b>(JP.ab.cd ef-0123456789abcdef)<b><><>2023/11/14(火) 19:26:40<> 最初の本文 <>既存スレ\n",
       "log": "1<>UID: IP:192.0.2.100 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0\n",
       "settings": "BBS_TITLE=sample＠3ch掲示板<>BBS_NONAME_NAME=名無しさん＠３ちゃんねる<>BBS_SHIKIBETSU=off<>"
     }
   },
   "boards": {
-    "sample": "1700000000.dat<>テストスレ [ID:zyIjCtRI★] (1)\n1699980000.dat<>別スレ (5)\n"
+    "sample": "1700000000.dat<>テストスレ (1)\n1699980000.dat<>別スレ (5)\n"
   },
   "r2": {
-    "sample/thread/1700/subject.txt": "1700000000\n1700000000<>テストスレ<>名無しさん＠３ちゃんねる </b>(JP.SA.CG Kx-042e35264c7d19b9)<b><>JP.SA.CG Kx-042e35264c7d19b9<>ID:zyIjCtRI<>テスト本文\n",
+    "sample/thread/1700/subject.txt": "1700000000\n1700000000<>テストスレ<>名無しさん＠３ちゃんねる </b>(JP.SA.CG Kx-042e35264c7d19b9)<b><>JP.SA.CG Kx-042e35264c7d19b9<><>テスト本文\n",
     "sample/thread/1699/subject.txt": null,
     "sample/thread/subject.txt": "1700000000\n1700<>1700000000\n",
     "headline.txt": "1700000000\nsample<>undefined<>1700000000<>1700000000<>テスト本文\n"

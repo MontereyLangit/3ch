@@ -3,6 +3,7 @@ package io._3ch.bbs.handler
 import munit.FunSuite
 import io._3ch.bbs.durable.DurableTestKit
 import io._3ch.bbs.durable.DurableTestKit.Env
+import io._3ch.bbs.domain.posting.PostingUser
 import io._3ch.bbs.external.web.{Request, TextEncoder}
 import io._3ch.bbs.util.SjisEncoding
 import scala.collection.mutable
@@ -53,6 +54,7 @@ class PostingSnapshotSuite extends FunSuite {
     submit: Option[String] = Some("書き込む"),
     method: String = "POST",
     random: Double = 0.5,
+    user: Option[PostingUser] = None,
     setup: Env => Future[Unit] = _ => Future.unit,
     boards: Seq[String] = Seq("sample")
   )
@@ -96,16 +98,16 @@ class PostingSnapshotSuite extends FunSuite {
   // ---- 準備 ----
 
   private val ThreadSettings = "BBS_TITLE=sample＠3ch掲示板<>BBS_NONAME_NAME=名無しさん＠３ちゃんねる<>BBS_SHIKIBETSU=off<>"
-  private val ExistingDat = "名無しさん＠３ちゃんねる </b>(JP.ab.cd ef-0123456789abcdef)<b><><>2023/11/14(火) 19:26:40 ID:abcdEFGH<> 最初の本文 <>既存スレ [ID:abcdEFGH★]\n"
+  private val ExistingDat = "名無しさん＠３ちゃんねる </b>(JP.ab.cd ef-0123456789abcdef)<b><><>2023/11/14(火) 19:26:40<> 最初の本文 <>既存スレ\n"
   private val ExistingLog = "1<>UID: IP:192.0.2.100 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0\n"
 
   private def seedThread(env: Env, name: String, entries: (String, js.Any)*): Future[Unit] =
     DurableTestKit.seed(env.threadInstance(name), entries*)
 
-  private def existing(settings: String = ThreadSettings, dat: String = ExistingDat, bbs: String = "sample", extra: Seq[(String, js.Any)] = Nil): Env => Future[Unit] = env =>
+  private def existing(settings: String = ThreadSettings, dat: String = ExistingDat, bbs: String = "sample", extra: Seq[(String, js.Any)] = Nil, key: String = ExistingKey): Env => Future[Unit] = env =>
     for {
-      _ <- seedThread(env, s"$bbs/$ExistingKey", (Seq[(String, js.Any)]("dat" -> dat, "log" -> ExistingLog, "settings" -> settings) ++ extra)*)
-      _ <- env.board(bbs).updateThread(js.Dynamic.literal(key = ExistingKey, title = "既存スレ [ID:abcdEFGH★]", resNum = 1)).toFuture
+      _ <- seedThread(env, s"$bbs/$key", (Seq[(String, js.Any)]("dat" -> dat, "log" -> ExistingLog, "settings" -> settings) ++ extra)*)
+      _ <- env.board(bbs).updateThread(js.Dynamic.literal(key = key, title = "既存スレ", resNum = 1)).toFuture
       _ <- env.board(bbs).updateThread(js.Dynamic.literal(key = OtherKey, title = "別スレ", resNum = 5)).toFuture
     } yield ()
 
@@ -124,7 +126,7 @@ class PostingSnapshotSuite extends FunSuite {
 
   /** 準備として `at` 秒に投稿処理を通す（スレ立て規制の履歴作り）。 */
   private def priorPost(at: Double, c: Case): Env => Future[Unit] = env =>
-    withFixedTime(at * 1000)(fut[js.Dynamic](PostingHandler.entry(makeRequest(c), env.worker))).map(_ => ())
+    withFixedTime(at * 1000)(fut[js.Dynamic](PostingHandler.entry(makeRequest(c), env.worker, resolver(c)))).map(_ => ())
 
   /** 以後の `THREAD_DO.get(...)` が返すスタブの `method` を失敗させる。 */
   private def failThread(method: String, message: String): Env => Future[Unit] = env => Future.successful {
@@ -149,6 +151,19 @@ class PostingSnapshotSuite extends FunSuite {
     env.onR2Get(k => if k == key && !done then { done = true; env.replaceR2Etag(k, "etag-conflict") })
   }
 
+  private def resolver(c: Case): PostingUserResolver.Resolver = (_, _) => Future.successful(c.user)
+
+  private val Alice = Some(PostingUser("aid1", "alice"))
+  private val OtherClient = Seq("CF-Connecting-IP" -> "192.0.2.77", "user-agent" -> "Mozilla/5.0 (OtherBrowser)")
+
+  /** 準備としてスレ `ExistingKey` を投稿処理で立てる（スレ主情報を残す）。 */
+  private def ownThread(headers: Seq[(String, String)] = Nil, user: Option[PostingUser] = None): Env => Future[Unit] =
+    priorPost(Now - 10000, Case("prior", headers = headers, user = user))
+
+  /** 板 924 に共通スレ `key` を置く。 */
+  private def globalThread(key: String): Env => Future[Unit] =
+    existing(bbs = "924", key = key)
+
   // ---- ケース ----
 
   private def create(name: String, c: Case => Case = identity): Case = c(Case(name))
@@ -171,14 +186,7 @@ class PostingSnapshotSuite extends FunSuite {
     create("create-cap-wrong", c => withFields(c.copy(setup = caps), "mail" -> "#!wrongpass")),
     create("create-cap-strong", c => withFields(c.copy(setup = caps), "FROM" -> ("a" * 100), "mail" -> "#!strongpass", "subject" -> ("s" * 100))),
     create("create-cap-strong-sjis", c => withFields(c.copy(setup = caps, sjis = true, headers = MonazillaUa), "mail" -> "#!strongpass")),
-    create("create-trip-des", withFields(_, "FROM" -> "名前#tripkey")),
-    create("create-trip-hex", withFields(_, "FROM" -> "名前##0123456789abcdef")),
-    create("create-trip-hex-salt", withFields(_, "FROM" -> "名前##0123456789abcdefAB")),
-    create("create-trip-hex-invalid", withFields(_, "FROM" -> "名前##0123456789abcdeg")),
-    create("create-trip-dollar", withFields(_, "FROM" -> "名前#$0123456789abcdef")),
-    create("create-trip-sha1", withFields(_, "FROM" -> "名前#abcdefghijklmnop")),
-    create("create-trip-sjis-11bytes", c => withFields(c.copy(sjis = true, headers = MonazillaUa), "FROM" -> "名前#げげげげげa")),
-    create("create-trip-sjis-12bytes", c => withFields(c.copy(sjis = true, headers = MonazillaUa), "FROM" -> "名前#げげげげげげ")),
+    create("create-trip-discarded", withFields(_, "FROM" -> "名前#tripkey")),
     create("create-trip-entity", withFields(_, "FROM" -> "&#65;#key")),
     create("create-trip-cap", c => withFields(c.copy(setup = caps), "FROM" -> "名前#tripkey", "mail" -> "#!weakpass")),
     create("create-escape", withFields(_, "FROM" -> "a&b\"c<d>e'f\tg", "mail" -> "m<b>", "MESSAGE" -> "msg&<>\"'\t\u0001x&#10;y&#x0D;z&amp;", "subject" -> "<subject>")),
@@ -209,13 +217,35 @@ class PostingSnapshotSuite extends FunSuite {
     create("create-shikibetsu-as", _.copy(setup = boardSetting("BBS_ID_SHIKIBETSU=as\n"))),
     create("create-shikibetsu-other", _.copy(setup = boardSetting("BBS_ID_SHIKIBETSU=d\n"))),
     create("create-shikibetsu-empty", _.copy(setup = boardSetting("BBS_ID_SHIKIBETSU=\n"))),
-    create("create-id-ip", _.copy(setup = boardSetting("BBS_ID=ip\n"))),
-    create("create-id-siberia", _.copy(setup = boardSetting("BBS_ID=siberia\n"))),
-    create("create-id-siberia-lv", _.copy(setup = boardSetting("BBS_ID=siberia\nBBS_ID_LV=checked\n"))),
-    create("create-id-off", _.copy(setup = boardSetting("BBS_ID=off\n"))),
-    create("create-id-off-lv", _.copy(setup = boardSetting("BBS_ID=off\nBBS_ID_LV=checked\n"))),
-    create("create-id-lv", _.copy(setup = boardSetting("BBS_ID_LV=checked\n"))),
     create("create-id-group-reset", _.copy(setup = boardSetting("BBS_ID_GROUP=grp\nBBS_ID_RESET=3600\n"))),
+    // !id・スレ主表示
+    create("create-name-id-user", c => withFields(c.copy(user = Alice), "FROM" -> "名前!id")),
+    create("create-name-id-escape", c => withFields(c.copy(user = Some(PostingUser("aid2", "<b>\"x\"&'"))), "FROM" -> "!id")),
+    create("create-name-id-anonymous", withFields(_, "FROM" -> "名前 !id")),
+    create("create-name-id-cap", c => withFields(c.copy(user = Alice, setup = caps), "FROM" -> "名前!id", "mail" -> "#!weakpass")),
+    create("create-showid-field", c => withFields(c.copy(user = Alice), "showid" -> "1")),
+    create("create-name-id-word", c => withFields(c.copy(user = Alice), "FROM" -> "!idx !no")),
+    reply("reply-name-id-user", c => withFields(c.copy(user = Alice), "FROM" -> "!id")),
+    reply("reply-nusi-ip", _.copy(setup = ownThread())),
+    reply("reply-nusi-account", c => c.copy(user = Alice, headers = OtherClient, setup = ownThread(user = Alice))),
+    reply("reply-nusi-account-other", c => c.copy(user = Some(PostingUser("aid9", "bob")), headers = OtherClient, setup = ownThread(user = Alice))),
+    reply("reply-nusi-other-ip", c => c.copy(headers = Seq("CF-Connecting-IP" -> "192.0.2.77"), setup = ownThread())),
+    reply("reply-nusi-other-client", c => c.copy(headers = OtherClient, setup = ownThread())),
+    reply("reply-nusi-ipv6-prefix", c => c.copy(headers = Seq("CF-Connecting-IP" -> "2001:db8:1:2::99"), setup = ownThread(headers = Seq("CF-Connecting-IP" -> "2001:db8:1:2::1")))),
+    reply("reply-nusi-no", c => withFields(c.copy(setup = ownThread()), "FROM" -> "名前!no")),
+    reply("reply-nusi-cap", c => withFields(c.copy(setup = all(ownThread(), caps)), "mail" -> "#!weakpass")),
+    reply("reply-nusi-board-disabled", c => c.copy(setup = all(boardSetting("BBS_DISABLE_NUSI=checked\n"), ownThread()))),
+    reply("reply-nusi-thread-disabled", c => c.copy(setup = all(ownThread(), env => env.threadInstance(s"sample/$ExistingKey").setSettings("BBS_DISABLE_NUSI=checked<>").toFuture))),
+    create("create-nusi-cap-owner", c => withFields(c.copy(setup = caps), "mail" -> "#!weakpass")),
+    // 全板共通スレ
+    create("create-global-924-cap", c => withFields(c.copy(setup = caps), "mail" -> "#!weakpass", "MESSAGE" -> "!924 共通スレ本文")).copy(boards = Seq("sample", "924")),
+    create("create-global-900-cap", c => withFields(c.copy(setup = caps), "mail" -> "#!weakpass", "MESSAGE" -> "!900<br>本文")).copy(boards = Seq("sample", "924")),
+    create("create-global-9240-not-command", c => withFields(c.copy(setup = caps), "mail" -> "#!weakpass", "MESSAGE" -> "!9240 本文")).copy(boards = Seq("sample", "924")),
+    create("error-global-create-not-cap", withFields(_, "MESSAGE" -> "!924 本文")).copy(boards = Seq("sample", "924")),
+    create("error-global-empty-message", c => withFields(c.copy(setup = caps), "mail" -> "#!weakpass", "MESSAGE" -> "!924")).copy(boards = Seq("sample", "924")),
+    reply("error-global-924-reply-not-cap", c => withFields(c.copy(setup = globalThread("9240000000")), "key" -> "9240000000", "bbs" -> "other")).copy(boards = Seq("924")),
+    reply("reply-global-924-cap", c => withFields(c.copy(setup = all(globalThread("9240000000"), caps)), "key" -> "9240000000", "mail" -> "#!weakpass")).copy(boards = Seq("924")),
+    reply("reply-global-900", c => withFields(c.copy(setup = globalThread("9000000000")), "key" -> "9000000000")).copy(boards = Seq("924")),
     create("create-ipv6", _.copy(headers = Seq("CF-Connecting-IP" -> "2001:DB8:0:0:0:0:0:1"))),
     create("create-ipv6-short", _.copy(headers = Seq("CF-Connecting-IP" -> "2001:db8::1"))),
     create("create-forwarded", _.copy(headers = Seq("x-forwarded-for" -> "203.0.113.5", "via" -> "1.1 proxy"))),
@@ -253,8 +283,7 @@ class PostingSnapshotSuite extends FunSuite {
     reply("reply-cap-weak", c => withFields(c.copy(setup = all(existing(), caps)), "mail" -> "#!weakpass")),
     reply("reply-cap-weak-sage", c => withFields(c.copy(setup = all(existing(), caps)), "mail" -> "sage#!weakpass")),
     reply("reply-cap-strong", c => withFields(c.copy(setup = all(existing(), caps)), "mail" -> "#!strongpass", "MESSAGE" -> ("y<br>" * 100))),
-    reply("reply-trip", withFields(_, "FROM" -> "名前#tripkey")),
-    reply("reply-trip-sjis", c => withFields(c.copy(sjis = true, headers = MonazillaUa), "FROM" -> "名前#とりっぷ")),
+    reply("reply-trip-discarded", withFields(_, "FROM" -> "名前#tripkey")),
     reply("reply-noname-thread", _.copy(setup = existing(settings = "BBS_NONAME_NAME=スレの名無し<>"))),
     reply("reply-thread-settings-override", c => c.copy(setup = all(existing(settings = "BBS_NONAME_NAME=a=b<> BBS_ID = off <>BBS_ID_SHIKIBETSU=raw<>"), boardSetting("BBS_NONAME_NAME=板側\nBBS_TITLE=板タイトル\n")))),
     reply("reply-force-sage", _.copy(setup = existing(settings = "BBS_FORCE_SAGE=1<>"))),
@@ -293,7 +322,7 @@ class PostingSnapshotSuite extends FunSuite {
     create("error-empty-submit", _.copy(submit = Some(""))),
     create("error-sjis-from-web", _.copy(sjis = true)),
     create("error-sjis-from-web-other-submit", _.copy(submit = Some("送信"))),
-    create("error-trip-key-too-long", withFields(_, "FROM" -> ("a#" + "k" * 1024))),
+    create("create-trip-key-long", withFields(_, "FROM" -> ("a#" + "k" * 1024))),
     create("error-forbidden-board", withFields(_, "bbs" -> "test")).copy(boards = Seq("test")),
     create("error-empty-board", withFields(_, "bbs" -> "!!")).copy(boards = Nil),
     create("error-board-id-invalid", withFields(_, "bbs" -> "foo_bar")).copy(boards = Seq("foo_bar")),
@@ -385,7 +414,8 @@ class PostingSnapshotSuite extends FunSuite {
       dat <- stub.getDat().toFuture
       log <- stub.getLog().toFuture
       settings <- stub.getSettings().toFuture
-    } yield name -> js.Dynamic.literal(dat = dat, log = log, settings = settings)
+      owner <- stub.getOwner().toFuture
+    } yield name -> js.Dynamic.literal(dat = dat, log = log, settings = settings, owner = owner)
   }
 
   private def run(c: Case): Future[String] =
@@ -394,16 +424,16 @@ class PostingSnapshotSuite extends FunSuite {
         val env = DurableTestKit.newEnv()
         for {
           _ <- c.setup(env)
-          outcome <- fut[js.Dynamic](PostingHandler.entry(makeRequest(c), env.worker)).transformWith {
+          outcome <- fut[js.Dynamic](PostingHandler.entry(makeRequest(c), env.worker, resolver(c))).transformWith {
             case scala.util.Success(res) => responseJson(res).map(json => "response" -> json)
             case scala.util.Failure(e) => Future.successful("failure" -> (DurableTestKit.messageOf(e): js.Any))
           }
           _ = env.onR2Get(_ => ())
-          threadNames = c.boards.flatMap(b => Seq(s"$b/$NowKey", s"$b/$ExistingKey")) ++ (if c.name == "reply-legacy-import" then Seq("sample/1600000000") else Nil)
+          threadNames = c.boards.flatMap(b => Seq(s"$b/$NowKey", s"$b/$ExistingKey") ++ (if b == "924" then Seq("924/9240000000", "924/9000000000", s"924/924${NowKey.drop(3)}", s"924/900${NowKey.drop(3)}") else Nil)) ++ (if c.name == "reply-legacy-import" then Seq("sample/1600000000") else Nil)
           threads <- Future.traverse(threadNames)(threadJson(env, _))
           subjects <- Future.traverse(c.boards)(b => env.board(b).getSubject().toFuture.map(s => b -> (s: js.Any)))
         } yield {
-          val r2Keys = c.boards.flatMap(b => Seq(s"$b/thread/1700/subject.txt", s"$b/thread/1699/subject.txt", s"$b/thread/subject.txt")) :+ "headline.txt"
+          val r2Keys = c.boards.flatMap(b => Seq(s"$b/thread/1700/subject.txt", s"$b/thread/1699/subject.txt", s"$b/thread/subject.txt") ++ (if b == "924" then Seq("924/thread/9240/subject.txt", "924/thread/9000/subject.txt") else Nil)) :+ "headline.txt"
           val result = js.Dictionary[js.Any](
             "case" -> c.name,
             outcome,

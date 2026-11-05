@@ -32,11 +32,11 @@
     }
   },
   "boards": {
-    "sample": "1699999999.dat<>海外1 [ID:03La9IFb★] (1)\n"
+    "sample": "1699999999.dat<>海外1 (1)\n"
   },
   "r2": {
     "sample/thread/1700/subject.txt": null,
-    "sample/thread/1699/subject.txt": "1699999999\n1699999999<>海外1<>名無しさん＠３ちゃんねる </b>(US.ia.E1 64-b0cc5d11d02b8fb1)<b><>US.ia.E1 64-b0cc5d11d02b8fb1<>ID:03La9IFb<>テスト本文\n",
+    "sample/thread/1699/subject.txt": "1699999999\n1699999999<>海外1<>名無しさん＠３ちゃんねる </b>(US.ia.E1 64-b0cc5d11d02b8fb1)<b><>US.ia.E1 64-b0cc5d11d02b8fb1<><>テスト本文\n",
     "sample/thread/subject.txt": "1699999999\n1699<>1699999999\n",
     "headline.txt": "1699999999\nsample<>sample＠3ch掲示板<>1699999999<>1699999999<>テスト本文\n"
   }

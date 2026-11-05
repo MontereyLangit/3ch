@@ -5,10 +5,13 @@ import io._3ch.bbs.domain.posting.moderation.ThreadCreationRejection
 
 /** 投稿処理の既定の板設定と、拒否理由の文言。 */
 object PostingText {
-  val settingTxtDefault: String = "BBS_TITLE=<DIR_NAME>＠3ch掲示板\nBBS_NONAME_NAME=名無しさん＠３ちゃんねる\nBBS_MAX_MENU_THREAD=300\nBBS_FORCE_SAGE=\nBBS_ADD_THREAD=on\nBBS_SHIKIBETSU=checked\nBBS_ID=checked\nBBS_ID_GROUP=\nBBS_ID_RESET=86400\nBBS_ID_LV=\nBBS_ID_SHIKIBETSU=checked\nBBS_SUBJECT_COUNT=64\nBBS_NAME_COUNT=64\nBBS_MAIL_COUNT=64\nBBS_MESSAGE_COUNT=4096\nBBS_LINE_NUMBER=30\nBBS_THREAD_TATESUGI=1\nBBS_THREAD_TATESUGI_RESET=3600\nBBS_THREAD_JUNBAN=1\nBBS_THREAD_JUNBAN_RESET=3600\nBBS_THREAD_JUNBAN_AS_ONLY=\nBBS_CREATETHREAD_INTERVAL=5\nBBS_COPIPE=3/86400\ntimecount=18\ntimeclose=10\ntimecover=3600\nBBS_COOK82=10\nBBS_COOK82_POST_LIMIT=60\nBBS_LIVE=\nBBS_KISEIOFF=\nBBS_NO_MADAKANA=\nBBS_THREAD_SETTINGS=on\nBBS_DISABLE_NUSI=\nBBS_FORCE_NONAME=\nBBS_ARR=\nBBS_HEISA=\n"
+  val settingTxtDefault: String = "BBS_TITLE=<DIR_NAME>＠3ch掲示板\nBBS_NONAME_NAME=名無しさん＠３ちゃんねる\nBBS_MAX_MENU_THREAD=300\nBBS_FORCE_SAGE=\nBBS_ADD_THREAD=on\nBBS_SHIKIBETSU=checked\nBBS_ID_GROUP=\nBBS_ID_RESET=86400\nBBS_ID_SHIKIBETSU=checked\nBBS_SUBJECT_COUNT=64\nBBS_NAME_COUNT=64\nBBS_MAIL_COUNT=64\nBBS_MESSAGE_COUNT=4096\nBBS_LINE_NUMBER=30\nBBS_THREAD_TATESUGI=1\nBBS_THREAD_TATESUGI_RESET=3600\nBBS_THREAD_JUNBAN=1\nBBS_THREAD_JUNBAN_RESET=3600\nBBS_THREAD_JUNBAN_AS_ONLY=\nBBS_CREATETHREAD_INTERVAL=5\nBBS_COPIPE=3/86400\ntimecount=18\ntimeclose=10\ntimecover=3600\nBBS_COOK82=10\nBBS_COOK82_POST_LIMIT=60\nBBS_LIVE=\nBBS_KISEIOFF=\nBBS_NO_MADAKANA=\nBBS_THREAD_SETTINGS=on\nBBS_DISABLE_NUSI=\nBBS_FORCE_NONAME=\nBBS_ARR=\nBBS_HEISA=\n"
 
   val threadCreationNarrow: String = "スレッドを立てすぎです。しばらく待ってから投稿してください。"
   val threadCreationBroad: String = "この接続環境ではスレッドを立てすぎです。しばらく待ってから投稿してください。"
+
+  val globalThreadCreateCapOnly: String = "全板共通スレッド(!924 / !900)は★(キャップ)のみ立てられます。"
+  val globalThreadCapOnly: String = "このスレッドは★(キャップ)のみ書き込めます。"
 
   private val boardIncorrect = "板の指定が不正です。<br>\nThe board directory is incorrect..."
 
@@ -28,7 +31,6 @@ object PostingText {
     case PostingError.ProxyHeader(clientIp) => "変な情報が送られて来ました。<br>Client_IP: " + clientIp
     case PostingError.NoSubmit => "書き込みボタンを押忍べし<br>\nNo submit"
     case PostingError.SjisFromWeb => "書き込みボタンを押忍べし<br>2ch専用ブラウザからの書き込みでこのエラーが出た場合、お使いの専用ブラウザはMonazilla/1.00で始まるUserAgentを使用していません。<br>認証時の問題などもありますので、2ch専用ブラウザではMonazilla/1.00で始まるUserAgentを使用してください。<br>(Monazilla/1.00以外のUserAgentでsubmit=%E6%9B%B8…でない場合にこのエラーが出ます。)<br>\n&apos;Submit&apos; must require &apos;書&apos; with Web browser&apos;s post."
-    case PostingError.TripKeyTooLong => "トリップキー長杉！<br>\nYour tripkey must be less than 1023 bytes."
     case PostingError.ForbiddenBoard => boardIncorrect
     case PostingError.EmptyMessage => "本文がありません！"
     case PostingError.MissingSubject(key) => "subjectが存在しないかキー情報が不正です。key=" + key + "<br>\nThe subject is empty and key is wrong."
@@ -47,6 +49,8 @@ object PostingText {
     case PostingError.Moderated(ModerationDenial.NgWord) => "NGワード禁止！"
     case PostingError.Moderated(ModerationDenial.TateDame) => "このホストではスレッドを立てられません。"
     case PostingError.Moderated(ModerationDenial.Host) => "アクセス規制中です！！"
+    case PostingError.GlobalThreadCreateCapOnly => globalThreadCreateCapOnly
+    case PostingError.GlobalThreadCapOnly => globalThreadCapOnly
     case PostingError.InvalidCreationSettings(detail) => detail
     case PostingError.ThreadCreation(ThreadCreationRejection.Broad(_)) => threadCreationBroad
     case PostingError.ThreadCreation(_) => threadCreationNarrow

@@ -37,7 +37,6 @@ enum PostingError {
   case ProxyHeader(clientIp: String)
   case NoSubmit
   case SjisFromWeb
-  case TripKeyTooLong
   case ForbiddenBoard
   case EmptyMessage
   case MissingSubject(key: String)
@@ -50,6 +49,8 @@ enum PostingError {
   case BrokenLog(kind: BrokenLogKind)
   case ThreadFull
   case DuplicateKey
+  case GlobalThreadCreateCapOnly
+  case GlobalThreadCapOnly
   case Moderated(denial: ModerationDenial)
   case InvalidCreationSettings(detail: String)
   case ThreadCreation(rejection: ThreadCreationRejection)
@@ -64,7 +65,6 @@ enum PostingError {
     case ProxyHeader(_) => "request:client-ip"
     case NoSubmit => "form:no-submit"
     case SjisFromWeb => "form:sjis-from-web"
-    case TripKeyTooLong => "form:trip-key-too-long"
     case ForbiddenBoard => "form:board"
     case EmptyMessage => "form:empty-message"
     case MissingSubject(_) => "form:subject"
@@ -77,6 +77,8 @@ enum PostingError {
     case BrokenLog(kind) => s"thread:broken-log:${kind.code}"
     case ThreadFull => "thread:full"
     case DuplicateKey => "thread:duplicate-key"
+    case GlobalThreadCreateCapOnly => "global-thread:create-cap-only"
+    case GlobalThreadCapOnly => "global-thread:cap-only"
     case Moderated(denial) => s"moderation:${denial.code}"
     case InvalidCreationSettings(_) => "thread-creation:settings"
     case ThreadCreation(rejection) => rejection.code

@@ -112,6 +112,35 @@ step 3 方針から外れる。
 本家 2ch と異なる 3ch 独自のトリップ値を生む既知の挙動なので、元の JS と同じく無条件に `TextEncoder` へ
 委譲して保持する（「正しい」変換に直してはいけない。[移植方針_step3_ScalaJS.md](移植方針_step3_ScalaJS.md) R-02）。
 
+### 3.3 MD5 / crypt(3) は npm ライブラリに委譲する（`hash/Md5.scala`, `hash/UnixCrypt.scala`）
+
+2026-11-01 に、`common/` にあった自作の MD5（`Md5.scala`）と Unix crypt(3) DES（`UnixCrypt.scala`）を
+npm ライブラリへの薄い facade に置き換えた。自作実装は v5 の JS をビット演算まで 1:1 で写したもので、
+保守の対象として残す価値が無い。
+
+- MD5: `@noble/hashes`（`@noble/hashes/legacy.js` の `md5`, `utils.js` の `bytesToHex`）。
+  v2 系は文字列入力を受け付けないので、v5 と同じく `TextEncoder` で UTF-8 化してから渡す
+  （孤立サロゲートが U+FFFD になる挙動はこれで保たれる）。
+- crypt(3): `unix-crypt-td-js`（Tim Dumol 版）。v5 の `src/common.js` に同梱されていたのは同じ実装なので、
+  KB-26（2文字未満の salt で NUL が混じる）を含めて出力は同一。**2026-11-02 のトリップ廃止で削除した**
+  （`hash/UnixCrypt.scala`・`hash/Hex.scala`・golden `crypt.json` / `crypt-bytes.json` も削除。[トリップ・ID廃止とスレ主表示.md](トリップ・ID廃止とスレ主表示.md)）。
+- 置き場所は `common/` ではなく `bbs/`: npm モジュールは Scala.js からしか呼べず、cross project の JVM 側では
+  リンクできない。`bbs/` の他の `@JSImport` facade（`react-dom/server` 等）と同じ扱い。
+- 検証: `tests/golden/md5.json` の全ケースが一致することを `bbs/src/test/.../hash/Md5Suite` で固定している（`common` から移した）。
+
+同日、残っていた `common/` の補助実装も置き換えた。
+
+- `text/Utf8.scala`（`TextEncoder` の手書き再現）→ 各呼び出し元（`AdminHandler` / `Responses` / `Board`）で
+  `bbs/external/web` の `TextEncoder` facade を直接使う。`common` に置いていた理由は JVM 側でも動かすためだったが、
+  利用者は全て `bbs/` だった。
+- `hash/HexToBinary.scala`（16進 → 1バイト1文字の文字列）→ `hash/Hex.scala`（`@noble/hashes` の `hexToBytes`。トリップ廃止で後に削除）。
+  `unix-crypt-td-js` は鍵をバイト配列でも受け取るので、`UnixCrypt.crypt(Uint8Array, String)` に直接渡す。
+  旧実装の「奇数長は末尾を切り捨てる」挙動は、呼び出し元が正規表現で 16 桁を保証しているため到達しない。
+  `tests/golden/hex-to-binary.json` はこの不到達の挙動だけを固定していたので削除した（`v5-final` タグに残る）。
+- `crypt/SaltChar.scala`（KB-19 の `translateSaltChar` 再現）→ 削除。v6 の `PostingHandler.processTrip` は
+  これを呼ばず、JS `RegExp` と文字対応表でソルトを作っているため本番では未使用だった。
+  `tests/golden/translate-salt-char.json` も同時に削除した（v5 の実測値は `v5-final` タグで参照できる）。
+
 ## 4. テストスイート（`bbs/src/test/`）
 
 ### 4.1 `DurableTestKit`
