@@ -1,0 +1,39 @@
+{
+  "case": "error-sjis-from-web",
+  "response": {
+    "status": 200,
+    "headers": [
+      [
+        "content-length",
+        "1458"
+      ],
+      [
+        "content-type",
+        "text/html;charset=Shift_JIS"
+      ]
+    ],
+    "bodyBase64": "PGh0bWw+PGhlYWQ+PHRpdGxlPoJkgnGCcYJugnGBSTwvdGl0bGU+PG1ldGEgaHR0cC1lcXVpdj0iQ29udGVudC1UeXBlIiBjb250ZW50PSJ0ZXh0L2h0bWw7IGNoYXJzZXQ9U2hpZnRfSklTIi8+PHNjcmlwdCB0eXBlPSJtb2R1bGUiIHNyYz0iL3N0YXRpYy9jbGllbnQuanMiPjwvc2NyaXB0PjwvaGVhZD48Ym9keSBiZ2NvbG9yPSIjRkZGRkZGIj48c3Bhbj48IS0tIDJjaF9YOmVycm9yIC0tPjwvc3Bhbj48Zm9udCBzaXplPSIrMSIgY29sb3I9IiNGRjAwMDAiPjxiPkVSUk9SOiCPkYKrjZ6C3YN7g16Dk4LwiZ+URYLXgrU8YnI+MmNokOqXcIN1g4mDRYNVgqmC54LMj5GCq42egt2CxYKxgsyDR4OJgVuCqo9vgr2P6o2HgUGCqI5ngqKCzJDql3CDdYOJg0WDVYLNTW9uYXppbGxhLzEuMDCCxY5ugtyC6VVzZXJBZ2VudILwjmeXcIK1gsSCooLcgrmC8YFCPGJyPpRGj9iOnoLMluKR6ILIgseC4IKgguiC3IK3gsyCxYFBMmNokOqXcIN1g4mDRYNVgsWCzU1vbmF6aWxsYS8xLjAwgsWOboLcgulVc2VyQWdlbnSC8I5nl3CCtYLEgq2CvoKzgqKBQjxicj4oTW9uYXppbGxhLzEuMDCIyIpPgsxVc2VyQWdlbnSCxXN1Ym1pdD0lRTYlOUIlQjiBY4LFgsiCoo/qjYeCyYKxgsyDR4OJgVuCqo9vgtyCt4FCKTxicj4KJmFwb3M7U3VibWl0JmFwb3M7IG11c3QgcmVxdWlyZSAmYXBvczuPkSZhcG9zOyB3aXRoIFdlYiBicm93c2VyJmFwb3M7cyBwb3N0LjwvYj48L2ZvbnQ+PHVsPjxici8+g3qDWINnPGI+MTkyLjAuMi4xPC9iPjxici8+PGI+IDwvYj48YnIvPgqWvJFPgUYgPGI+PC9iPjxici8+PHNwYW4+RS1tYWlsgUYgPC9zcGFuPjxici8+CpPgl2WBRjxici8+PHNwYW4+PC9zcGFuPjxici8+PGJyLz48L3VsPjxhIGhyZWY9Imh0dHBzOi8vd2lraS4zY2hiYnMuY29tL2luZGV4LnBocC8lRTMlODIlQTIlRTMlODIlQUYlRTMlODIlQkIlRTMlODIlQjklRTglQTYlOEYlRTUlODglQjYlRTQlQjglQUQlRTMlODElQTclRTMlODIlODIlRTYlOUIlQjglRTMlODElOTElRTMlODIlOEIlRTYlOUQlQkYiPoGaIINBg06DWoNYi0uQp5KGgsWC4I+Rgq+C6ZTCIIGaPC9hPjxici8+PGJyLz48aHIvPgqCsYK/gueCxYOKg42BW4NogrWCxIKtgr6Cs4KigUI8YSBocmVmPSIvdGVzdC9yZWFkLmNnaS8vLyI+IEdPISA8L2E+PGJyLz4KjqmVqoLFifCMiIK1gsSC3YLmgqQhIDxhIGhyZWY9Imh0dHBzOi8vd2lraS4zY2hiYnMuY29tL2luZGV4LnBocC8lRTYlOUIlQjglRTMlODElOEQlRTglQkUlQkMlRTMlODIlODElRTMlODElQUElRTMlODElODQlRTYlOTklODIlRTMlODElQUUlRTYlOTclQTklRTglQTYlOEIlRTglQTElQTgiPo+RgquNnoLfgsiCoo6egsyRgYyplVw8L2E+PGJyLz4KlaqCqYLngsiCooKxgsaCqoKggsGCvYLnPGEgaHJlZj0iaHR0cHM6Ly93d3cuM2NoLmlvL2h0bWwvZ3VpZGUvIj6CUoK/guGC8YLLgumDS4NDg2g8L2E+gtaBQoFCgUI8YnIvPjxici8+PHA+PC9wPjwvYm9keT48L2h0bWw+",
+    "bodyText": "<html><head><title>ＥＲＲＯＲ！</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=Shift_JIS\"/><script type=\"module\" src=\"/static/client.js\"></script></head><body bgcolor=\"#FFFFFF\"><span><!-- 2ch_X:error --></span><font size=\"+1\" color=\"#FF0000\"><b>ERROR: 書き込みボタンを押忍べし<br>2ch専用ブラウザからの書き込みでこのエラーが出た場合、お使いの専用ブラウザはMonazilla/1.00で始まるUserAgentを使用していません。<br>認証時の問題などもありますので、2ch専用ブラウザではMonazilla/1.00で始まるUserAgentを使用してください。<br>(Monazilla/1.00以外のUserAgentでsubmit=%E6%9B%B8…でない場合にこのエラーが出ます。)<br>\n&apos;Submit&apos; must require &apos;書&apos; with Web browser&apos;s post.</b></font><ul><br/>ホスト<b>192.0.2.1</b><br/><b> </b><br/>\n名前： <b></b><br/><span>E-mail： </span><br/>\n内容：<br/><span></span><br/><br/></ul><a href=\"https://wiki.3chbbs.com/index.php/%E3%82%A2%E3%82%AF%E3%82%BB%E3%82%B9%E8%A6%8F%E5%88%B6%E4%B8%AD%E3%81%A7%E3%82%82%E6%9B%B8%E3%81%91%E3%82%8B%E6%9D%BF\">★ アクセス規制中でも書ける板 ★</a><br/><br/><hr/>\nこちらでリロードしてください。<a href=\"/test/read.cgi///\"> GO! </a><br/>\n自分で解決してみよう! <a href=\"https://wiki.3chbbs.com/index.php/%E6%9B%B8%E3%81%8D%E8%BE%BC%E3%82%81%E3%81%AA%E3%81%84%E6%99%82%E3%81%AE%E6%97%A9%E8%A6%8B%E8%A1%A8\">書き込めない時の早見表</a><br/>\n分からないことがあったら<a href=\"https://www.3ch.io/html/guide/\">３ちゃんねるガイド</a>へ。。。<br/><br/><p></p></body></html>"
+  },
+  "threads": {
+    "sample/1700000000": {
+      "dat": "",
+      "log": "",
+      "settings": ""
+    },
+    "sample/1699990000": {
+      "dat": "",
+      "log": "",
+      "settings": ""
+    }
+  },
+  "boards": {
+    "sample": ""
+  },
+  "r2": {
+    "sample/thread/1700/subject.txt": null,
+    "sample/thread/1699/subject.txt": null,
+    "sample/thread/subject.txt": null,
+    "headline.txt": null
+  }
+}

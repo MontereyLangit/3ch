@@ -1,0 +1,39 @@
+{
+  "case": "error-missing-subject",
+  "response": {
+    "status": 200,
+    "headers": [
+      [
+        "content-length",
+        "1244"
+      ],
+      [
+        "content-type",
+        "text/html;charset=UTF-8"
+      ]
+    ],
+    "bodyBase64": "PGh0bWw+PGhlYWQ+PHRpdGxlPu+8pe+8su+8su+8r++8su+8gTwvdGl0bGU+PG1ldGEgaHR0cC1lcXVpdj0iQ29udGVudC1UeXBlIiBjb250ZW50PSJ0ZXh0L2h0bWw7IGNoYXJzZXQ9VVRGLTgiLz48c2NyaXB0IHR5cGU9Im1vZHVsZSIgc3JjPSIvc3RhdGljL2NsaWVudC5qcyI+PC9zY3JpcHQ+PC9oZWFkPjxib2R5IGJnY29sb3I9IiNGRkZGRkYiPjxzcGFuPjwhLS0gMmNoX1g6ZXJyb3IgLS0+PC9zcGFuPjxmb250IHNpemU9IisxIiBjb2xvcj0iI0ZGMDAwMCI+PGI+RVJST1I6IHN1YmplY3TjgYzlrZjlnKjjgZfjgarjgYTjgYvjgq3jg7zmg4XloLHjgYzkuI3mraPjgafjgZnjgIJrZXk9PGJyPgpUaGUgc3ViamVjdCBpcyBlbXB0eSBhbmQga2V5IGlzIHdyb25nLjwvYj48L2ZvbnQ+PHVsPjxici8+44Ob44K544OIPGI+MTkyLjAuMi4xPC9iPjxici8+PGI+IDwvYj48YnIvPgrlkI3liY3vvJogPGI+PC9iPjxici8+PHNwYW4+RS1tYWls77yaIDwvc3Bhbj48YnIvPgrlhoXlrrnvvJo8YnIvPjxzcGFuPuODhuOCueODiOacrOaWhzwvc3Bhbj48YnIvPjxici8+PC91bD48YSBocmVmPSJodHRwczovL3dpa2kuM2NoYmJzLmNvbS9pbmRleC5waHAvJUUzJTgyJUEyJUUzJTgyJUFGJUUzJTgyJUJCJUUzJTgyJUI5JUU4JUE2JThGJUU1JTg4JUI2JUU0JUI4JUFEJUUzJTgxJUE3JUUzJTgyJTgyJUU2JTlCJUI4JUUzJTgxJTkxJUUzJTgyJThCJUU2JTlEJUJGIj7imIUg44Ki44Kv44K744K56KaP5Yi25Lit44Gn44KC5pu444GR44KL5p2/IOKYhTwvYT48YnIvPjxici8+PGhyLz4K44GT44Gh44KJ44Gn44Oq44Ot44O844OJ44GX44Gm44GP44Gg44GV44GE44CCPGEgaHJlZj0iL3Rlc3QvcmVhZC5jZ2kvc2FtcGxlLy8iPiBHTyEgPC9hPjxici8+CuiHquWIhuOBp+ino+axuuOBl+OBpuOBv+OCiOOBhiEgPGEgaHJlZj0iaHR0cHM6Ly93aWtpLjNjaGJicy5jb20vaW5kZXgucGhwLyVFNiU5QiVCOCVFMyU4MSU4RCVFOCVCRSVCQyVFMyU4MiU4MSVFMyU4MSVBQSVFMyU4MSU4NCVFNiU5OSU4MiVFMyU4MSVBRSVFNiU5NyVBOSVFOCVBNiU4QiVFOCVBMSVBOCI+5pu444GN6L6844KB44Gq44GE5pmC44Gu5pep6KaL6KGoPC9hPjxici8+CuWIhuOBi+OCieOBquOBhOOBk+OBqOOBjOOBguOBo+OBn+OCiTxhIGhyZWY9Imh0dHBzOi8vd3d3LjNjaC5pby9odG1sL2d1aWRlLyI+77yT44Gh44KD44KT44Gt44KL44Ks44Kk44OJPC9hPuOBuOOAguOAguOAgjxici8+PGJyLz48cD48L3A+PC9ib2R5PjwvaHRtbD4=",
+    "bodyText": "<html><head><title>ＥＲＲＯＲ！</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/><script type=\"module\" src=\"/static/client.js\"></script></head><body bgcolor=\"#FFFFFF\"><span><!-- 2ch_X:error --></span><font size=\"+1\" color=\"#FF0000\"><b>ERROR: subjectが存在しないかキー情報が不正です。key=<br>\nThe subject is empty and key is wrong.</b></font><ul><br/>ホスト<b>192.0.2.1</b><br/><b> </b><br/>\n名前： <b></b><br/><span>E-mail： </span><br/>\n内容：<br/><span>テスト本文</span><br/><br/></ul><a href=\"https://wiki.3chbbs.com/index.php/%E3%82%A2%E3%82%AF%E3%82%BB%E3%82%B9%E8%A6%8F%E5%88%B6%E4%B8%AD%E3%81%A7%E3%82%82%E6%9B%B8%E3%81%91%E3%82%8B%E6%9D%BF\">★ アクセス規制中でも書ける板 ★</a><br/><br/><hr/>\nこちらでリロードしてください。<a href=\"/test/read.cgi/sample//\"> GO! </a><br/>\n自分で解決してみよう! <a href=\"https://wiki.3chbbs.com/index.php/%E6%9B%B8%E3%81%8D%E8%BE%BC%E3%82%81%E3%81%AA%E3%81%84%E6%99%82%E3%81%AE%E6%97%A9%E8%A6%8B%E8%A1%A8\">書き込めない時の早見表</a><br/>\n分からないことがあったら<a href=\"https://www.3ch.io/html/guide/\">３ちゃんねるガイド</a>へ。。。<br/><br/><p></p></body></html>"
+  },
+  "threads": {
+    "sample/1700000000": {
+      "dat": "",
+      "log": "",
+      "settings": ""
+    },
+    "sample/1699990000": {
+      "dat": "",
+      "log": "",
+      "settings": ""
+    }
+  },
+  "boards": {
+    "sample": ""
+  },
+  "r2": {
+    "sample/thread/1700/subject.txt": null,
+    "sample/thread/1699/subject.txt": null,
+    "sample/thread/subject.txt": null,
+    "headline.txt": null
+  }
+}
