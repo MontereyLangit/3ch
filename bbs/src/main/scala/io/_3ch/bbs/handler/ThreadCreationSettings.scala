@@ -1,6 +1,7 @@
 package io._3ch.bbs.handler
 
 import io._3ch.bbs.domain.posting.moderation.ThreadCreationRateLimit
+import io._3ch.common.domain.BbsSettings
 
 /** スレ立て設定を検証する。旧形式の件数/秒も受け付ける。 */
 object ThreadCreationSettings {
@@ -29,6 +30,10 @@ object ThreadCreationSettings {
   }.toMap
 
   def parseText(text: String): Either[String, Parsed] = parse(settingsMap(text))
+
+  /** 解析済みの板設定から読む。`BbsSettings` はキー末尾の空白を残すので、[[settingsMap]] と同じくキーの前後空白を除いて後勝ちにする。 */
+  def fromSettings(settings: BbsSettings): Either[String, Parsed] =
+    parse(settings.value.foldLeft(Map.empty[String, String]) { case (acc, (k, v)) => acc.updated(k.trim, v) })
 
   def parse(values: Map[String, String]): Either[String, Parsed] = {
     def limit(name: String, default: Int): Either[String, (Int, Double)] = {

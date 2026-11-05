@@ -41,7 +41,7 @@ object PostingHandler {
     case x: js.JavaScriptException => str(x.exception.asInstanceOf[js.Any])
     case _ => e.toString
   }
-  private def guarded(g: js.Dynamic, stage: String, description: String, clock: String)(f: => Future[Unit]): Future[Unit] =
+  private def guarded[A](g: js.Dynamic, stage: String, description: String, clock: String)(f: => Future[A]): Future[A] =
     Future.unit.flatMap(_ => f).recover { case Rejected => throw Rejected; case e =>
       deny(g, s"$stage error. $description($clock:${str(if clock == "time" || stage == "getThreadDataAndThreadSettings" || stage == "updateThreadFile" then g.time else g.nowTime)} bbs:${str(g.form.bbs)} key:${str(g.form.key)} number:${str(g.number)} errmsg:$stage->${errorText(e)})<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。")
     }
@@ -60,7 +60,7 @@ object PostingHandler {
       uid = "", userInfo = "", shikibetsuId = "", id = "", isIPv6 = 0, isMonazilla = 0, isSJIS = 0, idnotane = "",
       md5Salt = md5(str(rawEnv.salt)), tripKey = "", tripString = "", cap = 0, strongCap = 0, sage = 0,
       path = "PATH", logPath = "LOGPATH", logFile = "LOGDAT", logData = "", subject = "", number = 0,
-      settings = js.Dynamic.literal(), boardSettings = js.Dynamic.literal(), boardSettingsText = "", headers = js.Dictionary.empty[String]
+      settings = js.Dynamic.literal(), boardSettings = js.Dynamic.literal(), headers = js.Dictionary.empty[String]
     )
     (for {
       _ <- Future { checkRequest(g, request) }
@@ -68,14 +68,14 @@ object PostingHandler {
       _ <- processCap(g, env)
       _ <- processTrip(g)
       _ = { g.path = str(g.form.bbs) + "/"; g.logPath = str(g.path) + "thread/" + str(g.form.key).take(4) + "/"; g.logFile = str(g.logPath) + str(g.form.key) + ".cgi" }
-      _ <- boardSettings(g, env)
+      board <- boardSettings(g, env)
       _ <- threadSettings(g, env)
       _ <- identify(g, request)
       _ = g.userInfo = s"UID:${str(g.uid)} IP:${str(g.host)} AS${str(g.asn)}-${str(g.country)},${str(g.ken)},${str(g.city)}Device:${str(g.deviceInfo)} UA:${str(g.userAgent)}"
       allowed <- Moderation.check(g, env).toFuture
       _ = if allowed == 0 then throw Rejected
       _ = checkSizes(g)
-      creationLimit <- threadCreationLimit(g, request)
+      creationLimit <- threadCreationLimit(g, request, board)
       _ <- makeId(g)
       _ = prepare(g)
       _ <- updateThread(g, env, creationLimit)
@@ -204,12 +204,12 @@ object PostingHandler {
       trip.map(t => { g.tripString = t; g.form.FROM = str(g.form.FROM) + s" </b>◆$t</b>" })
     }
 
-  private def boardSettings(g: js.Dynamic, e: WorkerEnv): Future[Unit] = guarded(g, "getBoardSettings", "不明なエラーが発生しました。", "time") {
+  private def boardSettings(g: js.Dynamic, e: WorkerEnv): Future[BbsSettings] = guarded(g, "getBoardSettings", "不明なエラーが発生しました。", "time") {
     val board = BoardId.create(str(g.form.bbs)).fold(_ => deny(g, "板の指定が不正です。<br>\nThe board directory is incorrect..."), identity)
     BoardRepository.getBoardSettings(board, e).map { boardSettings =>
       g.settings = boardSettings.value.toJSDictionary.asInstanceOf[js.Dynamic]
       g.boardSettings = g.settings
-      g.boardSettingsText = boardSettings.toString
+      boardSettings
     }
   }
   private def threadSettings(g: js.Dynamic, e: WorkerEnv): Future[Unit] = {
@@ -307,13 +307,13 @@ object PostingHandler {
       if eq(g.settings.BBS_LIVE, "checked") && js.Math.random() * 10 >= 1 then g.sage = 1
     }
 
-  private def threadCreationLimit(g: js.Dynamic, request: Request): Future[js.UndefOr[js.Dynamic]] = {
+  private def threadCreationLimit(g: js.Dynamic, request: Request, boardSettings: BbsSettings): Future[js.UndefOr[js.Dynamic]] = {
     if (number(g.number) != 1) Future.successful(js.undefined)
     else {
       val board = BoardId.create(str(g.form.bbs)).fold(_ => deny(g, "板の指定が不正です。<br>\nThe board directory is incorrect..."), identity)
       val key = str(g.form.key).toLongOption.toRight("").flatMap(ThreadKey.create).fold(_ => deny(g, "キー情報が不正です。"), identity)
       if (truth(g.cap)) return Future.successful(js.undefined)
-      val settings = ThreadCreationSettings.parseText(str(g.boardSettingsText)).fold(message => deny(g, message), identity)
+      val settings = ThreadCreationSettings.fromSettings(boardSettings).fold(message => deny(g, message), identity)
       val cf = request.cf.getOrElse(js.Dynamic.literal())
       def metadata(name: String): String = {
         val value = cf.selectDynamic(name)

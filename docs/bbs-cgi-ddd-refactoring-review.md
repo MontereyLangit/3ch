@@ -13,3 +13,11 @@
 | 更新方法 | `sbt "bbs/testOnly io._3ch.bbs.handler.PostingSnapshotSuite -- --include-tags=update"` |
 | 計画との差分 | 計画書は `-- --update` を想定していたが、munit 1.0 の Scala.js ランナーは未知の引数を黙って捨て、スイートから引数を読む手段がない（`Settings` は `trimStackTraces` だけ）。そこで munit が解釈する `--include-tags=update` を使う。この指定では照合用の各ケースが除外され `update` タグ付きのテストだけが走るので、そのテストは「照合ケースが 1 件も走っていない」ときに限り全ケースを生成して書き出す（通常の `sbt test` では照合ケースが先に走るため何もしない）。環境変数・システムプロパティは使っていない |
 | 未解決 | 到達できない拒否（`キー情報が不正です。`、DO 側の `同じkeyのスレッドが存在します。` / `スレッドがありません。`）はケースにしていない。deny.cgi の R2 読み込み例外は `guarded` の外なので応答にならず Promise が reject される（現行どおり `failure` として固定） |
+
+## 段 0b: スレ立て規制の設定の読み直しをやめる
+
+| 項目 | 内容 |
+| --- | --- |
+| 実施 | `PostingHandler.threadCreationLimit` が `BbsSettings.toString` を `ThreadCreationSettings.parseText` で解析し直していたのをやめ、`boardSettings` 段が返す `BbsSettings` を `ThreadCreationSettings.fromSettings` に渡す形にした。`g.boardSettingsText` を削除。`guarded` を値を返せる形（`Future[A]`）にした |
+| 振る舞い | スナップショット差分なし。`BbsSettings.parse` はキー末尾の空白を残す（` BBS_THREAD_TATESUGI = 0` のキーは `BBS_THREAD_TATESUGI `）一方、旧経路の `settingsMap` は前後空白を除いていたので、`fromSettings` はキーの前後空白を除いて後勝ちにする（`error-creation-spaced-keys` で固定） |
+| 計画との差分 | なし。管理画面の検証（`AdminHandler`）は SETTING.TXT 本文を直接受けるので `parseText` / `settingsMap` は残した |
