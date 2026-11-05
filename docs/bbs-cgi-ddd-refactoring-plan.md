@@ -132,7 +132,7 @@ bbs/src/main/scala/io/_3ch/bbs/
 | §7 回避レベル | `ModerationRuleSet`（5 列目）と `BypassLevel.exempts(principal)`。連投規制・スレ立て規制の免除判定も同じ関数 |
 | §8 連投規制 | `PostRateLimit`（純粋）、`PostRateHistory`（集約）、`CopipeGuard`。`ThreadRepository.addRes` の引数と `PostingCodec` に `rateLimit` を追加。`PostingOutcome.Swallowed` |
 | §8.6 パイプライン位置 | `PostingService` の段の並びに 1 行ずつ追加。順序はサービスの 1 か所で読める |
-| §5.3 `!uid`、§4.4 `!バルサン` / `!SETTING` | `PostingService` の「コマンド解釈」段（`makeShikibetsu` の後）。`NameField` が `@uid` を連結し、`ThreadRepository.addRes` の `commands` でスレ設定を書く |
+| §5.3 `!id`、§4.4 `!バルサン` / `!SETTING` | `PostingService` の「コマンド解釈」段（`makeShikibetsu` の後）。`NameField` が `(@ユーザーID)` を連結し（develop で実装済み）、`ThreadRepository.addRes` の `commands` でスレ設定を書く |
 | §4.2 `Account.recordPost` | `addRes` 成功後の段。失敗は無視（投稿は成功） |
 | §3.6 エッジ防御 | `identify` の直後に `EdgeDefense.check(request.cf, principal, rules)`（規則は `RuleStore` から） |
 | §12 段 A〜E | 本計画の段 10 以降。段 A（連投規制）は本計画の段 7 完了後に着手する |
