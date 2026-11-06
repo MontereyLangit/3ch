@@ -4,7 +4,7 @@
 （リポジトリ外の `ninja_auth_system.md` 系。要点は §3.7 に転記）、および新 UI（`develop` に統合済みの板トップ。PR #37。
 `docs/ui/板top_書き込み欄と投稿後更新の方針.md`・`docs/islands-ssr.md`・`docs/handler-rendering.md`）をもとに、
 v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の挙動（§3.8）を設計する。
-**状態: 段Aは実装済み、段Bは部分実装、段E-1は実装済み（2026-11-07）。** E-1はID・パスワードの登録・ログイン・ロックとGoogleでのログイン・登録まで。Googleのクライアント登録と本番での接続確認は未実施。段C・D・E-2は未実装。残件、設定、検証結果は [引き継ぎ](claude-handoff.md) を参照する。実装は§12の順で行い、本書を実装結果に合わせて訂正する。
+**状態: 段Aは実装済み、段Bは部分実装、段E-1・段Cは実装済み（2026-11-07）。** E-1はID・パスワードの登録・ログイン・ロックとGoogleでのログイン・登録まで。Googleのクライアント登録と本番での接続確認は未実施。段CはUA解析表のデータ（§5.2）と識別子の既定値の切替（§14-1）を残す。段D・E-2は未実装。残件、設定、検証結果は [引き継ぎ](claude-handoff.md) を参照する。実装は§12の順で行い、本書を実装結果に合わせて訂正する。
 2026-11-02 に Opus 5 によるセルフレビューを行い、採用した指摘を反映した（[auth-phoebe-review.md](auth-phoebe-review.md)）。
 2026-11-05、トリップと日付欄の ID の廃止・`!id`・スレ主表示（[トリップ・ID廃止とスレ主表示](トリップ・ID廃止とスレ主表示.md)。`develop` で実装済み）に合わせて改めた。
 
@@ -360,11 +360,15 @@ Turnstile は要求しない（原案「作成時の認証なし」）が、端�
 
 PHOEBE.md の「L0〜L1 → 23h、L1〜L2 → 23×(Lv+1)h」は未ログインが L0 固定になった原案に合わせ、クライアント ID の L1 開始に読み替えた（§13）。
 
+実装（段 C）: `common` の `Phoebe`（T(lv)・N(lv)・開始 Lv）と `AccountLevel.afterPost(kind, now)`。今回の投稿を数えてから条件を見るので、ID/Password の L1 は 23 時間後の 23 件目の投稿で L2 になる。`Account.recordPost` は昇格後の状態を記録と同じ put で保存し、Lv が変わった投稿では Cookie を発行し直す（ヘッダーの Lv 表示用）。
+
 ### 4.3 上限・降格・手動設定
 
 - **上限ルール**（管理画面 `/admin/phoebe`）: `対象 userInfo 正規表現<>上限 Lv` の行リスト（R2 `phoebe.cgi`。`deny.cgi` と同じ構文解析）。ASN・県・端末ハッシュ・UA などで該当した投稿では `min(lv, 上限)` を実効 Lv とする。アカウントの `lv` 自体は下げない。
 - **手動設定**: 管理者はアカウントの `lvOverride`（固定値）と `status`（`active` / `frozen`＝投稿不可 / `banned`）を設定できる。`lvOverride` がある間は昇格しない。
 - **自動降格はしない**。規制対象となった投稿の扱いは管理者の手動操作（凍結・Lv 固定）に任せる。
+
+実装（段 C）: 固定は `AccountState.setLevelOverride` と `Account.setLevel(lvOverride?, now)`（0〜10、未指定で解除）。固定中も `lvPosts` は数える。操作画面は段 D、上限ルール `phoebe.cgi` は §12 のとおり E-2。
 
 ### 4.4 `BBS_PHOEBE` ゲート
 
@@ -374,6 +378,13 @@ PHOEBE.md の「L0〜L1 → 23h、L1〜L2 → 23×(Lv+1)h」は未ログイン�
 - **`!バルサン`**: 本文先頭が `!バルサン` ならスレ設定に `BBS_PHOEBE=3` を書く（既に 3 より大きければ変えない）。**`!SETTING:BBS_PHOEBE:n`**: 同様に `n` を書く。使えるのはスレ立て人（Thread DO の `ownerAid` と同じ `aid`。未ログインのスレは `ownerAid` が空で不可）と権限 `admin` / `delete` / `regulate`。**値を下げる操作は `staff` だけ**（権限者が上げた値をスレ立て人が戻せない）。それ以外は無視して通常投稿にする。コマンド行は本文から除かず、そのまま投稿される（2ch 互換）。
 - 処理位置は §8.6。スレ設定への書き込みは `Thread.addRes` の排他区間内で dat と同じ `storage.put` に含める。
 - `BBS_DISABLE_NUSI=checked` の板ではスレ立て人によるコマンドを無効にする（既存キーの流用）。同じキーで名前欄のスレ主表示 ` (主)` も止まる（実装済み）。
+
+実装（段 C）:
+- `BBS_PHOEBE` は `Phoebe.required` で読む。前後の空白を除いた 1〜2 桁の 0〜10 だけを受け付ける。スレ立て時の書き写しから外したので、スレ設定にあるのはコマンドで書いた値（と段 C より前に立ったスレの書き写し）だけ。
+- 免除は `PostingAccount.staff`。権限は段 D なので、今は常に偽で誰も免除しない。
+- 未ログインの専ブラが Lv 不足のときは、従来どおり `auth:required:login`（`x-auth-required: login`）で認証へ誘導する。認証済の Lv 不足は `x-post-error: auth:required:level`・`x-auth-required: level`・`x-phoebe-required: n`。新 UI は `x-phoebe-required` の値を出し、再送しない（§13-17）。
+- コマンドは本文の先頭だけを読み、直後は本文の終わり・半角空白・改行のどれか（`!バルサンです` は対象外）。全角の `！` は読まない。スレ立て人の照合は `ownerAid` を足さず、既存の `owner.account`（`SHA-256(accountKey + ":" + md5Salt)`）と投稿者の同じ値を比べる。ログイン中のスレ立てでは本人をスレ立て人とする。`!バルサン` は staff でも下げない（「既に 3 より大きければ変えない」）。
+- スレ設定に値が無いときの現在値は板設定の `BBS_PHOEBE`。投稿処理が板の値を `ThreadPhoebeRequest` に入れ、Thread DO はロック内でスレ設定の値と比べて書くかを決める。
 
 ## 5. 名前欄の識別子
 
@@ -391,7 +402,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 | `EEE`〜`XXX` | 端末情報 5 軸 × 3 桁 | 軸ごとに `sha1Base64(md5(axisValue + "|" + axisName + group + date + salt)).take(3)`。欠損軸は `000` |
 | `D` | Lv | 未ログイン `0`、1〜9 はその数字、10 以上 `*` |
 
-`group`・`date`・`salt` は現行 `makeShikibetsu` と同じ（`BBS_ID_GROUP`・`BBS_ID_RESET`・`md5Salt`）。全部分が日替わりで変わる点は現行と同じ。
+`group`・`date`・`salt` は現行 `makeShikibetsu` と同じ（`BBS_ID_GROUP`・`BBS_ID_RESET`・`md5Salt`）。`axisName` は軸の位置の文字 `E`・`F`・`G`・`Z`・`X`（実装 段 C）。`XXX` の値は `Client Hints + "|" + Accept-Language`（両方空なら欠損）。全部分が日替わりで変わる点は現行と同じ。
 文字集合も現行の 2 桁ハッシュと同じ Base64 文字（`+` `/` を含む）。市区町村ハッシュと 16 桁 UA ハッシュは廃止する。
 
 ### 5.2 5 軸の値
@@ -405,6 +416,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 | `XXX` | Client Hints（現行 `g.userAgent` に追記している `sec-ch-ua-full-version-list` / `sec-ch-ua`）＋ `Accept-Language` | 第 9 軸（`Sec-CH-UA-Model`） |
 
 - UA 解析は v3（PHP）の解析表を `common` の純粋関数 `UserAgentProfile.parse` に移植する（v3 はリポジトリ外。移植時に表を `tests/golden/ua-profile.json` に固定する）。
+  - 実装（段 C）: v3 の bbs.php には解析表が無かった（`$platform` は未定義、`$browser` にも代入が無い。引き継ぎの「外部資料」）。表を推測で作らず、R2 の `ua-profiles.json` を `bbs` の `UserAgentTable`（`js.RegExp` を使うので `common` ではなく `bbs/domain`）で読む。書式は `{"os": [{"match", "flags"?, "label"}…], "browser": […], "device": […]}`。表が無い・読めないときは OS・ブラウザ・端末種別の軸を `000` にする。表のデータを用意したら `tests/golden/ua-profile.json` に入出力を固定する。
 - 認証済の軸値は端末ハッシュ 18 hex を 2 桁ずつ軸に割り当てて連結した文字列。端末ハッシュが空（全欠損）なら 5 軸とも未ログインと同じ UA 解析で埋め、`D` だけ Lv を出す。
 - 端末ハッシュは Cookie の `dev`（§3.3）から取る。キーによる専ブラ認証（§3.4 の 2）では `dev` が無いので UA 解析側を使う。
 
@@ -644,7 +656,8 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 
 - `addRes` の排他区間内で判定・追記し、`dat`・`log` と同じ `storage.put` で一括保存する。コピペ判定も同じ区間内で `dat` 末尾 2 行を見る。
 - 既存の `addRes` 引数 `posting` に `rateLimit`（§8.1 の材料と設定）と `commands`（§4.4 のスレ設定変更）を足し、戻り値を `{count, swallowed}` にする。`rateLimit` が無ければ判定しない（管理画面やテストの既存経路を壊さない）。
-  実装（段 A-1）: `rateLimit` を足し、戻り値は `{count, swallowed, observed}`（`observed` は試行モードで記録だけした判定のコード）。`commands` は段 C で足す。
+  実装（段 A-1）: `rateLimit` を足し、戻り値は `{count, swallowed, observed}`（`observed` は試行モードで記録だけした判定のコード）。
+  実装（段 C）: `commands` は `{phoebe: {level, lower, board}}`。スレ設定の `BBS_PHOEBE=` の項目を外して末尾に置き直し、ほかの項目は書かれたまま残す。吸い込んだ投稿では書かない。
 
 ### 8.8 設定キー
 
@@ -663,7 +676,7 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | `BBS_PHOEBE` | `0` | 0〜10 | §4.4 |
 
 実装（段 A-1）: 書き写しから除くのは `BBS_SAMBA24`・`BBS_FR_SECOND`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_PASS`・`BBS_RENTOU_KEYS`・`BBS_FR_LEVEL` だけ。
-`BBS_PHOEBE`・`BBS_THREAD_PASS` はそれぞれの段で足す。`timecount` / `timeclose` の書き写しをやめるのは既存の振る舞いを変えるので承認待ちとし、今は書き写す（板単位の規制は板設定だけを読むので効かない）。
+`BBS_PHOEBE` は段 C で足した。`BBS_THREAD_PASS` は段 D で足す。`timecount` / `timeclose` の書き写しをやめるのは既存の振る舞いを変えるので承認待ちとし、今は書き写す（板単位の規制は板設定だけを読むので効かない）。
 
 読み込みは統合後の `BbsSettings`（計画書 段 0）を使う。不正値は**返信も拒否せず既定値で動く**（`BBS_FR_LEVEL` だけは不正値を規制モード＋FR にする。§8.1。スレ立て規制が不正値で拒否するのと異なる。
 連投規制は設定ミスで板全体を止めるより通す方が被害が小さいため。管理画面の保存時には検証する）。
@@ -814,7 +827,7 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | --- | --- | --- |
 | A | 連投規制（§8）。A-1（**実装済み 2026-11-06**）: 段階 `BBS_FR_LEVEL` の既定を規制モードにして実装した。当初案の A-2（`log` で 1 週間観測した後に既定を `on` へ）は、既定が最初から規制なので不要になった。観測したい板は `BBS_FR_LEVEL=log` を書く。照合キーは IP・識別子（`checked` 書式）。`aid` は空。前提は計画書の段 0〜7（`PostingCodec` を含む段 6） | `PostRateLimitSuite`（純粋判定: 件数窓・24h・Samba24・スレ 1h/40・コピペ末尾 2 行・あぼーん除外）、`BoardSuite`（予約/確定/取消・保持規則・ページ分割・容量）、`ThreadSuite`（`recentPosts` の一括保存・吸い込み時の dat 不変）、`PostingSuite`（パイプライン順序・文言・成功画面での吸い込み・`BBS_LIVE` 除外・設定不正時の既定値）、`AdminSuite`（フォーム検証）、実 workerd 統合 |
 | B | 認証基盤: `Account` / `AccountIndex` DO、Cookie、`/auth/`（クライアント ID・Turnstile・法的確認）、端末ハッシュと突合、`Accept-CH`、専ブラキー、キャップのアカウント紐づけ、`userInfo` の `UID:` / `Device:`、`PostingUserResolver` の差し替え（`!id`・スレ主表示の `account`。§5.3）、新 UI の `SessionReader`・ヘッダー出し分け・`AuthModal` / `AccountNav`・投稿欄のヘッダ分岐（§3.8）、bbs.cgi の `x-auth-required` / `x-post-error` | `common` の `DeviceFingerprintHasher` / `ClientHints` golden、`CookieCodecSuite`、`AccountSuite`（状態遷移・一意性）、`DedicatedBrowserTokensSuite`（未使用の紐づけ・同じ UA での置き換え・UA 不一致・上限・失効・Cookie の `bind`）、`AuthHandlerSuite`（Turnstile はテスト用サイトキーで成功/失敗を固定）、`PostingSuite`（§3.4 の優先順・`!auth`・Web 版の認証要求とヘッダ）、`SessionReaderSuite`、`BoardIndexSuite`（未ログイン/ログイン済のヘッダーと投稿欄の SSR）、`tests/islands-hydration.test.js` に `AuthModal` の `message` → `ch3s:auth-changed` と再送の jsdom 検証 |
-| C | PHOEBE: Lv 昇格・`BBS_PHOEBE`・`!バルサン` / `!SETTING:BBS_PHOEBE:n`・識別子 `phoebe` 書式・連投規制への `aid` 追加 | `PhoebeSuite`（T(lv)/N(lv) 境界・上限・固定）、`IdentifierSuite`（軸ごとの値・欠損 `000`・`D` の `*`）、`UserAgentProfileSuite`（v3 表の golden） |
+| C | PHOEBE: Lv 昇格・`BBS_PHOEBE`・`!バルサン` / `!SETTING:BBS_PHOEBE:n`・識別子 `phoebe` 書式・連投規制への `aid` 追加。**実装済み（2026-11-07）**。UA 解析表のデータは利用者の用意待ち、識別子の既定値は `checked` のまま（§14-1）。`aid` は段 B で連携済み | `PhoebeSuite`（T(lv)/N(lv) 境界・上限・固定）、`IdentifierSuite`（軸ごとの値・欠損 `000`・`D` の `*`）、`PhoebeCommandSuite`、`UserAgentTableSuite`・`UserAgentTableRepositorySuite`（表の書式。v3 表の golden は表が無いため未作成）、`PostingServiceSuite`・`ThreadSuite`・`AccountInfrastructureSuite` |
 | D | 権限・回避レベル・管理画面の認証機能画面（§6・§7・§11、改修計画 段 M3）、スレ立て規制の `BBS_THREAD_PASS` 化 | `BypassLevelSuite`、`ModerationSuite`（5 列目）、`AdminSuite` |
 | E-1 | ID/Password の登録・ログイン・ロック、Google ログイン（§3.9・§3.10 の基本部分）。管理画面のアカウント認証（改修計画 段 M2）の前提なので段 B の直後に行う。**実装済み（2026-11-07）**。方式移行・パスワード変更と再設定の HTTP・メール欄は E-2 | `PasswordSuite`・`LoginThrottleSuite`・`PasswordLoginSuite`・`GoogleIdTokenSuite`・`OAuthStateSuite`、`AccountPasswordSuite`（直列化・ロック・dummy）、`AccountRegistrationSuite`（確定順・応答喪失・再開）、`AuthHandlerSuite`・`GoogleHandlerSuite`・`GoogleIdTokensSuite`、board-islands、実 workerd |
 | E-2 | メール認証・パスワード再設定・方式移行・退会・エッジ防御・乱造検知・Lv 上限ルール | `AccountSuite`（移行）、`EdgeDefenseSuite`、実 workerd |
@@ -862,6 +875,8 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | 35 | 広域連投規制（FlyRibbon, FR）の有効・無効を何で決めるか（当初は `BBS_FR_SECOND` だけで決め、`BBS_FR_LEVEL` の数値は使っていなかった） | **決定（2026-11-06 利用者）**: `BBS_FR_LEVEL` が 1 以上のときだけ FR を有効にする。キー無しは既定 `1`。`0` と空は規制モードのまま FR だけを外す。不正値はキー無しと同じ。`log` は FR も判定して記録する。秒数は `BBS_FR_SECOND`（`0` なら判定しない、は併存） |
 | 36 | かんたん登録（クライアント ID）は Cookie だけで識別するので、ログアウトするとその端末から同じアカウントに戻れない | **決定（2026-11-07 利用者）**: 注意書きで足りる（ログアウトしたクライアント ID のアカウントは戻せない）。アカウント設定のログアウトの近くに「かんたん登録のアカウントは、ログアウトするとこの端末から戻せません」と出す |
 | 37 | Turnstile の検証応答の `action`・`cdata` を照合するか（現在は `success` と `hostname` だけを見る） | 照合しない。要確認 |
+| 38 | UA 解析表（§5.2）。v3 に表の実体が無かったため、OS・ブラウザ・端末種別の分け方と表記を決めたデータが要る | 表は R2 の `ua-profiles.json` から読む。データは利用者が用意する。無い間はその 3 軸が `000` |
+| 39 | 未ログインの専ブラが `BBS_PHOEBE` 1 以上の板・スレに書いたときの応答 | `x-auth-required: login`（ログインで解決するため。Lv 不足の `level` は認証済だけ） |
 
 ## 14. 不変条件への影響（承認が必要な点）
 

@@ -96,3 +96,18 @@ KotlinJSの [生成済み空白表](https://github.com/JetBrains/kotlin/blob/v2.
 | UI | 既存の認証画面の部品と配色のまま、タブ・方式の選択・入力欄を足した。角丸なし。見出しはモックどおり「認証・登録」。Turnstile のウィジェットはタブを替えても同じものを使う。Google の開始はフォームの遷移で送り、埋め込み時は別のウィンドウで開く（ポップアップの小さな通知スクリプトだけは callback の HTML に置く） |
 | Scala・Hooks | AuthFormIsland は関数コンポーネントのまま、状態を useState、ウィジェットを useRef で持つ。業務処理は TS に置いていない（`app/server.ts` は callback のルートを足しただけ） |
 | テスト | common に PasswordLoginSuite・GoogleIdTokenSuite・OAuthStateSuite、LoginThrottleSuite に 1 件。bbs に AccountPasswordSuite・AccountRegistrationSuite・GoogleIdTokensSuite・GoogleHandlerSuite と AuthHandlerSuite の 5 件、BoardIndexSuite に 1 件。board-islands に 2 件、実 workerd の統合テストに 1 件。既存のスナップショット・PostingSuite・golden は変えていない |
+
+## 段 C（2026-11-07、日本時間）
+
+対象は PHOEBE の Lv 昇格・`BBS_PHOEBE`・`!バルサン` / `!SETTING:BBS_PHOEBE:n`・識別子の `phoebe` 書式。範囲と残件は [引き継ぎ](claude-handoff.md) の「Cの実装範囲」を参照する。
+
+| 観点 | 実装・確認 |
+| --- | --- |
+| DO はインフラのみ | 昇格の条件は common の `Phoebe` と `AccountLevel.afterPost`、Lv の固定は `AccountState.setLevelOverride`。Thread DO はロック内でスレ設定の値を読み、`ThreadPhoebeRequest.next` の結果を dat と同じ put で書くだけ。保存形式の一項目の差し替えは `durable/codec/ThreadSettingsCodec` |
+| 種別 | コマンドは enum `PhoebeCommand`、識別子の軸は enum `IdentifierAxis`、書式は `ShikibetsuMode.Phoebe`。拒否は既存の `PostingError.AuthenticationLevel` と `phoebe:command:denied`（文言なしで通常投稿にするので型は足していない） |
+| 正規表現の置き場所 | UA 解析表は `js.RegExp` で照合するので `bbs/domain/posting/UserAgentTable`。表の JSON の読み取りは repository。表が無い・読めないときは空の表にして投稿を止めない（規制ファイルと違い、識別子の一部が `000` になるだけなので fail-open） |
+| 既存の振る舞い | 認証を有効にしていない環境ではコマンドを解釈せず、`BBS_PHOEBE` も見ない。`BBS_ID_SHIKIBETSU` が `phoebe` 以外の板の識別子・dat・log は変えていない。既存の投稿スナップショット・PostingSuite・golden は変更なし。`BBS_ID_LV` は読まないまま |
+| 変えたもの | `phoebe` は以前は知らない値として識別子を出さなかった（Hidden）。今は新しい書式を出す。スレ立て時のスレ設定に `BBS_PHOEBE` を書き写さない（§14-8 の新キー）。Thread.addRes の RPC 引数に `commands` が増え、外形のテストを直した。Lv が変わった投稿では Cookie を発行し直す（期限の延長だけでなく） |
+| 設計からの差分 | v3 の UA 解析表は存在しなかったので移植せず、R2 の表を読む形にした（§13-38）。`ownerAid` は足さず `owner.account` で照合した（§8.7 の注記どおり）。`!バルサン` は staff でも下げない。未ログインの専ブラの Lv 不足は `login` のまま（§13-39）。staff は差し込み口だけで、段 D まで誰も免除しない |
+| UI | 新 UI の Lv 不足は応答の `x-phoebe-required` を表示に使う（スレ設定の値は板トップの props に無いため）。既存の文言と部品のまま。モーダルを開かず再送しないことを board-islands で確かめた |
+| テスト | common に PhoebeSuite・PhoebeCommandSuite・IdentifierSuite、ShikibetsuSuite の phoebe。bbs に UserAgentTableSuite・UserAgentTableRepositorySuite、PostingServiceSuite（ゲート 5 件・コマンド 3 件・識別子 3 件）、ThreadSuite 2 件、PostingCodecSuite 1 件、AccountInfrastructureSuite・PostingAccountServiceSuite・ThreadOwnerSuite 各 1 件。board-islands に 1 件 |

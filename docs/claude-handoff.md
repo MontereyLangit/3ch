@@ -1,6 +1,6 @@
 # 認証実装の引き継ぎ
 
-作業ブランチは `ccr-9c002284-dbai2f`。2026-11-07（日本時間）の段Bの成果と、段E-1（ID・パスワードとGoogleログイン）の完了を区切りとして引き継ぐ。ビルドとテストを通した小さな単位ごとにcommit・pushし、完了範囲と残件をこの文書へ記録する。
+作業ブランチは `ccr-9c002284-dbai2f`。2026-11-07（日本時間）の段Bの成果、段E-1（ID・パスワードとGoogleログイン）と段C（PHOEBE）の完了を区切りとして引き継ぐ。ビルドとテストを通した小さな単位ごとにcommit・pushし、完了範囲と残件をこの文書へ記録する。
 
 ## 前提と現在の範囲
 
@@ -16,24 +16,24 @@
 
 ## 残件と次の順序
 
-段Bを完了扱いにしない。キャップのアカウントへの紐づけ・発行・失効を操作する画面、利用ログ、退会など、設計書と実装を照合して残件を整理する。アカウント画面は公開ID・登録方法と有効期限・Lv・この端末の粒度・専ブラ用キーの操作・ログアウトまで。Lvの進み具合（段C）は出していない。
+段Bを完了扱いにしない。キャップのアカウントへの紐づけ・発行・失効を操作する画面、利用ログ、退会など、設計書と実装を照合して残件を整理する。アカウント画面は公開ID・登録方法と有効期限・Lv・この端末の粒度・専ブラ用キーの操作・ログアウトまで。Lvの進み具合（次のLvまでの時間と投稿数）は段Cでも画面に出していない。
 
-AS・地域・UA・日別識別子の観測集計（Account.seen）、AccountDirectoryへの反映、管理者用RPC・役割の管理も未実装。専ブラの表示名は製品名・版・既知のOSを抽出する限定的な実装で、段Cのv3解析表の移植とは区別する。接続元の表示は現在取得できるAS番号と地域・国を使い、AS名の取得は後続で揃える。iOSの既知プロファイル表はR2から読む口だけを用意しており、本番の表データを作成したわけではない。
+AS・地域・UA・日別識別子の観測集計（Account.seen）、AccountDirectoryへの反映、管理者用RPC・役割の管理も未実装。専ブラの表示名は製品名・版・既知のOSを抽出する限定的な実装で、識別子のUA解析表（段C）とは別のもの。接続元の表示は現在取得できるAS番号と地域・国を使い、AS名の取得は後続で揃える。iOSの既知プロファイル表はR2から読む口だけを用意しており、本番の表データを作成したわけではない。
 
-次の実施順は **C → D → E-2**。E-1は完了した（下記「E-1の実装範囲」）。段Bの残件と境界も引き続き確認する。
+次の実施順は **D → E-2**。E-1とCは完了した（下記「E-1の実装範囲」「Cの実装範囲」）。段Bの残件と境界も引き続き確認する。
 
 | 段 | 次に実装する内容 |
 | --- | --- |
 | E-1 | 完了。残りはGoogle OAuthのクライアント登録と本番での接続確認（外部設定）だけ |
-| C | PHOEBEの昇格・投稿数と経過時間、識別子の書式、Lv設定とコマンド、連投規制へのアカウントID連携を設計書と照合する |
-| D | 権限・回避レベル・管理画面のアカウント認証と操作画面、スレ立て規制の設定を進める。管理画面の別計画も参照する |
+| C | 完了。残りはUA解析表 `ua-profiles.json` のデータ（利用者が用意する）と、既定の識別子を `phoebe` に切り替える承認（設計書§14-1） |
+| D | 権限・回避レベル・管理画面のアカウント認証と操作画面、スレ立て規制の設定を進める。管理画面の別計画も参照する。段Cで空けておいた `PostingAccount.staff`（BBS_PHOEBEの免除とスレのLvを下げる操作）を役割から埋め、Lvの固定（`Account.setLevel`）と状態変更の操作画面を作る |
 | E-2 | メール認証（登録画面のメール欄もここで出す）、パスワード変更・再設定のHTTP（照合と `setPassword` のRPCはE-1で用意済み）、クライアントIDからの方式移行、退会、エッジ防御など。メール送信APIの提供元は未定のため、送信ポートと提供元の設定を分ける |
 
 ## 外部資料
 
 端末ハッシュの原本は `MontereyLangit/v6-base` の `develop`。`common` の端末関連実装、`common/src/jsMain/kotlin/fc/pages/AuthPage.kt` の `collectFp`・`detectFonts`、`docs/feature/ninja_auth_system.md` を参照した。OS軸はUA、arch軸は `navigator.platform`。候補フォント、順序、計測文字列などは互換材料なので、独自の別方式へ置き換えない。
 
-設計が参照するv3のUA解析表全体は未確認。段Cで元の資料を探してから移植する。メール送信APIの選定も後続作業。Google OAuthのクライアント登録はまだで、本番のGoogleとの接続は確認していない（[認証の検証設定](auth-integration.md)）。
+設計が参照していたv3のUA解析表は存在しなかった。`MontereyLangit/v6-base` の `docs/v3_legacy/bbs.php` では、解析結果の `$platform` は1109行目にしか現れない未定義の変数で、`$browser` にも代入が無い（同リポジトリの `docs/feature/v3_regulation_gap_analysis.md` A16 も同じ結論）。v6-baseの `BrowserName.kt` もv6で新しく作った表で、v3の移植ではない。表は推測で作らず、R2の `ua-profiles.json` から読む形にした（下記「Cの実装範囲」）。メール送信APIの選定も後続作業。Google OAuthのクライアント登録はまだで、本番のGoogleとの接続は確認していない（[認証の検証設定](auth-integration.md)）。
 
 ## E-1の実装範囲
 
@@ -53,6 +53,24 @@ GoogleはOpenID Connectの認可コード＋PKCE。state・nonce・verifierを�
 
 E-1に含めなかったもの: クライアントIDからの方式移行（E-2）、パスワード変更・再設定・メール認証のHTTP（E-2）、Googleの開始へのエッジ防御（E-2）。ログイン中に新規登録すると別のアカウントになり、Cookieは新しいアカウントに切り替わる（移行はE-2）。
 
+## Cの実装範囲
+
+設計書§4・§5・§8.6・§8.7の段C。レビューと設計からの差分は [レビュー記録](auth-implementation-review.md) の「段 C」にまとめた。
+
+Lvの昇格はcommonの `Phoebe`（T(lv)・N(lv)・開始Lv）と `AccountLevel.afterPost`。成功投稿を数えた後、経過時間と投稿数の両方が揃えば一段だけ上げて数え直す。クライアントIDは23h×2^(lv−1)、ID・パスワードは23h×max(1, lv−2)、GoogleはL10固定。固定値（`lvOverride`）がある間は数えるだけで上げない。Account DOの `recordPost` が昇格後の状態を同じputで保存し、Lvが変わった投稿ではCookieを発行し直してヘッダーの表示を揃える。固定の設定・解除は `Account.setLevel` のRPCとリポジトリまでで、操作画面は段D。
+
+`BBS_PHOEBE` は `Phoebe.required` で0〜10の整数だけを読み、不正値は0。スレ設定（`!SETTING` 等で明示的に書いた値）を板設定より優先し、スレ立て時の書き写しから外した。免除は `PostingAccount.staff` で判定し、権限が無い今は誰も免除しない。未ログインの専ブラは従来どおり `x-auth-required: login`、認証済のLv不足は `x-auth-required: level` と `x-phoebe-required`。新UIは `x-phoebe-required` の値で「Lvn以上が必要です」を出し、認証モーダルも再送もしない。
+
+`!バルサン`（Lv3）と `!SETTING:BBS_PHOEBE:n`（n＝0〜10）は本文の先頭だけを読む。使えるのはスレ立て人（Thread DOの `owner.account` と投稿者のアカウントの照合値が一致。`ownerAid` は足していない）とstaff。スレ立て人は上げるだけ、下げられるのはstaffの `!SETTING` だけ。スレ設定に値が無ければ板の値を現在値とし、Thread DOが `addRes` のロック内で `ThreadPhoebeRequest.next` を呼んで、datと同じputでスレ設定を書く。使えない投稿者・未ログイン・`BBS_DISABLE_NUSI` の板ではコマンドを無視して通常の投稿にする（文言なし）。コマンド行は本文に残る。
+
+識別子は `BBS_ID_SHIKIBETSU=phoebe` の板だけ `国.県 AS-EEEFFFGGGZZZXXXD`。既定は `checked` のまま。軸の種は `値|軸名(E〜X)＋グループ＋日付＋ソルト`。認証済で端末ハッシュがあれば第1〜2・3〜5・6〜7・8・9軸を割り当て、無ければUA解析表のOS・ブラウザ・端末種別、UA全体、Client Hintsと `Accept-Language` を使う。空の軸は `000`、Dは未ログイン0・10は `*`。
+
+UA解析表はR2の `ua-profiles.json`（`{"os": [{"match", "flags"?, "label"}…], "browser": […], "device": […]}`。各表は上から最初に一致した行の `label` を使い、`$1`〜`$9` を捕捉で置き換える。flagsは `i`・`u`・`s` だけ）。表が無い・読めない環境ではOS・ブラウザ・端末種別の軸が `000` になる。**表のデータは利用者の用意待ち**。用意するときは `tests/golden/ua-profile.json` に入出力を固定する（設計書§5.2）。iOSの既知プロファイル `ios-profiles.json` も段Bと同じく読む口だけで、データは用意していない。
+
+連投規制の `aid` は段Bの時点で認証主体の `accountKey` を渡していた（§13-7）。段Cで追加の変更はない。
+
+段Cに含めなかったもの: Lvの進み具合の表示、上限ルール `phoebe.cgi`（§4.3。§12でE-2）、staffと回避レベル `l10`・`login` のLv連携（段D）、投稿ログ `Device:` のUA解析の要約（§5.4。表のデータが無いので書式を変えていない）、既定の識別子の切替（§14-1の承認待ち）。
+
 ## 設定と検証
 
 [認証の検証設定](auth-integration.md) に従う。`AUTH_SECRET` がないと認証は有効にならない。登録には `AGREEMENT_VERSION`、`TURNSTILE_SITE_KEY`、`TURNSTILE_SECRET_KEY` も必要。Googleログインには `GOOGLE_CLIENT_ID` と `GOOGLE_CLIENT_SECRET` を足す。秘密鍵は `.dev.vars` または環境のsecretで管理し、この文書やコミットへ書かない。
@@ -71,10 +89,10 @@ npm run v6:typecheck
 
 | 検証 | この区切りの結果 |
 | --- | --- |
-| Scala単体テスト | sbt test 1,181件成功（commonJVM 162、commonJS 165、codegen 27、bbsClient 2、bbs 825）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功 |
-| workerd・SSR・hydration | npm test 70件成功、skipなし。実workerdで登録→ログアウト→ログイン→投稿、未登録・不一致の同じ応答、十回の失敗による接続元のロックと応答の遅延、別の接続元からのログイン、認証画面の方式の表示を検証。board-islandsでタブを替えてもTurnstileを作り直さないこと、ログインと登録の送信内容、Googleの開始フォームを検証 |
+| Scala単体テスト | 段Cの区切りで sbt test 1,246件成功（commonJVM 183、commonJS 186、codegen 27、bbsClient 2、bbs 848）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功。E-1の区切りは1,181件 |
+| workerd・SSR・hydration | 段Cの区切りで npm test 71件成功、skipなし（E-1の70件にLv不足の表示と再送しないことのboard-islandsを1件追加）。E-1の区切りでは実workerdで登録→ログアウト→ログイン→投稿、未登録・不一致の同じ応答、十回の失敗による接続元のロックと応答の遅延、別の接続元からのログイン、認証画面の方式の表示を検証した |
 | ビルド | npm run v6:build成功 |
 | 型チェック | npm run v6:typecheck成功 |
-| コミット | E-1はRPC・登録とログイン・HTTP・画面・Google・文書の順に小さく分けてコミットした（pushはオーケストレーターが行う） |
+| コミット | E-1はRPC・登録とログイン・HTTP・画面・Google・文書の順に、CはLvの純粋関数・昇格の保存・BBS_PHOEBE・コマンド・識別子の純粋関数・識別子とUA解析表・文書の順に小さく分けてコミットした（pushはオーケストレーターが行う） |
 
 本番へのデプロイ、secretの登録、本番データの変更はこの区切りには含めない。
