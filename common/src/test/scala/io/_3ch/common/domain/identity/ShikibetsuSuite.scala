@@ -28,12 +28,13 @@ class ShikibetsuSuite extends munit.FunSuite {
   test("モード名は完全一致で読み、未知値は非表示にする") {
     import ShikibetsuMode.*
     val expected = List("checked" -> Checked, "raw" -> Raw, "ken" -> Ken, "city" -> City, "as" -> As,
-      "d" -> Hidden, "phoebe" -> Hidden, "CHECKED" -> Hidden, "" -> Hidden)
+      "phoebe" -> Phoebe, "d" -> Hidden, "PHOEBE" -> Hidden, "CHECKED" -> Hidden, "" -> Hidden)
     expected.foreach((value, mode) => assertEquals(ShikibetsuMode.parse(value), mode))
     assertEquals(ShikibetsuFormat.plain(Raw, "JP", "Tokyo", "Chiyoda", "1234"), "JP.Tokyo 1234")
     assertEquals(ShikibetsuFormat.plain(Ken, "JP", "Tokyo", "Chiyoda", "1234"), "JP.Tokyo")
     assertEquals(ShikibetsuFormat.plain(City, "JP", "Tokyo", "Chiyoda", "1234"), "JP.Tokyo.Chiyoda")
     assertEquals(ShikibetsuFormat.plain(As, "JP", "Tokyo", "Chiyoda", "1234"), "1234")
     assertEquals(ShikibetsuFormat.plain(Hidden, "JP", "Tokyo", "Chiyoda", "1234"), "")
+    assertEquals(ShikibetsuFormat.plain(Phoebe, "JP", "Tokyo", "Chiyoda", "1234"), "")
   }
 }
