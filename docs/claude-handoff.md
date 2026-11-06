@@ -1,6 +1,6 @@
 # 認証実装の引き継ぎ
 
-作業ブランチは `ccr-9c002284-dbai2f`。2026-11-07（日本時間）の段Bの成果、段E-1（ID・パスワードとGoogleログイン）と段C（PHOEBE）の完了を区切りとして引き継ぐ。ビルドとテストを通した小さな単位ごとにcommit・pushし、完了範囲と残件をこの文書へ記録する。
+作業ブランチは `ccr-9c002284-dbai2f`。2026-11-07（日本時間）の段Bの成果、段E-1（ID・パスワードとGoogleログイン）と段C（PHOEBE）の完了、段Dのうち管理画面以外（権限・キャップ・回避レベル）の完了を区切りとして引き継ぐ。ビルドとテストを通した小さな単位ごとにcommit・pushし、完了範囲と残件をこの文書へ記録する。
 
 ## 前提と現在の範囲
 
@@ -20,13 +20,13 @@
 
 AS・地域・UA・日別識別子の観測集計（Account.seen）、AccountDirectoryへの反映、管理者用RPC・役割の管理も未実装。専ブラの表示名は製品名・版・既知のOSを抽出する限定的な実装で、識別子のUA解析表（段C）とは別のもの。接続元の表示は現在取得できるAS番号と地域・国を使い、AS名の取得は後続で揃える。iOSの既知プロファイル表はR2から読む口だけを用意しており、本番の表データを作成したわけではない。
 
-次の実施順は **D → E-2**。E-1とCは完了した（下記「E-1の実装範囲」「Cの実装範囲」）。段Bの残件と境界も引き続き確認する。
+次の実施順は **管理画面（改修計画 M0〜M4）→ E-2**。E-1・C と、D のうち管理画面以外は完了した（下記「E-1の実装範囲」「Cの実装範囲」「Dの実装範囲」）。段Bの残件と境界も引き続き確認する。
 
 | 段 | 次に実装する内容 |
 | --- | --- |
 | E-1 | 完了。残りはGoogle OAuthのクライアント登録と本番での接続確認（外部設定）だけ |
 | C | 完了。残りはUA解析表 `ua-profiles.json` のデータ（利用者が用意する）と、既定の識別子を `phoebe` に切り替える承認（設計書§14-1） |
-| D | 権限・回避レベル・管理画面のアカウント認証と操作画面、スレ立て規制の設定を進める。管理画面の別計画も参照する。段Cで空けておいた `PostingAccount.staff`（BBS_PHOEBEの免除とスレのLvを下げる操作）を役割から埋め、Lvの固定（`Account.setLevel`）と状態変更の操作画面を作る |
+| D | 管理画面以外は完了。残りは管理画面の作り直し（[改修計画](admin-spa-auth-plan.md) M0〜M4）: bootstrap の HTTP、管理者セッション、役割の付与・Lvの固定・凍結・他人へのキャップ発行と旧キャップの紐づけの画面、`BBS_THREAD_PASS`・`BBS_RENTOU_PASS` の専用フォーム。§14-4（名無しの staff の規制免除）は利用者の承認待ち |
 | E-2 | メール認証（登録画面のメール欄もここで出す）、パスワード変更・再設定のHTTP（照合と `setPassword` のRPCはE-1で用意済み）、クライアントIDからの方式移行、退会、エッジ防御など。メール送信APIの提供元は未定のため、送信ポートと提供元の設定を分ける |
 
 ## 外部資料
@@ -71,6 +71,18 @@ UA解析表はR2の `ua-profiles.json`（`{"os": [{"match", "flags"?, "label"}�
 
 段Cに含めなかったもの: Lvの進み具合の表示、上限ルール `phoebe.cgi`（§4.3。§12でE-2）、staffと回避レベル `l10`・`login` のLv連携（段D）、投稿ログ `Device:` のUA解析の要約（§5.4。表のデータが無いので書式を変えていない）、既定の識別子の切替（§14-1の承認待ち）。
 
+## Dの実装範囲
+
+設計書§6.1・§6.2・§6.4・§7のうち、管理画面を除く部分。管理画面の作り直し（SPA・アカウント認証への切替・操作画面）は改修計画 M0〜M4 として残す。レビューと設計からの差分は [レビュー記録](auth-implementation-review.md) の「段 D」にまとめた。
+
+権限は Account の `roles`（admin / delete / regulate / cap）。`Roles.staff` は cap 以外の役割を持つこと、`Roles.manages` は「admin は誰でも、ほかの staff は staff でない相手だけ」を操作できる規則。役割を変えられるのは admin だけで（`AccountState.assignRoles`）、Account DO の `setRoles(roles, actorRoles, now)` がロック内で判定する。admin の付け外しは application の `AccountRoles` が `AccountIndex("role:admin")` に反映する。初回の管理者は `AccountIndex("role:admin").claimFirstAdmin(hash, aid, now, breakGlass)` が有効な admin（確定済みで、Account の `adminStatus` が真）と他人の期限内の予約を数え、居なければ（非常用期間なら居ても）予約する。続く `Account.grantFirstAdmin` → `confirm` と失敗時の予約の取り消しは `AccountRoles.claimFirstAdmin`。非常用期間の判定は `FirstAdminClaim.breakGlass`（現在より先で24時間以内）。bootstrap の HTTP・トークンの照合・監査ログは M2。
+
+投稿では `PostingAccount.roles` を認証結果の役割から埋め、`staff`（BBS_PHOEBE の免除と `!SETTING` で下げる権限）は役割から決まる。回避レベル `BypassLevel` は `BypassPoster`（役割・★・認証済・実効 Lv）で判定する。適用先は deny.cgi / ngwords.cgi の5列目（省略・空欄は privileged、不正な値は書式の誤り）、`BBS_RENTOU_PASS`、`BBS_THREAD_PASS`（キャップ除外を置き換え。スレ設定に書き写さない）。admin の投稿はルールファイルを読まない。既定の段階（privileged）で免除される投稿者は、ルールファイルが壊れている・読めないときも通す（キャップの従来の挙動を保つため）。Tor の拒否はキャップだけを免除する（staff は免除しない）。saku 板は従来どおり deny.cgi / ngwords.cgi をスルーする。
+
+キャップは本人が `/auth/account` のキャップ欄で発行・パスワードの再発行・失効できる（`/auth/cap/issue`・`reissue`・`revoke`。発行は一日十回まで）。パスワードは `#` ＋20文字で、発行した応答にだけ出す。KV の `CAP` に従来の照合キー（`CapKey.of`。投稿処理と共有）で表示名を書き、`AccountIndex("cap")` に照合キーの HMAC → aid を載せる。失効では KV を消してから索引を外す（KV を消せなかったら索引を残し、所有者の失効の記録で照合を拒否する）。役割保持者は自分用に1個まで、admin は無制限・強キャップ・他人宛て（他人宛ては `CapIssuing.issue` まで。画面は M3）。自分で発行したキャップは役割を全て外すと使えない。旧キャップ（索引に無い KV の値）は従来どおり動く。キャップ欄には直近5件の書き込みを出す（Account の書き込み記録のうち `via=cap` の行）。
+
+段Dに含めなかったもの: 管理画面（M0〜M4）、`adminGen`（管理者セッションの世代。M2）、旧キャップの紐づけ、`BBS_THREAD_PASS`・`BBS_RENTOU_PASS` の管理画面の専用フォーム（M3）。
+
 ## 設定と検証
 
 [認証の検証設定](auth-integration.md) に従う。`AUTH_SECRET` がないと認証は有効にならない。登録には `AGREEMENT_VERSION`、`TURNSTILE_SITE_KEY`、`TURNSTILE_SECRET_KEY` も必要。Googleログインには `GOOGLE_CLIENT_ID` と `GOOGLE_CLIENT_SECRET` を足す。秘密鍵は `.dev.vars` または環境のsecretで管理し、この文書やコミットへ書かない。
@@ -89,8 +101,8 @@ npm run v6:typecheck
 
 | 検証 | この区切りの結果 |
 | --- | --- |
-| Scala単体テスト | 段Cの区切りで sbt test 1,246件成功（commonJVM 183、commonJS 186、codegen 27、bbsClient 2、bbs 848）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功。E-1の区切りは1,181件 |
-| workerd・SSR・hydration | 段Cの区切りで npm test 71件成功、skipなし（E-1の70件にLv不足の表示と再送しないことのboard-islandsを1件追加）。E-1の区切りでは実workerdで登録→ログアウト→ログイン→投稿、未登録・不一致の同じ応答、十回の失敗による接続元のロックと応答の遅延、別の接続元からのログイン、認証画面の方式の表示を検証した |
+| Scala単体テスト | 段Dの区切りで sbt test 1,291件成功（commonJVM 194、commonJS 197、codegen 27、bbsClient 2、bbs 871）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功。段Cの区切りで sbt test 1,246件成功（commonJVM 183、commonJS 186、codegen 27、bbsClient 2、bbs 848）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功。E-1の区切りは1,181件 |
+| workerd・SSR・hydration | 段Dの区切りで npm test 75件成功、skipなし（board-islandsにキャップ欄3件、実workerdにキャップの発行→★の書き込み→失効を1件）。段Cの区切りで npm test 71件成功、skipなし（E-1の70件にLv不足の表示と再送しないことのboard-islandsを1件追加）。E-1の区切りでは実workerdで登録→ログアウト→ログイン→投稿、未登録・不一致の同じ応答、十回の失敗による接続元のロックと応答の遅延、別の接続元からのログイン、認証画面の方式の表示を検証した |
 | ビルド | npm run v6:build成功 |
 | 型チェック | npm run v6:typecheck成功 |
 | コミット | E-1はRPC・登録とログイン・HTTP・画面・Google・文書の順に、CはLvの純粋関数・昇格の保存・BBS_PHOEBE・コマンド・識別子の純粋関数・識別子とUA解析表・文書の順に小さく分けてコミットした（pushはオーケストレーターが行う） |

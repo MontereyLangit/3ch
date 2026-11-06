@@ -111,3 +111,18 @@ KotlinJSの [生成済み空白表](https://github.com/JetBrains/kotlin/blob/v2.
 | 設計からの差分 | v3 の UA 解析表は存在しなかったので移植せず、R2 の表を読む形にした（§13-38）。`ownerAid` は足さず `owner.account` で照合した（§8.7 の注記どおり）。`!バルサン` は staff でも下げない。未ログインの専ブラの Lv 不足は `login` のまま（§13-39）。staff は差し込み口だけで、段 D まで誰も免除しない |
 | UI | 新 UI の Lv 不足は応答の `x-phoebe-required` を表示に使う（スレ設定の値は板トップの props に無いため）。既存の文言と部品のまま。モーダルを開かず再送しないことを board-islands で確かめた |
 | テスト | common に PhoebeSuite・PhoebeCommandSuite・IdentifierSuite、ShikibetsuSuite の phoebe。bbs に UserAgentTableSuite・UserAgentTableRepositorySuite、PostingServiceSuite（ゲート 5 件・コマンド 3 件・識別子 3 件）、ThreadSuite 2 件、PostingCodecSuite 1 件、AccountInfrastructureSuite・PostingAccountServiceSuite・ThreadOwnerSuite 各 1 件。board-islands に 1 件 |
+
+## 段 D（2026-11-07、日本時間）
+
+対象は権限・キャップ・回避レベルで、管理画面は含めない（改修計画 M0〜M4）。範囲と残件は [引き継ぎ](claude-handoff.md) の「Dの実装範囲」を参照する。
+
+| 観点 | 実装・確認 |
+| --- | --- |
+| DO はインフラのみ | 役割の規則は common の `Roles.manages`・`AccountState.assignRoles`、初回の管理者の判定は `FirstAdminClaim.claim`、キャップの発行数・強キャップ・再発行・失効の記録は `AccountState`。AccountIndex DO はロック内で索引を列挙し、各所有者の `adminStatus` を聞いて純粋関数に渡すだけ。KV と索引を揃える順序は application の `AccountRoles`・`CapIssuing` |
+| 種別 | 回避レベルは enum `BypassLevel`、5 列目の誤りは `ModerationRuleProblem.Bypass`、キャップ名の誤りは `CapNameRejection`、権限不足は `AccountRejection.Forbidden`。文言は handler（`AuthHandler`・`AdminText`） |
+| 既存の振る舞い | 認証を有効にしていない環境と役割の無い投稿者では、回避の判定は以前と同じ（admin・staff は誰も該当せず、l10 は実効 Lv が 0 なので privileged と同じ）。既存の投稿スナップショット・PostingSuite・golden は変更なし。4 列の deny.cgi の行の結果も同じ。DO の既存キーは変えていない（キャップは既存の `caps` キー、索引は既存の DO に新しい種別 `role:admin` の値を足しただけ） |
+| 変えたもの | キャップの投稿でも deny.cgi / ngwords.cgi を読むようになった（上の段階の行を当てるため）。既定の段階で免除される投稿者は読込の障害でも通すので、キャップの投稿が以前より失敗することはない。`ModerationRuleSetSuite` の「5 列の行は書式の誤り」の期待値を、5 列目の不正値として読む形に改めた。Account の `revokeCap` の戻り値を照合値付きにした |
+| 設計からの差分 | Tor の拒否は staff を免除しない（§7 に記載が無く、振る舞いを変えない側に倒した）。`BBS_THREAD_PASS`・`BBS_RENTOU_PASS` の不正値は拒否せず privileged（スレ立て規制の既存キーは不正値でスレ立てを拒否するが、免除の設定ミスで板を止めないため）。自分で発行したキャップは役割を全て外すと使えないようにした（設計に無い。権限を外した後もキャップが残るのを防ぐ）。`adminGen` は管理者セッションと一緒に M2 で足す |
+| UI | キャップ欄は専ブラ用キーの欄と同じ部品・配色・文言の調子にした（角丸なし）。モックはキャップ欄が案内の1行だけなので、役割の無い人にはその1行だけを出す。書き込みの1行の表示は専ブラ用キーの欄と共通の `AccountPostView` に切り出した。状態は useState、パスワードはメモリ上だけ |
+| 確認が要る点 | §14-4（名無しの staff の規制免除）は実装したが承認待ち |
+| テスト | common に AccountRolesSuite（6）・AccountCapSuite（5）。bbs に BypassLevelSuite（4）、AccountRolesSuite（5、同時に確保しても admin は一人）、AuthCapSuite（5）、PostingServiceSuite 4 件、ModerationRuleSetSuite・ModerationServiceSuite・PostingModerationSuite・PostRateSettingsSuite・AdminHandlerSuite に追加。board-islands に 3 件、実 workerd に 1 件（キャップの発行 → ★ の書き込み → 失効） |

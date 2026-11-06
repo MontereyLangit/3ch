@@ -34,7 +34,7 @@
 件数0でその規制を無効にします。詳細と旧設定形式の扱いは [bbs.cgi スレ立て規制](thread-creation-regulation.md) を参照してください。
 
 アクセス規制は既存の `deny.cgi`、NGワードは `ngwords.cgi` に保存します。
-1行につき `板の正規表現<>投稿者情報の正規表現<>NGワードの正規表現<>動作`。
+1行につき `板の正規表現<>投稿者情報の正規表現<>NGワードの正規表現<>動作`。5列目に回避レベルを書けます（`板<>対象<>NG<>動作<>回避レベル`）。
 空欄は全対象。空行と `#` で始まるコメント行は無視します。
 
 ```
@@ -45,8 +45,13 @@
 
 動作は `deny` または空欄（拒否）、`mark`（注意表示）、`TateDame`（スレ立てのみ禁止）、`md5`（詳細非公開で拒否）です。
 NGワードは名前・メール・本文・タイトルに適用し、数値文字参照も検査します。
-既存互換としてキャップ・saku板は対象外、`BBS_NO_MADAKANA=checked` は注意表示に変更、`BBS_NGWORD_PASS=checked` はNGを除外します。
+回避レベルはその行を適用しない投稿者の段階で、`admin`（管理者）、`staff`（管理・削除・規制の権限者）、`privileged`（staff とキャップ付きの投稿）、`l10`（privileged と Lv10）、`login`（privileged と認証済）のいずれかです。
+省略・空欄は `privileged` で、4列の行は従来どおり（キャップは対象外）に加えて権限者の名無し投稿も対象外になります。ほかの値は保存できません。
+`admin` の投稿はどの行にもかかりません。saku板は対象外、`BBS_NO_MADAKANA=checked` は注意表示に変更、`BBS_NGWORD_PASS=checked` はNGを除外します。
 識別子システムは従来通り無効のため、UIDではなくIP・AS番号等を利用してください。
+
+連投規制とスレ立て規制の免除は SETTING.TXT の `BBS_RENTOU_PASS`・`BBS_THREAD_PASS` に同じ回避レベルで書きます（既定はどちらも `privileged`。知らない値も `privileged`）。
+`BBS_THREAD_PASS` はスレ設定へ書き写しません。専用フォームはまだ無いので SETTING.TXT を直接編集してください。
 
 ## テスト
 
