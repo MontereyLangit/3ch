@@ -8,13 +8,15 @@
 
 前回のレビュー修正は `d02da38` を目印にしている。DDD化と段Aの確認では `sbt test` 843件、`npm test` 47件とビルド・型チェックの成功を記録済み。この件数は段Bを含む今回の結果ではない。
 
-段BではAccount・AccountIndex・AuthRate DO、CookieとSessionReader、端末情報の照合、クライアントIDの登録、Turnstileと同意確認、専ブラ用キー、投稿認証と追加ヘッダーを実装した。新UIには認証ページ、投稿中の認証モーダル、ヘッダーの表示切り替え、アカウントのキー操作を追加した。認証設定がない環境では従来の投稿・画面を維持する。
+段B・E-1途中のレビュー指摘と対応は [レビュー記録](auth-implementation-review.md) の「段 B / E-1 途中のレビュー指摘と対応」にまとめた。
+
+段BではAccount・AccountIndex・AuthRate DO、CookieとSessionReader、端末情報の照合、クライアントIDの登録、Turnstileと同意確認、専ブラ用キー、投稿認証と追加ヘッダーを実装した。新UIには認証ページ、投稿中の認証モーダル、ヘッダーの表示切り替え、アカウントのキー操作を追加した。認証は `AUTH_SECRET`（32文字以上）・`AGREEMENT_VERSION`・Turnstileの2つの鍵が揃ったときだけ有効になり、揃わない環境では従来の投稿・画面を維持する（`/auth/` も404）。
 
 画面へ渡すセッションは `uid`・`lv` のみ。アカウント画面にキー平文・ハッシュを出さない。発行直後のPOST応答の平文だけを一度表示する。認証通知は表示更新用で、権限の判定はサーバーで行う。
 
 ## 残件と次の順序
 
-段Bを完了扱いにしない。キャップのアカウントへの紐づけ・発行・失効を操作する画面、利用ログなど、設計書と実装を照合して残件を整理する。アカウント画面は現時点で公開ID・Lvと専ブラ用キーの操作が中心。設計書にある全操作を提供してはいない。
+段Bを完了扱いにしない。キャップのアカウントへの紐づけ・発行・失効を操作する画面、利用ログ、退会など、設計書と実装を照合して残件を整理する。アカウント画面は公開ID・登録方法と有効期限・Lv・この端末の粒度・専ブラ用キーの操作・ログアウトまで。Lvの進み具合（段C）は出していない。
 
 AS・地域・UA・日別識別子の観測集計（Account.seen）、AccountDirectoryへの反映、管理者用RPC・役割の管理も未実装。専ブラの表示名は製品名・版・既知のOSを抽出する限定的な実装で、段Cのv3解析表の移植とは区別する。接続元の表示は現在取得できるAS番号と地域・国を使い、AS名の取得は後続で揃える。iOSの既知プロファイル表はR2から読む口だけを用意しており、本番の表データを作成したわけではない。
 
@@ -67,11 +69,11 @@ npm run v6:typecheck
 
 | 検証 | この区切りの結果 |
 | --- | --- |
-| Scala単体テスト | sbt test 1,096件成功（commonJVM 140、commonJS 143、codegen 27、bbsClient 2、bbs 784）。既存の投稿goldenは変更なし |
-| workerd・SSR・hydration | npm test 64件成功、skipなし。npmのpretestも成功。実DOの競合・保存、Turnstile応答の差し替え、Cookie・再認証・キー失効・ログアウト、既存投稿、SSR・hydration、ネイティブPBKDF2、SQLと同期KVの原子性を検証 |
+| Scala単体テスト | sbt test 1,135件成功（commonJVM 151、commonJS 154、codegen 27、bbsClient 2、bbs 801）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功 |
+| workerd・SSR・hydration | npm test 67件成功、skipなし。npmのpretestも成功。実DOの競合・保存、Turnstile応答の差し替え、Cookie・再認証・キー失効と索引の削除、HTTPのログアウト（無効なセッションでもCookieを消す）、未ログインのアカウント設定の302、設定不足の404、既存投稿、SSR・hydration、ネイティブPBKDF2、SQLと同期KVの原子性を検証。画面のログアウトはboard-islandsで送信の形（フォーム形式の本文）と表示の切り替えを検証 |
 | ビルド | npm run v6:build成功。Workerの最終出力に5つのDOが公開されることも検証 |
 | dev起動 | npm run devをローカル・ダミーsaltで起動。トップ200、bbs.cgiのHTTP 200とエラーマーカー、管理者パスワード未設定時の503、各応答のAccept-CHを確認 |
 | 型チェック | npm run v6:typecheck成功 |
-| コミット・push | 段B基盤は38615acで反映済み。以後も互換性修正とE-1の入力規則を分けて反映する |
+| コミット・push | 段B基盤は38615acで反映済み。レビュー指摘の修正は6d745cfから小さく分けてコミットした |
 
 本番へのデプロイ、secretの登録、本番データの変更はこの区切りには含めない。

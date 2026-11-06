@@ -56,16 +56,18 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 ### 1.4 ディレクトリ構成
 
 ```
-common/                Scala (JVM/JS cross)。純粋ロジック（ルート表 RouteTable.scala, BoardId / ThreadKey / BbsSettings 等）
+common/                Scala (JVM/JS cross)。純粋ロジック（ルート表 RouteTable.scala, BoardId / ThreadKey / BbsSettings 等）。
+                       domain/account/ はアカウント・Cookie・専ブラキー・ログイン失敗の規則、domain/device/ は端末ハッシュと Client Hints
 bbs/
   src/main/scala/io/_3ch/bbs/
     Main.scala         Worker エントリ（JSExportTopLevel）
     handler/           PublicRoutes（dat, subject.txt, SETTING.TXT, bbsmenu 等）, Posting（投稿パイプライン）,
-                       AdminHandler（/admin/*）, Responses
-    application/       アプリケーションサービス。posting/PostingService が投稿の段の並びを持ち、ports/ に外部の読み書きの口を置く
+                       AdminHandler（/admin/*）, Responses。auth/ は /auth/* の画面と API、セッション Cookie、認証設定の読み取り
+    application/       アプリケーションサービス。posting/PostingService が投稿の段の並びを持ち、ports/ に外部の読み書きの口を置く。
+                       auth/ はクライアント認証・専ブラキー発行・投稿の認証と記録（ports/ にアカウント・Cookie の口）
     domain/            ドメインモデル・ドメインサービス（js.RegExp を使う規則と投稿処理の型。正規表現を使わない規則は common/）
     repository/        ports の実装。DO スタブ / R2 / KV を包み、js.Dynamic をここで止める
-    durable/           Board DO, Thread DO
+    durable/           Board DO, Thread DO, Account / AccountIndex / AuthRate DO
     external/cloudflare/  Workers / DO / R2 / KV の facade（DO の RPC スタブ `*DoStub` はコンパイル時に codegen が生成。docs/durable-object-stubs.md）
     hash/, util/       Web Crypto ハッシュ・MD5 の npm facade（`@noble/hashes`）, Shift_JIS 変換
   src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
@@ -75,7 +77,8 @@ codegen/               Main の @route / @islands から app/routes/・app/islan
 app/                   HonoX（server.ts がエントリ。routes/index.ts と _renderer.tsx は手書き）
 public/
   3chiko.html          3chiko.html本体。Vite の publicDir として dist/ へコピーされ Workers Static Assets で配信
-tests/                 実workerdを使う統合テスト（要 dist/）用ディレクトリ。admin.integration.test.js・rpc.integration.test.js（実 workerd。support/ はテスト専用 Worker）。golden/ は言語中立の入出力表（Scala 側が読む）
+tests/                 実workerdを使う統合テスト（要 dist/）用ディレクトリ。admin・rpc・post-rate・auth（認証の HTTP と DO）・storage-atomicity（SQLite DO の同期 KV と SQL の原子性）の *.integration.test.js（実 workerd。support/ はテスト専用 Worker）。
+                       golden/ は言語中立の入出力表（Scala 側が読む。端末ハッシュ・Client Hints・空白処理の照合表を含む）
 docs/                  仕様書・設計メモ（後述）
 wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 ```
@@ -92,6 +95,8 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 | `docs/auth-phoebe-rate-limit-design.md`                                                | 認証・PHOEBE（Lv）・連投規制と新UIの設計。段Aは実装済み、段Bは部分実装。E-1は入力規則と暗号プロバイダまで実装し、DO・登録・ログイン・Google認証は未接続。現在の範囲は `docs/claude-handoff.md` を参照                                                                                                               |
 | `docs/claude-handoff.md` | 段B・E-1の実装範囲・残件・設定・検証結果と、C→D→E-2への引き継ぎ |
 | `docs/auth-integration.md` | 認証の有効化、Turnstile、localhost、追加DOの開発・検証設定 |
+| `docs/auth-implementation-review.md` | 認証・PHOEBE 実装のレビュー記録（段A・段B・E-1途中の指摘と対応） |
+| `docs/auth-password-implementation-notes.md` | ID・パスワード方式（E-1）の実装メモ。入力規則・PBKDF2・登録回復方式の候補 |
 | `docs/bbs-cgi-ddd-refactoring-plan.md`                                                 | bbs.cgi 投稿処理の DDD 化リファクタリング計画（段0〜9は完了。段10以降が認証・規制の実装）                                                                                                            |
 | `docs/auth-phoebe-review.md`                                                           | 上記 2 文書の Opus 5 セルフレビュー記録（2026-11-02）                                                                                                                                |
 | `docs/admin-spa-auth-plan.md`                                                          | 管理画面の改修計画（アカウント認証化・新 UI・scalajs-react SPA。2026-11-02、未着手）                                                                                                            |

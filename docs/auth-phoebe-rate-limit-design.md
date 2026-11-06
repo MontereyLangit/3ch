@@ -4,7 +4,7 @@
 （リポジトリ外の `ninja_auth_system.md` 系。要点は §3.7 に転記）、および新 UI（`develop` に統合済みの板トップ。PR #37。
 `docs/ui/板top_書き込み欄と投稿後更新の方針.md`・`docs/islands-ssr.md`・`docs/handler-rendering.md`）をもとに、
 v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の挙動（§3.8）を設計する。
-**状態: 段Aは実装済み、段Bは部分実装（2026-11-06）。** 段Bの残件、設定、検証結果は [引き継ぎ](claude-handoff.md) を参照する。段E-1以降は未実装。実装は§12の順で行い、本書を実装結果に合わせて訂正する。
+**状態: 段Aは実装済み、段Bは部分実装、段E-1は途中（2026-11-07）。** E-1は入力規則・ログイン失敗の計数・PBKDF2・資格情報の保存形式・登録準備状態までで、DO・登録・ログイン・Google認証は未接続。段C以降は未実装。残件、設定、検証結果は [引き継ぎ](claude-handoff.md) を参照する。実装は§12の順で行い、本書を実装結果に合わせて訂正する。
 2026-11-02 に Opus 5 によるセルフレビューを行い、採用した指摘を反映した（[auth-phoebe-review.md](auth-phoebe-review.md)）。
 2026-11-05、トリップと日付欄の ID の廃止・`!id`・スレ主表示（[トリップ・ID廃止とスレ主表示](トリップ・ID廃止とスレ主表示.md)。`develop` で実装済み）に合わせて改めた。
 
@@ -74,7 +74,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 
 - **移行**: クライアント ID → ID/Password または Google へ移行できる。移行しても `aid`（DO）は変わらず、Lv・端末履歴・ログを引き継ぐ。`uid` は登録したユーザー ID に変わる（自動採番の旧 `uid` は索引に残す）。手順は §3.9・§3.10。ID/Password・Google からクライアント ID への移行、ID/Password ⇄ Google の相互移行はしない。
 - **ID/Password** の詳細は §3.9、**Google 連携**の詳細は §3.10。
-- **法的投稿確認**: 認証画面で利用規約・投稿の法的責任への同意チェックを必須にし、`agreedAt` と同意文書の版を保存する。版を上げたら次回投稿前に再同意させる。
+- **法的投稿確認**: 認証画面で利用規約・投稿の法的責任への同意チェックを必須にし、`agreedAt` と同意文書の版を保存する。版を上げたら次回投稿前に再同意させる（投稿の拒否に `x-auth-required: login` を付け、認証モーダルの verify で同意し直す。JS なしはエラー画面の認証・登録のリンクから）。
 
 ### 3.2 認証フロー
 
@@ -112,7 +112,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 3. 有効なセッション Cookie → そのアカウント。キーから発行した Cookie は UA の一致とキーの有効性も確かめる（§6.3）。
 4. いずれもない → 未ログイン（L0）。
 
-メール欄からは `#...`・`!#...`・`!auth` を取り除いてから sage 判定に使う（dat には保存されないので表示影響なし）。ログイン済で `!auth` を付けた場合は無視して通常投稿にする。
+メール欄からは `!#...`（空白の手前まで）・キャップのパスワード部分（最初の `#` から次の `#` の手前まで。空白も含め、キャップの照合と同じ範囲）・`!auth` を取り除いてから sage 判定に使う（dat には保存されないので表示影響なし。読み取りと除去は `common` の `MailCommands`）。ログイン済で `!auth` を付けた場合は無視して通常投稿にする。
 応答ヘッダ `Set-Cookie` は 2 と 3 で `__Host-ch3s_sid` を出しつつ、現行の `PON` も出す（§3.3）。
 
 ### 3.5 認証要求の発生条件（板設定ゲート原則）
@@ -128,7 +128,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 エラー文言は「この板（スレ）に書き込むには認証が必要です（必要 Lv: n）」＋ URL。どの規則で落ちたかは出さない。
 **Web 版のログイン必須は利用者を認証へ導くための仕組みで、防御ではない**（UA を `Monazilla/1.00` にすれば `BBS_PHOEBE=0` の板へ未ログインで書ける）。
 防御は `BBS_PHOEBE`・エッジ防御（§3.6）・連投規制（§8）が担う。
-認証要求のエラー応答には HTTP 200・エラーマーカーに加えて応答ヘッダ `x-auth-required: login`（未ログイン）または
+認証要求のエラー応答には HTTP 200・エラーマーカーに加えて応答ヘッダ `x-auth-required: login`（未ログイン、または同意の版が古い）または
 `x-auth-required: level` と `x-phoebe-required: n`（Lv 不足）、`x-auth-url: /auth/?...` を付ける。新 UI は本文を解析せず
 このヘッダでモーダルを開く（§3.8）。ヘッダの追加は専ブラ互換（`x-threadkey` / `x-resnum` と同じ扱い）に触れない。
 
@@ -484,11 +484,11 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 
 **保存**
 
-- `Account.tokens`: `[{tokenId, hash, issuedAt, expiresAt, uaHash?, uaLabel?, boundAt?, replacedTokenAt?, lastUsedAt?, recentPosts, revokedAt?, revokeReason?}]`。無効になったものも 30 日は残して一覧に出し、その後は消す。
-- `recentPosts` はそのキーでの直近 5 件の書き込み `{t, bbs, key, title, resNum, excerpt, network}`。`excerpt` は本文の先頭 40 文字（`<br>` を空白にしたエスケープ済みの文字列）、`network` は AS 名と県（海外は国）の表示名。書き込みが成功したとき `Account.recordPost`（§4.2）で一緒に更新する。
+- `Account.tokens`: `[{tokenId, hash, issuedAt, expiresAt, uaHash?, uaLabel?, boundAt?, replacedTokenAt?, lastUsedAt?, recentPosts, revokedAt?, revokeReason?}]`。無効になったものも 30 日は残して一覧に出し、その後は消す。無効にした記録は新しいものから 20 件までにする。発行は 1 アカウント 1 日 10 回まで（`AuthRate` の `token`）。
+- `recentPosts` はそのキーでの直近 5 件の書き込み `{t, bbs, key, title, resNum, excerpt, network}`。`excerpt` は本文の先頭 40 文字（`<br>` を空白にしたエスケープ済みの文字列。文字参照の途中では切らない）、`network` は AS 名と県（海外は国）の表示名。書き込みが成功したとき `Account.recordPost`（§4.2）で一緒に更新する。
 - キーの平文とハッシュは画面に出さない（平文は発行直後に 1 度だけ）。利用者はキーを UA で見分ける。
-- `AccountIndex("token")`: `HMAC-SHA256(AUTH_SECRET, "token:" + キー)` → `{aid, tokenId}`。無効にしたキーの索引は後から消す（照合の正は Account DO の `tokens` なので、索引に残っていても使えない）。
-- 利用ログは §6.2 と同じ形で `kind: "token"`、`tokenId`・`uaLabel`・結果（許可・各拒否コード）を残す。
+- `AccountIndex("token")`: `HMAC-SHA256(AUTH_SECRET, "token:" + キー)` → `{aid, tokenId}`。置き換え・手動の無効化・未使用の失効でキーが無効になったら、Account DO が保存の後に索引から外す（照合の正は Account DO の `tokens` なので、外し損ねても使えない）。
+- 許可した使用は利用ログに `tokenId`・`uaLabel`・結果を残す。拒否（UA 不一致などの各拒否コード）は利用ログと分けて `rejections` に新しい順で 20 件まで残し、漏れたキーの試行で書き込み記録を押し出さない。
 
 **アカウント設定（`/auth/account`）**
 
@@ -699,7 +699,7 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | --- | --- |
 | `profile` | `{aid, uid, kind: client\|password\|google, createdAt, expiresAt?, loginId?, email?, emailVerifiedAt?, googleSubHash?, agreedAt, agreementVersion, status, generation}` |
 | `activation` | 登録準備状態の `pending` / `ready`。凍結等のstatusとは別。準備中は認証不可。既存Clientだけはキー欠損をreadyとして読み、PasswordとGoogleは必須。readyのPasswordには有効なcredentialとUIDに一致するloginIdも必要 |
-| `credential` | ID/Password: `{algo: "pbkdf2-sha256", iterations, salt, hash, updatedAt, failures: [t…], lockedUntil?}`。メール認証・パスワード再設定の保留トークンは `pending: {kind, hash, expiresAt, email?}`（§3.9） |
+| `credential` | ID/Password: `{algo: "pbkdf2-sha256", iterations, salt, hash, updatedAt, throttle: {failures: [{keyIpHash, t}…], locks: {keyIpHash: until}}}`。`salt`（16 バイト）と `hash`（32 バイト）は小文字の 16 進数。`failures` は直近 1 時間・最大 100 件、`locks` は接続元ごとのロック期限で最大 100 件。メール認証・パスワード再設定の保留トークンは別キー（`pending:email` / `pending:reset`） |
 | `level` | `{lv, lvSince, lvPosts, lvOverride?}` |
 | `roles` | `["admin", ...]` |
 | `adminGen` | 管理者セッションの世代（整数）。管理者のログアウト・役割変更・凍結で進める（改修計画 §3.2） |
@@ -707,7 +707,8 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | `tokens` | 専ブラ用認証キーの一覧（§6.3 の「保存」） |
 | `pending:email` / `pending:reset` | §3.9 の保留トークン（種別ごとに別キー） |
 | `devices` | `[{hash, firstSeen, lastSeen, keyIpHash}]` 最大 10 件。超えたら `lastSeen` が最も古いものを捨てる |
-| `log:<n>` | 書き込み記録。1 件は `{t, via: web\|token\|cap, tokenId?, capId?, result, bbs, key, title, resNum, excerpt, asn, asName, country, region, uaLabel, deviceHash?, id, shikibetsu}`。`result` は `posted` か拒否コード（キーの UA 不一致など、アカウントに結びつく拒否だけ）。`excerpt` は本文の先頭 40 文字。64 件ごとのページで、16 ページ（1,024 件）を超えたら最古のページを消す |
+| `rejections` | 専ブラキーの照合で拒否した記録（`log:<n>` と同じ 1 件の形）。新しい順に 20 件まで |
+| `log:<n>` | 書き込み記録。1 件は `{t, via: web\|token\|cap, tokenId?, capId?, result, bbs, key, title, resNum, excerpt, asn, asName, country, region, uaLabel, deviceHash?, id, shikibetsu}`。`result` は `posted` か拒否コード（キーの UA 不一致など、アカウントに結びつく拒否だけ）。`excerpt` は本文の先頭 40 文字。キーの照合の拒否はここではなく `rejections` に残す。64 件ごとのページで、16 ページ（1,024 件）を超えたら最古のページを消す |
 | `seen` | 観測の集計。`as`・`region`・`ua`・`device` は値ごとに `{value, label, count, firstSeen, lastSeen}` を最大 50 件（`lastSeen` が古いものから捨てる）。`ua` の `value` は生の UA（管理画面の詳細でだけ出す。本人の画面には表示名だけ）。`ident` は（日付, 板）ごとに `{date, bbs, shikibetsu, count}` を 60 日分 |
 | `directorySyncedAt` | `AccountDirectory` へ最後に反映した時刻 |
 
@@ -732,7 +733,7 @@ RPC: `create`, `describeForPosting(aid, gen)`, `describeForAdmin(aid, gen, admin
 
 **`AuthRate`**（`idFromName(keyIp)`）
 
-- `keyIp` ごとの計数。`hit(kind, now): Int`（`kind` ∈ `verify` / `register` / `login` / `reset` / `deviceHash:<hash>`）が直近 1 時間・24 時間の件数を返す。記録は `{kind, t}` の配列で 24 時間より古いものを `hit` のたびに捨てる。閾値の判定は `common/domain/account/AbuseThresholds` の純粋関数。
+- `keyIp` ごとの計数。`hit(kind, now): Int`（`kind` ∈ `verify` / `register` / `login` / `reset` / `deviceHash:<hash>`。専ブラ用キーの発行回数 `token` だけは `keyIp` ではなくアカウントごとの HMAC を名前にする）が直近 1 時間・24 時間の件数を返す。記録は `{kind, t}` の配列で 24 時間より古いものを `hit` のたびに捨てる。閾値の判定は `common/domain/account/AbuseThresholds` の純粋関数。
 - KV ではなく DO にするのは、原子的な加算と即時の整合が要るため（KV は結果整合で 1 キー 1 回/秒の書き込み上限がある）。応答しないときは認証系の要求を拒否する（§3.7）。
 
 ### 9.2 既存 DO への追加キー
@@ -747,7 +748,7 @@ RPC: `create`, `describeForPosting(aid, gen)`, `describeForAdmin(aid, gen, admin
 | DO | `AuthRate`（新） | §9.1 |
 | R2 | `edge-rules.json`・`ios-profiles.json`・`phoebe.cgi`・`reserved-ids.txt`・`disposable-domains.txt`（新） | §3.6・§3.7・§4.3・§3.9 |
 | vars | `TURNSTILE_SITE_KEY`・`GOOGLE_CLIENT_ID`・`AGREEMENT_VERSION`・`ADMIN_BREAK_GLASS_UNTIL`（通常は未設定） | 公開値 |
-| secret | `AUTH_SECRET`・`TURNSTILE_SECRET_KEY`・`GOOGLE_CLIENT_SECRET`・`MAIL_API_KEY`・`ADMIN_SESSION_SECRET`（`_PREV`）・`ADMIN_BOOTSTRAP_TOKEN`（`ADMIN_PASSWORD`・`ADMIN_USER` は廃止） | `wrangler secret put`。`.dev.vars` で開発。コミットしない |
+| secret | `AUTH_SECRET`（32 文字以上。`AGREEMENT_VERSION`・`TURNSTILE_SITE_KEY`・`TURNSTILE_SECRET_KEY` と揃ったときだけ認証を有効にする）・`TURNSTILE_SECRET_KEY`・`GOOGLE_CLIENT_SECRET`・`MAIL_API_KEY`・`ADMIN_SESSION_SECRET`（`_PREV`）・`ADMIN_BOOTSTRAP_TOKEN`（`ADMIN_PASSWORD`・`ADMIN_USER` は廃止） | `wrangler secret put`。`.dev.vars` で開発。コミットしない |
 
 段Bの `wrangler.jsonc` は移行タグ `v2` で `new_sqlite_classes: ["Account", "AccountIndex", "AuthRate"]` と、バインディング `ACCOUNT_DO`・`ACCOUNT_INDEX_DO`・`AUTH_RATE_DO` を追加した。`AccountDirectory` と `AdminAudit` は後続の管理画面で別の移行タグとバインディングを追加する。適用済みの `v2` には追記しない。開発時の設定は [認証の検証設定](auth-integration.md) を参照する。
 
@@ -767,17 +768,19 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | --- | --- | --- |
 | `/auth/` | GET | 認証・登録ページ（SSR ＋ `AuthForm` island）。`embed=1` でモーダル用レイアウト、`mode=login`、`return` で戻り先 |
 | `/auth/verify` | POST | Turnstile 検証・端末ハッシュ算出・突合・クライアント ID 作成または既存アカウントへの端末登録。JSON 応答 |
-| `/auth/register` / `/auth/login` / `/auth/logout` | POST | ID/Password（§3.9）。`logout` は `gen` を進めて Cookie を消す |
+| `/auth/register` / `/auth/login` / `/auth/logout` | POST | ID/Password（§3.9）。`logout` は `gen` を進めて Cookie を消す。セッションが既に無効でも Cookie は消す |
 | `/auth/password` | POST | パスワード変更（ログイン済） |
 | `/auth/reset/request` / `/auth/reset` | POST / GET+POST | パスワード再設定の申請とリンク先（§3.9） |
 | `/auth/email` / `/auth/email/verify` | POST / GET | メールアドレスの登録・変更とメール認証リンク（§3.9） |
 | `/auth/google/start` / `/auth/google/callback` | POST / GET | OAuth（§3.10）。`start` が `state`・`nonce`・PKCE を Cookie に保存して Google へ転送、`callback` が検証して Cookie を発行。`popup=1` で callback が `window.opener` へ通知して閉じる |
-| `/auth/account` | GET / POST | アカウントメニュー（SSR ＋ island）: 種別・Lv・ユーザー ID（`uid`）、専ブラキー発行/失効、キャップ発行/失効、利用ログ、方式移行（`upgrade=1`）、ログアウト、退会 |
+| `/auth/account/` | GET / POST | 未ログインなら `/auth/?return=/auth/account/` へ 302。アカウントメニュー（SSR ＋ island）: 種別・Lv・ユーザー ID（`uid`）、専ブラキー発行/失効、キャップ発行/失効、利用ログ、方式移行（`upgrade=1`）、ログアウト、退会 |
 | `/auth/session` | GET | 現在のセッションの `{uid, lv}` を JSON で返す（`no-store`。§3.8 の予備経路とヘッダーの client 取得用） |
 | `/admin/*` | GET / POST / PUT | 管理画面（SPA）と `/admin/api/*`（§6.1、[管理画面 改修計画](admin-spa-auth-plan.md) §5・§6）。`__Host-ch3s_admin` と `Origin` 検証 |
 | 全ルート | — | `Accept-CH` 付与ミドルウェア（§3.7）。`app/routes/_middleware.ts` は手動管理（`docs/handler-rendering.md`） |
 
-島の一覧: `AuthForm`（Turnstile ウィジェット・方式選択・同意チェック・`verify` 呼び出し）、`AuthModal`、`AccountNav`、`AccountMenu`（キー発行の 1 回表示とコピー）。
+島の一覧: `AuthForm`（Turnstile ウィジェット・方式選択・同意チェック・`verify` 呼び出し）、`AuthModal`（認証を有効にした板トップにだけ置く）、`AccountNav`、`AccountMenu`（キー発行の 1 回表示とコピー）、`AccountLogout`。
+
+認証 API のルートは `GET /auth/session/` と `/auth/*` の POST だけで、画面（`/auth/`・`/auth/account/`）はファイルルートが描く。認証の設定が揃わない環境では、画面も API も認証導入前と同じ 404 を返す。
 
 `auth`・`admin` は板名として使えない（`PostRouting` の禁止板名に追加）。`/auth/*` の応答は `cache-control: no-store`、CSP（Turnstile の `challenges.cloudflare.com` と Google の必要オリジンだけ許可）、`X-Frame-Options` は付けず
 `frame-ancestors 'self'` でモーダル埋め込みを許す。`/auth.js` の固定スクリプトは現行のまま残す。
@@ -850,6 +853,8 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | 33 | UA が一致しない使用でキーを止めないこと（止めると、漏れたキーを他人が試すだけで正規の利用者が書けなくなる） | 止めない。記録と通知だけ |
 | 34 | ユーザー ID の決め方（トリップ・ID 廃止の指示「ID/Password・Google は登録したユーザー ID」）。ログイン ID を公開してよいか、Google 登録でユーザー ID を入力させること、移行でユーザー ID が変わること | **決定（2026-11-06 利用者）**: ID/Password はログイン ID をそのままユーザー ID にする。名前欄への表示は既定で出さず、本人が名前欄の !id（Web 版はユーザー ID 表示のチェックボックス）を付けた投稿だけに出す（develop の実装どおり）。Google は登録時に入力させる。移行では登録した ID に変わり、旧 ID は再利用させない |
 | 35 | 広域連投規制（FlyRibbon, FR）の有効・無効を何で決めるか（当初は `BBS_FR_SECOND` だけで決め、`BBS_FR_LEVEL` の数値は使っていなかった） | **決定（2026-11-06 利用者）**: `BBS_FR_LEVEL` が 1 以上のときだけ FR を有効にする。キー無しは既定 `1`。`0` と空は規制モードのまま FR だけを外す。不正値はキー無しと同じ。`log` は FR も判定して記録する。秒数は `BBS_FR_SECOND`（`0` なら判定しない、は併存） |
+| 36 | かんたん登録（クライアント ID）は Cookie だけで識別するので、ログアウトするとその端末から同じアカウントに戻れない | **決定（2026-11-07 利用者）**: 注意書きで足りる（ログアウトしたクライアント ID のアカウントは戻せない）。アカウント設定のログアウトの近くに「かんたん登録のアカウントは、ログアウトするとこの端末から戻せません」と出す |
+| 37 | Turnstile の検証応答の `action`・`cdata` を照合するか（現在は `success` と `hostname` だけを見る） | 照合しない。要確認 |
 
 ## 14. 不変条件への影響（承認が必要な点）
 
