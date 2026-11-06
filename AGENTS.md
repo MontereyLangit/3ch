@@ -45,7 +45,7 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 
 ### 1.3 技術スタック（現行 v6）
 
-- **ランタイム**: Cloudflare Workers (ES Modules, `compatibility_date: 2026-08-04`。この日付以降は `nodejs_compat` が既定で有効)
+- **ランタイム**: Cloudflare Workers (ES Modules, `compatibility_date: 2026-10-02`。`nodejs_compat` は既定で有効)
 - **言語 / フレームワーク**: Scala 3 / Scala.js（`bbs/` = Worker・DO・ハンドラ、`common/` = 純粋ロジック）+ scalajs-react + HonoX + Vite。`codegen` は `bbs.Main` の `@route` と `bbsclient.Main` の `@islands` から配線を生成。既存 fetch の `app/routes/index.ts` は手書き
   - 管理画面はscalajs-reactのSPA。利用者向け画面はHonoX SSR (Islands)
 - **状態管理**: Durable Objects — `Board`（板: スレ一覧 / 削除済み一覧）, `Thread`（スレ: dat / log / settings / hidden / stopped / movedTo）
