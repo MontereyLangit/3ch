@@ -20,6 +20,10 @@ class PostingSuite extends FunSuite {
 
   private final case class Posted(res: js.Dynamic, text: String)
 
+  /** 連投規制を外した板設定を置く。同じ投稿者が続けて書くテストで連投規制に当たらないようにする */
+  private def withoutPostRate(env: Env, bbs: String = "sample", settings: String = PostingText.settingTxtDefault): Unit =
+    env.putR2(s"$bbs/SETTING.TXT", settings + "BBS_FR_LEVEL=off\n")
+
   private def sjisPercentEncode(str: String): String =
     sjisBytes(str).map(b => "%" + f"$b%02X").mkString
 
@@ -156,6 +160,7 @@ class PostingSuite extends FunSuite {
   )) {
     test(s"スレ立て規制: 同一$label を拒否し返信は許可する") {
       val env = DurableTestKit.newEnv()
+      withoutPostRate(env)
       for {
         first <- atSecond(1700000000d)(post(env, Seq("subject" -> "original")))
         rejected <- atSecond(1700000001d)(post(env, Seq("subject" -> (if (sameTitle) "original" else "different")), secondHeaders, secondCf))
@@ -241,7 +246,7 @@ class PostingSuite extends FunSuite {
 
   test("スレ立て規制: RESET経過後は同一IPとUAでも再度作成できる") {
     val env = DurableTestKit.newEnv()
-    env.putR2("sample/SETTING.TXT", "BBS_THREAD_TATESUGI_RESET=2\nBBS_THREAD_JUNBAN_RESET=2\n")
+    withoutPostRate(env, settings = "BBS_THREAD_TATESUGI_RESET=2\nBBS_THREAD_JUNBAN_RESET=2\n")
     for {
       first <- atSecond(1700000000d)(post(env))
       next <- atSecond(1700000003d)(post(env))
@@ -299,9 +304,10 @@ class PostingSuite extends FunSuite {
 
   test("スレ立て規制: 設定不正は作成を拒否するが既存スレへの返信は妨げない") {
     val env = DurableTestKit.newEnv()
+    withoutPostRate(env)
     for {
       first <- atSecond(1700000000d)(post(env))
-      _ = env.putR2("sample/SETTING.TXT", "BBS_THREAD_TATESUGI=invalid\n")
+      _ = withoutPostRate(env, settings = "BBS_THREAD_TATESUGI=invalid\n")
       next <- atSecond(1700000001d)(post(env))
       reply <- atSecond(1700000002d)(post(env, Seq("key" -> threadKey(first))))
     } yield {
@@ -312,7 +318,7 @@ class PostingSuite extends FunSuite {
 
   test("スレ立て規制: 設定キーの前後空白は管理画面と同じく無視する") {
     val env = DurableTestKit.newEnv()
-    env.putR2("sample/SETTING.TXT", " BBS_THREAD_TATESUGI =0\n BBS_THREAD_JUNBAN =0\n")
+    withoutPostRate(env, settings = " BBS_THREAD_TATESUGI =0\n BBS_THREAD_JUNBAN =0\n")
     for {
       first <- atSecond(1700000000d)(post(env))
       next <- atSecond(1700000001d)(post(env))
@@ -496,6 +502,7 @@ class PostingSuite extends FunSuite {
     // 改行の欠落も検知できるようにする。
     withFixedTime(1700000000d * 1000) {
       val env = DurableTestKit.newEnv()
+      withoutPostRate(env)
       for {
         p1 <- post(env, Seq("subject" -> "たておき2"))
         key = threadKey(p1)
@@ -617,6 +624,7 @@ class PostingSuite extends FunSuite {
 
   test("checkFieldSize: 行数チェックは>>2以降のみ適用される (BBS_LINE_NUMBER=30のとき<br>分割数60まで許可)") {
     val env = DurableTestKit.newEnv()
+    withoutPostRate(env)
     val ok = (0 until 60).map(i => s"l$i").mkString("\n") // 59個の<br> -> split長60
     val bad = (0 until 61).map(i => s"l$i").mkString("\n") // 60個の<br> -> split長61
     for {
@@ -846,7 +854,8 @@ class PostingSuite extends FunSuite {
   private def replyName(env: Env, create: Seq[(String, String)] = Nil, createHeaders: Seq[(String, String)] = Nil,
                         createUser: Option[PostingUser] = None, before: String => Future[Unit] = _ => Future.unit,
                         reply: Seq[(String, String)] = Nil, replyHeaders: Seq[(String, String)] = Nil, replyCf: Seq[(String, String)] = Nil,
-                        replyUser: Option[PostingUser] = None): Future[String] =
+                        replyUser: Option[PostingUser] = None): Future[String] = {
+    withoutPostRate(env)
     for {
       p1 <- post(env, merge(Seq("subject" -> "nusi"), create), createHeaders, user = createUser)
       key = threadKey(p1)
@@ -855,6 +864,7 @@ class PostingSuite extends FunSuite {
       _ = assertEquals(errorMessage(p2.text), None)
       d <- dat(env, "sample", key)
     } yield nameOf(d, 2)
+  }
 
   test("!id: 未認証では取り除くだけで何も付けない") {
     fixed(firstRow(DurableTestKit.newEnv(), "FROM" -> "名前 !id", "subject" -> "idcmd1")).map { fields =>
@@ -962,7 +972,7 @@ class PostingSuite extends FunSuite {
 
   test("主: 板のBBS_DISABLE_NUSI=checkedなら付かない（スレ設定が空でも板設定を見る）") {
     val env = DurableTestKit.newEnv()
-    fixed(replyName(env, before = _ => Future.successful(env.putR2("sample/SETTING.TXT", "BBS_DISABLE_NUSI=checked\n")))).map { name =>
+    fixed(replyName(env, before = _ => Future.successful(withoutPostRate(env, settings = "BBS_DISABLE_NUSI=checked\n")))).map { name =>
       assert(!name.contains("(主)"), name)
     }
   }
@@ -1157,6 +1167,7 @@ class PostingSuite extends FunSuite {
 
   test("全板共通スレ: 900スレは誰でも書き込め、どの板のURLから投稿しても板924のスレに追記される") {
     val env = DurableTestKit.newEnv()
+    withoutPostRate(env, bbs = "924")
     env.putCap("weakpass", "キャップ")
     for {
       created <- atSecond(1700000000d)(post(env, Seq("subject" -> "共通スレ", "mail" -> "#!weakpass", "MESSAGE" -> "!900 本文")))
@@ -1189,6 +1200,7 @@ class PostingSuite extends FunSuite {
 
   test("既知の不具合: dat行数が1000以上で拒否されるため実質999レスで書き込み不能になる") {
     val env = DurableTestKit.newEnv()
+    withoutPostRate(env)
     def loop(key: String, i: Int, last: Option[String]): Future[(Option[String], Option[String])] =
       if i > 1001 then Future.successful((last, None))
       else post(env, Seq("key" -> key, "subject" -> "", "MESSAGE" -> s"res$i")).flatMap { p =>
@@ -1233,7 +1245,7 @@ class PostingSuite extends FunSuite {
 
   test("updateSubback: onlyIf.etagMatchesの競合注入時は実際にエラーになる（コンディショナルputが機能していることの検証）") {
     val env = DurableTestKit.newEnv()
-    env.putR2("sample/SETTING.TXT", "BBS_THREAD_TATESUGI=0\nBBS_THREAD_JUNBAN=0\n")
+    withoutPostRate(env, settings = "BBS_THREAD_TATESUGI=0\nBBS_THREAD_JUNBAN=0\n")
     for {
       // 1本目のスレ立て。同一4桁key帯のsubbackFileが作成される。
       p1 <- post(env, Seq("subject" -> "conflict1"))
@@ -1343,7 +1355,7 @@ class PostingSuite extends FunSuite {
 
   test("boardSettings: 板のBBS_MAX_MENU_THREADがsubjectの最大スレッド数に効く") {
     val env = DurableTestKit.newEnv()
-    env.putR2("maxtest/SETTING.TXT", "BBS_MAX_MENU_THREAD=2\nBBS_THREAD_TATESUGI=0\nBBS_THREAD_JUNBAN=0\n")
+    withoutPostRate(env, "maxtest", "BBS_MAX_MENU_THREAD=2\nBBS_THREAD_TATESUGI=0\nBBS_THREAD_JUNBAN=0\n")
     def create(ms: Double, subject: String): Future[Posted] =
       withFixedTime(ms * 1000)(post(env, Seq("bbs" -> "maxtest", "subject" -> subject)))
     for {
@@ -1370,10 +1382,10 @@ class PostingSuite extends FunSuite {
 
   test("threadSettings: 返信時はスレ初期設定を板設定と同じ規則で読む（値の = を保持）") {
     val env = DurableTestKit.newEnv()
-    env.putR2("eqtest/SETTING.TXT", "BBS_NONAME_NAME=a=b\n")
+    withoutPostRate(env, "eqtest", "BBS_NONAME_NAME=a=b\n")
     for {
       p <- post(env, Seq("bbs" -> "eqtest", "FROM" -> "", "subject" -> "EQ"))
-      _ = env.putR2("eqtest/SETTING.TXT", "BBS_NONAME_NAME=板側\n")
+      _ = withoutPostRate(env, "eqtest", "BBS_NONAME_NAME=板側\n")
       r <- post(env, Seq("bbs" -> "eqtest", "key" -> threadKey(p), "FROM" -> "", "subject" -> ""))
       d <- dat(env, "eqtest", threadKey(p))
     } yield {

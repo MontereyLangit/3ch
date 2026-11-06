@@ -68,7 +68,8 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   for (const bbs of ['sandbox', 'destination']) assert.equal((await save(`/admin/board?bbs=${bbs}`, {
     action: 'save',
     head: '<b>rules</b>',
-    settings: `BBS_TITLE=${bbs}\nBBS_NONAME_NAME=名無し`
+    // 同じ IP から続けて投稿するので連投規制を外す
+    settings: `BBS_TITLE=${bbs}\nBBS_NONAME_NAME=名無し\nBBS_FR_LEVEL=off`
   })).status, 303);
   assert.match(await publicText('/sandbox/head.txt'), /<b>rules<\/b>/);
   assert.match(await publicText('/sandbox/SETTING.TXT'), /BBS_TITLE=sandbox/);
