@@ -1,7 +1,7 @@
 package io._3ch.bbs.handler
 
 import io._3ch.bbs.application.posting.{PostingOutcome, PostingPorts, PostingRequest, PostingService}
-import io._3ch.bbs.application.posting.ports.{Clock, Random}
+import io._3ch.bbs.application.posting.ports.{Clock, PostRateLog, Random}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.hash.WebHasher
@@ -23,7 +23,8 @@ object Posting {
       users = () => resolveUser(request, env),
       hasher = WebHasher,
       clock = Clock.system,
-      random = Random.system
+      random = Random.system,
+      rateLog = PostRateLog.console
     )
     new PostingService(ports, String.valueOf(env.salt)).post(PostingRequest.from(request)).map(respond).toJSPromise
   }
@@ -32,8 +33,8 @@ object Posting {
     val context = outcome.context
     val charset = if (context.form.isSJIS) "Shift_JIS" else "UTF-8"
     val posted = outcome match {
-      case PostingOutcome.Posted(_, _) => Seq("x-threadkey" -> context.form.key, "x-resnum" -> context.number.toString)
-      case _ => Nil
+      case PostingOutcome.Rejected(_, _, _) => Nil
+      case _ => Seq("x-threadkey" -> context.form.key, "x-resnum" -> context.number.toString)
     }
     RendererShell.legacyReact(PostingPages.render(outcome, charset), encoding = charset, extra = outcome.headers ++ posted)
   }

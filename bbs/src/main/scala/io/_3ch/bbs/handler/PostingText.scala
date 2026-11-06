@@ -1,7 +1,7 @@
 package io._3ch.bbs.handler
 
 import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureSite, ModerationDenial, PostField, PostingError, PostingStage}
-import io._3ch.bbs.domain.posting.moderation.{ThreadCreationRejection, ThreadCreationSettingError}
+import io._3ch.bbs.domain.posting.moderation.{PostRateRejection, ThreadCreationRejection, ThreadCreationSettingError}
 import io._3ch.common.domain.posting.ThreadWriteRejection
 
 /** 投稿処理の既定の板設定と、拒否理由の文言 */
@@ -86,6 +86,9 @@ object PostingText {
     case PostingError.InvalidCreationSettings(reason) => creationSettingsMessage(reason)
     case PostingError.ThreadCreation(ThreadCreationRejection.Broad(_)) => threadCreationBroad
     case PostingError.ThreadCreation(_) => threadCreationNarrow
+    case PostingError.PostRate(PostRateRejection.Gontakure) => "連続投稿ですか？？ しばらく待ってから投稿してください。"
+    case PostingError.PostRate(PostRateRejection.Samba24(seconds)) => s"Samba24 で規制中です。(あと $seconds 秒) しばらく待ってから投稿してください。"
+    case PostingError.PostRate(PostRateRejection.ThreadRentou) => "このスレッドへの連続投稿が多すぎます。しばらく待ってから投稿してください。"
     case PostingError.ArchiveConflict(target, site) =>
       s"updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(${site.clock.label}:${site.time} bbs:${site.bbs} key:${site.key} number:${site.number} errmsg:updateSubback->${target}_update_conflicted!)"
     case PostingError.ThreadRefused(rejection, site) => internal(PostingStage.ThreadWrite, site, "Error: " + threadWriteMessage(rejection))

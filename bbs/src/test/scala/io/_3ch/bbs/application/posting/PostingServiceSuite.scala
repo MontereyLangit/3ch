@@ -1,8 +1,9 @@
 package io._3ch.bbs.application.posting
 
-import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore}
+import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore}
 import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureClock, FailureSite, ModerationDenial, PostingError, PostingStage, PostingUser, ThreadOwner, ThreadPosting, ThreadWriteResult}
-import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, ThreadCreationRejection, ThreadCreationRateLimit}
+import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, PostRateFinding, PostRateIdentity, PostRateMode, PostRateRejection, ThreadCreationRejection, ThreadCreationRateLimit}
+import io._3ch.bbs.handler.PostingText
 import io._3ch.bbs.external.web.TextEncoder
 import io._3ch.common.domain.{BbsSettings, BoardId}
 import io._3ch.common.domain.posting.CapHandle
@@ -37,6 +38,7 @@ class PostingServiceSuite extends FunSuite {
     val postings: mutable.Buffer[(String, String, ThreadPosting)] = mutable.Buffer.empty
     val writes: mutable.Buffer[(String, String)] = mutable.Buffer.empty
     val md5Inputs: mutable.Buffer[String] = mutable.Buffer.empty
+    val observations: mutable.Buffer[PostRateObservation] = mutable.Buffer.empty
     private def called[A](name: String)(value: => A): Future[A] = { calls += name; Future(value) }
 
     val ports: PostingPorts = PostingPorts(
@@ -87,6 +89,9 @@ class PostingServiceSuite extends FunSuite {
       },
       random = new Random {
         def next(): Double = { calls += "random"; roll }
+      },
+      rateLog = new PostRateLog {
+        def record(observation: PostRateObservation): Unit = observations += observation
       }
     )
 
@@ -312,6 +317,94 @@ class PostingServiceSuite extends FunSuite {
       assertEquals(negativeZero, Seq("Mozilla/5.0 (Test)sample-Infinitym(salt)"))
       assertEquals(negativeZero, underflow)
       assertNotEquals(negativeZero, positive)
+    }
+  }
+
+  test("連投規制の材料は識別子の後に作り、IP と識別子をハッシュにして addRes に渡す") {
+    val fake = Fake(boardSettings = "BBS_TITLE=看板\nBBS_SAMBA24=30\ntimecount=5\n")
+    fake.post(reply()*)().map { outcome =>
+      val check = fake.postings.head._3.rateLimit.getOrElse(fail("rateLimit が無い"))
+      assertEquals(check.mode, PostRateMode.Log)
+      assertEquals(check.identity, PostRateIdentity(s"s2(192.0.2.1:$salt)", s"s2(${outcome.context.shikibetsu}:$salt)", ""))
+      assertEquals((check.board.timecount, check.board.timeclose, check.board.samba24), (5, 10, 30))
+      assertEquals((check.thread.count, check.thread.resetSeconds), (40, 3600d))
+      assert(outcome.isInstanceOf[PostingOutcome.Posted], outcome.toString)
+    }
+  }
+
+  test("認証済の投稿者は aid を照合値にする") {
+    val fake = Fake(user = Some(PostingUser("account", "alice")))
+    fake.post()().map(_ => assertEquals(fake.postings.head._3.rateLimit.map(_.identity.aid), Some(s"s2(account:$salt)")))
+  }
+
+  test("板単位の件数と秒数は板設定だけ、スレ単位はスレ設定を優先して読む") {
+    val fake = Fake(boardSettings = "BBS_SAMBA24=20\nBBS_THREAD_RENTOU=3\n", threadSettings = "BBS_SAMBA24=0<>timecount=1<>BBS_THREAD_RENTOU=7<>")
+    fake.post(reply()*)().map { _ =>
+      val check = fake.postings.head._3.rateLimit.get
+      assertEquals((check.board.samba24, check.board.timecount, check.thread.count), (20, 18, 7))
+    }
+  }
+
+  test("不正な設定は拒否せず既定値で判定する") {
+    val fake = Fake(boardSettings = "BBS_SAMBA24=abc\ntimecount=-3\nBBS_RENTOU_MODE=yes\nBBS_RENTOU_KEYS=id\n")
+    fake.post()().map { outcome =>
+      assert(outcome.isInstanceOf[PostingOutcome.Posted], outcome.toString)
+      val check = fake.postings.head._3.rateLimit.get
+      assertEquals((check.mode, check.board.samba24, check.board.timecount), (PostRateMode.Log, 10, 18))
+    }
+  }
+
+  test("off・BBS_LIVE・キャップは連投規制を判定しない") {
+    val cases = Seq(
+      Fake(boardSettings = "BBS_RENTOU_MODE=off\n") -> Seq.empty[(String, String)],
+      Fake(boardSettings = "BBS_LIVE=checked\n") -> Seq.empty[(String, String)],
+      Fake(boardSettings = "BBS_LIVE=1\n") -> Seq.empty[(String, String)],
+      Fake(caps = Map("pass" -> "管理人")) -> Seq("mail" -> "#!pass"),
+      Fake(boardSettings = "BBS_RENTOU_PASS=login\n", user = Some(PostingUser("account", "alice"))) -> Seq.empty[(String, String)])
+    Future.traverse(cases) { case (fake, fields) => fake.post(fields*)().map(_ => fake.postings.head._3.rateLimit) }
+      .map(results => assertEquals(results, Seq.fill(cases.size)(None)))
+  }
+
+  test("スレ立て時のスレ設定に連投規制の新しいキーを書き写さない") {
+    val fake = Fake(boardSettings = "BBS_TITLE=看板\nBBS_SAMBA24=5\nBBS_RENTOU_MODE=on\ntimecount=3\n")
+    fake.post()().map(_ => assertEquals(fake.postings.head._3.initialSettings, Some("BBS_TITLE=看板<>timecount=3<>BBS_SHIKIBETSU=off<>")))
+  }
+
+  test("連投規制の拒否は PostRate にし、文言は待ち秒数を出し、過去ログ目次と headline を書かない") {
+    val fake = Fake(write = _ => Future.successful(ThreadWriteResult.RateLimited(PostRateRejection.Samba24(7))))
+    fake.post(reply()*)().map { outcome =>
+      val r = rejected(outcome)
+      assertEquals(r.error, PostingError.PostRate(PostRateRejection.Samba24(7)))
+      assertEquals(r.error.code, "post-rate:board:samba24:7")
+      assertEquals(PostingText.message(r.error), "Samba24 で規制中です。(あと 7 秒) しばらく待ってから投稿してください。")
+      assertEquals(PostingText.message(PostingError.PostRate(PostRateRejection.Gontakure)), "連続投稿ですか？？ しばらく待ってから投稿してください。")
+      assertEquals(PostingText.message(PostingError.PostRate(PostRateRejection.ThreadRentou)), "このスレッドへの連続投稿が多すぎます。しばらく待ってから投稿してください。")
+      assertEquals(r.headers, Seq("Set-Cookie" -> pon))
+      assert(!fake.calls.exists(_.startsWith("archive")))
+    }
+  }
+
+  test("試行モードの判定は拒否せずに書き、ハッシュ済みの値だけを記録する") {
+    val findings = Seq(PostRateFinding.Rejected(PostRateRejection.Gontakure), PostRateFinding.Copipe)
+    val fake = Fake(write = _ => Future.successful(ThreadWriteResult.Written(2, findings)))
+    fake.post(reply()*)().map { outcome =>
+      assert(outcome.isInstanceOf[PostingOutcome.Posted], outcome.toString)
+      assertEquals(fake.observations.toList, List(PostRateObservation("sample", "1699990000", 2, findings, s"s2(192.0.2.1:$salt)", s"s2(${outcome.context.shikibetsu}:$salt)")))
+      assert(fake.calls.contains("archive.writeHeadline"))
+    }
+  }
+
+  test("吸い込みは成功として採番予定の番号を返し、headline を書かない") {
+    val fake = Fake(write = _ => Future.successful(ThreadWriteResult.Swallowed(2)))
+    fake.post(reply()*)().map { outcome =>
+      outcome match {
+        case PostingOutcome.Swallowed(context, headers) =>
+          assertEquals(context.number, 2)
+          assertEquals(headers, Seq("Set-Cookie" -> pon))
+        case other => fail(s"吸い込まなかった: $other")
+      }
+      assert(!fake.calls.exists(_.startsWith("archive")))
+      assertEquals(fake.observations.toList, Nil)
     }
   }
 }

@@ -1,8 +1,8 @@
 package io._3ch.bbs.application.posting
 
-import io._3ch.bbs.application.posting.ports.ArchiveIndexFile
+import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, PostRateObservation}
 import io._3ch.bbs.domain.posting.{ClientIdentity, FailureClock, FailureSite, GlobalThread, KeyIp, NusiMark, PostFormLimits, PostRouting, PostingContext, PostingError, PostingIdentity, PostingStage, PostingUser, ReplyThread, ThreadOwner, ThreadPosting, ThreadWriteResult}
-import io._3ch.bbs.domain.posting.moderation.{ModerationDecision, ModerationInput, ModerationService, ThreadCreationLimit, ThreadCreationNetwork, ThreadCreationRequest, ThreadCreationSettings}
+import io._3ch.bbs.domain.posting.moderation.{ModerationDecision, ModerationInput, ModerationService, PostRateCheck, PostRateIdentity, PostRateSettings, ThreadCreationLimit, ThreadCreationNetwork, ThreadCreationRequest, ThreadCreationSettings}
 import io._3ch.bbs.external.web.URL
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
 import io._3ch.common.domain.identity.{DateSalt, ShikibetsuFormat, ShikibetsuMode, ShikibetsuSeeds}
@@ -38,10 +38,14 @@ final class PostingService(ports: PostingPorts, salt: String) {
       named <- makeShikibetsu(sized, user)
       (marked, owner) <- markNusi(named, user, board.settings)
       decided = marked.copy(sage = SageRule.sage(marked.number, marked.form.mail, marked.form.key, marked.unixtime, marked.settings, ports.random.next()))
-      written <- updateThread(decided, board, creationLimit, owner, userInfo)
-      _ <- updateSubback(written)
-      _ <- updateHeadline(written)
-    } yield PostingOutcome.Posted(written, headers(written))).recover {
+      rateLimit <- postRateCheck(decided, board.settings, user, request)
+      (written, swallowed) <- updateThread(decided, board, creationLimit, owner, rateLimit, userInfo)
+      outcome <- if (swallowed) Future.successful(PostingOutcome.Swallowed(written, headers(written)))
+        else for {
+          _ <- updateSubback(written)
+          _ <- updateHeadline(written)
+        } yield PostingOutcome.Posted(written, headers(written))
+    } yield outcome).recover {
       case Rejected(error, context) => PostingOutcome.Rejected(error, context, headers(context))
     }
 
@@ -166,8 +170,20 @@ final class PostingService(ports: PostingPorts, salt: String) {
       }
     }
 
+  /** 連投規制の材料。判定しない投稿（off・BBS_LIVE・回避レベルで免除）は None。aid は認証主体の accountKey（未認証は空） */
+  private def postRateCheck(context: PostingContext, boardSettings: BbsSettings, user: Option[PostingUser], request: PostingRequest): Future[Option[PostRateCheck]] = {
+    val settings = PostRateSettings.from(boardSettings, context.settings)
+    if (!settings.applies(context.cap.isDefined, user.isDefined)) Future.successful(None)
+    else for {
+      ip <- digest(context, canonicalIp(request.connectingIp.getOrElse("")))
+      shiki <- digest(context, context.shikibetsu)
+      aid <- digest(context, user.fold("")(_.accountKey))
+    } yield Some(PostRateCheck(settings.mode, PostRateIdentity(ip, shiki, aid), settings.board, settings.thread))
+  }
+
+  /** dat に追記する。連投規制のコピペで吸い込んだら真を返す */
   private def updateThread(context: PostingContext, board: PostingBoard, creationLimit: Option[ThreadCreationLimit], owner: Option[ThreadOwner],
-                           userInfo: UserInfo): Future[PostingContext] = {
+                           rateLimit: Option[PostRateCheck], userInfo: UserInfo): Future[(PostingContext, Boolean)] = {
     val spaced = context.copy(form = context.form.copy(message = DatLineFormatter.spaceFirstBreak(context.form.message)))
     guarded(spaced, PostingStage.ThreadWrite, FailureClock.Unixtime) {
       val form = spaced.form
@@ -175,11 +191,18 @@ final class PostingService(ports: PostingPorts, salt: String) {
       val dat = DatLineFormatter.datLine(form.name, ports.clock.datDate(JsNumber.parseInt(spaced.unixtime)), form.message, if (create) spaced.title else "")
       val posting = ThreadPosting(bbs = Some(form.bbs), key = Some(form.key), title = Some(spaced.title), sage = spaced.sage,
         maxThreads = Some(spaced.settings.int("BBS_MAX_MENU_THREAD", "700")), create = create,
-        initialSettings = Option.when(create)(spaced.settings.toThreadSettings), creationLimit = creationLimit, owner = owner)
+        initialSettings = Option.when(create)(PostRateSettings.copiedToThread(spaced.settings).toThreadSettings), creationLimit = creationLimit, owner = owner,
+        rateLimit = rateLimit)
       ports.threads.addRes(board.id, form.key, dat, DatLineFormatter.logLine(spaced.number.toString, userInfo.text), posting).map {
-        case ThreadWriteResult.Written(number) => spaced.copy(number = number)
+        case ThreadWriteResult.Written(number, observed) =>
+          rateLimit.filter(_ => observed.nonEmpty).foreach { check =>
+            ports.rateLog.record(PostRateObservation(form.bbs, form.key, number, observed, check.identity.ip, check.identity.shiki))
+          }
+          (spaced.copy(number = number), false)
+        case ThreadWriteResult.Swallowed(number) => (spaced.copy(number = number), true)
         case ThreadWriteResult.Refused(rejection) => reject(PostingError.ThreadRefused(rejection, site(spaced, FailureClock.Unixtime, spaced.time)), spaced)
         case ThreadWriteResult.CreationLimited(rejection) => reject(PostingError.ThreadCreation(rejection), spaced)
+        case ThreadWriteResult.RateLimited(rejection) => reject(PostingError.PostRate(rejection), spaced)
       }
     }
   }
@@ -255,7 +278,7 @@ object PostingService {
   private def ponCookie(pon: String, monazilla: Boolean): String =
     s"PON=$pon; Max-Age=63072000; path=/; ${if (!monazilla) "Secure;" else ""} HttpOnly"
 
-  /** スレ立て規制に使う IP。IPv6 は URL の hostname で正規化する */
+  /** スレ立て規制と連投規制に使う IP。IPv6 は URL の hostname で正規化する */
   private def canonicalIp(ip: String): String =
     if (ip.contains(":")) Try(new URL(s"http://[$ip]/").hostname).getOrElse(ip.toLowerCase) else ip
 }

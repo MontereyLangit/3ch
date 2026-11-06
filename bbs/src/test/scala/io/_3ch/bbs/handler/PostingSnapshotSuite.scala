@@ -156,6 +156,10 @@ class PostingSnapshotSuite extends FunSuite {
   private val Alice = Some(PostingUser("aid1", "alice"))
   private val OtherClient = Seq("CF-Connecting-IP" -> "192.0.2.77", "user-agent" -> "Mozilla/5.0 (OtherBrowser)")
 
+  /** 準備として at 秒に ExistingKey へ返信する（連投規制の履歴作り） */
+  private def priorReply(at: Double, headers: Seq[(String, String)] = Nil, fields: Seq[(String, String)] = Nil): Env => Future[Unit] =
+    priorPost(at, Case("prior", fields = merge(ReplyFields, fields), headers = headers))
+
   /** 準備としてスレ ExistingKey を投稿処理で立てる（スレ主情報を残す） */
   private def ownThread(headers: Seq[(String, String)] = Nil, user: Option[PostingUser] = None): Env => Future[Unit] =
     priorPost(Now - 10000, Case("prior", headers = headers, user = user))
@@ -384,6 +388,16 @@ class PostingSnapshotSuite extends FunSuite {
     create("error-creation-invalid-as-only", _.copy(setup = boardSetting("BBS_THREAD_JUNBAN_AS_ONLY=AS0\n"))),
     create("error-creation-value-with-equals", _.copy(setup = boardSetting("BBS_THREAD_TATESUGI=0=invalid\n"))),
     create("error-creation-spaced-keys", c => c.copy(setup = all(boardSetting(" BBS_THREAD_TATESUGI = 0\n BBS_THREAD_JUNBAN =0\n"), priorPost(Now - 1, Case("prior"))))),
+    // 連投規制（BBS_RENTOU_MODE=on）。既定の log は既存のケースのとおり拒否しない
+    reply("error-post-rate-samba24", _.copy(setup = all(existing(), boardSetting("BBS_RENTOU_MODE=on\n"), priorReply(Now - 3)))),
+    reply("error-post-rate-gontakure", _.copy(setup = all(existing(), boardSetting("BBS_RENTOU_MODE=on\nBBS_SAMBA24=0\ntimeclose=1\n"), priorReply(Now - 100)))),
+    reply("error-post-rate-thread", _.copy(setup = all(existing(), boardSetting("BBS_RENTOU_MODE=on\nBBS_SAMBA24=0\nBBS_THREAD_RENTOU=1\n"), priorReply(Now - 100)))),
+    reply("reply-post-rate-copipe-swallowed", _.copy(setup = all(existing(), boardSetting("BBS_RENTOU_MODE=on\n"), priorReply(Now - 100, OtherClient)))),
+    reply("reply-post-rate-copipe-log", _.copy(setup = all(existing(), priorReply(Now - 100, OtherClient)))),
+    reply("reply-post-rate-samba24-log", _.copy(setup = all(existing(), priorReply(Now - 3, fields = Seq("MESSAGE" -> "前の本文"))))),
+    reply("reply-post-rate-live", _.copy(setup = all(existing(), boardSetting("BBS_RENTOU_MODE=on\nBBS_LIVE=checked\n"), priorReply(Now - 3, fields = Seq("MESSAGE" -> "前の本文"))))),
+    reply("reply-post-rate-cap", c => withFields(c.copy(setup = all(existing(), caps, boardSetting("BBS_RENTOU_MODE=on\n"),
+      priorReply(Now - 3, fields = Seq("MESSAGE" -> "前の本文", "mail" -> "#!weakpass")))), "mail" -> "#!weakpass")),
     // エラー: 内部エラー
     create("error-internal-board-settings", _.copy(setup = all(boardSetting("BBS_TITLE=x\n"), failR2Get("sample/SETTING.TXT")))),
     create("error-internal-thread-read-create", _.copy(setup = failThread("getDat", "getDat failed"))),
