@@ -13,6 +13,7 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 import scala.util.Try
+import scala.util.control.NonFatal
 
 /** bbs.cgi の書き込み。段の並びはこのクラスの post だけで決まる。salt は投稿者の照合値に混ぜる秘密の値 */
 final class PostingService(ports: PostingPorts, salt: String) {
@@ -27,24 +28,34 @@ final class PostingService(ports: PostingPorts, salt: String) {
       _ = GlobalThread.postingError(capped.form.key, capped.form.kind == PostKind.NewThread, capped.cap.isDefined).foreach(reject(_, capped))
       (board, boardRead) <- boardSettings(capped)
       threadRead <- threadSettings(boardRead, board)
-      identified <- identify(threadRead)
-      user <- ports.users.current()
-      userInfo = UserInfo("", identified.identity.host, identified.identity.asn, identified.identity.country, identified.identity.region,
-        identified.identity.city, identified.identity.deviceInfo, identified.identity.userAgent)
+      identifiedRaw <- identify(threadRead)
+      authenticated <- ports.users.authenticate(if (ports.users.configured) identifiedRaw.authMail else identifiedRaw.form.mail, identifiedRaw.capKey, request, identifiedRaw.unixtime.toDouble)
+      account = authenticated.fold(reason => reject(PostingError.Authentication(reason), identifiedRaw), identity)
+      identified = identifiedRaw.copy(authHeaders = account.headers)
+      user = account.user
+      _ = if (ports.users.configured && !account.legacyCap && user.isEmpty && (!request.isMonazilla || identified.authMail.contains("!auth"))) reject(PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.LoginRequired), identified)
+      required = identified.settings.get("BBS_PHOEBE").flatMap(_.toIntOption).getOrElse(0)
+      _ = if (ports.users.configured && !account.legacyCap && account.lv < required) {
+        if (user.isEmpty) reject(PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.LoginRequired), identified)
+        else reject(PostingError.AuthenticationLevel(required), identified)
+      }
+      userInfo = UserInfo(if (ports.users.configured) user.fold("")(_.displayId) else "", identified.identity.host, identified.identity.asn, identified.identity.country, identified.identity.region,
+        identified.identity.city, if (ports.users.configured) account.device else identified.identity.deviceInfo, identified.identity.userAgent)
       moderated <- moderate(identified, userInfo)
       sized = PostFormLimits.check(moderated.form, moderated.settings, moderated.number, moderated.cap.exists(_.strong))
-        .fold(reject(_, moderated), form => moderated.copy(form = form))
+        .fold(reject(_, moderated), form => moderated.copy(form = if (ports.users.configured) form.copy(mail = form.mail.replaceAll("!#[^\\s]*|#[^\\s]*|!auth", "")) else form))
       creationLimit <- threadCreationLimit(sized, request, board.settings)
       named <- makeShikibetsu(sized, user)
       (marked, owner) <- markNusi(named, user, board.settings)
       decided = marked.copy(sage = SageRule.sage(marked.number, marked.form.mail, marked.form.key, marked.unixtime, marked.settings, ports.random.next()))
       rateLimit <- postRateCheck(decided, board.settings, user, request)
       (written, swallowed) <- updateThread(decided, board, creationLimit, owner, rateLimit, userInfo)
+      recorded <- if (swallowed) Future.successful(written) else Future.unit.flatMap(_ => ports.users.posted(written, request, account)).recover { case NonFatal(error) => Try(ports.users.recordFailed(error)); Nil }.map(extra => written.copy(authHeaders = written.authHeaders ++ extra))
       outcome <- if (swallowed) Future.successful(PostingOutcome.Swallowed(written, headers(written)))
         else for {
-          _ <- updateSubback(written)
-          _ <- updateHeadline(written)
-        } yield PostingOutcome.Posted(written, headers(written))
+          _ <- updateSubback(recorded)
+          _ <- updateHeadline(recorded)
+        } yield PostingOutcome.Posted(recorded, headers(recorded))
     } yield outcome).recover {
       case Rejected(error, context) => PostingOutcome.Rejected(error, context, headers(context))
     }
@@ -56,7 +67,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
     PostingContext(PostForm(), identity, time = now.toString, unixtime = math.floor(now / 1000).toString)
   }
 
-  private def headers(context: PostingContext): Seq[(String, String)] = context.ponCookie.map("Set-Cookie" -> _).toSeq
+  private def headers(context: PostingContext): Seq[(String, String)] = context.ponCookie.map("Set-Cookie" -> _).toSeq ++ context.authHeaders
 
   private def checkRequest(context: PostingContext, request: PostingRequest): Future[PostingContext] = Future {
     request.validate.foreach(reject(_, context))
@@ -65,18 +76,18 @@ final class PostingService(ports: PostingPorts, salt: String) {
 
   private def readForm(context: PostingContext, request: PostingRequest): Future[PostingContext] = request.body().map { bytes =>
     PostingFormDecoder.decode(bytes, request.isMonazilla).flatMap(PostRouting.route(_, context.unixtime)) match {
-      case Left((error, form)) => reject(error, context.copy(form = form))
-      case Right(form) => context.copy(form = form)
+      case Left((error, form)) => reject(error, context.copy(form = if (ports.users.configured) form.copy(mail = form.mail.replaceAll("!#[^\\s]*|#[^\\s]*|!auth", "")) else form))
+      case Right(form) => if (ports.users.configured) context.copy(form = form.copy(mail = form.mail.replaceAll("!#[^\\s]*|#[^\\s]*|!auth", "")), authMail = form.mail) else context.copy(form = form)
     }
   }
 
-  private def processCap(context: PostingContext): Future[PostingContext] = CapHandle.password(context.form.mail) match {
+  private def processCap(context: PostingContext): Future[PostingContext] = CapHandle.password(if (ports.users.configured) context.authMail.replaceAll("!#[^\\s]*", "") else context.form.mail) match {
     case None => Future.successful(context)
     case Some(password) =>
       val hasher = ports.hasher
       val key = if (password.startsWith("!")) Future.successful(password.drop(1)) else hasher.sha256Hex(hasher.md5(password) + context.identity.salt).flatMap(hasher.sha1Base64)
-      key.flatMap(ports.caps.find).map { cap =>
-        context.copy(cap = cap, form = cap.fold(context.form)(handle => context.form.copy(name = handle.displayName(context.form.name))))
+      key.flatMap(value => ports.caps.find(value).map(cap => (value, cap))).map { case (value, cap) =>
+        context.copy(cap = cap, capKey = Option.when(cap.isDefined)(value), form = cap.fold(context.form)(handle => context.form.copy(name = handle.displayName(context.form.name))))
       }
   }
 

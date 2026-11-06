@@ -4,7 +4,7 @@
 （リポジトリ外の `ninja_auth_system.md` 系。要点は §3.7 に転記）、および新 UI（`develop` に統合済みの板トップ。PR #37。
 `docs/ui/板top_書き込み欄と投稿後更新の方針.md`・`docs/islands-ssr.md`・`docs/handler-rendering.md`）をもとに、
 v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の挙動（§3.8）を設計する。
-**状態: 設計案。§8 の連投規制は段 A-1 を 2026-11-06 に実装済み（[post-rate-limit.md](post-rate-limit.md)。同日、段階の設定を `BBS_FR_LEVEL` にし、既定を規制モードにした）。ほかは未実装。** 実装は §12 の順で行い、各段で本書を実装結果に合わせて訂正する。
+**状態: 段Aは実装済み、段Bは部分実装（2026-11-06）。** 段Bの残件、設定、検証結果は [引き継ぎ](claude-handoff.md) を参照する。段E-1以降は未実装。実装は§12の順で行い、本書を実装結果に合わせて訂正する。
 2026-11-02 に Opus 5 によるセルフレビューを行い、採用した指摘を反映した（[auth-phoebe-review.md](auth-phoebe-review.md)）。
 2026-11-05、トリップと日付欄の ID の廃止・`!id`・スレ主表示（[トリップ・ID廃止とスレ主表示](トリップ・ID廃止とスレ主表示.md)。`develop` で実装済み）に合わせて改めた。
 
@@ -748,7 +748,7 @@ RPC: `create`, `describeForPosting(aid, gen)`, `describeForAdmin(aid, gen, admin
 | vars | `TURNSTILE_SITE_KEY`・`GOOGLE_CLIENT_ID`・`AGREEMENT_VERSION`・`ADMIN_BREAK_GLASS_UNTIL`（通常は未設定） | 公開値 |
 | secret | `AUTH_SECRET`・`TURNSTILE_SECRET_KEY`・`GOOGLE_CLIENT_SECRET`・`MAIL_API_KEY`・`ADMIN_SESSION_SECRET`（`_PREV`）・`ADMIN_BOOTSTRAP_TOKEN`（`ADMIN_PASSWORD`・`ADMIN_USER` は廃止） | `wrangler secret put`。`.dev.vars` で開発。コミットしない |
 
-`wrangler.jsonc` には `migrations` に `{tag: "v2", new_sqlite_classes: ["Account", "AccountIndex", "AccountDirectory", "AuthRate"]}`、`durable_objects.bindings` に `ACCOUNT_DO`・`ACCOUNT_INDEX_DO`・`ACCOUNT_DIRECTORY_DO`・`AUTH_RATE_DO` を足す。管理画面の監査ログは `{tag: "v3", new_sqlite_classes: ["AdminAudit"]}` と `ADMIN_AUDIT_DO`（改修計画 §3.6）。
+段Bの `wrangler.jsonc` は移行タグ `v2` で `new_sqlite_classes: ["Account", "AccountIndex", "AuthRate"]` と、バインディング `ACCOUNT_DO`・`ACCOUNT_INDEX_DO`・`AUTH_RATE_DO` を追加した。`AccountDirectory` と `AdminAudit` は後続の管理画面で別の移行タグとバインディングを追加する。適用済みの `v2` には追記しない。開発時の設定は [認証の検証設定](auth-integration.md) を参照する。
 
 ### 9.4 `deny.cgi` との接続
 

@@ -90,7 +90,10 @@ class HonoRenderSuite extends munit.FunSuite {
         assert(html.startsWith("<!DOCTYPE html><html lang=\"ja\">"))
         assert(html.contains("<meta charSet=\"UTF-8\"/>"))
         assert(html.contains("<title>題名 &lt;&amp;&gt;</title>"))
-        assert(html.contains("<body><main>日本語 &lt;&amp;&gt;</main></body>"))
+        assert(html.contains("<body><main>日本語 &lt;&amp;&gt;</main>"))
+        assert(html.contains("component-name=\"/app/islands/auth-modal.tsx\""))
+        assert(html.contains("<dialog"))
+        assert(!html.contains("<iframe"))
         assert(html.contains("<script type=\"module\" src=\"/static/client.js\"></script>"))
       }
     }

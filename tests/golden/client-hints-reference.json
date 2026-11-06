@@ -1,0 +1,203 @@
+{
+  "source": "MontereyLangit/v6-base develop common/src/commonTest/kotlin/domain/model/device/ClientHintsTest.kt; R4-R7 expected behavior from original cases",
+  "cases": [
+    {
+      "name": "no-hints",
+      "platform": "",
+      "mobile": "",
+      "arch": "iPhone",
+      "ua": "iPhone Mobile",
+      "headerUa": "",
+      "rule": ""
+    },
+    {
+      "name": "R4-priority",
+      "platform": "Windows",
+      "mobile": "?1",
+      "arch": "iPad",
+      "ua": "Android",
+      "headerUa": "",
+      "rule": "R4"
+    },
+    {
+      "name": "R5-priority",
+      "platform": "Windows",
+      "mobile": "?1",
+      "arch": "Linux x86_64",
+      "ua": "Macintosh",
+      "headerUa": "",
+      "rule": "R5"
+    },
+    {
+      "name": "R5-macos",
+      "platform": "macOS",
+      "mobile": "?0",
+      "arch": "Win32",
+      "ua": "Macintosh",
+      "headerUa": "",
+      "rule": "R5"
+    },
+    {
+      "name": "R6-android",
+      "platform": "Android",
+      "mobile": "?1",
+      "arch": "Linux armv8l",
+      "ua": "Windows Mobile",
+      "headerUa": "",
+      "rule": "R6"
+    },
+    {
+      "name": "R6-header-fallback",
+      "platform": "Android",
+      "mobile": "?1",
+      "arch": "",
+      "ua": "   ",
+      "headerUa": "Windows Mobile",
+      "rule": "R6"
+    },
+    {
+      "name": "R7-desktop",
+      "platform": "Android",
+      "mobile": "?0",
+      "arch": "Linux armv8l",
+      "ua": "Linux Android Mobile",
+      "headerUa": "",
+      "rule": "R7"
+    },
+    {
+      "name": "R7-mobile",
+      "platform": "Windows",
+      "mobile": "?1",
+      "arch": "Win32",
+      "ua": "Windows",
+      "headerUa": "",
+      "rule": "R7"
+    },
+    {
+      "name": "R7-header-fallback",
+      "platform": "Android",
+      "mobile": "?0",
+      "arch": "",
+      "ua": "",
+      "headerUa": "Linux Android Mobile",
+      "rule": "R7"
+    },
+    {
+      "name": "broken-mobile-fails-open",
+      "platform": "Android",
+      "mobile": "1",
+      "arch": "Linux armv8l",
+      "ua": "Linux Android Mobile",
+      "headerUa": "",
+      "rule": ""
+    },
+    {
+      "name": "mobile-absent-fails-open",
+      "platform": "Android",
+      "mobile": "",
+      "arch": "Linux armv8l",
+      "ua": "Linux Android Mobile",
+      "headerUa": "",
+      "rule": ""
+    },
+    {
+      "name": "platform-absent-fails-open",
+      "platform": "",
+      "mobile": "?0",
+      "arch": "iPhone",
+      "ua": "Mobile",
+      "headerUa": "",
+      "rule": ""
+    },
+    {
+      "name": "ua-absent-fails-open",
+      "platform": "Windows",
+      "mobile": "?1",
+      "arch": "Win32",
+      "ua": "",
+      "headerUa": " ",
+      "rule": ""
+    },
+    {
+      "name": "android-tablet",
+      "platform": "Android",
+      "mobile": "?0",
+      "arch": "Linux aarch64",
+      "ua": "Linux Android",
+      "headerUa": "",
+      "rule": ""
+    },
+    {
+      "name": "linux-includes-android",
+      "platform": "Linux",
+      "mobile": "?1",
+      "arch": "Win32",
+      "ua": "Linux Android Mobile",
+      "headerUa": "",
+      "rule": ""
+    },
+    {
+      "name": "linux-x11-marker",
+      "platform": "Linux",
+      "mobile": "?0",
+      "arch": "",
+      "ua": "X11 Ubuntu",
+      "headerUa": "",
+      "rule": ""
+    },
+    {
+      "name": "macintosh-marker",
+      "platform": "macOS",
+      "mobile": "?0",
+      "arch": "MacIntel",
+      "ua": "Macintosh",
+      "headerUa": "",
+      "rule": ""
+    },
+    {
+      "name": "mac-os-marker",
+      "platform": "macOS",
+      "mobile": "?0",
+      "arch": "MacIntel",
+      "ua": "Mac OS",
+      "headerUa": "",
+      "rule": ""
+    },
+    {
+      "name": "unknown-platform",
+      "platform": "Chrome OS",
+      "mobile": "?0",
+      "arch": "Win32",
+      "ua": "CrOS",
+      "headerUa": "",
+      "rule": ""
+    },
+    {
+      "name": "future-ios",
+      "platform": "iOS",
+      "mobile": "?1",
+      "arch": "iPhone",
+      "ua": "iPhone Mobile",
+      "headerUa": "",
+      "rule": ""
+    },
+    {
+      "name": "case-and-whitespace",
+      "platform": " \" WINDOWS \" ",
+      "mobile": " \"?0\" ",
+      "arch": " win32 ",
+      "ua": " windows ",
+      "headerUa": "",
+      "rule": ""
+    },
+    {
+      "name": "declared-ua-first",
+      "platform": "Android",
+      "mobile": "?1",
+      "arch": "",
+      "ua": "Windows Mobile",
+      "headerUa": "Android Mobile",
+      "rule": "R6"
+    }
+  ]
+}

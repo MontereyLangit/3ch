@@ -10,6 +10,7 @@ class PostingRequestSuite extends FunSuite {
   private def makeRequest(method: String = "POST", headers: Seq[(String, String)] = Nil, cf: js.UndefOr[js.Dictionary[js.Any]] = js.undefined): Request = {
     val lowered = headers.map((k, v) => k.toLowerCase -> v).toMap
     js.Dynamic.literal(
+      url = "https://www.3ch.io/test/bbs.cgi",
       method = method,
       cf = cf,
       headers = js.Dynamic.literal(get = ((name: String) => lowered.getOrElse(name.toLowerCase, null)): js.Function1[String, String])
@@ -22,6 +23,14 @@ class PostingRequestSuite extends FunSuite {
     "user-agent" -> "Mozilla/5.0 (TestBrowser)",
     "CF-Connecting-IP" -> "192.0.2.1"
   )))
+
+  test("専ブラキー用の secure は HTTPS だけで localhost HTTP を含めない") {
+    val request = makeRequest().asInstanceOf[js.Dynamic]
+    request.url = "http://localhost:8787/test/bbs.cgi"
+    assertEquals(PostingRequest.from(request.asInstanceOf[Request]).secure, false)
+    request.url = "https://www.3ch.io/test/bbs.cgi"
+    assertEquals(PostingRequest.from(request.asInstanceOf[Request]).secure, true)
+  }
 
   test("通常のリクエストは検査を通る") {
     assertEquals(valid.validate, None)

@@ -35,6 +35,12 @@ class PostRoutingSuite extends FunSuite {
     assertEquals(routed.map(f => (f.subject, f.name, f.mail, f.submit)), Right(("ab", "cd", "ef", "gh")))
   }
 
+  test("auth と admin はスレ立て・返信とも投稿先にしない") {
+    for (board <- Seq("auth", "admin"); key <- Seq("", "123")) {
+      assertEquals(PostRouting.route(base.copy(bbs = board, key = key), "1700000000").left.map(_._1), Left(PostingError.ForbiddenBoard))
+    }
+  }
+
   test("必須項目の検査は 禁止板 → 本文 → 題名と key → time の順") {
     def error(form: PostForm): Option[PostingError] = PostRouting.route(form, "1").left.toOption.map(_._1)
     assertEquals(error(base.copy(bbs = "test", message = "")), Some(PostingError.ForbiddenBoard))

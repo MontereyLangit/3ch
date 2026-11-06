@@ -16,6 +16,7 @@ private[islands] sealed trait SubmitResult
 private[islands] object SubmitResult {
   case object Idle extends SubmitResult
   final case class Error(message: String) extends SubmitResult
+  final case class Level(message: String) extends SubmitResult
   final case class Cookie(summary: String, terms: String) extends SubmitResult
   final case class Unknown(message: String) extends SubmitResult
 }
@@ -51,10 +52,11 @@ private[islands] object PostingSubmit {
    * UTF-8 application/x-www-form-urlencodedでbbs.cgiへPOSTし、応答の分類を返す
    * 失敗は Unrecognized
    */
-  private def postForm(formData: dom.FormData): Future[PostingOutcome] = {
+  private final case class Reply(outcome: PostingOutcome, auth: String, error: String)
+
+  private def postForm(payload: String): Future[Reply] = {
     Future.delegate {
-      val params = js.Dynamic.newInstance(js.Dynamic.global.URLSearchParams)(formData)
-      params.set("submit", "書き込む")
+      val params = new dom.URLSearchParams(payload)
       val init = new dom.RequestInit {}
       init.method = dom.HttpMethod.POST
       init.credentials = dom.RequestCredentials.`same-origin`
@@ -63,10 +65,16 @@ private[islands] object PostingSubmit {
         val charset = PostingResponse.charset(Option(r.headers.get("content-type")).getOrElse(""))
         r.arrayBuffer().toFuture.map { buffer =>
           val decoder = js.Dynamic.newInstance(js.Dynamic.global.TextDecoder)(charset)
-          PostingResponse.classify(parsePage(decoder.decode(buffer).asInstanceOf[String]))
+          val outcome = PostingResponse.classify(parsePage(decoder.decode(buffer).asInstanceOf[String]))
+          val posted = Option(r.headers.get("x-resnum")).exists(_.matches("[0-9]+"))
+          Reply(if posted then outcome match {
+            case success: PostingOutcome.Posted => success
+            case _ => PostingOutcome.Posted(None)
+          } else outcome,
+            Option(r.headers.get("x-auth-required")).getOrElse(""), Option(r.headers.get("x-post-error")).getOrElse(""))
         }
       }
-    }.recover { case _ => PostingOutcome.Unrecognized }
+    }.recover { case _ => Reply(PostingOutcome.Unrecognized, "", "") }
   }
 
   /** 
@@ -82,23 +90,37 @@ private[islands] object PostingSubmit {
         previous
       }
     } else {
-      AsyncCallback.fromFuture(postForm(formData)).map {
-        case PostingOutcome.Posted(redirect) =>
-          fields.clearPosted.runNow()
-          if props.threadKey.isDefined then {
-            dom.window.location.reload()
-            SubmitResult.Idle
-          } else {
-            redirect match {
-              case Some(url) =>
-                dom.window.location.assign(url)
-                SubmitResult.Idle
-              case None => SubmitResult.Unknown(NoRedirectMessage)
+      val params = js.Dynamic.newInstance(js.Dynamic.global.URLSearchParams)(formData)
+      params.set("submit", "書き込む")
+      val payload = params.toString().asInstanceOf[String]
+      val response = postForm(payload).flatMap { first =>
+        if first.auth == "login" then AuthClient.requestLogin().flatMap { ok =>
+          if ok then postForm(payload) else Future.successful(first)
+        } else Future.successful(first)
+      }
+      AsyncCallback.fromFuture(response).map {
+        case Reply(_, "level", _) => SubmitResult.Level(if props.requiredLevel > 0 then s"Lv${props.requiredLevel}以上が必要です" else "このスレに書き込むにはLvが足りません")
+        case Reply(_, "login", _) => SubmitResult.Error("書き込みには認証・登録が必要です")
+        case Reply(PostingOutcome.Rejected(message), _, error) if error.nonEmpty => SubmitResult.Error(message)
+        case Reply(_, _, error) if error.nonEmpty => SubmitResult.Error(if error.startsWith("post-rate:") then "しばらく待ってから書き込んでください" else UnknownMessage)
+        case Reply(outcome, _, _) => outcome match {
+          case PostingOutcome.Posted(redirect) =>
+            fields.clearPosted.runNow()
+            if props.threadKey.isDefined then {
+              dom.window.location.reload()
+              SubmitResult.Idle
+            } else {
+              redirect match {
+                case Some(url) =>
+                  dom.window.location.assign(url)
+                  SubmitResult.Idle
+                case None => SubmitResult.Unknown(NoRedirectMessage)
+              }
             }
-          }
-        case PostingOutcome.Rejected(message) => SubmitResult.Error(message)
-        case PostingOutcome.NeedsCookie(summary, terms) => SubmitResult.Cookie(summary, terms)
-        case PostingOutcome.Unrecognized => SubmitResult.Unknown(UnknownMessage)
+          case PostingOutcome.Rejected(message) => SubmitResult.Error(message)
+          case PostingOutcome.NeedsCookie(summary, terms) => SubmitResult.Cookie(summary, terms)
+          case PostingOutcome.Unrecognized => SubmitResult.Unknown(UnknownMessage)
+        }
       }
     }
   }

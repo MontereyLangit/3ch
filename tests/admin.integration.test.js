@@ -21,6 +21,11 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   });
   t.after(() => worker.stop());
   const origin = `http://${worker.address}:${worker.port}`;
+  // ASSETS.fetch の応答にも変更可能なヘッダを持つコピーを返す。
+  const rootResponse = await fetch(origin + '/');
+  assert.equal(rootResponse.status, 200);
+  assert.match(rootResponse.headers.get('accept-ch'), /Sec-CH-UA-Model/);
+  assert.match(await rootResponse.text(), /<!doctype html>/i);
   const authorization = 'Basic ' + Buffer.from('admin:local-integration-password').toString('base64');
   const get = path => fetch(origin + path, {headers: {authorization}});
   const save = (path, data, extra = {}) => fetch(origin + path, {

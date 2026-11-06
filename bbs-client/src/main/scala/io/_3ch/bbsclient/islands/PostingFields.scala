@@ -160,7 +160,12 @@ object PostingFields {
         detailsOpen = values.detailsOpen,
         setField = (field, value) => modAndPersist(field)(withField(_, field, value)),
         modMessage = f => modAndPersist("MESSAGE")(v => v.copy(message = f(v.message))),
-        clearPosted = Callback(BrowserStorage.remove(draftStorageKey(props))) >> state.modState(_.copy(subject = "", message = "")))
+        clearPosted = Callback {
+          val current = latest.value._2
+          if current.subject == values.subject && current.message == values.message then BrowserStorage.remove(draftStorageKey(props))
+        } >> state.modState { current =>
+          if current.subject == values.subject && current.message == values.message then current.copy(subject = "", message = "") else current
+        })
     }
   }
 }

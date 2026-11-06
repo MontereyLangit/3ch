@@ -57,6 +57,14 @@ object PostingText {
 
   /** 拒否理由をエラー画面の文言にする */
   def message(error: PostingError): String = error match {
+    case PostingError.Authentication(reason) => reason match {
+      case io._3ch.bbs.domain.account.AuthenticationFailure.LoginRequired => "この板（スレ）に書き込むには認証が必要です。"
+      case io._3ch.bbs.domain.account.AuthenticationFailure.TokenInsecure => "HTTPSで接続してください。"
+      case io._3ch.bbs.domain.account.AuthenticationFailure.TokenNotDedicated => "専用ブラウザから認証キーを使用してください。"
+      case io._3ch.bbs.domain.account.AuthenticationFailure.Account(io._3ch.common.domain.account.AccountRejection.Agreement) => "アカウント設定で利用規約への同意を確認してください。"
+      case _ => "認証を確認できませんでした。認証・登録から再度お試しください。"
+    }
+    case PostingError.AuthenticationLevel(required) => s"この板（スレ）に書き込むには認証が必要です（必要Lv:$required）。"
     case PostingError.MethodNotPost => "POST メソッドを使ってください。<br>\nRecieve GET METHOD"
     case PostingError.BrokenBody(contentType) => "送信された内容が破損しています。->" + contentType + "<br>\nBroken request body. "
     case PostingError.InvalidReferer(referer) => "ERROR: あなた騙されてますよ？->" + referer + "<br>\nReferer is invalid."

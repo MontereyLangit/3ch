@@ -1,7 +1,7 @@
 package io._3ch.bbs
 
 import io._3ch.bbs.external.hono.HonoContextFacade
-import io._3ch.bbs.external.web.Response
+import io._3ch.bbs.external.web.{Response, ResponseInit}
 import io._3ch.bbs.handler.RendererShell
 import io._3ch.bbs.util.SjisEncoding
 import io._3ch.common.routes.route
@@ -42,6 +42,32 @@ object Main {
   @JSExportTopLevel("boardIndexHandler", "server")
   def boardIndexHandler(c: js.Any): js.Promise[Response] =
   BoardHandler.index(c.asInstanceOf[HonoContextFacade])
+
+  /** 認証・登録画面を描画する */
+  @route("auth/index.ts")
+  @JSExportTopLevel("authPageHandler", "server")
+  def authPageHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.page(c.asInstanceOf[HonoContextFacade])
+
+  /** 本人のアカウント設定画面を描画する */
+  @route("auth/account.ts")
+  @JSExportTopLevel("authAccountHandler", "server")
+  def authAccountHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.page(c.asInstanceOf[HonoContextFacade], accountPage = true)
+
+  /** 本文と状態を保って応答を複製し、変更可能なヘッダへClient Hintsを付ける */
+  @JSExportTopLevel("acceptClientHints", "server")
+  def acceptClientHints(response: Response): Response = {
+    val init = new ResponseInit {}
+    init.status = response.status
+    init.statusText = response.statusText
+    init.headers = response.headers
+    val copy = new Response(response.body, init)
+    copy.headers.set("Accept-CH", "Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version, Sec-CH-UA-Model, Sec-CH-UA-Arch, Sec-CH-UA-Mobile, Sec-CH-UA-Full-Version-List")
+    copy
+  }
+
+  /** 認証と本人向け操作の API を受け付ける */
+  @JSExportTopLevel("authApi", "server")
+  def authApi(request: Request, env: WorkerEnv): js.Promise[Response] = handler.auth.AuthHandler.handle(request, env)
 
   // SjisEncoding（R-01案A）の実装そのものを exhaustive に検証するための診断用export。
   // HTTPルーティングからは呼ばれない（@route を付けていない）。

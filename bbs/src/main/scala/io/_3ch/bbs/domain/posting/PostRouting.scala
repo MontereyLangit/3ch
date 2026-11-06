@@ -12,7 +12,7 @@ object PostRouting {
   private val BoardChars = new js.RegExp("[^a-zA-Z0-9_-]", "g")
   private val NonDigit = new js.RegExp("\\D", "g")
   private val Digits = new js.RegExp("^[0-9]+$")
-  private val Forbidden = Set("", "test", "js", "css", "html", "images")
+  private val Forbidden = Set("", "test", "js", "css", "html", "images", "auth", "admin")
 
   /**
     * スレ立てなら key を unixtime（本文先頭が !924・!900 なら共通スレのキー）にし、返信なら題名を空にする。

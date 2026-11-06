@@ -21,7 +21,10 @@ final case class PostingContext(
   shikibetsu: String = "",
   threadOwner: () => Option[ThreadOwner] = () => None,
   sage: Boolean = false,
-  ponCookie: Option[String] = None
+  ponCookie: Option[String] = None,
+  capKey: Option[String] = None,
+  authMail: String = "",
+  authHeaders: Seq[(String, String)] = Nil
 ) {
   /** スレ立てか。レス番号が 1 のとき */
   def creating: Boolean = number == 1

@@ -26,6 +26,7 @@ lazy val common = crossProject(JSPlatform, JVMPlatform)
   .in(file("common"))
   .settings(commonSettings)
   .jvmSettings(
+    Compile / unmanagedSourceDirectories += baseDirectory.value / ".." / "src" / "main" / "scala-jvm",
     // golden入出力表 (tests/golden/*.json) を読むテスト専用のJVM実装 (java.io を使う。
     // 本番コードはcommon/src/main配下だけなので「pure/no I/O」方針には反しない)。
     // CrossType.Pure は src/{main,test}/scala を共有するため、プラットフォーム別の
@@ -33,6 +34,7 @@ lazy val common = crossProject(JSPlatform, JVMPlatform)
     Test / unmanagedSourceDirectories += baseDirectory.value / ".." / "src" / "test" / "scala-jvm"
   )
   .jsSettings(
+    Compile / unmanagedSourceDirectories += baseDirectory.value / ".." / "src" / "main" / "scala-js",
     scalaJSUseMainModuleInitializer := false,
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
     // golden入出力表を読むテスト専用のJS実装 (Node の fs を使う。sbt-scalajsのテストは

@@ -4,6 +4,11 @@ import { appendTrailingSlash } from "hono/trailing-slash";
 import {
   Board,
   Thread,
+  Account,
+  AccountIndex,
+  AuthRate,
+  authApi,
+  acceptClientHints,
   // @ts-expect-error scalajs:server.js is resolved by the Scala.js Vite plugin.
   publicHandler,
 } from "scalajs:server.js";
@@ -11,18 +16,22 @@ import {
 const app = createApp({
   trailingSlash: true,
   init: (app) => {
+    app.use("*", async (c, next) => {
+      await next();
+      c.res = acceptClientHints(c.res);
+    });
     app.use(appendTrailingSlash({
       alwaysRedirect: true,
       skip: (path) => path.substring(path.lastIndexOf('/') + 1).includes('.'),
     }));
   },
 });
+app.all("/auth/*", (c) => authApi(c.req.raw, c.env));
+
 // ファイルルートに一致しないリクエストは既存の公開ハンドラで処理する(LegacyDispatch)
 app.all("*", (c) => publicHandler(c));
 
 export default app;
 
-// =========================================================
-// !!! CRITICAL STEP: EXPORT THE DURABLE OBJECT CLASSES !!!
-// =========================================================
-export { Board, Thread };
+// Workers に Durable Object を公開する。
+export { Board, Thread, Account, AccountIndex, AuthRate };

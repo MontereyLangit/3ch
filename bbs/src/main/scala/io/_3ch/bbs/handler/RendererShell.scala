@@ -1,6 +1,7 @@
 package io._3ch.bbs.handler
 
 import io._3ch.bbs.external.web.Response
+import io._3ch.bbs.generated.IslandComponents
 import io._3ch.bbs.util.SjisEncoding
 import japgolly.scalajs.react.facade.React
 
@@ -72,7 +73,7 @@ object RendererShell {
         title.toOption.map(t => React.createElement("title", new js.Object(), t).asInstanceOf[React.Node]).toSeq
 
     val head = React.createElement("head", new js.Object(), headChildren*)
-    val body = React.createElement("body", new js.Object(), children.asInstanceOf[React.Node])
+    val body = React.createElement("body", new js.Object(), children.asInstanceOf[React.Node], IslandComponents.AuthModalJs(js.Dynamic.literal()).rawElement.asInstanceOf[React.Node])
     React.createElement("html", js.Dictionary("lang" -> "ja").asInstanceOf[js.Object], head.asInstanceOf[React.Node], body.asInstanceOf[React.Node])
   }
 }

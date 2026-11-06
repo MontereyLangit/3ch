@@ -1,10 +1,12 @@
 package io._3ch.bbsclient.islands
 
+import io._3ch.common.domain.account.SessionView
 import io._3ch.common.domain.{BoardId, ThreadCommand, ThreadKey}
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 
 import scala.scalajs.js
+import scala.scalajs.js.URIUtils
 
 /**
  * 書き込みフォーム
@@ -13,7 +15,8 @@ import scala.scalajs.js
  */
 object PostingFormIsland {
 
-  final case class Props(bbs: BoardId, time: String, threadKey: Option[ThreadKey], imgurClientId: String, commands: List[ThreadCommand]) {
+  final case class Props(bbs: BoardId, time: String, threadKey: Option[ThreadKey], imgurClientId: String, commands: List[ThreadCommand],
+    authEnabled: Boolean = false, session: Option[SessionView] = None, requiredLevel: Int = 0, returnPath: String = "/") {
     def draftKey: String = s"${bbs.value}/${threadKey.fold("new")(_.value.toString)}"
   }
 
@@ -33,7 +36,8 @@ object PostingFormIsland {
       for {
         bbs <- BoardId.create(text("bbs")).toOption
         key <- threadKey.fold[Option[Option[ThreadKey]]](Option(None))(_.map(Option(_)))
-      } yield Props(bbs, text("time"), key, text("imgurClientId"), commands)
+      } yield Props(bbs, text("time"), key, text("imgurClientId"), commands, AuthClient.flag(raw, "authEnabled"), AuthClient.initial(raw),
+        o.selectDynamic("requiredLevel").asInstanceOf[js.UndefOr[Int]].getOrElse(0), text("returnPath"))
     }
   }
 
@@ -103,6 +107,8 @@ object PostingFormIsland {
 
   private def resultView(result: SubmitResult): VdomNode = result match {
     case SubmitResult.Idle => EmptyVdom
+    case SubmitResult.Level(message) =>
+      <.p(^.className := "my-1 text-[#f00]", ^.role := "alert", message, " ", <.a(^.href := "/auth/account?upgrade=1", ^.className := "text-[#06f]", "アカウント設定へ"))
     case SubmitResult.Error(message) =>
       <.p(^.className := "my-1 whitespace-pre-wrap font-bold text-[#f00]", VdomAttr("data-post-result") := "error", ^.role := "alert", message)
     case SubmitResult.Unknown(message) =>
@@ -119,6 +125,8 @@ object PostingFormIsland {
 
   final val Component = ScalaFnComponent[Props] { props =>
     for {
+      session <- AuthClient.useSession(props.session)
+      showId <- useState(false)
       fields <- PostingFields.usePostingFields(props)
       upload <- ImgurUpload.useImgurUpload(props.imgurClientId, url => fields.modMessage(appendLink(_, url)))
       submit <- PostingSubmit.usePostingSubmit(props, fields, upload)
@@ -143,6 +151,10 @@ object PostingFormIsland {
             <.label(" E-mail：", textInput("mail", fields.mail, 24, fields.setField))),
           props.threadKey.fold[VdomNode](
             <.label("タイトル：", textInput("subject", fields.subject, 80, fields.setField, ^.required := true)))(_ => EmptyVdom),
+          if props.authEnabled && session.isEmpty then <.p(^.className := "my-2 text-sm", "書き込みには認証・登録が必要です。", <.a(^.className := "text-[#06f]", ^.href := ("/auth/?return=" + URIUtils.encodeURIComponent(props.returnPath)), "認証・登録へ")) else EmptyVdom,
+          if props.authEnabled && session.exists(_.lv < props.requiredLevel) then <.p(^.className := "my-2 text-sm", s"このスレはLv${props.requiredLevel}以上", " ", <.a(^.className := "text-[#06f]", ^.href := "/auth/account?upgrade=1", "アカウント設定へ")) else EmptyVdom,
+          if props.authEnabled && session.isDefined then <.label(^.className := "my-2 block! text-sm", <.input(^.`type` := "checkbox", ^.name := "showid", ^.value := "1", ^.checked := showId.value,
+            ^.onChange ==> ((e: ReactEventFromInput) => showId.setState(e.target.checked))), " ユーザーIDを名前欄に出す") else EmptyVdom,
           SubmitButton(if props.threadKey.isEmpty then "新規スレッド作成" else "書き込む"),
           if showCommands then commandHelper(props.commands, fields, toggleCommand) else EmptyVdom,
           <.label(^.className := "message-label block!", "本文", <.textarea(^.className := s"$controlClass block w-full resize-y",

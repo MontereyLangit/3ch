@@ -130,4 +130,51 @@ class BoardIndexSuite extends munit.FunSuite {
     assert(html.indexOf("共通少レス") < html.indexOf("共通多レス"))
     assert(html.indexOf("通常多レス") < html.indexOf("通常少レス"))
   }
+  test("認証有効時は未ログインの導線と検証済みの表示情報を出し分ける") {
+    val guest = render(props.copy(authEnabled = true, returnPath = "/sample/"))
+    assert(guest.contains("/auth/?return=%2Fsample%2F"))
+    assert(guest.contains("書き込みには認証・登録が必要です"))
+    assert(!guest.contains("name=\"showid\""))
+    val member = render(props.copy(authEnabled = true, session = Some(io._3ch.common.domain.account.SessionView("test_user", 3)), settings = Map("BBS_PHOEBE" -> "5")))
+    assert(member.contains("@test_user"))
+    assert(member.contains("Lv3"))
+    assert(member.contains("このスレはLv5以上"))
+    assert(member.contains("name=\"showid\""))
+    assert(!member.contains("書き込みには認証・登録が必要です"))
+    val mature = render(props.copy(authEnabled = true, session = Some(io._3ch.common.domain.account.SessionView("adult", 10))))
+    assert(mature.contains("Lv*"))
+    assert(!mature.contains("Lv10"))
+  }
+
+  test("認証ページのSSRには秘密や発行済みのキーを含めない") {
+    val html = BoardMarkup(AuthComponent.Component(AuthProps("public-site-key", "/sample/", embed = true, agreementVersion = "v2")).rawElement)
+    assert(html.contains("public-site-key"))
+    assert(html.contains("利用規約を読み"))
+    assert(!html.contains("<header"))
+    assert(!html.contains("<footer"))
+    assert(!html.contains("challenges.cloudflare.com/turnstile/v0/api.js"))
+    val account = BoardMarkup(AccountComponent.Component(AccountProps("member", 1, Seq(AccountTokenProps("opaque-id", "Jane")))).rawElement)
+    assert(account.contains("Jane"))
+    assert(!account.contains("!#"))
+    assert(!account.contains("発行したキー（今だけ表示されます）"))
+  }
+  test("アカウント画面は専ブラの使用枠・履歴・不一致・期限・失効理由を公開情報から描く") {
+    val recent = AccountPostProps(1800000000, "sample", "1800000001", "スレ &lt;script&gt;", 12, "本文 &lt;img&gt;", "回線・東京都")
+    val tokens = Seq(
+      AccountTokenProps("active", "JaneStyle・Windows", boundAt = Some(1800000000), replacedTokenAt = Some(1800000000),
+        recentPosts = Seq(recent), warnings = Seq(AccountTokenWarningProps(1800000010, "別のブラウザ"))),
+      AccountTokenProps("unused", "未使用", issuedAt = 1800000000, expiresAt = 1800086400),
+      AccountTokenProps("old", "古い専ブラ", boundAt = Some(1799990000), revokedAt = Some(1800000000), revokeReason = Some("superseded"), recentPosts = Seq(recent)))
+    val html = visible(BoardMarkup(AccountComponent.Component(AccountProps("member", 3, tokens, activeCount = 1, nowSeconds = 1800000100)).rawElement))
+    assert(html.contains("専用ブラウザ 1 / 5"))
+    assert(html.contains("前のキーを置き換え"))
+    assert(html.contains("別の専用ブラウザ（別のブラウザ）"))
+    assert(html.contains("最近の書き込み（1件）"))
+    assert(html.contains("/test/read.cgi/sample/1800000001/12"))
+    assert(html.contains("スレ &lt;script&gt;"))
+    assert(html.contains("本文 &lt;img&gt;"))
+    assert(html.contains("あと24時間"))
+    assert(html.contains("新しいキーへ置き換え"))
+    assert(!html.contains("<script>"))
+  }
 }

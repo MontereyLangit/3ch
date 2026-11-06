@@ -112,11 +112,22 @@ trait WorkerEnv extends js.Object {
   /** v5 `thread.js` / `board.js` 移植分のバインディング（`wrangler.jsonc` 参照）。 */
   val THREAD_DO: DurableObjectNamespace[ThreadDoStub] = js.native
   val BOARD_DO: DurableObjectNamespace[BoardDoStub] = js.native
+  /** アカウント本体、一意索引、認証回数の記録 */
+  val ACCOUNT_DO: DurableObjectNamespace[AccountDoStub] = js.native
+  val ACCOUNT_INDEX_DO: DurableObjectNamespace[AccountIndexDoStub] = js.native
+  val AUTH_RATE_DO: DurableObjectNamespace[AuthRateDoStub] = js.native
   val ch3www: R2Bucket = js.native
   val CAP: KVNamespace = js.native
   val ASSETS: Fetcher = js.native
   /** 板topの画像アップロード用 imgur Client-ID。未設定ならアップロード欄を出さない。 */
   val IMGUR_CLIENT_ID: js.UndefOr[String] = js.native
+  /** セッションと認証用索引の署名鍵 */
+  val AUTH_SECRET: js.UndefOr[String] = js.native
+  /** Turnstile のサーバ検証鍵と公開サイトキー */
+  val TURNSTILE_SECRET_KEY: js.UndefOr[String] = js.native
+  val TURNSTILE_SITE_KEY: js.UndefOr[String] = js.native
+  /** 現在の法的投稿確認の版 */
+  val AGREEMENT_VERSION: js.UndefOr[String] = js.native
   /** 投稿者の照合値に混ぜるソルト（wrangler.jsonc の vars） */
   val salt: js.Any = js.native
 }

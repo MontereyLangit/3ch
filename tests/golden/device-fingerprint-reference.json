@@ -1,0 +1,366 @@
+{
+  "source": "MontereyLangit/v6-base develop common/src/commonMain/kotlin/domain/model/device/DeviceFingerprintHasher.kt (blob fa2a1a029d71d9508870057ef2aecda2e5dfa17c); original algorithm FNV-1a UTF-16 and DPR roundToInt",
+  "cases": [
+    {
+      "name": "base",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": 1,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "32673d0b890667fd81"
+    },
+    {
+      "name": "ua-ram-excluded",
+      "fingerprint": {
+        "os": "",
+        "cores": 8,
+        "ram": 32,
+        "screen": "1920x1080",
+        "dpr": 1,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "32673d0b890667fd81"
+    },
+    {
+      "name": "model",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": 1,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "Pixel 9",
+      "expected": "32673d0b890667fdcf"
+    },
+    {
+      "name": "model-normalized",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": 1,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "  PIXEL 9\t",
+      "expected": "32673d0b890667fdcf"
+    },
+    {
+      "name": "empty",
+      "fingerprint": {},
+      "model": "Pixel 9",
+      "expected": ""
+    },
+    {
+      "name": "ua-ram-only",
+      "fingerprint": {
+        "os": "Mozilla",
+        "ram": 8
+      },
+      "model": "",
+      "expected": ""
+    },
+    {
+      "name": "null",
+      "fingerprint": null,
+      "model": "Pixel 9",
+      "expected": ""
+    },
+    {
+      "name": "dpr-half",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": 2.625,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "32b83d0b890667fd81"
+    },
+    {
+      "name": "dpr-negative-half",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": -2.625,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "32013d0b890667fd81"
+    },
+    {
+      "name": "dpr-maximum",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": 1e+308,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "321d3d0b890667fd81"
+    },
+    {
+      "name": "dpr-minimum",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": -1e+308,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "32943d0b890667fd81"
+    },
+    {
+      "name": "dpr-nan",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": "NaN",
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "32353d0b890667fd81"
+    },
+    {
+      "name": "dpr-infinity",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": "Infinity",
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "32353d0b890667fd81"
+    },
+    {
+      "name": "utf16",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": 1,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "字😀𝄞",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "機種😀",
+      "expected": "32673d0b890654fd57"
+    },
+    {
+      "name": "axis-screen",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1280x720",
+        "dpr": 1,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "02673d0b890667fd81"
+    },
+    {
+      "name": "axis-dpr",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": 2,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "32c33d0b890667fd81"
+    },
+    {
+      "name": "axis-cores",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 4,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": 1,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "3267310b890667fd81"
+    },
+    {
+      "name": "axis-touch",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": 1,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": true,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "32673d4d890667fd81"
+    },
+    {
+      "name": "axis-colorDepth",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": 1,
+        "colorDepth": 30,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "32673d0b870667fd81"
+    },
+    {
+      "name": "axis-arch",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": 1,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "MacIntel"
+      },
+      "model": "",
+      "expected": "32673d0b89e067fd81"
+    },
+    {
+      "name": "axis-fonts",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": 1,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Meiryo",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "32673d0b890603fd81"
+    },
+    {
+      "name": "axis-webgl",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": 1,
+        "colorDepth": 24,
+        "webgl": "Apple GPU",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "",
+      "expected": "32673d0b890667a281"
+    },
+    {
+      "name": "unicode-model-lowercase",
+      "fingerprint": {
+        "os": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+        "cores": 8,
+        "ram": 8,
+        "screen": "1920x1080",
+        "dpr": 1,
+        "colorDepth": 24,
+        "webgl": "ANGLE (NVIDIA GeForce RTX 3080)",
+        "fonts": "Arial,Courier,Georgia",
+        "touch": false,
+        "arch": "Win32"
+      },
+      "model": "İ Σ ΟΣ",
+      "expected": "32673d0b890667fdc0"
+    }
+  ]
+}

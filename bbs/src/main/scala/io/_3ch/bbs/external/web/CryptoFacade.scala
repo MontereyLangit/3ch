@@ -22,13 +22,19 @@ class TextDecoder(label: String = js.native) extends js.Object {
 }
 
 @js.native
+trait CryptoKey extends js.Object
+
+@js.native
 trait SubtleCrypto extends js.Object {
+  def importKey(format: String, keyData: Uint8Array, algorithm: js.Object, extractable: Boolean, keyUsages: js.Array[String]): js.Promise[CryptoKey] = js.native
+  def sign(algorithm: String, key: CryptoKey, data: Uint8Array): js.Promise[ArrayBuffer] = js.native
   def digest(algorithm: String, data: Uint8Array): js.Promise[ArrayBuffer] = js.native
 }
 
 @js.native
 trait CryptoFacade extends js.Object {
   val subtle: SubtleCrypto = js.native
+  def getRandomValues(array: Uint8Array): Uint8Array = js.native
 }
 
 @js.native

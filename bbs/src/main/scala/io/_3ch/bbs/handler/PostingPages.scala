@@ -19,7 +19,13 @@ object PostingPages {
 
   /** 投稿処理の結果の画面。拒否ならその時点のフォームとホストを出す */
   def render(outcome: PostingOutcome, charset: String): React.Element = outcome match {
-    case PostingOutcome.Rejected(error, context, _) => respondError(context.form, context.identity.host, PostingText.message(error), charset)
+    case PostingOutcome.Rejected(error, context, _) =>
+      val message = error match {
+        case io._3ch.bbs.domain.posting.PostingError.Authentication(_) | io._3ch.bbs.domain.posting.PostingError.AuthenticationLevel(_) =>
+          PostingText.message(error) + "<br><a href=\"/auth/?return=/" + context.form.bbs + "/\">認証・登録</a>"
+        case _ => PostingText.message(error)
+      }
+      respondError(context.form, context.identity.host, message, charset)
     case done => respondEndHtml(done.context.form, charset)
   }
 

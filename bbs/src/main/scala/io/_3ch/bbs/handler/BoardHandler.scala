@@ -4,6 +4,7 @@ import io._3ch.bbs.components.{BoardIndexComponent, BoardIndexProps}
 import io._3ch.bbs.external.hono.{HonoContextFacade, RenderProps}
 import io._3ch.bbs.external.web.Response
 import io._3ch.bbs.repository.BoardRepository
+import io._3ch.bbs.handler.auth.SessionReader
 import io._3ch.common.domain.BoardId
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -37,11 +38,13 @@ object BoardHandler {
     val boardSettingsF = BoardRepository.getBoardSettings(board, c.env)
     val headTextF = BoardRepository.getHeadText(board, c.env)
     val subjectsF = BoardRepository.getSubjects(board, c.env)
+    val sessionF = SessionReader.fromRequest(c)
 
     (for {
       boardSettings <- boardSettingsF
       headText <- headTextF
       subjects <- subjectsF
+      session <- sessionF
       res <- {
         val title = boardSettings.value.getOrElse("BBS_TITLE", "???＠3ch掲示板")
 
@@ -54,9 +57,16 @@ object BoardHandler {
           BoardIndexComponent.Component(BoardIndexProps(
             title, headText, board, viewType, subjects, boardSettings.value,
             c.req.query("q").getOrElse(""), sort, math.floor(js.Date.now() / 1000).toLong.toString,
-            c.env.IMGUR_CLIENT_ID.getOrElse("")
+            c.env.IMGUR_CLIENT_ID.getOrElse(""),
+            authEnabled = c.env.AUTH_SECRET.exists(_.nonEmpty), session = session.map(_.view), returnPath = s"/$bbs/"
           )).rawElement, props).toFuture
       }
-    } yield res).toJSPromise
+    } yield {
+      if c.env.AUTH_SECRET.exists(_.nonEmpty) then {
+        res.headers.set("Cache-Control", "private, no-cache")
+        res.headers.append("Vary", "Cookie")
+      }
+      res
+    }).toJSPromise
   }
 }

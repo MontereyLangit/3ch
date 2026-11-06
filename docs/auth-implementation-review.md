@@ -20,3 +20,24 @@
 
 端末ハッシュの算出方式と v3 の UA 解析表は設計書でリポジトリ外の資料を参照しているため、原本を確認してから移植する
 メール送信 API は設計書で未定のため、段 E-2 では送信先の設定と送信ポートを分離する
+
+## 段Bの認証画面・投稿連携（2026-11-07、日本時間）
+
+段Bは部分実装。クライアントIDの認証、Cookie、端末情報、専ブラ用キー、投稿時の認証と画面の連携を追加した。キャップのアカウント操作画面など、設計書の全項目を完了した状態ではない。設定と残件は [認証の検証設定](auth-integration.md) と [引き継ぎ](claude-handoff.md) を参照する。
+
+| 観点 | 実装・確認対象 |
+| --- | --- |
+| 画面設計 | `docs/ui/auth.html`・`auth-modal.html`・`account.html` を参照。既存ヘッダーの配色と部品を使い、角丸を追加しない。ID・パスワードとGoogleの操作は準備中として無効にする |
+| Scala・Hooks | AuthForm・AuthModal・AccountNav・AccountMenuは関数コンポーネント。表示状態とTurnstile、イベント、タイマーの副作用をHooksで管理する。業務処理をTSへ移さない |
+| DDD・FP | 登録・キー発行の順序と補償はapplicationのClientAuthentication・TokenIssuingへ移した。DOはロック・変換・保存を担当し、状態遷移と期限はcommonの純粋モデルに置く。投稿の認証結果は不変値で後段へ渡す |
+| 失効と障害 | 期限更新と再認証の両方で専ブラCookieのbindingを維持する。保存後のアカウント記録失敗で投稿を失敗扱いにしない。予約応答の喪失と補償失敗も検証する |
+| 境界の検証 | 索引の欠損を明示した応答だけを旧キャップとして扱う。不正なRPC値は型変換の前に拒否し、保存済みプロフィールの状態・世代の欠損も拒否する |
+| Workerの配線 | 変更できないFetch応答を複製してAccept-CHを付ける。Viteの最終エントリにも新DOを公開し、ソースだけでなく生成物と実workerdで確認する |
+| SSR | SessionReaderはCookieの署名と期限から表示情報を読み、Account DOを呼ばない。クライアントpropsは `uid`・`lv` と公開設定・利用履歴だけ。Cookie、`aid`、キーハッシュを渡さない |
+| キャッシュ | 認証を有効にした板画面は `private, no-cache` と `Vary: Cookie`。認証ページとAPIは保存しない |
+| モーダル | 通知のoriginとiframeのcontentWindowを照合する。BroadcastChannelと2秒ごと・最長5分のポーリングはセッションを再確認し、表示通知だけで投稿を許可しない。キャンセル・終了・アンマウントで監視を解除する |
+| 投稿 | 最初の送信内容を固定し、認証後に一度だけ再送する。Lv不足・拒否・キャンセルは下書きを残す。送信待ちに追記した本文も成功時に消さない。JSなしの通常POSTと認証リンクを維持する |
+| 専ブラ用キー | 平文は発行直後のstateだけで保持する。使用枠、UA表示名、日時、直近5件、未使用キーの期限、失効理由、不一致の警告を公開情報から表示する |
+| 追加テスト | BoardIndexSuiteで未ログイン・ログイン・Lv不足と埋め込みSSRを検証。RendererShellSuite・HonoRenderSuiteは共通モーダルのSSRを検証。board-islands.test.jsに通知の送信元照合、再送上限、下書き保持、hydration一致、Turnstileと同意、キー平文の保存防止を追加。最終の実行結果は引き継ぎに記録する |
+
+端末情報の原本は `MontereyLangit/v6-base` の `develop` を確認した。ブラウザ収集は `common/src/jsMain/kotlin/fc/pages/AuthPage.kt` の `collectFp` と `detectFonts` を参照し、OS軸にはUA、arch軸には `navigator.platform` をそのまま使う。フォント候補・順序・計測文字列・WebGLの材料を変えない。関連設計は同リポジトリの `docs/feature/ninja_auth_system.md`。v3のUA解析表全体はまだ確認できていない。
