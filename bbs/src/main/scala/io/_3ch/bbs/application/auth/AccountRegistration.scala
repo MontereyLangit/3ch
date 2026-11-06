@@ -50,7 +50,9 @@ final class AccountRegistration(accounts: AccountManagementStore & AccountSignIn
       accounts.lookup("uid", uidHash).flatMap {
         case Some(owner) if owner == aid => Future.unit
         case Some(_) => Future.failed(AuthServiceException(AuthServiceFailure.Invalid))
-        case None => accounts.confirm("uid", uidHash, aid, now)
+        case None => accounts.confirm("uid", uidHash, aid, now).recoverWith {
+          case _: AccountStoreException => Future.failed(AuthServiceException(AuthServiceFailure.Invalid))
+        }
       }
     }.flatMap(_ => accounts.activate(aid, now))
 

@@ -123,6 +123,20 @@ class AccountRegistrationSuite extends FunSuite {
     }
   }
 
+  test("uid の確定の結果が分からず予約が他人に渡ったら、再開せずログインの失敗にする") {
+    val store = new Store(DurableTestKit.newEnv())
+    store.failures("confirm:uid") = (new IllegalStateException("response lost"), false)
+    store.failures("lookup:uid") = (new IllegalStateException("unreachable"), false)
+    for {
+      _ <- failure(service(store).register(id, password, "", keyIp, now))
+      _ = assert(!store.trace.exists(_.startsWith("remove")))
+      uidHash <- hash("uid")
+      taken <- store.reserve("uid", uidHash, "otherowner000001", now + 601, None)
+      _ = assert(taken)
+      outcome <- service(store).login(Some(id), "correct horse", "", keyIp, now + 602)
+    } yield assertEquals(outcome, LoginOutcome.Failed(0))
+  }
+
   test("存在しない ID は固定の Account(\"dummy\") で照合し、ログイン ID の無い入力も同じにする") {
     val store = new Store(DurableTestKit.newEnv())
     for {

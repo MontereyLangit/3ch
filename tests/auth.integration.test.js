@@ -247,6 +247,9 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
   });
 
   await t.test('ID・パスワードで登録し、ログアウト・ログインして書き込み、十回の失敗で接続元をロックする', async () => {
+    const page = await (await fetch(origin + '/auth/')).text();
+    for (const text of ['新しく登録する', 'ID・パスワード', 'Googleで続ける（準備中）']) assert.ok(page.includes(text), text);
+    assert.ok((await (await fetch(origin + '/auth/?mode=login')).text()).includes('current-password'));
     const headers = { 'user-agent': 'Mozilla/5.0 IntegrationBrowser', 'CF-Connecting-IP': '192.0.2.50' };
     const registration = { id: 'Taro_2026', password: 'correct horse', password2: 'correct horse', agreement: 'v1', 'cf-turnstile-response': 'accepted' };
     const registered = await post('/auth/register/', registration, headers);
