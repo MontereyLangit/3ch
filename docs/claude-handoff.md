@@ -1,6 +1,6 @@
 # 認証実装の引き継ぎ
 
-作業ブランチは `ccr-9c002284-dbai2f`。2026-11-07（日本時間）の段Bの途中成果を区切りとして引き継ぐ。ビルドとテストを通した小さな単位ごとにcommit・pushし、完了範囲と残件をこの文書へ記録する。
+作業ブランチは `ccr-9c002284-dbai2f`。2026-11-07（日本時間）の段BとE-1の途中成果を区切りとして引き継ぐ。ビルドとテストを通した小さな単位ごとにcommit・pushし、完了範囲と残件をこの文書へ記録する。
 
 ## 前提と現在の範囲
 
@@ -18,11 +18,11 @@
 
 AS・地域・UA・日別識別子の観測集計（Account.seen）、AccountDirectoryへの反映、管理者用RPC・役割の管理も未実装。専ブラの表示名は製品名・版・既知のOSを抽出する限定的な実装で、段Cのv3解析表の移植とは区別する。接続元の表示は現在取得できるAS番号と地域・国を使い、AS名の取得は後続で揃える。iOSの既知プロファイル表はR2から読む口だけを用意しており、本番の表データを作成したわけではない。
 
-次の実施順は **E-1 → C → D → E-2**。段Bの残件と境界の確認を先に行い、この区切りではE-1の機能を追加しない。
+次の実施順は **E-1 → C → D → E-2**。段Bの基盤は `38615ac` でpush済み。後続で端末情報のUnicode空白の互換性を修正し、E-1の純粋モデルに着手した。段Bの残件と境界も引き続き確認する。
 
 | 段 | 次に実装する内容 |
 | --- | --- |
-| E-1 | ID・パスワード登録、ログイン、ロック、Google認証の基本部分。現在の準備中UIを実際の処理へ接続する |
+| E-1 | 入力規則・ログイン失敗計数・資格情報の値型まで実装。PBKDF2、資格情報の保存・照合RPC、HTTP登録・ログイン、Google認証と準備中UIの接続は未実装 |
 | C | PHOEBEの昇格・投稿数と経過時間、識別子の書式、Lv設定とコマンド、連投規制へのアカウントID連携を設計書と照合する |
 | D | 権限・回避レベル・管理画面のアカウント認証と操作画面、スレ立て規制の設定を進める。管理画面の別計画も参照する |
 | E-2 | メール認証、パスワード再設定、方式移行など。メール送信APIの提供元は未定のため、送信ポートと提供元の設定を分ける |
@@ -32,6 +32,12 @@ AS・地域・UA・日別識別子の観測集計（Account.seen）、AccountDir
 端末ハッシュの原本は `MontereyLangit/v6-base` の `develop`。`common` の端末関連実装、`common/src/jsMain/kotlin/fc/pages/AuthPage.kt` の `collectFp`・`detectFonts`、`docs/feature/ninja_auth_system.md` を参照した。OS軸はUA、arch軸は `navigator.platform`。候補フォント、順序、計測文字列などは互換材料なので、独自の別方式へ置き換えない。
 
 設計が参照するv3のUA解析表全体は未確認。段Cで元の資料を探してから移植する。Google OAuthのクライアント登録とメール送信APIの選定も後続作業。
+
+## E-1の最初の区切り
+
+LoginId、Password、LoginThrottle、PasswordCredentialをcommonに追加した。NFC後のUTF-8長、孤立サロゲート、予約語と板名、5回目からの遅延、10回目の接続元ロック、期限と別IPへの影響をJVM・Scala.jsで検証する。ID・パスワード方式で実際に登録・ログインできる段階ではない。
+
+全体の失敗窓は1時間とし、成功は該当する接続元の失敗だけを消す。登録時のパスワードでは、ASCIIの大文字小文字を区別せずIDの包含を拒否する。[実装メモ](auth-password-implementation-notes.md) の登録回復方式は未採用の候補であり、既存Bの10分の予約期限を変更していない。
 
 ## 設定と検証
 
@@ -51,11 +57,11 @@ npm run v6:typecheck
 
 | 検証 | この区切りの結果 |
 | --- | --- |
-| Scala単体テスト | sbt test 1,001件成功（commonJVM 103、commonJS 108、codegen 27、bbsClient 2、bbs 761）。既存の投稿goldenは変更なし |
+| Scala単体テスト | sbt test 1,059件成功（commonJVM 133、commonJS 136、codegen 27、bbsClient 2、bbs 761）。既存の投稿goldenは変更なし |
 | workerd・SSR・hydration | npm test 62件成功、skipなし。npmのpretestも成功。実DOの競合・保存、Turnstile応答の差し替え、Cookie・再認証・キー失効・ログアウト、既存投稿、SSR・hydrationを検証 |
 | ビルド | npm run v6:build成功。Workerの最終出力に5つのDOが公開されることも検証 |
 | dev起動 | npm run devをローカル・ダミーsaltで起動。トップ200、bbs.cgiのHTTP 200とエラーマーカー、管理者パスワード未設定時の503、各応答のAccept-CHを確認 |
 | 型チェック | npm run v6:typecheck成功 |
-| コミット・push | この文書を含む検証済みの段Bの区切りとして作業ブランチへ反映する |
+| コミット・push | 段B基盤は38615acで反映済み。以後も互換性修正とE-1の入力規則を分けて反映する |
 
 本番へのデプロイ、secretの登録、本番データの変更はこの区切りには含めない。
