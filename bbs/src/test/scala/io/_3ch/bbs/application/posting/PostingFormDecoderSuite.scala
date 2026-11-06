@@ -1,4 +1,4 @@
-package io._3ch.bbs.handler
+package io._3ch.bbs.application.posting
 
 import munit.FunSuite
 import io._3ch.bbs.external.web.TextEncoder

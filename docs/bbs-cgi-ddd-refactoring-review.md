@@ -127,3 +127,22 @@
 ## domain の Scaladoc の補足
 
 bbs/domain と common/domain の公開型・公開メソッドで doc が無かったもの（GlobalThread.Kind・kindOf・canPost、KeyIp.of、NusiMark、PostingError の一部の場合と code、ThreadCreationRejection・ThreadCreationRecord・ThreadCreationRateLimit の Settings / Entry、ThreadCreationSettingError、BoardId・ThreadKey・ThreadTitle・BbsSubject の create、SubjectText.decode、PostingResponse.classify、DateSalt・ShikibetsuFormat・ShikibetsuSeeds、CapHandle.displayName、NameField.withIdentity、UserInfo.text など）に 1 行の doc を足した。コードと既存の doc の意味は変えていない。
+
+## 段 8 の前準備: Thread DO 側の境界ケース
+
+| 項目 | 内容 |
+| --- | --- |
+| 実施 | スナップショットに 8 ケースを足した。スレ設定の BBS_HEISA（値の前の空白、キーの前後の空白、後勝ちで checked、`<<>` と `<>>` に挟まれた checked を後で空に上書き）、スレ設定だけがある key へのスレ立て、R2 の旧ログがある key へのスレ立て（DO 側の同一 key）、末尾に改行の無い 999 行の dat への返信（DO 側の 1000 件）。DO 側だけが拒否する場合は内部エラーの文言（errmsg:updateThreadFile->Error: …）になる |
+| 生成 | 段 6 の終わりのコードで update タグを実行し、既存 196 件に差分が出ないことを確認した。さらに develop（3775f12）の作業ツリーに同じスイートと 204 件を置いて照合し、全件一致した |
+
+## 段 7: アプリケーションサービス
+
+| 項目 | 内容 |
+| --- | --- |
+| 実施 | application/posting/PostingService.post(request) に段の並びを集めた。PostingRequest と PostingFormDecoder を handler から application/posting に移し、PostingRequest に本文を読む body を足した（ヘッダの検査の後に読む順は従来どおり）。ポートは ports/ の ThreadStore・SettingsStore・RuleStore・CapStore・ArchiveIndexStore・PostingUserSource・Hasher・Clock・Random で、PostingPorts にまとめる。実装は既存のリポジトリ（ThreadRepository.store など）と hash/WebHasher。handler/PostingHandler は handler/Posting に改名し、PostingRequest 化 → サービス → PostingPages.render だけにした |
+| 状態 | g と Draft を削除し、PostingContext（form・identity・受付時刻・合成した settings・number・title・cap・shikibetsu・スレ主・sage・PON）を段ごとに copy で埋める。拒否はサービス内部の例外 Rejected(error, その時点の context) で、PostingOutcome.Rejected にして返す。段 3 で保留した settings は PostingContext.settings に置いた。板設定だけを読む箇所（スレ立て規制・板の BBS_DISABLE_NUSI）はサービス内の PostingBoard で渡す |
+| ドメインへ移したもの | subject.txt・スレ帯一覧・headline.txt の本文（common の ArchiveIndexText。headline の trim は JavaScript と同じ空白を除く JsText）、sage 判定（common の SageRule。BBS_LIVE の乱数は Random ポートから by-name で渡し、判定に進んだときだけ読む）、返信先の dat の検査（ReplyThread）、文字数と行数の検査（PostFormLimits）、広域スレ立て規制のネットワークグループ（ThreadCreationNetwork）、初期スレ設定の保存形式（BbsSettings.toThreadSettings。JavaScript のオブジェクトと同じキー順を js.Object.keys を使わずに並べる）。ThreadCreationSettings は handler から domain/posting/moderation へ移した |
+| 振る舞いの保存 | スナップショット 204 件・PostingSuite（改名のみ）・golden は差分なし。返信先の dat・スレ設定・スレ主は従来どおり同時に読み始め、スレ主は名前欄の (主) の判定で初めて復号する（キャップ・閉鎖・満杯では触れない）。内部エラーの時刻は段ごとの従来の規則（KB-39 の undefined を含む）をサービスの guarded に移した |
+| テスト | PostingServiceSuite（メモリ上のポートで、スレ立てと返信の呼び出し順、addRes に渡す付帯情報、ヘッダ検査・閉鎖・満杯・規制・スレ立て規制で後段を呼ばないこと、内部エラーと過去ログ目次の競合の内容、copy で埋まる context）、ReplyThreadSuite・PostFormLimitsSuite・ThreadCreationNetworkSuite、common の ArchiveIndexTextSuite・SageRuleSuite・JsTextSuite（JVM / JS）と実行環境の trim・Object.keys と突き合わせる JsTextRuntimeSuite・BbsSettingsRuntimeSuite |
+| 計画との差分 | ポート BoardStore は作らなかった（投稿処理から Board DO は直接呼ばず、Thread DO が呼ぶ）。代わりに板設定を SettingsStore、認証主体の解決を PostingUserSource とした。PostingOutcome の Posted・Swallowed は key と number を別に持たず context を持つ（context.form.key・context.number）。x-threadkey・x-resnum は handler が付け、サービスの headers は Set-Cookie だけ。受付時刻は Clock を 1 回だけ読む（従来は時刻と秒で 2 回読んでいた。秒の境界をまたぐ瞬間だけ値がずれうるが、固定時刻のテストでは同じ）。g.cookies は書くだけでどこからも読まれていなかったので削除した。PostingSuite が handler の名前で参照する ThreadCreationSettings は、テスト側に別名（ThreadCreationSettingsAlias.scala）を置いて PostingSuite を変えずに済ませた |
+| 見送りの解消 | PostingFormDecoder の Shift_JIS 復号の var と可変バッファを末尾再帰に置き換えた |

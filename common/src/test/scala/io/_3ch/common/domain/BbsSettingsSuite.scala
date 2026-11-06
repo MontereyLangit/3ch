@@ -85,4 +85,10 @@ class BbsSettingsSuite extends munit.FunSuite {
     assertEquals(board.merged(thread).value.toList, List("A" -> "1", "B" -> "x", "C" -> "y"))
     assertEquals(board.updated("A", "z").value.toList, List("A" -> "z", "B" -> "2"))
   }
+
+  test("toThreadSettings は配列の添字になるキーを数の順で先に並べ、ほかは元の順") {
+    val settings = BbsSettings(ListMap("B" -> "1", "10" -> "a", "01" -> "b", "2" -> "c", "4294967295" -> "d", "4294967294" -> "e", "-1" -> "f", "0" -> "g"))
+    assertEquals(settings.toThreadSettings, "0=g<>2=c<>10=a<>4294967294=e<>B=1<>01=b<>4294967295=d<>-1=f<>")
+    assertEquals(BbsSettings(ListMap.empty).toThreadSettings, "")
+  }
 }

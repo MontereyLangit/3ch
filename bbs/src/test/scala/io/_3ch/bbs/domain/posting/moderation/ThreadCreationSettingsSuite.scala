@@ -1,6 +1,5 @@
-package io._3ch.bbs.handler
+package io._3ch.bbs.domain.posting.moderation
 
-import io._3ch.bbs.domain.posting.moderation.ThreadCreationSettingError
 import munit.FunSuite
 
 class ThreadCreationSettingsSuite extends FunSuite {

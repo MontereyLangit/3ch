@@ -14,7 +14,7 @@ import scala.scalajs.js
  * 「現在の実際の動作」を凍結するものであり、正しさを検証するものではない。既知の不具合
  * （docs/現行システム仕様書.md 11章、docs/既知不具合台帳.md）もそのまま凍結し、修正しない。
  */
-class PostingHandlerSuite extends FunSuite {
+class PostingSuite extends FunSuite {
   import HandlerTestKit.*
 
   private final case class Posted(res: js.Dynamic, text: String)
@@ -54,7 +54,7 @@ class PostingHandlerSuite extends FunSuite {
   )
 
   private def entry(env: Env, req: Request, resolveUser: PostingUserResolver.Resolver = PostingUserResolver.unresolved): Future[js.Dynamic] =
-    fut[js.Dynamic](PostingHandler.entry(req, env.worker, resolveUser))
+    fut[js.Dynamic](Posting.entry(req, env.worker, resolveUser))
 
   /** フィールドを与えて POST リクエストを投稿エントリへ渡す。submit は既定でWebブラウザ相当(UTF-8)。 */
   private def post(env: Env, fields: Seq[(String, String)] = Nil, headers: Seq[(String, String)] = Nil, cf: Seq[(String, String)] = Nil,

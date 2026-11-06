@@ -18,7 +18,7 @@ class PostingNumericSettingsSuite extends munit.FunSuite {
       "content-type" -> "application/x-www-form-urlencoded", "referer" -> "https://www.3ch.io/", "user-agent" -> "Mozilla/5.0",
       "CF-Connecting-IP" -> "192.0.2.1"
     ))
-    PostingHandler.entry(req, env.worker).toFuture.map(_.asInstanceOf[js.Dynamic])
+    Posting.entry(req, env.worker).toFuture.map(_.asInstanceOf[js.Dynamic])
   }
 
   test("巨大な指数の文字数上限は Infinity として読み、スレ立てと返信を受け付ける") {

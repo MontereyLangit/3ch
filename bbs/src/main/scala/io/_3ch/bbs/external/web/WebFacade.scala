@@ -31,3 +31,9 @@ trait Request extends js.Object {
   val cf: js.UndefOr[js.Dynamic] = js.native
   def arrayBuffer(): js.Promise[js.typedarray.ArrayBuffer] = js.native
 }
+
+@js.native
+@JSGlobal("URL")
+class URL(url: String) extends js.Object {
+  val hostname: String = js.native
+}

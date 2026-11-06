@@ -39,9 +39,17 @@ case class BbsSettings (
 
   /** other の値で上書きする。既存のキーは位置を保ち、新しいキーは末尾に足す */
   def merged(other: BbsSettings): BbsSettings = BbsSettings(other.value.foldLeft(value) { case (acc, (k, v)) => acc.updated(k, v) })
+
+  /** スレ設定の保存形式（キー=値<> の列）。キーは JavaScript のオブジェクトと同じく、配列の添字になるものを数の順で先に並べる */
+  def toThreadSettings: String = {
+    val (indices, names) = value.toSeq.partition { case (k, _) => BbsSettings.isArrayIndex(k) }
+    (indices.sortBy { case (k, _) => k.toLong } ++ names).map { case (k, v) => s"$k=$v<>" }.mkString
+  }
 }
 
 object BbsSettings {
+  private def isArrayIndex(key: String): Boolean =
+    key.nonEmpty && key.length <= 10 && key.forall(c => c >= '0' && c <= '9') && (key == "0" || key.head != '0') && key.toLong < 4294967295L
 
   /**
     * SETTING.TXT形式の文字列をパースして設定オブジェクトを生成

@@ -3,7 +3,7 @@ package io._3ch.bbs.handler
 import io._3ch.bbs.external.cloudflare.*
 import io._3ch.bbs.external.web.{Request, Response, TextEncoder}
 import io._3ch.bbs.hash.WebHash
-import io._3ch.bbs.domain.posting.moderation.ModerationRuleSet
+import io._3ch.bbs.domain.posting.moderation.{ModerationRuleSet, ThreadCreationSettings}
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue

@@ -1,5 +1,6 @@
 package io._3ch.bbs.repository
 
+import io._3ch.bbs.application.posting.ports.StoredIndex
 import io._3ch.bbs.durable.DurableTestKit
 import munit.FunSuite
 
@@ -18,7 +19,7 @@ class ArchiveIndexRepositorySuite extends FunSuite {
       found <- ArchiveIndexRepository.read("a.txt", env.worker)
       missing <- ArchiveIndexRepository.read("b.txt", env.worker)
     } yield {
-      assertEquals(found, Some(ArchiveIndexRepository.Stored("本文", Some("etag-a"))))
+      assertEquals(found, Some(StoredIndex("本文", Some("etag-a"))))
       assertEquals(missing, None)
     }
   }

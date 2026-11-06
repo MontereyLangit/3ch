@@ -1,11 +1,13 @@
-package io._3ch.bbs.handler
+package io._3ch.bbs.application.posting
 
 import io._3ch.bbs.domain.posting.{FormSanitizer, PostingError}
 import io._3ch.bbs.external.web.TextDecoder
 import io._3ch.bbs.util.SjisEncoding
 import io._3ch.common.domain.posting.PostForm
 
+import scala.annotation.tailrec
 import scala.scalajs.js
+import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.typedarray.Uint8Array
 
 /** bbs.cgi のフォーム本文を復号する。submit=書… なら UTF-8、それ以外は Monazilla の Shift_JIS とみなす */
@@ -34,19 +36,11 @@ object PostingFormDecoder {
   }
 
   private def decodeSjis(s: String): String = {
-    val bytes = scala.collection.mutable.ArrayBuffer.empty[Int]
-    var i = 0
-    while (i < s.length) {
-      if (s(i) == '%' && i + 2 < s.length && HexByte.test(s.substring(i + 1, i + 3))) {
-        bytes += Integer.parseInt(s.substring(i + 1, i + 3), 16)
-        i += 3
-      } else {
-        bytes += s(i).toInt
-        i += 1
-      }
-    }
-    val u8 = new Uint8Array(bytes.length)
-    bytes.indices.foreach(j => u8(j) = bytes(j).toShort)
-    SjisEncoding.decode(u8)
+    @tailrec
+    def bytes(i: Int, acc: Vector[Short]): Vector[Short] =
+      if (i >= s.length) acc
+      else if (s(i) == '%' && i + 2 < s.length && HexByte.test(s.substring(i + 1, i + 3))) bytes(i + 3, acc :+ Integer.parseInt(s.substring(i + 1, i + 3), 16).toShort)
+      else bytes(i + 1, acc :+ s(i).toShort)
+    SjisEncoding.decode(new Uint8Array(bytes(0, Vector.empty).toJSArray))
   }
 }

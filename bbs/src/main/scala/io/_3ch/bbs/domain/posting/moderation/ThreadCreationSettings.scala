@@ -1,6 +1,5 @@
-package io._3ch.bbs.handler
+package io._3ch.bbs.domain.posting.moderation
 
-import io._3ch.bbs.domain.posting.moderation.{ThreadCreationRateLimit, ThreadCreationSettingError}
 import io._3ch.common.domain.BbsSettings
 
 /** スレ立て設定を検証する。旧形式の件数/秒も受け付ける。 */

@@ -37,7 +37,7 @@
 - `BBS_NAME_COUNT` の検査は付ける前の名前で行う。
 - 認証主体は `domain/posting/PostingUser`（`accountKey`: 移行しても変わらない内部 ID、`displayId`: 表示するユーザー ID）で受け取る。
   解決関数は `handler/PostingUserResolver`（型 `Resolver`）で、現時点の `PostingUserResolver.unresolved` は常に未認証を返す。
-  `PostingHandler.entry` の第 3 引数で差し替えられる。**認証ブランチでここを Cookie / 専ブラ認証キーからの解決に差し替える。**
+  `Posting.entry` の第 3 引数で差し替えられる（`PostingService` には `PostingUserSource` のポートとして渡る）。**認証ブランチでここを Cookie / 専ブラ認証キーからの解決に差し替える。**
   表示 ID を方式ごとに選ぶ（クライアント ID は自動 ID、ID/Password・Google は登録 ID）のは認証側の責務とする。
 
 ### 2.4 スレ主表示 ` (主)`

@@ -37,7 +37,7 @@ IPv6の表記はURLの正規化を使って揃える。タイトルはフォー�
 `ThreadCreationRateLimit` が純粋な判定を担い、`PostingContext` と `ClientIdentity` で投稿情報を渡す。
 予約・確定・取消と履歴の保持規則は集約 `ThreadCreationHistory` が持ち、Board DO はロック・ページの読み書き・
 `ThreadCreationCodec` による変換だけを行う（AGENTS.md 3.5）。拒否はRPCで `ThreadCreationRejection` のコード
-（例 `thread-creation:broad:network-group`）として返し、文言への変換は `PostingHandler` が行う。
+（例 `thread-creation:broad:network-group`）として返し、文言への変換は `PostingText` が行う。
 通常の検証後、Thread DOがdatを保存する直前にBoard DOへ予約を依頼する。
 Board DOは判定と履歴の追加を `blockConcurrencyWhile` で直列化する。
 予約中の履歴は件数窓を進めず、期限内の予約との一致も別途拒否する。

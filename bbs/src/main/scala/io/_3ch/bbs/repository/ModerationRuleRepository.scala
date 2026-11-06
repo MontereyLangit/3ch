@@ -1,5 +1,6 @@
 package io._3ch.bbs.repository
 
+import io._3ch.bbs.application.posting.ports.RuleStore
 import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRuleSet, ModerationRuleSource}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 
@@ -16,4 +17,7 @@ object ModerationRuleRepository {
         ModerationRuleSet.parse(text).fold(_ => ModerationRuleSource.Broken, ModerationRuleSource.Loaded(_))
       }.recover { case _ => ModerationRuleSource.Broken }
     }
+
+  /** 投稿処理のポート */
+  def store(e: WorkerEnv): RuleStore = file => load(file, e)
 }

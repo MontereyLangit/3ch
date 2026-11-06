@@ -1,11 +1,14 @@
-package io._3ch.bbs.handler
+package io._3ch.bbs.application.posting
 
 import io._3ch.bbs.domain.posting.PostingError
 import io._3ch.bbs.external.web.Request
 
+import scala.concurrent.Future
+import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
+import scala.scalajs.js.typedarray.Uint8Array
 
-/** bbs.cgi へのリクエストのうち投稿処理が読むヘッダと cf の値。無いヘッダは空文字列、本文は含めない */
+/** bbs.cgi へのリクエストのうち投稿処理が読むヘッダと cf の値。無いヘッダは空文字列。本文は body を呼んだときに読む */
 final case class PostingRequest(
   method: String,
   contentType: String,
@@ -26,7 +29,8 @@ final case class PostingRequest(
   asn: Option[String],
   country: Option[String],
   region: Option[String],
-  city: Option[String]
+  city: Option[String],
+  body: () => Future[Uint8Array] = () => Future.successful(new Uint8Array(0))
 ) {
 
   /** UA に Client Hints（完全版があればそちら）を連結したもの */
@@ -89,7 +93,8 @@ object PostingRequest {
       asn = metadata("asn"),
       country = metadata("country"),
       region = metadata("region"),
-      city = metadata("city")
+      city = metadata("city"),
+      body = () => request.arrayBuffer().toFuture.map(new Uint8Array(_))
     )
   }
 }

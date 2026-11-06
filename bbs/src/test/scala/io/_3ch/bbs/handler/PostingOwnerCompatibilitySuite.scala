@@ -27,7 +27,7 @@ class PostingOwnerCompatibilitySuite extends munit.FunSuite {
       "content-type" -> "application/x-www-form-urlencoded", "referer" -> "https://www.3ch.io/", "user-agent" -> "Mozilla/5.0",
       "CF-Connecting-IP" -> "192.0.2.1"
     ), method = "POST", body = body)
-    PostingHandler.entry(req, env.worker).toFuture.map(_.asInstanceOf[js.Dynamic])
+    Posting.entry(req, env.worker).toFuture.map(_.asInstanceOf[js.Dynamic])
   }
 
   test("キャップの返信は壊れた owner をデコードせず書き込む") {

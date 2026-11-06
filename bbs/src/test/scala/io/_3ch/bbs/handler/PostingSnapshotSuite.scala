@@ -126,7 +126,7 @@ class PostingSnapshotSuite extends FunSuite {
 
   /** 準備として at 秒に投稿処理を通す（スレ立て規制の履歴作り） */
   private def priorPost(at: Double, c: Case): Env => Future[Unit] = env =>
-    withFixedTime(at * 1000)(fut[js.Dynamic](PostingHandler.entry(makeRequest(c), env.worker, resolver(c)))).map(_ => ())
+    withFixedTime(at * 1000)(fut[js.Dynamic](Posting.entry(makeRequest(c), env.worker, resolver(c)))).map(_ => ())
 
   /** 以後の THREAD_DO.get(...) が返すスタブの method を失敗させる */
   private def failThread(method: String, message: String): Env => Future[Unit] = env => Future.successful {
@@ -432,7 +432,7 @@ class PostingSnapshotSuite extends FunSuite {
         val env = DurableTestKit.newEnv()
         for {
           _ <- c.setup(env)
-          outcome <- fut[js.Dynamic](PostingHandler.entry(makeRequest(c), env.worker, resolver(c))).transformWith {
+          outcome <- fut[js.Dynamic](Posting.entry(makeRequest(c), env.worker, resolver(c))).transformWith {
             case scala.util.Success(res) => responseJson(res).map(json => "response" -> json)
             case scala.util.Failure(e) => Future.successful("failure" -> (DurableTestKit.messageOf(e): js.Any))
           }

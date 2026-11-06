@@ -1,5 +1,6 @@
 package io._3ch.bbs.handler
 
+import io._3ch.bbs.application.posting.PostingOutcome
 import io._3ch.common.domain.posting.PostForm
 import japgolly.scalajs.react.facade.React
 import scala.scalajs.js
@@ -14,6 +15,12 @@ object PostingPages {
   // Only preformatted message fragments and literal protocol comments bypass escaping.
   private def raw(tag: String, content: String): React.Element = {
     React.createElement(tag, js.Dynamic.literal(dangerouslySetInnerHTML = js.Dynamic.literal(__html = content)))
+  }
+
+  /** 投稿処理の結果の画面。拒否ならその時点のフォームとホストを出す */
+  def render(outcome: PostingOutcome, charset: String): React.Element = outcome match {
+    case PostingOutcome.Rejected(error, context, _) => respondError(context.form, context.identity.host, PostingText.message(error), charset)
+    case done => respondEndHtml(done.context.form, charset)
   }
 
   def respondEndHtml(form: PostForm, charset: String): React.Element = {

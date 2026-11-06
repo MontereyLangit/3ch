@@ -2,11 +2,7 @@ package io._3ch.common.text
 
 /** JavaScript の Number(s) と parseInt(s)（基数省略）の文字列解釈 */
 object JsNumber {
-  private def isJsSpace(c: Char): Boolean =
-    c == '\t' || c == '\n' || c == '\u000b' || c == '\f' || c == '\r' || c == ' ' || c == ' ' || c == ' ' ||
-      (c >= ' ' && c <= ' ') || c == ' ' || c == ' ' || c == ' ' || c == ' ' || c == '　' || c == '﻿'
-
-  private def trim(s: String): String = s.dropWhile(isJsSpace).reverse.dropWhile(isJsSpace).reverse
+  private def trim(s: String): String = JsText.trim(s)
 
   private def isDigits(s: String, radix: Int): Boolean = s.nonEmpty && s.forall(c => Character.digit(c, radix) >= 0 && c < '\u0080')
 
