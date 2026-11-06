@@ -178,6 +178,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
         initialSettings = Option.when(create)(spaced.settings.toThreadSettings), creationLimit = creationLimit, owner = owner)
       ports.threads.addRes(board.id, form.key, dat, DatLineFormatter.logLine(spaced.number.toString, userInfo.text), posting).map {
         case ThreadWriteResult.Written(number) => spaced.copy(number = number)
+        case ThreadWriteResult.Refused(rejection) => reject(PostingError.ThreadRefused(rejection, site(spaced, FailureClock.Unixtime, spaced.time)), spaced)
         case ThreadWriteResult.CreationLimited(rejection) => reject(PostingError.ThreadCreation(rejection), spaced)
       }
     }

@@ -3,6 +3,7 @@ package io._3ch.bbs.handler
 import munit.FunSuite
 import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureClock, FailureSite, ModerationDenial, PostField, PostingError, PostingStage}
 import io._3ch.bbs.domain.posting.moderation.{ThreadCreationRejection, ThreadCreationRateLimit, ThreadCreationSettingError}
+import io._3ch.common.domain.posting.ThreadWriteRejection
 
 /** 拒否理由ごとの文言が従来どおりか */
 class PostingTextSuite extends FunSuite {
@@ -44,6 +45,8 @@ class PostingTextSuite extends FunSuite {
     PostingError.ThreadCreation(ThreadCreationRejection.Capacity) -> "スレッドを立てすぎです。しばらく待ってから投稿してください。",
     PostingError.ThreadCreation(ThreadCreationRejection.Broad(ThreadCreationRateLimit.Reason.NetworkGroup)) -> "この接続環境ではスレッドを立てすぎです。しばらく待ってから投稿してください。",
     PostingError.ArchiveConflict("SubbackFIle", site) -> "updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(unixtime:undefined bbs:sample key:1700000000 number:1 errmsg:updateSubback->SubbackFIle_update_conflicted!)",
+    PostingError.ThreadRefused(ThreadWriteRejection.Closed, site) ->
+      "updateThreadFile error. ログファイルに書けませんでした。(unixtime:undefined bbs:sample key:1700000000 number:1 errmsg:updateThreadFile->Error: このスレッドは停止されています。)<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。",
     PostingError.Internal(PostingStage.BoardSettings, FailureSite(FailureClock.Time, "1700000000000", "sample", "1700000000", "0"), "Error: boom") ->
       "getBoardSettings error. 不明なエラーが発生しました。(time:1700000000000 bbs:sample key:1700000000 number:0 errmsg:getBoardSettings->Error: boom)<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。"
   )
@@ -85,6 +88,22 @@ class PostingTextSuite extends FunSuite {
       val error = PostingError.Internal(stage, site, "Error: boom")
       assertEquals(error.code, code)
       assertEquals(PostingText.message(error), s"$label error. $description(unixtime:undefined bbs:sample key:1700000000 number:1 errmsg:$label->Error: boom)<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。")
+    }
+  }
+
+  test("Thread DO の拒否は従来の DO の例外文言を原因に出し、コードは DO が返したもの") {
+    val cases = Seq(
+      ThreadWriteRejection.Unavailable -> "このスレッドは停止・移動または削除されています。",
+      ThreadWriteRejection.Closed -> "このスレッドは停止されています。",
+      ThreadWriteRejection.DuplicateKey -> "同じkeyのスレッドが存在します。",
+      ThreadWriteRejection.Missing -> "スレッドがありません。",
+      ThreadWriteRejection.Full -> "このスレッドは1000を超えたのでもう書けません。"
+    )
+    assertEquals(cases.map(_._1).toSet, ThreadWriteRejection.values.toSet)
+    cases.foreach { (rejection, cause) =>
+      val refused = PostingError.ThreadRefused(rejection, site)
+      assertEquals(refused.code, rejection.code)
+      assertEquals(PostingText.message(refused), PostingText.message(PostingError.Internal(PostingStage.ThreadWrite, site, "Error: " + cause)))
     }
   }
 }

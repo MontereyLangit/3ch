@@ -17,4 +17,12 @@ class DatLineFormatterSuite extends munit.FunSuite {
   test("log 行はレス番号と投稿者情報") {
     assertEquals(DatLineFormatter.logLine("2", "UID: IP:h AS0-JP,,Device: UA:"), "2<>UID: IP:h AS0-JP,,Device: UA:")
   }
+
+  test("log 行の先頭のレス番号だけを確定した番号に置き換える") {
+    assertEquals(DatLineFormatter.renumberLog("1<>UID: x", 12), "12<>UID: x")
+    assertEquals(DatLineFormatter.renumberLog("007<>a<>1<>b", 3), "3<>a<>1<>b")
+    assertEquals(DatLineFormatter.renumberLog("<>a", 3), "<>a")
+    assertEquals(DatLineFormatter.renumberLog("1a<>a", 3), "1a<>a")
+    assertEquals(DatLineFormatter.renumberLog("１<>a", 3), "１<>a")
+  }
 }

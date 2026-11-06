@@ -8,7 +8,7 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 
-/** `Thread` DO を完全一致で固定し、replay ハーネスが踏まない境界を補う */
+/** Thread DO の直列化・一括保存・拒否のコードの返し方。追記できるかの規則は ThreadWriteGuardSuite で確かめる */
 class ThreadSuite extends FunSuite {
   import DurableTestKit.{newEnv, seed, rejectionMessage}
 
@@ -57,7 +57,7 @@ class ThreadSuite extends FunSuite {
       destDatAfterFail <- destination.getDat().toFuture
       _ = assertEquals(destDatAfterFail, "")
       retryBlockedMsg <- rejectionMessage(source.addRes("new", "2<>log").toFuture)
-      _ = assert(retryBlockedMsg.contains("移動"), retryBlockedMsg)
+      _ = assertEquals(retryBlockedMsg, "thread-write:unavailable")
       // updateThreadを元の実装に戻すと、同じ移動先に対してだけ再開できる。
       _ = boardTargetOriginal.updateThread = originalUpdateThread
       restoredBoard = env.board("target")
@@ -69,7 +69,7 @@ class ThreadSuite extends FunSuite {
       destInspect <- destination.inspect().toFuture
       _ = assertEquals(destInspect.legacyLog.toOption, Some("old private log"))
       destAddBlocked <- rejectionMessage(destination.addRes("new", "2<>log").toFuture)
-      _ = assert(destAddBlocked.contains("停止"), destAddBlocked)
+      _ = assertEquals(destAddBlocked, "thread-write:unavailable")
       subject <- restoredBoard.getSubject().toFuture
       _ = assertEquals(subject, "1800000001.dat<>title (1)\n")
       sourceInspect <- source.inspect().toFuture
@@ -95,7 +95,7 @@ class ThreadSuite extends FunSuite {
       moveMsg <- rejectionMessage(source.moderate("move", moveInput()).toFuture)
       _ = assert(moveMsg.contains("lost response"), moveMsg)
       addBlockedMsg <- rejectionMessage(source.addRes("new", "2<>log").toFuture)
-      _ = assert(addBlockedMsg.contains("移動"), addBlockedMsg)
+      _ = assertEquals(addBlockedMsg, "thread-write:unavailable")
       _ = destDynamic.receiveMove = originalReceiveMove
       _ <- source.moderate("move", moveInput()).toFuture
       destDat <- destination.getDat().toFuture
@@ -181,7 +181,7 @@ class ThreadSuite extends FunSuite {
       _ = assertEquals(finalLog, "1<>first\n2<>second\n3<>third\n")
       _ <- thread.moderate("stop", moveInput(bbs = "source", key = "1800000000")).toFuture
       blocked <- rejectionMessage(thread.addRes("fourth", "4<>fourth").toFuture)
-      _ = assert(blocked.contains("停止"), blocked)
+      _ = assertEquals(blocked, "thread-write:unavailable")
     } yield ()
   }
 
@@ -198,13 +198,13 @@ class ThreadSuite extends FunSuite {
       _ = assertEquals(newLog, "2<>log\n")
       _ = env.putR2("source/thread/1700/1700000001.cgi", "legacy title\nBBS_HEISA=checked\n1<>name<><>1700000000<>ID:one<>text<>IP:192.0.2.1\n")
       blockedMsg <- rejectionMessage(env.thread("source/1700000001").addRes("second<><><><>", "2<>log", js.Dynamic.literal(bbs = "source", key = "1700000001", create = false)).toFuture)
-      _ = assert(blockedMsg.contains("停止"), blockedMsg)
+      _ = assertEquals(blockedMsg, "thread-write:closed")
     } yield ()
   }
 
   // ---------- ここから: replayハーネスが踏んでいない追加シナリオ ----------
 
-  test("999件目は許可され、1000件目は「1000を超えた」で完全一致のメッセージと共に拒否される（KB-02）") {
+  test("999件目は保存し、1000件目は拒否のコードで失敗して dat を変えない（KB-02）") {
     val env = newEnv()
     val instance998 = env.threadInstance("board1/1")
     val seeded998 = (1 to 998).map(i => s"$i<>x<><>msg<>\n").mkString
@@ -219,7 +219,7 @@ class ThreadSuite extends FunSuite {
       seeded999 = (1 to 999).map(i => s"$i<>x<><>msg<>\n").mkString
       _ <- seed(instance999, "dat" -> seeded999, "log" -> "")
       msg <- rejectionMessage(env.thread("board1/2").addRes("1000<>new<><>msg<>", "1000<>log").toFuture)
-      _ = assertEquals(msg, "このスレッドは1000を超えたのでもう書けません。")
+      _ = assertEquals(msg, "thread-write:full")
       unchanged <- env.thread("board1/2").getDat().toFuture
       _ = assertEquals(unchanged, seeded999, "拒否された投稿はdatに反映されない")
     } yield ()
@@ -237,7 +237,7 @@ class ThreadSuite extends FunSuite {
       stoppedInspect <- thread.inspect().toFuture
       _ = assertEquals(stoppedInspect.stopped.toOption, Some(true))
       blocked <- rejectionMessage(thread.addRes("x", "2<>log", js.Dynamic.literal(bbs = "board1", key = "3", create = false)).toFuture)
-      _ = assert(blocked.contains("停止"), blocked)
+      _ = assertEquals(blocked, "thread-write:unavailable")
       _ <- thread.moderate("resume", moveInput(bbs = "board1", key = "3")).toFuture
       afterResume <- thread.getSettings().toFuture
       _ = assertEquals(afterResume, "FOO=bar<>BAR=baz<>BBS_HEISA=")
@@ -325,6 +325,26 @@ class ThreadSuite extends FunSuite {
       threadOmitted = env.thread("board1/9")
       countOmitted <- threadOmitted.addRes("1<>a<><>msg<>title", "1<>log").toFuture
       _ = assertEquals(countOmitted, 1, "posting省略(undefined)時と同じ結果になる")
+    } yield ()
+  }
+
+  test("拒否した追記はスレ立て規制の予約も保存もせず、log の番号は確定した番号に置き換える") {
+    val env = newEnv()
+    val instance = env.threadInstance("board1/10")
+    val thread = env.thread("board1/10")
+    val creation = js.Dynamic.literal(ip = "ip", userAgent = "ua", networkGroup = "net", title = "t", tatesugi = 1, tatesugiResetSeconds = 3600, junban = 0, junbanResetSeconds = 3600)
+    def create(key: String) = js.Dynamic.literal(bbs = "board1", key = key, title = "t", create = true, creationLimit = creation)
+    for {
+      _ <- seed(instance, "settings" -> "BBS_HEISA=checked<>")
+      closed <- rejectionMessage(thread.addRes("d<><><> m <>t", "1<>log", create("10")).toFuture)
+      _ = assertEquals(closed, "thread-write:closed")
+      stored <- instance.state.storage.get[String]("dat").toFuture
+      _ = assertEquals(stored.toOption.getOrElse(""), "")
+      // 予約が残っていれば同じ識別情報の次のスレ立ては狭域規制で拒否される
+      count <- env.thread("board1/11").addRes("d<><><> m <>t", "7<>log", create("11")).toFuture
+      _ = assertEquals(count, 1)
+      log <- env.thread("board1/11").getLog().toFuture
+      _ = assertEquals(log, "1<>log\n")
     } yield ()
   }
 }

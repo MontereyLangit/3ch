@@ -1,7 +1,8 @@
 package io._3ch.bbs.handler
 
-import io._3ch.bbs.domain.posting.{BrokenLogKind, ModerationDenial, PostField, PostingError, PostingStage}
+import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureSite, ModerationDenial, PostField, PostingError, PostingStage}
 import io._3ch.bbs.domain.posting.moderation.{ThreadCreationRejection, ThreadCreationSettingError}
+import io._3ch.common.domain.posting.ThreadWriteRejection
 
 /** 投稿処理の既定の板設定と、拒否理由の文言 */
 object PostingText {
@@ -38,6 +39,21 @@ object PostingText {
     case PostingStage.Headline => "updateHeadline"
   }
 
+  /** Thread DO が書き込みを拒否した理由。内部エラーの原因の欄に Error: を付けて出す */
+  private def threadWriteMessage(rejection: ThreadWriteRejection): String = rejection match {
+    case ThreadWriteRejection.Unavailable => "このスレッドは停止・移動または削除されています。"
+    case ThreadWriteRejection.Closed => "このスレッドは停止されています。"
+    case ThreadWriteRejection.DuplicateKey => "同じkeyのスレッドが存在します。"
+    case ThreadWriteRejection.Missing => "スレッドがありません。"
+    case ThreadWriteRejection.Full => "このスレッドは1000を超えたのでもう書けません。"
+  }
+
+  private def internal(stage: PostingStage, site: FailureSite, cause: String): String = {
+    val label = stageLabel(stage)
+    val description = if stage == PostingStage.ThreadWrite then "ログファイルに書けませんでした。" else "不明なエラーが発生しました。"
+    s"$label error. $description(${site.clock.label}:${site.time} bbs:${site.bbs} key:${site.key} number:${site.number} errmsg:$label->$cause)<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。"
+  }
+
   /** 拒否理由をエラー画面の文言にする */
   def message(error: PostingError): String = error match {
     case PostingError.MethodNotPost => "POST メソッドを使ってください。<br>\nRecieve GET METHOD"
@@ -72,9 +88,7 @@ object PostingText {
     case PostingError.ThreadCreation(_) => threadCreationNarrow
     case PostingError.ArchiveConflict(target, site) =>
       s"updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(${site.clock.label}:${site.time} bbs:${site.bbs} key:${site.key} number:${site.number} errmsg:updateSubback->${target}_update_conflicted!)"
-    case PostingError.Internal(stage, site, cause) =>
-      val label = stageLabel(stage)
-      val description = if stage == PostingStage.ThreadWrite then "ログファイルに書けませんでした。" else "不明なエラーが発生しました。"
-      s"$label error. $description(${site.clock.label}:${site.time} bbs:${site.bbs} key:${site.key} number:${site.number} errmsg:$label->$cause)<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。"
+    case PostingError.ThreadRefused(rejection, site) => internal(PostingStage.ThreadWrite, site, "Error: " + threadWriteMessage(rejection))
+    case PostingError.Internal(stage, site, cause) => internal(stage, site, cause)
   }
 }

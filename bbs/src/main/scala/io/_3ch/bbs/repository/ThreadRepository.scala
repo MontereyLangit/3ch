@@ -6,6 +6,7 @@ import io._3ch.bbs.domain.posting.moderation.ThreadCreationRejection
 import io._3ch.bbs.durable.codec.{PostingCodec, ThreadOwnerCodec}
 import io._3ch.bbs.external.cloudflare.{ThreadDoStub, WorkerEnv}
 import io._3ch.common.domain.{BbsSettings, BoardId}
+import io._3ch.common.domain.posting.ThreadWriteRejection
 
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -19,11 +20,11 @@ object ThreadRepository {
   def getSettings(board: BoardId, key: String, e: WorkerEnv): Future[BbsSettings] =
     stub(board, key, e).getSettings().toFuture.map(BbsSettings.parse(_, "<>"))
 
-  /** dat 行と log 行を追記し、確定したレス番号を返す。スレ立て規制の拒否は結果で返し、ほかの拒否は Future の失敗 */
+  /** dat 行と log 行を追記し、確定したレス番号を返す。スレの状態とスレ立て規制による拒否は結果で返し、それ以外の障害は Future の失敗 */
   def addRes(board: BoardId, key: String, datLine: String, logLine: String, posting: ThreadPosting, e: WorkerEnv): Future[ThreadWriteResult] =
     stub(board, key, e).addRes(datLine, logLine, PostingCodec.encode(posting)).toFuture
       .map(ThreadWriteResult.Written(_))
-      .recover { case CreationRejected(rejection) => ThreadWriteResult.CreationLimited(rejection) }
+      .recover { case Refusal(result) => result }
 
   /** 投稿処理のポート */
   def store(e: WorkerEnv): ThreadStore = new ThreadStore {
@@ -43,11 +44,16 @@ object ThreadRepository {
       ThreadRepository.addRes(board, key, datLine, logLine, posting, e)
   }
 
-  /** DO が投げたエラーの文字列（Error: の後）がスレ立て規制のコードなら取り出す */
-  private object CreationRejected {
-    def unapply(error: Throwable): Option[ThreadCreationRejection] = error match {
-      case x: js.JavaScriptException => ThreadCreationRejection.fromCode(String.valueOf(x.exception).stripPrefix("Error: "))
-      case other => ThreadCreationRejection.fromCode(other.toString.stripPrefix("Error: "))
+  /** DO が投げたエラーの文字列（Error: の後）が拒否のコードなら結果にする */
+  private object Refusal {
+    def unapply(error: Throwable): Option[ThreadWriteResult] = {
+      val text = error match {
+        case x: js.JavaScriptException => String.valueOf(x.exception)
+        case other => other.toString
+      }
+      val code = text.stripPrefix("Error: ")
+      ThreadWriteRejection.fromCode(code).map(ThreadWriteResult.Refused(_))
+        .orElse(ThreadCreationRejection.fromCode(code).map(ThreadWriteResult.CreationLimited(_)))
     }
   }
 }

@@ -146,3 +146,13 @@ bbs/domain と common/domain の公開型・公開メソッドで doc が無か�
 | テスト | PostingServiceSuite（メモリ上のポートで、スレ立てと返信の呼び出し順、addRes に渡す付帯情報、ヘッダ検査・閉鎖・満杯・規制・スレ立て規制で後段を呼ばないこと、内部エラーと過去ログ目次の競合の内容、copy で埋まる context）、ReplyThreadSuite・PostFormLimitsSuite・ThreadCreationNetworkSuite、common の ArchiveIndexTextSuite・SageRuleSuite・JsTextSuite（JVM / JS）と実行環境の trim・Object.keys と突き合わせる JsTextRuntimeSuite・BbsSettingsRuntimeSuite |
 | 計画との差分 | ポート BoardStore は作らなかった（投稿処理から Board DO は直接呼ばず、Thread DO が呼ぶ）。代わりに板設定を SettingsStore、認証主体の解決を PostingUserSource とした。PostingOutcome の Posted・Swallowed は key と number を別に持たず context を持つ（context.form.key・context.number）。x-threadkey・x-resnum は handler が付け、サービスの headers は Set-Cookie だけ。受付時刻は Clock を 1 回だけ読む（従来は時刻と秒で 2 回読んでいた。秒の境界をまたぐ瞬間だけ値がずれうるが、固定時刻のテストでは同じ）。g.cookies は書くだけでどこからも読まれていなかったので削除した。PostingSuite が handler の名前で参照する ThreadCreationSettings は、テスト側に別名（ThreadCreationSettingsAlias.scala）を置いて PostingSuite を変えずに済ませた |
 | 見送りの解消 | PostingFormDecoder の Shift_JIS 復号の var と可変バッファを末尾再帰に置き換えた |
+
+## 段 8: Thread DO の整理
+
+| 項目 | 内容 |
+| --- | --- |
+| 実施 | Thread.addRes の停止・移動・削除、BBS_HEISA、同じ key、スレ不在、1000 件の判定を common の ThreadWriteGuard.check に移した。拒否の理由は ThreadWriteRejection（コードは thread-write:unavailable・closed・duplicate-key・missing・full）で、DO はそのコードを Error の文言にして失敗する。log 行のレス番号の置き換えも DatLineFormatter.renumberLog に移した。DO に残るのはロック、状態の読込、PostingCodec での復号、判定の呼び出し、一括保存、スレ立て規制の予約・確定・取消し、Board DO への通知 |
+| 文言 | ThreadRepository が DO のコードを ThreadWriteResult.Refused にし、サービスは PostingError.ThreadRefused(理由, 内部エラーの位置) にする。PostingText は従来の DO の例外文言を Error: 付きで原因の欄に入れ、内部エラーと同じ書式（updateThreadFile error. ログファイルに書けませんでした。(… errmsg:updateThreadFile->Error: …)）で出す。コードは x-post-error などにまだ出さない |
+| BBS_HEISA の統一 | DO の正規表現 (?:^|<>)BBS_HEISA=checked(?:<>|$) を、スレ設定を <> で区切った項目にちょうど BBS_HEISA=checked があるか、という同じ意味の判定にした（ThreadWriteGuard.closed）。ハンドラ側（現在はサービス）の解析済み設定による判定（前後の空白を除き、後勝ち）とは読み方が違うので、両方を残し、違いが出る場合（後で空に上書き、<<> に挟まれた項目、設定だけある key）を段 8 の前準備のスナップショットで固定した。読み方を 1 つにするのは振る舞いを変えるので、この段ではしない |
+| テスト | ThreadWriteGuardSuite（判定順、レス番号と末尾の空白、付帯情報なし、BBS_HEISA の境界、コードの往復。JVM / JS）、DatLineFormatterSuite に renumberLog、PostingTextSuite に ThreadRefused の文言とコード。ThreadSuite は拒否の確認を文言からコードに替え、拒否した追記が予約も保存もしないこと・log の番号の置き換えを足した。スナップショット 204 件は差分なし |
+| 計画との差分 | 計画書の ThreadWriteGuard.check(datLineCount, settings, create) は、停止・移動・削除の状態と付帯情報の有無（ThreadWriteKind の Raw）も受け、dat から次の番号を数える形にした。停止・移動・削除のときは従来どおり dat とスレ設定を読まない。RPC の戻り値の型（Promise[Int]）は変えず、拒否はスレ立て規制の予約と同じく Error の文言のコードで返す |

@@ -1,6 +1,7 @@
 package io._3ch.bbs.domain.posting
 
 import io._3ch.bbs.domain.posting.moderation.{ThreadCreationRejection, ThreadCreationSettingError}
+import io._3ch.common.domain.posting.ThreadWriteRejection
 
 /** 文字数を検査する入力欄 */
 enum PostField(val code: String) {
@@ -76,6 +77,8 @@ enum PostingError {
   case ThreadCreation(rejection: ThreadCreationRejection)
   /** 過去ログ目次の書き込みが ETag の競合で失敗した。target は文言に出す対象名 */
   case ArchiveConflict(target: String, site: FailureSite)
+  /** Thread DO が書き込みを拒否した。文言は内部エラーと同じ形 */
+  case ThreadRefused(rejection: ThreadWriteRejection, site: FailureSite)
   /** 段の途中で起きた例外。cause は例外の文字列 */
   case Internal(stage: PostingStage, site: FailureSite, cause: String)
 
@@ -106,6 +109,7 @@ enum PostingError {
     case InvalidCreationSettings(_) => "thread-creation:settings"
     case ThreadCreation(rejection) => rejection.code
     case ArchiveConflict(_, _) => "internal:archive-conflict"
+    case ThreadRefused(rejection, _) => rejection.code
     case Internal(stage, _, _) => "internal:" + stage.code
   }
 }
