@@ -12,6 +12,7 @@ import scala.util.control.NonFatal
 object AuthHmac {
   private val Base32 = "abcdefghijklmnopqrstuvwxyz234567"
   private val Alphanumeric = "abcdefghijklmnopqrstuvwxyz0123456789"
+  private val UrlSafe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 
   /** HMAC-SHA256 の全 32 バイトを小文字の 16 進数にする */
   def fullHex(secret: String, text: String): Future[Option[String]] =
@@ -41,6 +42,9 @@ object AuthHmac {
 
   /** 専ブラ認証キーに使う a-z・2-7 の乱数 */
   def randomBase32(length: Int): String = randomString(Base32, length)
+
+  /** OAuth の state・nonce・PKCE の verifier に使う base64url の文字の乱数 */
+  def randomUrlSafe(length: Int): String = randomString(UrlSafe, length)
 
   /** 内部アカウント ID に使う 16 文字の乱数 */
   def randomAid(): String = randomString(Alphanumeric, 16)

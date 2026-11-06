@@ -126,6 +126,9 @@ trait WorkerEnv extends js.Object {
   /** Turnstile のサーバ検証鍵と公開サイトキー */
   val TURNSTILE_SECRET_KEY: js.UndefOr[String] = js.native
   val TURNSTILE_SITE_KEY: js.UndefOr[String] = js.native
+  /** Google ログインのクライアント ID と秘密。どちらか欠ければ Google ログインを出さない */
+  val GOOGLE_CLIENT_ID: js.UndefOr[String] = js.native
+  val GOOGLE_CLIENT_SECRET: js.UndefOr[String] = js.native
   /** 現在の法的投稿確認の版 */
   val AGREEMENT_VERSION: js.UndefOr[String] = js.native
   /** 投稿者の照合値に混ぜるソルト（wrangler.jsonc の vars） */

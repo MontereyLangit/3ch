@@ -171,6 +171,20 @@ object AuthHandler {
         }
     }
 
+  /** Google ログインから戻したときの理由。知らない値は出さない */
+  private def notice(code: String): Option[String] = code match {
+    case "google_denied" => Some("Googleでのログインを中止しました。")
+    case "google" | "oauth_state" => Some("Googleでのログインを確認できませんでした。もう一度お試しください。")
+    case "google_register" => Some("このGoogleアカウントはまだ登録されていません。ユーザーIDを決めて「Googleで登録する」を押してください。")
+    case "uid" => Some(message(AuthApiError.LoginId(LoginIdRejection.Invalid)))
+    case "uid_taken" => Some(message(AuthApiError.Service(AuthServiceFailure.Taken)))
+    case "agreement" => Some(message(AuthApiError.AgreementRequired))
+    case "device" => Some(message(AuthApiError.Device(DeviceRejection.Fingerprint)))
+    case "account" => Some(message(AuthApiError.Refused(AccountRejection.Frozen)))
+    case "unavailable" => Some(message(AuthApiError.Unavailable))
+    case _ => None
+  }
+
   /** 認証画面と本人向け設定画面を SSR する。未ログインでアカウント設定を開いたら認証画面へ送る */
   def page(c: HonoContextFacade, accountPage: Boolean = false): js.Promise[Response] = {
     val request = c.req.raw
@@ -182,7 +196,8 @@ object AuthHandler {
         val rendered = Future.unit.flatMap { _ =>
           if (accountPage) account(c, config, props)
           else c.renderPromise(AuthComponent.Component(AuthProps(config.turnstileSiteKey, safeReturn(c.req.query("return").getOrElse("/"), request.url),
-            c.req.query("embed").contains("1"), c.req.query("mode").contains("login"), config.agreementVersion)).rawElement, props).toFuture
+            c.req.query("embed").contains("1"), c.req.query("mode").contains("login"), config.agreementVersion,
+            AuthEnv.google(c.env).isDefined, notice(c.req.query("error").getOrElse("")).getOrElse(""))).rawElement, props).toFuture
         }
         rendered.map(secure).recover {
           case Refused(error) if accountPage && error.signedOut =>
@@ -214,7 +229,9 @@ object AuthHandler {
       val repository = new AccountRepository(env)
       val path = new URL(request.url).pathname.stripSuffix("/")
       val time = now
-      if (request.method == "GET" && path == "/auth/session") {
+      if (request.method == "GET" && path == "/auth/google/callback") {
+        GoogleHandler.callback(request, env, repository, config, time)
+      } else if (request.method == "GET" && path == "/auth/session") {
         current(request, config.secret, repository, time).map { case (_, account) => json(js.Dynamic.literal(uid = account.uid, lv = account.lv)) }
           .recover { case Refused(_) => json(null) }
       } else {
@@ -226,6 +243,7 @@ object AuthHandler {
             case "/auth/verify" => verify(request, env, repository, form, config, time)
             case "/auth/register" => register(request, env, repository, form, config, time)
             case "/auth/login" => login(request, env, repository, form, config, time)
+            case "/auth/google/start" => GoogleHandler.start(request, env, form, config, time)
             case "/auth/logout" => logout(request, config, repository, time)
             case "/auth/agree" => current(request, config.secret, repository, time).flatMap { case (_, account) =>
               if (!form.get("agreement").contains(config.agreementVersion)) throw Refused(AuthApiError.AgreementRequired)

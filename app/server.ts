@@ -28,6 +28,7 @@ const app = createApp({
 });
 // 認証 API。画面（/auth/ と /auth/account/）はファイルルートが描画する。
 app.get("/auth/session/", (c) => authApi(c.req.raw, c.env));
+app.get("/auth/google/callback/", (c) => authApi(c.req.raw, c.env));
 app.post("/auth/*", (c) => authApi(c.req.raw, c.env));
 
 // ファイルルートに一致しないリクエストは既存の公開ハンドラで処理する(LegacyDispatch)

@@ -11,8 +11,8 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
-/** 実 DO を記憶域だけ差し替えて動かし、外部の Turnstile の応答を固定する */
-final class AuthSignInTestKit {
+/** 実 DO を記憶域だけ差し替えて動かし、外部の Turnstile と Google の応答を固定する */
+final class AuthSignInTestKit(google: Boolean = false) {
   val origin = "https://www.3ch.io"
   val kit: DurableTestKit.Env = DurableTestKit.newEnv()
   val env: WorkerEnv = {
@@ -21,8 +21,15 @@ final class AuthSignInTestKit {
     raw.AGREEMENT_VERSION = "v1"
     raw.TURNSTILE_SITE_KEY = "test-site-key"
     raw.TURNSTILE_SECRET_KEY = "test-server-key"
+    if (google) {
+      raw.GOOGLE_CLIENT_ID = "test-client.apps.googleusercontent.com"
+      raw.GOOGLE_CLIENT_SECRET = "test-client-secret"
+    }
     kit.worker
   }
+  /** Google のトークンエンドポイントが返す ID トークン */
+  var idToken: String = ""
+  var jwks: js.Any = js.Dynamic.literal(keys = js.Array())
   val external = mutable.ArrayBuffer.empty[String]
   /** 応答の遅延として要求された秒数 */
   val delays = mutable.ArrayBuffer.empty[Double]
@@ -64,6 +71,8 @@ final class AuthSignInTestKit {
         case "https://challenges.cloudflare.com/turnstile/v0/siteverify" =>
           val token = js.Dynamic.newInstance(js.Dynamic.global.URLSearchParams)(init.body).get("response").asInstanceOf[String]
           respond(200, js.Dynamic.literal(success = token == "accepted", hostname = "www.3ch.io"))
+        case GoogleIdTokens.TokenUrl => respond(200, js.Dynamic.literal(id_token = idToken))
+        case GoogleIdTokens.CertsUrl => respond(200, jwks, js.Dictionary("Cache-Control" -> "public, max-age=60"))
         case _ => js.Promise.reject(new js.Error("unexpected fetch " + url))
       }
     }): js.Function2[String, js.Dynamic, js.Promise[js.Any]]

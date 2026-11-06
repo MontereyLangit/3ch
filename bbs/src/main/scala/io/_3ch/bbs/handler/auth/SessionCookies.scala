@@ -34,7 +34,8 @@ object SessionCookies {
   def clear(requestUrl: String): Option[String] =
     Option.when(canIssue(requestUrl))(s"${CookieCodec.Name}=; Max-Age=0$Attributes")
 
-  private def canIssue(requestUrl: String): Boolean = {
+  /** HTTPS か、開発用の http://localhost だけ */
+  private[auth] def canIssue(requestUrl: String): Boolean = {
     try {
       val url = new URL(requestUrl)
       url.protocol == "https:" || (url.protocol == "http:" && url.hostname == "localhost")
