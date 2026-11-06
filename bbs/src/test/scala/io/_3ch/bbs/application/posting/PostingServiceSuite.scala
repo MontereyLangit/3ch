@@ -6,7 +6,7 @@ import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRule
 import io._3ch.bbs.handler.PostingText
 import io._3ch.bbs.external.web.TextEncoder
 import io._3ch.common.domain.{BbsSettings, BoardId}
-import io._3ch.common.domain.posting.CapHandle
+import io._3ch.common.domain.posting.{CapHandle, ThreadPhoebeRequest}
 import munit.FunSuite
 
 import scala.collection.immutable.ListMap
@@ -532,6 +532,49 @@ class PostingServiceSuite extends FunSuite {
     } yield {
       assert(!open.isInstanceOf[PostingOutcome.Rejected])
       assertEquals(rejected(closed).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.LoginRequired))
+    }
+  }
+
+  private val ownedThread = Some(ThreadOwner("", "", "s2(account-a:m(salt))"))
+  private def phoebeOf(fake: Fake): Option[ThreadPhoebeRequest] = fake.postings.head._3.phoebe
+
+  test("スレ立て人の !バルサン と !SETTING は上げるだけの要求にし、本文はそのまま書き込む") {
+    val balsan = Fake(boardSettings = "BBS_PHOEBE=1\n", owner = ownedThread, authSource = Some(new AuthSource(member)))
+    val setting = Fake(owner = ownedThread, authSource = Some(new AuthSource(member)))
+    for {
+      _ <- balsan.post(reply("MESSAGE" -> "!バルサン")*)()
+      _ <- setting.post(reply("MESSAGE" -> "!SETTING:BBS_PHOEBE:0\n下げたい")*)()
+    } yield {
+      assertEquals(phoebeOf(balsan), Some(ThreadPhoebeRequest(3, lower = false, 1)))
+      assert(balsan.postings.head._1.contains(" !バルサン "))
+      assertEquals(phoebeOf(setting), Some(ThreadPhoebeRequest(0, lower = false, 0)))
+    }
+  }
+
+  test("スレ立て人でない投稿者・未ログイン・スレ主表示を止めた板ではコマンドを無視して通常の投稿にする") {
+    val other = Some(ThreadOwner("s2(192.0.2.1:m(salt))", "", "s2(account-b:m(salt))"))
+    val cases = Seq(
+      Fake(owner = other, authSource = Some(new AuthSource(member))),
+      Fake(owner = ownedThread, authSource = Some(new AuthSource())),
+      Fake(boardSettings = "BBS_DISABLE_NUSI=checked\n", owner = ownedThread, authSource = Some(new AuthSource(member))),
+      Fake(threadSettings = "BBS_DISABLE_NUSI=checked<>", owner = ownedThread, authSource = Some(new AuthSource(member))),
+      Fake(owner = ownedThread, user = member))
+    val monazilla: PostingRequest => PostingRequest = _.copy(userAgent = "Monazilla/1.00 Test/1.0")
+    Future.traverse(cases)(fake => fake.post(reply("MESSAGE" -> "!バルサン")*)(monazilla).map { outcome =>
+      assert(!outcome.isInstanceOf[PostingOutcome.Rejected])
+      phoebeOf(fake)
+    }).map(results => assertEquals(results, Seq.fill(cases.size)(None)))
+  }
+
+  test("staff はスレ立て人でなくても !SETTING で下げられ、ログインしたスレ立てではスレ立て人として扱う") {
+    val staff = Fake(owner = None, authSource = Some(new AuthSource(member, staff = true)))
+    val creator = Fake(authSource = Some(new AuthSource(member)))
+    for {
+      _ <- staff.post(reply("MESSAGE" -> "!SETTING:BBS_PHOEBE:0")*)()
+      _ <- creator.post("MESSAGE" -> "!SETTING:BBS_PHOEBE:4")()
+    } yield {
+      assertEquals(phoebeOf(staff), Some(ThreadPhoebeRequest(0, lower = true, 0)))
+      assertEquals(phoebeOf(creator), Some(ThreadPhoebeRequest(4, lower = false, 0)))
     }
   }
 

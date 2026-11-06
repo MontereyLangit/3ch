@@ -1,7 +1,7 @@
 package io._3ch.bbs.durable
 
 import io._3ch.bbs.external.cloudflare.*
-import io._3ch.bbs.durable.codec.{PostRateCodec, PostingCodec, ThreadCreationCodec, ThreadOwnerCodec}
+import io._3ch.bbs.durable.codec.{PostRateCodec, PostingCodec, ThreadCreationCodec, ThreadOwnerCodec, ThreadSettingsCodec}
 import io._3ch.bbs.domain.posting.ThreadPosting
 import io._3ch.bbs.domain.posting.moderation.{PostRateFinding, PostRateLimit, ThreadRecentPosts}
 import io._3ch.bbs.durable.support.DurableLock
@@ -190,6 +190,10 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
       update = js.Dictionary[js.Any]("dat" -> (dat + datLine + "\n"), "log" -> (log + DatLineFormatter.renumberLog(logLine, count) + "\n"), "modifiedAt" -> nowMillis)
       _ = if p.create then update("settings") = p.initialSettings.getOrElse("")
       _ = if p.create then p.owner.foreach(owner => update("owner") = ThreadOwnerCodec.encode(owner))
+      base = if p.create then p.initialSettings.getOrElse("") else settings
+      _ = if kind != ThreadWriteKind.Raw then p.phoebe.flatMap(_.next(ThreadSettingsCodec.value(base, "BBS_PHOEBE"))).foreach { level =>
+        update("settings") = ThreadSettingsCodec.updated(base, "BBS_PHOEBE", level.toString)
+      }
       _ = rate.foreach(r => update("recentPosts") = PostRateCodec.encodeRecent(recent.appended(PostRateLimit.Entry(now, r.identity), r.thread, now)))
       _ <- creationLimit.fold(Future.unit) { limit =>
         board(boardName).reserveThreadCreation(keyName, ThreadCreationCodec.encodeRequest(limit)).toFuture.map { error =>

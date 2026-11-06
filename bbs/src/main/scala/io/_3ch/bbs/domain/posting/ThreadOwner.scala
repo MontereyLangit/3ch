@@ -6,5 +6,8 @@ final case class ThreadOwner(ip: String, shikibetsu: String, account: String) {
   def matches(poster: ThreadOwner): Boolean =
     same(ip, poster.ip) || same(shikibetsu, poster.shikibetsu) || same(account, poster.account)
 
+  /** アカウントの照合値が一致するか。スレ立て人だけに許すコマンドに使い、IP と識別子は見ない */
+  def ownedBy(accountHash: String): Boolean = same(account, accountHash)
+
   private def same(a: String, b: String): Boolean = a.nonEmpty && a == b
 }

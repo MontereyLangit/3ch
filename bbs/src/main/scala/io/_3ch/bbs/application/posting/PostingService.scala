@@ -8,7 +8,7 @@ import io._3ch.bbs.external.web.URL
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
 import io._3ch.common.domain.account.Phoebe
 import io._3ch.common.domain.identity.{DateSalt, ShikibetsuFormat, ShikibetsuMode, ShikibetsuSeeds}
-import io._3ch.common.domain.posting.{ArchiveIndexText, CapHandle, MailCommands, DatLineFormatter, NameField, PostForm, PostKind, SageRule, UserInfo}
+import io._3ch.common.domain.posting.{ArchiveIndexText, CapHandle, MailCommands, DatLineFormatter, NameField, PhoebeCommand, PostForm, PostKind, SageRule, ThreadPhoebeRequest, UserInfo}
 import io._3ch.common.text.JsNumber
 
 import scala.concurrent.Future
@@ -45,7 +45,8 @@ final class PostingService(ports: PostingPorts, salt: String) {
       (marked, owner) <- markNusi(named, user, board.settings)
       decided = marked.copy(sage = SageRule.sage(marked.number, marked.form.mail, marked.form.key, marked.unixtime, marked.settings, ports.random.next()))
       rateLimit <- postRateCheck(decided, board.settings, user, request)
-      (written, swallowed) <- updateThread(decided, board, creationLimit, owner, rateLimit, userInfo)
+      phoebe <- phoebeCommand(decided, account, board.settings)
+      (written, swallowed) <- updateThread(decided, board, creationLimit, owner, rateLimit, phoebe, userInfo)
       recorded <- if (swallowed) Future.successful(written) else record(written, request, account)
       outcome <- if (swallowed) Future.successful(PostingOutcome.Swallowed(written, headers(written)))
         else for {
@@ -221,9 +222,23 @@ final class PostingService(ports: PostingPorts, salt: String) {
     } yield Some(PostRateCheck(settings.level, PostRateIdentity(ip, shiki, aid), settings.board, settings.thread))
   }
 
+  /** 本文先頭の !バルサン・!SETTING:BBS_PHOEBE:n をスレ設定の変更にする。スレ立て人と staff 以外のコマンドは無視して通常の投稿にする */
+  private def phoebeCommand(context: PostingContext, account: PostingAccount, boardSettings: BbsSettings): Future[Option[ThreadPhoebeRequest]] =
+    PhoebeCommand.parse(context.form.message).filter(_ => authEnabled) match {
+      case None => Future.successful(None)
+      case Some(command) =>
+        val nusiDisabled = boardSettings.checked("BBS_DISABLE_NUSI") || context.settings.checked("BBS_DISABLE_NUSI")
+        val owner = account.user.filter(_ => !nusiDisabled) match {
+          case None => Future.successful(false)
+          case Some(_) if context.creating => Future.successful(true)
+          case Some(user) => digest(context, user.accountKey).map(hash => context.threadOwner().exists(_.ownedBy(hash)))
+        }
+        owner.map(command.request(_, account.staff, Phoebe.required(boardSettings.get("BBS_PHOEBE"))))
+    }
+
   /** dat に追記する。連投規制のコピペで吸い込んだら真を返す */
   private def updateThread(context: PostingContext, board: PostingBoard, creationLimit: Option[ThreadCreationLimit], owner: Option[ThreadOwner],
-                           rateLimit: Option[PostRateCheck], userInfo: UserInfo): Future[(PostingContext, Boolean)] = {
+                           rateLimit: Option[PostRateCheck], phoebe: Option[ThreadPhoebeRequest], userInfo: UserInfo): Future[(PostingContext, Boolean)] = {
     val spaced = context.copy(form = context.form.copy(message = DatLineFormatter.spaceFirstBreak(context.form.message)))
     guarded(spaced, PostingStage.ThreadWrite, FailureClock.Unixtime) {
       val form = spaced.form
@@ -232,7 +247,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
       val posting = ThreadPosting(bbs = Some(form.bbs), key = Some(form.key), title = Some(spaced.title), sage = spaced.sage,
         maxThreads = Some(spaced.settings.int("BBS_MAX_MENU_THREAD", "700")), create = create,
         initialSettings = Option.when(create)(PostRateSettings.copiedToThread(spaced.settings).toThreadSettings), creationLimit = creationLimit, owner = owner,
-        rateLimit = rateLimit)
+        rateLimit = rateLimit, phoebe = phoebe)
       ports.threads.addRes(board.id, form.key, dat, DatLineFormatter.logLine(spaced.number.toString, userInfo.text), posting).map {
         case ThreadWriteResult.Written(number, observed) =>
           rateLimit.filter(_ => observed.nonEmpty).foreach { check =>

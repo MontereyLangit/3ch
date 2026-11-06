@@ -2,6 +2,7 @@ package io._3ch.bbs.durable.codec
 
 import io._3ch.bbs.domain.posting.{ClientIdentity, ThreadOwner, ThreadPosting}
 import io._3ch.bbs.domain.posting.moderation.{PostRateCheck, PostRateIdentity, PostRateKey, PostRateLevel, PostRateLimit, ThreadCreationLimit, ThreadCreationRateLimit, ThreadCreationRequest}
+import io._3ch.common.domain.posting.ThreadPhoebeRequest
 import munit.FunSuite
 import scala.scalajs.js
 
@@ -20,7 +21,7 @@ class PostingCodecSuite extends FunSuite {
   test("RPC の外形は従来のプレーンオブジェクト") {
     val encoded = PostingCodec.encode(create)
     assertEquals(js.Object.keys(encoded.asInstanceOf[js.Object]).toList,
-      List("bbs", "key", "title", "sage", "maxThreads", "create", "initialSettings", "creationLimit", "owner", "rateLimit"))
+      List("bbs", "key", "title", "sage", "maxThreads", "create", "initialSettings", "creationLimit", "owner", "rateLimit", "commands"))
     assertEquals(js.JSON.stringify(encoded.creationLimit),
       """{"ip":"ip","userAgent":"ua","networkGroup":"net","title":"title","tatesugi":2,"tatesugiResetSeconds":3600,"junban":1,"junbanResetSeconds":60}""")
     assertEquals(js.JSON.stringify(encoded.owner), """{"ip":"iph","shikibetsu":"JP.x","account":""}""")
@@ -54,6 +55,15 @@ class PostingCodecSuite extends FunSuite {
     assertEquals(encoded.level.asInstanceOf[String], "0")
     assertEquals(PostRateCodec.decodeCheck(encoded), check)
     assertEquals(PostRateCodec.decodeBoardSettings(PostRateCodec.encodeBoardSettings(check.boardSettings, check.enforce)), (check.board.copy(fr = 0), true))
+  }
+
+  test("スレ Lv のコマンドは往復し、0〜10 の整数でない値は読まない") {
+    val reply = ThreadPosting(Some("sample"), Some("1"), None, phoebe = Some(ThreadPhoebeRequest(5, lower = true, 2)))
+    assertEquals(PostingCodec.decode(PostingCodec.encode(reply)), Some(reply))
+    assertEquals(js.JSON.stringify(PostingCodec.encode(reply).commands), """{"phoebe":{"level":5,"lower":true,"board":2}}""")
+    Seq(js.Dynamic.literal(level = 11, lower = false, board = 0), js.Dynamic.literal(level = "3", lower = false, board = 0),
+      js.Dynamic.literal(level = 3.5, lower = false, board = 0), js.Dynamic.literal(level = 3, lower = false))
+      .foreach(phoebe => assertEquals(PostingCodec.decode(js.Dynamic.literal(commands = js.Dynamic.literal(phoebe = phoebe))), Some(ThreadPosting())))
   }
 
   test("null と undefined は投稿情報なし") {
