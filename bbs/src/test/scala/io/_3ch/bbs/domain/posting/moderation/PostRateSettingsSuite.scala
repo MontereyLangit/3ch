@@ -8,9 +8,9 @@ class PostRateSettingsSuite extends FunSuite {
   private def parse(text: String, separator: String = "\n"): BbsSettings = BbsSettings.parse(text, separator)
   private val none = parse("")
 
-  test("設定が無ければ既定値で、段階は規制") {
+  test("設定が無ければ既定値で、段階は規制、広域連投規制は 1") {
     val settings = PostRateSettings.from(none, none)
-    assertEquals(settings, PostRateSettings(PostRateLevel.Enforce(None), BypassLevel.Privileged, live = false,
+    assertEquals(settings, PostRateSettings(PostRateLevel.Enforce(Some(1)), BypassLevel.Privileged, live = false,
       BoardSettings(18, 10, 10, 1, PostRateKey.defaults), ThreadSettings(40, 3600, PostRateKey.defaults)))
   }
 
@@ -41,40 +41,47 @@ class PostRateSettingsSuite extends FunSuite {
     assertEquals((settings.thread.count, settings.level), (7, PostRateLevel.Off))
   }
 
-  test("BBS_FR_LEVEL は off と log だけが規制を外し、ほかはキーが無くても不正でも規制する") {
+  test("BBS_FR_LEVEL は off と log が規制を外し、空と 0 は広域連投規制だけを外し、キー無しと不正な値は既定") {
     def level(text: String): PostRateLevel = {
       val settings = parse(text)
       PostRateSettings.from(settings, settings).level
     }
     val cases = Seq(
-      "" -> PostRateLevel.Enforce(None),
+      "" -> PostRateLevel.Enforce(Some(1)),
       "BBS_FR_LEVEL=\n" -> PostRateLevel.Enforce(None),
-      "BBS_FR_LEVEL=off\n" -> PostRateLevel.Off,
-      "BBS_FR_LEVEL=log\n" -> PostRateLevel.Log,
+      "BBS_FR_LEVEL=   \n" -> PostRateLevel.Enforce(None),
+      "BBS_FR_LEVEL=0\n" -> PostRateLevel.Enforce(None),
+      "BBS_FR_LEVEL=00\n" -> PostRateLevel.Enforce(None),
       "BBS_FR_LEVEL=1\n" -> PostRateLevel.Enforce(Some(1)),
       "BBS_FR_LEVEL=30\n" -> PostRateLevel.Enforce(Some(30)),
-      "BBS_FR_LEVEL=0\n" -> PostRateLevel.Enforce(None),
-      "BBS_FR_LEVEL=-1\n" -> PostRateLevel.Enforce(None),
-      "BBS_FR_LEVEL=99999999999\n" -> PostRateLevel.Enforce(None),
-      "BBS_FR_LEVEL=1.5\n" -> PostRateLevel.Enforce(None),
-      "BBS_FR_LEVEL=on\n" -> PostRateLevel.Enforce(None),
-      "BBS_FR_LEVEL=OFF\n" -> PostRateLevel.Enforce(None),
-      "BBS_FR_LEVEL=Log\n" -> PostRateLevel.Enforce(None),
+      "BBS_FR_LEVEL=off\n" -> PostRateLevel.Off,
+      "BBS_FR_LEVEL=log\n" -> PostRateLevel.Log,
+      "BBS_FR_LEVEL=-1\n" -> PostRateLevel.Enforce(Some(1)),
+      "BBS_FR_LEVEL=OFF\n" -> PostRateLevel.Enforce(Some(1)),
+      "BBS_FR_LEVEL=Log\n" -> PostRateLevel.Enforce(Some(1)),
+      "BBS_FR_LEVEL=on\n" -> PostRateLevel.Enforce(Some(1)),
+      "BBS_FR_LEVEL=none\n" -> PostRateLevel.Enforce(Some(1)),
+      "BBS_FR_LEVEL=1.5\n" -> PostRateLevel.Enforce(Some(1)),
+      "BBS_FR_LEVEL=99999999999\n" -> PostRateLevel.Enforce(Some(1)),
       " BBS_FR_LEVEL = off \n" -> PostRateLevel.Off,
       "BBS_FR_LEVEL=  log\n" -> PostRateLevel.Log,
       "BBS_FR_LEVEL= 5 \n" -> PostRateLevel.Enforce(Some(5)),
-      "BBS_FR_LEVEL=   \n" -> PostRateLevel.Enforce(None),
-      "BBS_RENTOU_MODE=off\n" -> PostRateLevel.Enforce(None))
+      "BBS_FR_LEVEL= 0 \n" -> PostRateLevel.Enforce(None),
+      "BBS_RENTOU_MODE=off\n" -> PostRateLevel.Enforce(Some(1)))
     cases.foreach { case (text, expected) => assertEquals(level(text), expected, text) }
   }
 
-  test("規制するのは Enforce だけで、設定の値の形で往復する") {
+  test("規制するのは Enforce だけ、広域連投規制を判定するのは Log と 1 以上の Enforce で、設定の値の形で往復する") {
     val levels = Seq(PostRateLevel.Off, PostRateLevel.Log, PostRateLevel.Enforce(None), PostRateLevel.Enforce(Some(3)))
-    assertEquals(levels.map(_.value), Seq("off", "log", "", "3"))
+    assertEquals(levels.map(_.value), Seq("off", "log", "0", "3"))
     assertEquals(levels.map(level => PostRateLevel.parse(Some(level.value))), levels)
+    assertEquals(levels.map(_.checksFlyRibbon), Seq(false, true, false, true))
     val identity = PostRateIdentity("ip", "shiki", "")
     val defaults = PostRateSettings.from(none, none)
-    assertEquals(levels.map(level => PostRateCheck(level, identity, defaults.board, defaults.thread).enforce), Seq(false, false, true, true))
+    val checks = levels.map(level => PostRateCheck(level, identity, defaults.board, defaults.thread))
+    assertEquals(checks.map(_.enforce), Seq(false, false, true, true))
+    assertEquals(checks.map(_.boardSettings.fr), Seq(0, 1, 0, 1))
+    assertEquals(checks.map(_.boardSettings.copy(fr = 1)), Seq.fill(levels.size)(defaults.board), "fr のほかは変えない")
   }
 
   test("設定名の前後の空白は無視する") {

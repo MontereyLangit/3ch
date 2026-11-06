@@ -324,7 +324,7 @@ class PostingServiceSuite extends FunSuite {
     val fake = Fake(boardSettings = "BBS_TITLE=看板\nBBS_SAMBA24=30\ntimecount=5\n")
     fake.post(reply()*)().map { outcome =>
       val check = fake.postings.head._3.rateLimit.getOrElse(fail("rateLimit が無い"))
-      assertEquals(check.level, PostRateLevel.Enforce(None))
+      assertEquals(check.level, PostRateLevel.Enforce(Some(1)))
       assertEquals(check.identity, PostRateIdentity(s"s2(192.0.2.1:$salt)", s"s2(${outcome.context.shikibetsu}:$salt)", ""))
       assertEquals((check.board.timecount, check.board.timeclose, check.board.samba24, check.board.fr), (5, 10, 30, 1))
       assertEquals((check.thread.count, check.thread.resetSeconds), (40, 3600d))
@@ -350,8 +350,20 @@ class PostingServiceSuite extends FunSuite {
     fake.post()().map { outcome =>
       assert(outcome.isInstanceOf[PostingOutcome.Posted], outcome.toString)
       val check = fake.postings.head._3.rateLimit.get
-      assertEquals((check.level, check.board.samba24, check.board.timecount), (PostRateLevel.Enforce(None), 10, 18))
+      assertEquals((check.level, check.board.samba24, check.board.timecount), (PostRateLevel.Enforce(Some(1)), 10, 18))
     }
+  }
+
+  test("BBS_FR_LEVEL が 0 か空なら規制したまま、板には広域連投規制を外して渡す") {
+    val cases = Seq("BBS_FR_LEVEL=0\n" -> (PostRateLevel.Enforce(None), 0), "BBS_FR_LEVEL=\n" -> (PostRateLevel.Enforce(None), 0),
+      "" -> (PostRateLevel.Enforce(Some(1)), 4), "BBS_FR_LEVEL=30\n" -> (PostRateLevel.Enforce(Some(30)), 4))
+    Future.traverse(cases) { case (text, _) =>
+      val fake = Fake(boardSettings = text + "BBS_FR_SECOND=4\n")
+      fake.post(reply()*)().map { _ =>
+        val check = fake.postings.head._3.rateLimit.get
+        (check.level, check.boardSettings.fr)
+      }
+    }.map(results => assertEquals(results, cases.map(_._2)))
   }
 
   test("キャップを判定するときは識別子（★）を照合値にしない") {

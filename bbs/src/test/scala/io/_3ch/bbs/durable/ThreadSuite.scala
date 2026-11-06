@@ -423,6 +423,23 @@ class ThreadSuite extends FunSuite {
     } yield ()
   }
 
+  test("level が 0 なら板に広域連投規制を外して予約し、空の旧形式は既定どおり判定する") {
+    val env = newEnv()
+    def sameShiki(level: String, ip: String): js.Dynamic = {
+      val limit = rateLimit(level = level, ip = ip)
+      limit.shiki = "shiki-ip-a"
+      limit.fr = 10
+      rated("1800000026", limit)
+    }
+    for {
+      _ <- env.thread("board1/1800000026").addRes("n<><>d<> 1 <>t", "1<>log", rated("1800000026", rateLimit(level = "1"), create = true)).toFuture
+      allowed <- env.thread("board1/1800000026").addRes("n<><>d<> 2 <>", "2<>log", sameShiki("0", "ip-b")).toFuture
+      _ = assertEquals(allowed.count, 2)
+      rejected <- rejectionMessage(env.thread("board1/1800000026").addRes("n<><>d<> 3 <>", "3<>log", sameShiki("", "ip-c")).toFuture)
+      _ = assertEquals(rejected, "post-rate:board:fr:10")
+    } yield ()
+  }
+
   test("板単位で拒否したスレ立てはスレ立て規制の予約を取り消し、dat を書かない") {
     val env = newEnv()
     val creation = js.Dynamic.literal(ip = "ip", userAgent = "ua", networkGroup = "net", title = "t", tatesugi = 1, tatesugiResetSeconds = 3600, junban = 0, junbanResetSeconds = 3600)

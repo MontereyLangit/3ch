@@ -2,6 +2,9 @@ package io._3ch.bbs.durable
 
 import munit.FunSuite
 import io._3ch.bbs.external.cloudflare.*
+import io._3ch.bbs.domain.posting.moderation.{PostRateCheck, PostRateIdentity, PostRateSettings}
+import io._3ch.bbs.durable.codec.PostRateCodec
+import io._3ch.common.domain.BbsSettings
 import scala.collection.mutable
 import scala.concurrent.Future
 import scala.scalajs.js
@@ -160,6 +163,25 @@ class BoardSuite extends FunSuite {
       _ = assertEquals(allowed, "", "Samba24 は識別子だけの一致では拒否しない")
       legacyRejected <- board.reservePost("4:c", js.Dynamic.literal(ip = "third", shiki = "shiki-a", aid = ""), legacy).toFuture
       _ = assertEquals(legacyRejected, "post-rate:board:fr:1")
+    } yield ()
+  }
+
+  test("BBS_FR_LEVEL が 0 か空の板設定から渡した予約は識別子が一致しても拒否しない") {
+    def settings(text: String): js.Dynamic = {
+      val values = BbsSettings.parse(text, "\n")
+      val rate = PostRateSettings.from(values, values)
+      val check = PostRateCheck(rate.level, PostRateIdentity(), rate.board, rate.thread)
+      PostRateCodec.encodeBoardSettings(check.boardSettings, check.enforce)
+    }
+    val board = DurableTestKit.newEnv().board("board1")
+    def sameShiki(ip: String): js.Dynamic = js.Dynamic.literal(ip = ip, shiki = "shiki-a", aid = "")
+    for {
+      _ <- board.reservePost("1:a", entry("a"), settings("BBS_FR_SECOND=10\n")).toFuture
+      zero <- board.reservePost("2:b", sameShiki("b"), settings("BBS_FR_LEVEL=0\nBBS_FR_SECOND=10\n")).toFuture
+      empty <- board.reservePost("3:c", sameShiki("c"), settings("BBS_FR_LEVEL=\nBBS_FR_SECOND=10\n")).toFuture
+      _ = assertEquals((zero, empty), ("", ""))
+      rejected <- board.reservePost("4:d", sameShiki("d"), settings("BBS_FR_LEVEL=1\nBBS_FR_SECOND=10\n")).toFuture
+      _ = assertEquals(rejected, "post-rate:board:fr:10")
     } yield ()
   }
 

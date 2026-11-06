@@ -7,24 +7,39 @@ import io._3ch.common.domain.BbsSettings
 enum PostRateLevel {
   case Off
   case Log
-  /** 拒否する。number は旧 3ch の広域連投規制の数値で、今は使わない */
-  case Enforce(number: Option[Int])
+  /** 拒否する。flyRibbon が None なら広域連投規制（FlyRibbon）を判定しない。数値の強さは今は使わない */
+  case Enforce(flyRibbon: Option[Int])
+
+  /** 広域連投規制を判定するか。Log は既定どおり判定して記録する */
+  def checksFlyRibbon: Boolean = this match {
+    case Off => false
+    case Log => true
+    case Enforce(number) => number.isDefined
+  }
 
   /** 設定に書く形の値。RPC でもこの形で渡す */
   def value: String = this match {
     case Off => "off"
     case Log => "log"
-    case Enforce(number) => number.fold("")(_.toString)
+    case Enforce(number) => number.fold("0")(_.toString)
   }
 }
 
 object PostRateLevel {
-  /** 設定の値を読む。キーが無い・空・数値・知らない値はどれも Enforce にする */
+  /** キーが無いときの段階。規制し、広域連投規制も判定する */
+  val Default: PostRateLevel = Enforce(Some(1))
+
+  /**
+    * 設定の値を読む。キーが無ければ Default、空と 0 は広域連投規制だけを外す。
+    * 負数・大文字・知らない値などの不正な値は Default にする
+    */
   def parse(value: Option[String]): PostRateLevel = value.map(_.trim) match {
+    case None => Default
     case Some("off") => Off
     case Some("log") => Log
-    case Some(text) if text.matches("[0-9]+") => Enforce(text.toIntOption.filter(_ > 0))
-    case _ => Enforce(None)
+    case Some("") => Enforce(None)
+    case Some(text) if text.matches("[0-9]+") => text.toIntOption.fold(Default)(number => Enforce(Option.when(number > 0)(number)))
+    case Some(_) => Default
   }
 }
 
@@ -35,9 +50,12 @@ final case class PostRateCheck(level: PostRateLevel, identity: PostRateIdentity,
     case PostRateLevel.Enforce(_) => true
     case PostRateLevel.Off | PostRateLevel.Log => false
   }
+
+  /** Board.reservePost に渡す板単位の設定。広域連投規制を判定しない段階なら fr を 0 にする */
+  def boardSettings: BoardSettings = if (level.checksFlyRibbon) board else board.copy(fr = 0)
 }
 
-/** 連投規制の設定。不正な値は拒否せず既定値で動き、BBS_FR_LEVEL だけは規制側に倒す */
+/** 連投規制の設定。不正な値は拒否せず既定値で動き、BBS_FR_LEVEL の不正な値は規制と広域連投規制の側に倒す */
 final case class PostRateSettings(level: PostRateLevel, pass: BypassLevel, live: Boolean, board: BoardSettings, thread: ThreadSettings) {
   /** この投稿を判定するか。off・BBS_LIVE・回避レベルで免除される投稿者は判定も記録もしない */
   def applies(cap: Boolean, authenticated: Boolean): Boolean =

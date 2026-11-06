@@ -9,7 +9,7 @@
 | --- | --- | --- | --- |
 | ごんたくれ | 板 | 板の履歴を新しい順に `timecount` 件取り、24 時間以内の同一投稿者が `timeclose` 件以上 | `post-rate:board:gontakure` |
 | Samba24 | 板 | 板の履歴に `BBS_SAMBA24` 秒以内の IP か `aid` が一致する投稿がある。残り秒数を文言に出す | `post-rate:board:samba24:<秒>` |
-| 広域連投規制 | 板 | 板の履歴に `BBS_FR_SECOND` 秒以内の識別子が一致する投稿がある。残り秒数を文言に出す | `post-rate:board:fr:<秒>` |
+| 広域連投規制（FlyRibbon, FR） | 板 | 板の履歴に `BBS_FR_SECOND` 秒以内の識別子が一致する投稿がある。`BBS_FR_LEVEL` が 1 以上（キー無しを含む）か `log` のときだけ見る。残り秒数を文言に出す | `post-rate:board:fr:<秒>` |
 | スレ連投 | スレ | `BBS_THREAD_RENTOU_RESET` 秒以内の同一投稿者が `BBS_THREAD_RENTOU` 件以上。>>1 は見ない | `post-rate:thread:rentou` |
 | コピペ | スレ | dat の末尾 2 行（あぼーん行は除く）の本文フィールドと完全一致。投稿者は問わない。>>1 は見ない | 成功画面のまま dat に残さない |
 
@@ -29,14 +29,20 @@
 | 値 | 動き |
 | --- | --- |
 | `off` | 判定も記録もしない |
-| `log` | 判定と履歴の記録だけ行い、拒否も吸い込みもしない（試行モード） |
-| 空（`BBS_FR_LEVEL=`）・キーが無い | 規制モード。拒否と吸い込みを行う |
-| 1 以上の整数 | 旧 3ch の広域連投規制の数値。意味は未実装で、今は規制モード |
-| それ以外（`0`・負数・`on`・`OFF` などの不正な値） | 規制モード（設定ミスで規制が外れないようにする） |
+| `log` | 判定と履歴の記録だけ行い、拒否も吸い込みもしない（試行モード）。広域連投規制も判定して記録する |
+| キーが無い | 既定の `1` と同じ。規制モードで、広域連投規制も判定する |
+| 1 以上の整数 | 規制モードで、広域連投規制も判定する。数値は旧 3ch の広域連投規制の強さで、意味は未実装（型に保持する） |
+| `0`・空（`BBS_FR_LEVEL=`） | 規制モードだが広域連投規制だけを判定しない（ごんたくれ・Samba24・スレ連投・コピペは行う） |
+| それ以外（負数・`on`・`OFF`・`1.5` などの不正な値） | キー無しと同じ（設定ミスで規制が外れないようにする） |
 
-前後の空白は除いて比べる。`off` / `log` は小文字だけに一致する（`BBS_LIVE` の `checked` と同じく値をそのまま比べる）。
-**コード既定は規制モード**で、SETTING.TXT にキーを書かない板はすべて拒否する。型は `PostRateLevel`（`Off` / `Log` / `Enforce(number)`）。
-`Thread.addRes` の `posting.rateLimit.level` には設定に書く形の値（`off` / `log` / 空 / 整数）で渡す。
+前後の空白は除いて比べる（空白だけの値は空）。`off` / `log` は小文字だけに一致する（`BBS_LIVE` の `checked` と同じく値をそのまま比べる）。
+**コード既定は規制モードで広域連投規制も有効**で、SETTING.TXT にキーを書かない板はすべて拒否する。
+型は `PostRateLevel`（`Off` / `Log` / `Enforce(flyRibbon: Option[Int])`）で、`Enforce(None)` が広域連投規制を判定しない規制モード。
+`BBS_FR_SECOND=0` でも広域連投規制は判定しない（どちらか一方で外れる）。
+
+`Thread.addRes` の `posting.rateLimit.level` には `off` / `log` / `0` / 1 以上の整数で渡す（`Enforce(None)` は `0`）。
+`level` が空の旧形式は、以前の意味（規制モード）に合わせてキー無しと同じに読む。
+`Board.reservePost` の `settings` には、広域連投規制を判定しない段階なら `fr` を `0` にして渡すので、板の DO の形式は変えていない。
 
 `log` で拒否するはずだった判定は Workers Logs に 1 行の JSON で出す（`{"event":"post-rate","mode":"log","bbs","key","number","codes":[...],"ip","shiki"}`。
 `ip`・`shiki` はソルト付きハッシュ）。拒否は HTTP 200 と `<!-- 2ch_X:error -->`。
@@ -51,13 +57,13 @@
 | --- | --- | --- | --- |
 | `timecount` / `timeclose` | `18` / `10` | 0〜1000 | 板設定だけ |
 | `BBS_SAMBA24` | `10` | 0〜86400 | 板設定だけ |
-| `BBS_FR_SECOND` | `1` | 0〜86400 | 板設定だけ |
+| `BBS_FR_SECOND` | `1` | 0〜86400。`BBS_FR_LEVEL` が広域連投規制を外していれば見ない | 板設定だけ |
 | `BBS_THREAD_RENTOU` / `BBS_THREAD_RENTOU_RESET` | `40` / `3600` | 0〜1000 / 0〜315360000 | スレ設定 → 板設定 |
-| `BBS_FR_LEVEL` | 規制（キー無し） | `off` / `log` / 空 / 1 以上の整数 | スレ設定 → 板設定 |
+| `BBS_FR_LEVEL` | `1`（キー無し） | `off` / `log` / `0`・空 / 1 以上の整数 | スレ設定 → 板設定 |
 | `BBS_RENTOU_PASS` | `privileged` | `admin` / `staff` / `privileged` / `l10` / `login` | スレ設定 → 板設定 |
 | `BBS_RENTOU_KEYS` | `ip,shiki,aid` | カンマ区切り。`id` などは無視 | スレ設定 → 板設定 |
 
-不正な値は拒否せず既定値で動く（`BBS_FR_LEVEL` の不正な値は規制モード）。スレ立て時の設定の書き写しから `BBS_SAMBA24`・`BBS_FR_SECOND`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_PASS`・`BBS_RENTOU_KEYS`・`BBS_FR_LEVEL` を除く。
+不正な値は拒否せず既定値で動く（`BBS_FR_LEVEL` の不正な値は規制モードで広域連投規制も有効）。スレ立て時の設定の書き写しから `BBS_SAMBA24`・`BBS_FR_SECOND`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_PASS`・`BBS_RENTOU_KEYS`・`BBS_FR_LEVEL` を除く。
 `timecount` / `timeclose` は従来どおり書き写すが、板単位の規制は板設定だけを読むので効かない（書き写しをやめるかは未決）。
 
 ## 保存・同時実行

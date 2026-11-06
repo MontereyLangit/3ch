@@ -41,9 +41,19 @@ class PostingCodecSuite extends FunSuite {
   test("連投規制の材料に fr が無い旧形式は既定の秒数で読む") {
     val legacy = js.JSON.parse("""{"level":"","ip":"ip","shiki":"shiki","aid":"","timecount":18,"timeclose":10,"samba24":10,"threadRentou":40,"threadRentouReset":3600,"keys":"ip"}""")
     assertEquals(PostRateCodec.decodeCheck(legacy).board.fr, 1)
+    assertEquals(PostRateCodec.decodeCheck(legacy).level, PostRateLevel.Enforce(Some(1)), "level が空の旧形式は既定")
     val (board, enforce) = PostRateCodec.decodeBoardSettings(js.Dynamic.literal(timecount = 18, timeclose = 10, samba24 = 10, keys = "ip", enforce = true))
     assertEquals((board.fr, board.samba24, enforce), (1, 10, true))
     assertEquals(PostRateCodec.decodeBoardSettings(PostRateCodec.encodeBoardSettings(board.copy(fr = 0), enforce = false)), (board.copy(fr = 0), false))
+  }
+
+  test("広域連投規制を判定しない段階は level を 0 で渡して往復する") {
+    val keys = PostRateKey.defaults
+    val check = PostRateCheck(PostRateLevel.Enforce(None), PostRateIdentity("ip", "shiki", ""), PostRateLimit.BoardSettings(18, 10, 10, 5, keys), PostRateLimit.ThreadSettings(40, 3600, keys))
+    val encoded = PostRateCodec.encodeCheck(check)
+    assertEquals(encoded.level.asInstanceOf[String], "0")
+    assertEquals(PostRateCodec.decodeCheck(encoded), check)
+    assertEquals(PostRateCodec.decodeBoardSettings(PostRateCodec.encodeBoardSettings(check.boardSettings, check.enforce)), (check.board.copy(fr = 0), true))
   }
 
   test("null と undefined は投稿情報なし") {

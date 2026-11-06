@@ -197,7 +197,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
         }
       }
       boardCode <- rate.fold(Future.successful("")) { r =>
-        board(boardName).reservePost(rateKey, PostRateCodec.encodeIdentity(r.identity), PostRateCodec.encodeBoardSettings(r.board, r.enforce)).toFuture
+        board(boardName).reservePost(rateKey, PostRateCodec.encodeIdentity(r.identity), PostRateCodec.encodeBoardSettings(r.boardSettings, r.enforce)).toFuture
           .recoverWith { case error => if r.enforce then cancelCreation().transformWith(_ => Future.failed(error)) else Future.successful("") }
       }
       _ <- if rate.exists(_.enforce) && boardCode.nonEmpty then cancelCreation().map(_ => fail(boardCode)) else Future.unit

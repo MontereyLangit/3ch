@@ -390,14 +390,15 @@ class PostingSnapshotSuite extends FunSuite {
     create("error-creation-invalid-as-only", _.copy(setup = boardSetting("BBS_THREAD_JUNBAN_AS_ONLY=AS0\n"))),
     create("error-creation-value-with-equals", _.copy(setup = boardSetting("BBS_THREAD_TATESUGI=0=invalid\n"))),
     create("error-creation-spaced-keys", c => c.copy(setup = all(boardSetting(" BBS_THREAD_TATESUGI = 0\n BBS_THREAD_JUNBAN =0\nBBS_FR_LEVEL=off\n"), priorPost(Now - 1, Case("prior"))))),
-    // 連投規制。キーが無ければ規制し、log は拒否せず記録だけする
+    // 連投規制。キーが無ければ規制し、log は拒否せず記録だけする。BBS_FR_LEVEL が 0 か空なら広域連投規制だけを外す
     reply("error-post-rate-samba24", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=\n"), priorReply(Now - 3)))),
     reply("error-post-rate-gontakure", _.copy(setup = all(existing(), boardSetting("BBS_SAMBA24=0\ntimeclose=1\n"), priorReply(Now - 100)))),
     reply("error-post-rate-thread", _.copy(setup = all(existing(), boardSetting("BBS_SAMBA24=0\nBBS_THREAD_RENTOU=1\n"), priorReply(Now - 100)))),
     reply("reply-post-rate-copipe-swallowed", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=\n"), priorReply(Now - 100, OtherClient)))),
     reply("reply-post-rate-copipe-log", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=log\n"), priorReply(Now - 100, OtherClient)))),
     reply("reply-post-rate-samba24-log", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=log\n"), priorReply(Now - 3, fields = Seq("MESSAGE" -> "前の本文"))))),
-    reply("error-post-rate-fr", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=\n"), priorReply(Now - 1, SameShikiClient, Seq("MESSAGE" -> "前の本文"))))),
+    reply("error-post-rate-fr", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=1\n"), priorReply(Now - 1, SameShikiClient, Seq("MESSAGE" -> "前の本文"))))),
+    reply("reply-post-rate-fr-level-zero", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=0\n"), priorReply(Now - 1, SameShikiClient, Seq("MESSAGE" -> "前の本文"))))),
     reply("reply-post-rate-same-shiki", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=\n"), priorReply(Now - 3, SameShikiClient, Seq("MESSAGE" -> "前の本文"))))),
     reply("reply-post-rate-live", _.copy(setup = all(existing(), boardSetting("BBS_LIVE=checked\n"), priorReply(Now - 3, fields = Seq("MESSAGE" -> "前の本文"))))),
     reply("reply-post-rate-cap", c => withFields(c.copy(setup = all(existing(), caps, boardSetting("BBS_FR_LEVEL=\n"),

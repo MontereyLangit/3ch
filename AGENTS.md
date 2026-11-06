@@ -96,7 +96,7 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 | `docs/admin-spa-auth-review.md`                                                        | 管理画面改修計画の Opus 5 セルフレビュー記録（2026-11-02）                                                                                                                               |
 | `docs/durable-object-stubs.md`                                                         | DO の RPC スタブ（`*DoStub`）のコンパイル時生成の仕様・対応範囲・運用手順                                                                                                            |
 | `docs/thread-creation-regulation.md` / `docs/global-thread.md`                         | 投稿機能の追加仕様（スレ立て規制、全板共通スレ 924 / 900）                                                                                                                            |
-| `docs/post-rate-limit.md`                                                              | 連投規制（ごんたくれ・Samba24・広域 `BBS_FR_SECOND`・スレ連投・コピペ吸い込み、段階 `BBS_FR_LEVEL`。既定は規制）の仕様と保存形式                                                                         |
+| `docs/post-rate-limit.md`                                                              | 連投規制（ごんたくれ・Samba24・広域 FlyRibbon・スレ連投・コピペ吸い込み、段階 `BBS_FR_LEVEL`。既定は規制＋FlyRibbon）の仕様と保存形式                                                                       |
 
 ### 1.6 開発コマンド
 

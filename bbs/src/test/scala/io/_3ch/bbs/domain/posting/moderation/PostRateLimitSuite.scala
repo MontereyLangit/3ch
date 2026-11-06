@@ -1,6 +1,7 @@
 package io._3ch.bbs.domain.posting.moderation
 
 import io._3ch.bbs.domain.posting.moderation.PostRateLimit.{BoardSettings, Entry, ThreadSettings}
+import io._3ch.common.domain.BbsSettings
 import munit.FunSuite
 
 class PostRateLimitSuite extends FunSuite {
@@ -58,6 +59,21 @@ class PostRateLimitSuite extends FunSuite {
     assertEquals(check(t0 - 3.5, fr = 10), Some(PostRateRejection.Fr(7)))
     assertEquals(check(t0, fr = 0), None, "0 で無効")
     assertEquals(check(t0, PostRateIdentity("ip", "other", "aid")), None, "識別子以外の一致は見ない")
+  }
+
+  test("BBS_FR_LEVEL が 0 か空なら識別子が一致しても広域連投規制で拒否しない") {
+    val history = Seq(Entry(t0, PostRateIdentity("other", "shiki-a")))
+    def check(text: String): Option[PostRateRejection] = {
+      val settings = BbsSettings.parse(text, "\n")
+      val rate = PostRateSettings.from(settings, settings)
+      PostRateLimit.checkBoard(PostRateCheck(rate.level, who("a"), rate.board, rate.thread).boardSettings, history, who("a"), t0)
+    }
+    assertEquals(check("BBS_FR_LEVEL=0\nBBS_FR_SECOND=10\n"), None)
+    assertEquals(check("BBS_FR_LEVEL=\nBBS_FR_SECOND=10\n"), None)
+    assertEquals(check("BBS_FR_SECOND=10\n"), Some(PostRateRejection.Fr(10)))
+    assertEquals(check("BBS_FR_LEVEL=1\nBBS_FR_SECOND=10\n"), Some(PostRateRejection.Fr(10)))
+    assertEquals(check("BBS_FR_LEVEL=log\nBBS_FR_SECOND=10\n"), Some(PostRateRejection.Fr(10)), "log は判定して記録する")
+    assertEquals(check("BBS_FR_LEVEL=1\nBBS_FR_SECOND=0\n"), None, "BBS_FR_SECOND=0 も無効")
   }
 
   test("広域連投規制は識別子が空なら照合しない") {

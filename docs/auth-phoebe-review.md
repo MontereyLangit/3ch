@@ -112,6 +112,19 @@ Codex CLI / Gemini CLI レビューは未実施。
   `PostRateLimitSuite` の照合キーのテストは Samba24 で `BBS_RENTOU_KEYS` を確かめていたので、ごんたくれで確かめる形に書き直した。
   スナップショットの既存の期待値は変わらず、広域連投規制の拒否（`error-post-rate-fr`）と、識別子だけ一致する投稿を Samba24 が通すケース（`reply-post-rate-same-shiki`）を足した。
 
+## 広域連投規制を BBS_FR_LEVEL で有効にする（2026-11-06）
+
+利用者の決定で、広域連投規制を FlyRibbon（FR）と呼び、`BBS_FR_LEVEL` が 1 以上のときだけ有効にした（設計書 §8.1・§8.3a・§13-35）。
+
+- キー無しは既定 `1`（規制＋FR）、1 以上の整数も規制＋FR。`0` と空は規制モードのまま FR だけを外す。`off` / `log` は従来どおりで、`log` は FR も判定して記録する。
+- 不正な値（負数・`OFF`・文字列・`int` に収まらない数字）はキー無しと同じ規制＋FR にした。以前は空と同じ扱いだったので、空の意味が変わったことになる。
+- 型は `PostRateLevel.Enforce(flyRibbon: Option[Int])`。`None` が FR を外した規制モード。`PostRateCheck.boardSettings` が FR を外す段階で `fr` を 0 にし、
+  `Board.reservePost` にはそれを渡すので、Board DO の RPC 形式と保存形式は変えていない。
+- `Thread.addRes` の `rateLimit.level` は、FR を外した規制モードを `0` で渡す。以前の形式は規制モードを空で渡していたので、空はキー無しと同じに読む。
+- 既存のスナップショット `error-post-rate-fr` は板設定を `BBS_FR_LEVEL=`（空）にしていたので FR で拒否されなくなる。期待値は変えず、板設定を `BBS_FR_LEVEL=1` に改めた。
+  `BBS_FR_LEVEL=0` で識別子だけが一致する投稿を通すケース（`reply-post-rate-fr-level-zero`）を足した。ほかの空を使うケースは FR に当たらないので変えていない。
+- `PostRateSettingsSuite`・`PostingServiceSuite` の既定の段階の期待値は型の意味が変わったので `Enforce(Some(1))` に改めた（振る舞いは同じ）。
+
 ## レビューで未確認とされた事項
 
 workerd の PBKDF2 反復上限、COOP による `window.opener` 喪失、主要な専ブラが host-only の `Set-Cookie` を保持するか、

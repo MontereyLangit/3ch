@@ -39,10 +39,11 @@ object PostRateCodec {
     timecount = check.board.timecount, timeclose = check.board.timeclose, samba24 = check.board.samba24, fr = check.board.fr,
     threadRentou = check.thread.count, threadRentouReset = check.thread.resetSeconds, keys = encodeKeys(check.board.keys))
 
+  /** level が空の旧形式は既定の段階で読む */
   def decodeCheck(value: js.Dynamic): PostRateCheck = {
     val keys = PostRateKey.parse(text(value.keys))
     PostRateCheck(
-      PostRateLevel.parse(Some(text(value.level))),
+      PostRateLevel.parse(Option(text(value.level)).filter(_.nonEmpty)),
       decodeIdentity(value),
       decodeBoard(value, keys),
       ThreadSettings(value.threadRentou.asInstanceOf[Int], value.threadRentouReset.asInstanceOf[Double], keys))
