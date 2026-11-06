@@ -1,6 +1,6 @@
 package io._3ch.bbs.durable
 
-import io._3ch.bbs.external.cloudflare.{DurableObject, DurableObjectState}
+import io._3ch.bbs.external.cloudflare.{DurableObject, DurableObjectState, WorkerEnv}
 import io._3ch.bbs.durable.codec.AccountIndexCodec
 import io._3ch.bbs.durable.support.DurableLock
 import io._3ch.common.domain.account.*
@@ -55,6 +55,29 @@ class AccountIndex(val state: DurableObjectState, env: js.Any) extends DurableOb
         case Some(entry) => entry.remove(kind, expectedAid) match {
           case Left(error) => Future.successful(error.code)
           case Right(_) => state.storage.delete(hash).toFuture.map(_ => "")
+        }
+      }
+    }
+  }.toJSPromise
+
+  /**
+    * role:admin 索引で初回の管理者を予約する。有効な admin が居なければ（非常用期間なら居ても）予約し、
+    * 利用できなくなった所有者の索引は外す。続く Account.grantFirstAdmin と confirm は呼び出し元が行う
+    */
+  def claimFirstAdmin(hash: String, aid: String, now: Double, breakGlass: Boolean): js.Promise[String] = DurableLock.serialized(state) {
+    if (kind != AccountIndexKind.Admin || !validHash(hash)) Future.successful(AccountRejection.Invalid.code)
+    else state.storage.list().toFuture.flatMap { values =>
+      val entries = values.toVector.flatMap { case (key, value) => AccountIndexCodec.decode(value).map(key -> _) }
+      val accounts = env.asInstanceOf[WorkerEnv].ACCOUNT_DO
+      Future.traverse(entries) { case (key, entry) =>
+        if (!entry.confirmed) Future.successful(AdminSeat(key, entry, activeAdmin = false))
+        else accounts.get(accounts.idFromName(entry.aid)).adminStatus(now).toFuture.map(AdminSeat(key, entry, _))
+      }.flatMap { seats =>
+        FirstAdminClaim.claim(seats, aid, now, breakGlass) match {
+          case Left(error) => Future.successful(error.code)
+          case Right((stale, entry)) =>
+            Future.traverse(stale)(key => state.storage.delete(key).toFuture)
+              .flatMap(_ => state.storage.put(hash, AccountIndexCodec.encode(entry)).toFuture).map(_ => "")
         }
       }
     }

@@ -178,6 +178,19 @@ final case class AccountState(
   def setRoles(next: Roles): Either[AccountRejection, AccountState] =
     if (!next.permitted(profile.kind)) Left(AccountRejection.RolesForbidden) else Right(copy(roles = next))
 
+  /** actor の権限で役割を置き換える。変えられるのは admin だけで、上位の役割を持つ相手は操作できない */
+  def assignRoles(next: Roles, actor: Roles, now: Double): Either[AccountRejection, AccountState] =
+    if (!AccountProfile.validTime(now) || !valid) Left(AccountRejection.Invalid)
+    else if (!actor.admin || !actor.manages(roles)) Left(AccountRejection.Forbidden)
+    else setRoles(next)
+
+  /** 初回の管理者として admin を足す。role:admin 索引で一人に絞ってから呼ぶ */
+  def grantFirstAdmin(now: Double): Either[AccountRejection, AccountState] =
+    usable(now).flatMap(_ => setRoles(Roles(roles.values + AccountRole.Admin)))
+
+  /** 利用できる admin か。初回の管理者の確保で、有効な管理者を数えるのに使う */
+  def activeAdmin(now: Double): Boolean = roles.admin && usable(now).isRight
+
   /** 初回観測を保って端末を更新し、最終観測が新しい十件を残す。空の端末は記録しない */
   def bindDevice(hash: String, keyIpHash: String, now: Double): Either[AccountRejection, AccountState] = usable(now).flatMap { _ =>
     if (hash.isEmpty) Right(this)

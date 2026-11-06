@@ -40,3 +40,30 @@ object AccountIndexEntry {
     else Right(AccountIndexEntry(aid, now, tokenId = tokenId))
   }
 }
+
+/** role:admin 索引の一件。activeAdmin は確定済みの所有者が今も利用できる admin か */
+final case class AdminSeat(hash: String, entry: AccountIndexEntry, activeAdmin: Boolean)
+
+/** 初回の管理者の確保。有効な admin が居ない間か、非常用期間だけ予約できる */
+object FirstAdminClaim {
+  /** 非常用期間の上限（秒）。これより先の期限は無視する */
+  val breakGlassWindow: Double = 86400
+
+  /** ADMIN_BREAK_GLASS_UNTIL が現在より先で、24 時間以内のときだけ非常用期間とする */
+  def breakGlass(until: Option[Double], now: Double): Boolean =
+    AccountProfile.validTime(now) && until.exists(value => value.isFinite && value > now && value <= now + breakGlassWindow)
+
+  /**
+    * 外す索引のハッシュと、aid の予約を返す。有効な admin か他人の期限内の予約があれば、非常用期間を除いて拒否する。
+    * 確定済みでも利用できない・admin でなくなった所有者と、期限切れの予約は外す
+    */
+  def claim(seats: Vector[AdminSeat], aid: String, now: Double, breakGlass: Boolean): Either[AccountRejection, (Vector[String], AccountIndexEntry)] = {
+    if (!aid.matches("[a-z0-9]{16}") || !AccountProfile.validTime(now)) Left(AccountRejection.Invalid)
+    else {
+      val stale = seats.filter(seat => if (seat.entry.confirmed) !seat.activeAdmin else !seat.entry.reserved(now))
+      val occupied = seats.exists(seat => if (seat.entry.confirmed) seat.activeAdmin else seat.entry.reserved(now) && seat.entry.aid != aid)
+      if (occupied && !breakGlass) Left(AccountRejection.Forbidden)
+      else Right((stale.map(_.hash), AccountIndexEntry(aid, now)))
+    }
+  }
+}

@@ -186,6 +186,19 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
   /** キャップを失効させる。KV と索引の更新は呼び出し元が行う */
   def revokeCap(capId: String, now: Double): js.Promise[String] = update(_.revokeCap(capId, now))
 
+  /** actor の役割で役割を置き換える。admin 以外の操作と上位の役割を持つ相手への操作は拒否する */
+  def setRoles(roles: js.Array[String], actorRoles: js.Array[String], now: Double): js.Promise[String] =
+    Roles.parse(roles.toSeq).zip(Roles.parse(actorRoles.toSeq)) match {
+      case Some((next, actor)) => update(_.assignRoles(next, actor, now))
+      case None => js.Promise.resolve[String](AccountRejection.Invalid.code)
+    }
+
+  /** role:admin 索引で確保した初回の管理者に admin を足す */
+  def grantFirstAdmin(now: Double): js.Promise[String] = update(_.grantFirstAdmin(now))
+
+  /** 利用できる admin か。凍結・退会や役割を外したアカウントは偽 */
+  def adminStatus(now: Double): js.Promise[Boolean] = read().map(_.exists(_.activeAdmin(now))).toJSPromise
+
   /** 管理者による Lv の固定値を保存する。未指定で固定を外す */
   def setLevel(lvOverride: js.UndefOr[Int], now: Double): js.Promise[String] = update(_.setLevelOverride(lvOverride.toOption, now))
 

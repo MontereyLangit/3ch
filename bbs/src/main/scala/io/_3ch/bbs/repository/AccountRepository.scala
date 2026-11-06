@@ -22,7 +22,7 @@ final case class AccountTokenView(id: String, label: String, issuedAt: Double = 
 final case class AccountPanel(account: AccountDescription, tokens: Vector[AccountTokenView], activeCount: Int = 0, deviceCount: Int = 0)
 
 /** アカウント RPC の値をアプリケーションの型に変換する */
-final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountManagementStore with AccountSignInStore {
+final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountManagementStore with AccountSignInStore with AccountRoleStore {
   private def account(aid: String): AccountDoStub = env.ACCOUNT_DO.get(env.ACCOUNT_DO.idFromName(aid))
   private def index(kind: String): AccountIndexDoStub = env.ACCOUNT_INDEX_DO.get(env.ACCOUNT_INDEX_DO.idFromName(kind))
   private def raw(value: js.Promise[?]): Future[js.Any] = value.asInstanceOf[js.Promise[js.Any]].toFuture
@@ -143,6 +143,11 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
   /** Lv を固定する。None で固定を外す */
   def setLevel(aid: String, lvOverride: Option[Int], now: Double): Future[Unit] =
     raw(account(aid).setLevel(lvOverride.orUndefined, now)).map(checked)
+  private def codes(roles: Roles): js.Array[String] = roles.values.toVector.map(_.code).sorted.toJSArray
+  def setRoles(aid: String, roles: Roles, actor: Roles, now: Double): Future[Unit] = raw(account(aid).setRoles(codes(roles), codes(actor), now)).map(checked)
+  def grantFirstAdmin(aid: String, now: Double): Future[Unit] = raw(account(aid).grantFirstAdmin(now)).map(checked)
+  def claimFirstAdmin(hash: String, aid: String, now: Double, breakGlass: Boolean): Future[Unit] =
+    raw(index(AccountIndexKind.Admin.code).claimFirstAdmin(hash, aid, now, breakGlass)).map(checked)
   def recordPost(aid: String, post: AccountPost, observation: AccountObservation): Future[AccountDescription] =
     account(aid).recordPost(post.t, AccountCodec.encodePost(post), js.Dynamic.literal(deviceHash = observation.deviceHash, keyIpHash = observation.keyIpHash)).toFuture.map(v =>
       decode(v, aid).fold(reason => throw AccountStoreException(reason), identity))

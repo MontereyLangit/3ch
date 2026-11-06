@@ -18,6 +18,9 @@ trait DurableObjectStorage extends js.Object {
   /** 複数キー版 */
   def get(keys: js.Array[String]): js.Promise[js.Map[String, js.Any]] = js.native
   def put(entries: js.Dictionary[js.Any]): js.Promise[Unit] = js.native
+
+  /** 全キーと値。件数の少ない索引でだけ使う */
+  def list(): js.Promise[js.Map[String, js.Any]] = js.native
 }
 
 @js.native
@@ -98,6 +101,7 @@ trait R2Bucket extends js.Object {
 trait KVNamespace extends js.Object {
   def get(key: String): js.Promise[js.UndefOr[String]] = js.native
   def put(key: String, value: String): js.Promise[Unit] = js.native
+  def delete(key: String): js.Promise[Unit] = js.native
 }
 
 /** Workers Static Assets バインディング（`env.ASSETS`）。3chiko.html配信に使う（PublicRoutes参照）。 */
