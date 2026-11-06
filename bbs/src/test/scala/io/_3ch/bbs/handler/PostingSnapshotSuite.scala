@@ -273,8 +273,8 @@ class PostingSnapshotSuite extends FunSuite {
     create("create-moderation-decoded", withFields(_, "MESSAGE" -> "&#x41;&#66;&lt;")).copy(setup = r2("ngwords.cgi", "<><>AB<<>deny\n")),
     create("create-live", _.copy(setup = boardSetting("BBS_LIVE=checked\n"))),
     create("create-creation-as-only", _.copy(setup = boardSetting("BBS_THREAD_JUNBAN_AS_ONLY=AS2516\n"))),
-    create("create-creation-limit-zero", c => c.copy(setup = all(boardSetting("BBS_THREAD_TATESUGI=0\nBBS_THREAD_JUNBAN=0\n"), priorPost(Now - 1, Case("prior"))))),
-    create("create-creation-after-reset", c => c.copy(setup = all(boardSetting("BBS_THREAD_TATESUGI_RESET=1\nBBS_THREAD_JUNBAN=1/1\n"), priorPost(Now - 2, Case("prior"))))),
+    create("create-creation-limit-zero", c => c.copy(setup = all(boardSetting("BBS_THREAD_TATESUGI=0\nBBS_THREAD_JUNBAN=0\nBBS_FR_LEVEL=off\n"), priorPost(Now - 1, Case("prior"))))),
+    create("create-creation-after-reset", c => c.copy(setup = all(boardSetting("BBS_THREAD_TATESUGI_RESET=1\nBBS_THREAD_JUNBAN=1/1\nBBS_FR_LEVEL=off\n"), priorPost(Now - 2, Case("prior"))))),
     create("create-creation-invalid-settings-cap", c => withFields(c.copy(setup = all(caps, boardSetting("BBS_THREAD_TATESUGI=invalid\n"))), "mail" -> "#!weakpass")),
 
     // 返信
@@ -387,16 +387,16 @@ class PostingSnapshotSuite extends FunSuite {
     create("error-creation-invalid-format", _.copy(setup = boardSetting("BBS_THREAD_JUNBAN=1/2/3\n"))),
     create("error-creation-invalid-as-only", _.copy(setup = boardSetting("BBS_THREAD_JUNBAN_AS_ONLY=AS0\n"))),
     create("error-creation-value-with-equals", _.copy(setup = boardSetting("BBS_THREAD_TATESUGI=0=invalid\n"))),
-    create("error-creation-spaced-keys", c => c.copy(setup = all(boardSetting(" BBS_THREAD_TATESUGI = 0\n BBS_THREAD_JUNBAN =0\n"), priorPost(Now - 1, Case("prior"))))),
-    // 連投規制（BBS_RENTOU_MODE=on）。既定の log は既存のケースのとおり拒否しない
-    reply("error-post-rate-samba24", _.copy(setup = all(existing(), boardSetting("BBS_RENTOU_MODE=on\n"), priorReply(Now - 3)))),
-    reply("error-post-rate-gontakure", _.copy(setup = all(existing(), boardSetting("BBS_RENTOU_MODE=on\nBBS_SAMBA24=0\ntimeclose=1\n"), priorReply(Now - 100)))),
-    reply("error-post-rate-thread", _.copy(setup = all(existing(), boardSetting("BBS_RENTOU_MODE=on\nBBS_SAMBA24=0\nBBS_THREAD_RENTOU=1\n"), priorReply(Now - 100)))),
-    reply("reply-post-rate-copipe-swallowed", _.copy(setup = all(existing(), boardSetting("BBS_RENTOU_MODE=on\n"), priorReply(Now - 100, OtherClient)))),
-    reply("reply-post-rate-copipe-log", _.copy(setup = all(existing(), priorReply(Now - 100, OtherClient)))),
-    reply("reply-post-rate-samba24-log", _.copy(setup = all(existing(), priorReply(Now - 3, fields = Seq("MESSAGE" -> "前の本文"))))),
-    reply("reply-post-rate-live", _.copy(setup = all(existing(), boardSetting("BBS_RENTOU_MODE=on\nBBS_LIVE=checked\n"), priorReply(Now - 3, fields = Seq("MESSAGE" -> "前の本文"))))),
-    reply("reply-post-rate-cap", c => withFields(c.copy(setup = all(existing(), caps, boardSetting("BBS_RENTOU_MODE=on\n"),
+    create("error-creation-spaced-keys", c => c.copy(setup = all(boardSetting(" BBS_THREAD_TATESUGI = 0\n BBS_THREAD_JUNBAN =0\nBBS_FR_LEVEL=off\n"), priorPost(Now - 1, Case("prior"))))),
+    // 連投規制。キーが無ければ規制し、log は拒否せず記録だけする
+    reply("error-post-rate-samba24", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=\n"), priorReply(Now - 3)))),
+    reply("error-post-rate-gontakure", _.copy(setup = all(existing(), boardSetting("BBS_SAMBA24=0\ntimeclose=1\n"), priorReply(Now - 100)))),
+    reply("error-post-rate-thread", _.copy(setup = all(existing(), boardSetting("BBS_SAMBA24=0\nBBS_THREAD_RENTOU=1\n"), priorReply(Now - 100)))),
+    reply("reply-post-rate-copipe-swallowed", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=\n"), priorReply(Now - 100, OtherClient)))),
+    reply("reply-post-rate-copipe-log", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=log\n"), priorReply(Now - 100, OtherClient)))),
+    reply("reply-post-rate-samba24-log", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=log\n"), priorReply(Now - 3, fields = Seq("MESSAGE" -> "前の本文"))))),
+    reply("reply-post-rate-live", _.copy(setup = all(existing(), boardSetting("BBS_LIVE=checked\n"), priorReply(Now - 3, fields = Seq("MESSAGE" -> "前の本文"))))),
+    reply("reply-post-rate-cap", c => withFields(c.copy(setup = all(existing(), caps, boardSetting("BBS_FR_LEVEL=\n"),
       priorReply(Now - 3, fields = Seq("MESSAGE" -> "前の本文", "mail" -> "#!weakpass")))), "mail" -> "#!weakpass")),
     // エラー: 内部エラー
     create("error-internal-board-settings", _.copy(setup = all(boardSetting("BBS_TITLE=x\n"), failR2Get("sample/SETTING.TXT")))),

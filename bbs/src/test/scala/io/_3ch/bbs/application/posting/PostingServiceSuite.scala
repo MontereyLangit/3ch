@@ -2,7 +2,7 @@ package io._3ch.bbs.application.posting
 
 import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore}
 import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureClock, FailureSite, ModerationDenial, PostingError, PostingStage, PostingUser, ThreadOwner, ThreadPosting, ThreadWriteResult}
-import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, PostRateFinding, PostRateIdentity, PostRateMode, PostRateRejection, ThreadCreationRejection, ThreadCreationRateLimit}
+import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, PostRateFinding, PostRateIdentity, PostRateLevel, PostRateRejection, ThreadCreationRejection, ThreadCreationRateLimit}
 import io._3ch.bbs.handler.PostingText
 import io._3ch.bbs.external.web.TextEncoder
 import io._3ch.common.domain.{BbsSettings, BoardId}
@@ -324,7 +324,7 @@ class PostingServiceSuite extends FunSuite {
     val fake = Fake(boardSettings = "BBS_TITLE=看板\nBBS_SAMBA24=30\ntimecount=5\n")
     fake.post(reply()*)().map { outcome =>
       val check = fake.postings.head._3.rateLimit.getOrElse(fail("rateLimit が無い"))
-      assertEquals(check.mode, PostRateMode.Log)
+      assertEquals(check.level, PostRateLevel.Enforce(None))
       assertEquals(check.identity, PostRateIdentity(s"s2(192.0.2.1:$salt)", s"s2(${outcome.context.shikibetsu}:$salt)", ""))
       assertEquals((check.board.timecount, check.board.timeclose, check.board.samba24), (5, 10, 30))
       assertEquals((check.thread.count, check.thread.resetSeconds), (40, 3600d))
@@ -346,17 +346,17 @@ class PostingServiceSuite extends FunSuite {
   }
 
   test("不正な設定は拒否せず既定値で判定する") {
-    val fake = Fake(boardSettings = "BBS_SAMBA24=abc\ntimecount=-3\nBBS_RENTOU_MODE=yes\nBBS_RENTOU_KEYS=id\n")
+    val fake = Fake(boardSettings = "BBS_SAMBA24=abc\ntimecount=-3\nBBS_FR_LEVEL=yes\nBBS_RENTOU_KEYS=id\n")
     fake.post()().map { outcome =>
       assert(outcome.isInstanceOf[PostingOutcome.Posted], outcome.toString)
       val check = fake.postings.head._3.rateLimit.get
-      assertEquals((check.mode, check.board.samba24, check.board.timecount), (PostRateMode.Log, 10, 18))
+      assertEquals((check.level, check.board.samba24, check.board.timecount), (PostRateLevel.Enforce(None), 10, 18))
     }
   }
 
   test("off・BBS_LIVE・キャップは連投規制を判定しない") {
     val cases = Seq(
-      Fake(boardSettings = "BBS_RENTOU_MODE=off\n") -> Seq.empty[(String, String)],
+      Fake(boardSettings = "BBS_FR_LEVEL=off\n") -> Seq.empty[(String, String)],
       Fake(boardSettings = "BBS_LIVE=checked\n") -> Seq.empty[(String, String)],
       Fake(boardSettings = "BBS_LIVE=1\n") -> Seq.empty[(String, String)],
       Fake(caps = Map("pass" -> "管理人")) -> Seq("mail" -> "#!pass"),
@@ -366,7 +366,7 @@ class PostingServiceSuite extends FunSuite {
   }
 
   test("スレ立て時のスレ設定に連投規制の新しいキーを書き写さない") {
-    val fake = Fake(boardSettings = "BBS_TITLE=看板\nBBS_SAMBA24=5\nBBS_RENTOU_MODE=on\ntimecount=3\n")
+    val fake = Fake(boardSettings = "BBS_TITLE=看板\nBBS_SAMBA24=5\nBBS_FR_LEVEL=log\ntimecount=3\n")
     fake.post()().map(_ => assertEquals(fake.postings.head._3.initialSettings, Some("BBS_TITLE=看板<>timecount=3<>BBS_SHIKIBETSU=off<>")))
   }
 

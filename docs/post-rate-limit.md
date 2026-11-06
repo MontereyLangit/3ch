@@ -17,15 +17,30 @@
   値はどれもソルト付き SHA-256 で、空の値は照合しない。
 - 板の履歴では予約中も確定済みも 1 件に数える。吸い込んだ投稿も数える。拒否した投稿は数えない。
 - 判定順は スレ連投 → ごんたくれ → Samba24 → コピペ。
-- 判定しない投稿: `BBS_RENTOU_MODE=off`、`BBS_LIVE` が `checked` か `1`、`BBS_RENTOU_PASS` で免除される投稿者。
+- 判定しない投稿: `BBS_FR_LEVEL=off`、`BBS_LIVE` が `checked` か `1`、`BBS_RENTOU_PASS` で免除される投稿者。
   権限と Lv がまだ無いので、免除されるのは `privileged`・`l10` ではキャップ（★）、`login` ではキャップと認証済、`admin`・`staff` では誰もいない。
   免除した投稿は履歴にも残さない。saku 板にも適用する。
 
-## 試行モード
+## 段階（`BBS_FR_LEVEL`）
 
-`BBS_RENTOU_MODE` が `log`（コード既定）なら判定と履歴の記録だけ行い、拒否も吸い込みもしない。拒否するはずだった判定は
-Workers Logs に 1 行の JSON で出す（`{"event":"post-rate","mode":"log","bbs","key","number","codes":[...],"ip","shiki"}`。
-`ip`・`shiki` はソルト付きハッシュ）。`on` で拒否と吸い込みを行う。拒否は HTTP 200 と `<!-- 2ch_X:error -->`。
+| 値 | 動き |
+| --- | --- |
+| `off` | 判定も記録もしない |
+| `log` | 判定と履歴の記録だけ行い、拒否も吸い込みもしない（試行モード） |
+| 空（`BBS_FR_LEVEL=`）・キーが無い | 規制モード。拒否と吸い込みを行う |
+| 1 以上の整数 | 旧 3ch の広域連投規制の数値。意味は未実装で、今は規制モード |
+| それ以外（`0`・負数・`on`・`OFF` などの不正な値） | 規制モード（設定ミスで規制が外れないようにする） |
+
+前後の空白は除いて比べる。`off` / `log` は小文字だけに一致する（`BBS_LIVE` の `checked` と同じく値をそのまま比べる）。
+**コード既定は規制モード**で、SETTING.TXT にキーを書かない板はすべて拒否する。型は `PostRateLevel`（`Off` / `Log` / `Enforce(number)`）。
+`Thread.addRes` の `posting.rateLimit.level` には設定に書く形の値（`off` / `log` / 空 / 整数）で渡す。
+
+`log` で拒否するはずだった判定は Workers Logs に 1 行の JSON で出す（`{"event":"post-rate","mode":"log","bbs","key","number","codes":[...],"ip","shiki"}`。
+`ip`・`shiki` はソルト付きハッシュ）。拒否は HTTP 200 と `<!-- 2ch_X:error -->`。
+吸い込み（コピペ）は投稿者を問わないので、規制モードでは別人の投稿の写しも成功画面のまま dat に残さない。
+
+当初は `BBS_RENTOU_MODE`（`off` / `log` / `on`、既定 `log`）で試行してから既定を `on` にする予定だったが、2026-11-06 の利用者決定で
+`BBS_FR_LEVEL` に置き換え、既定を最初から規制にした。`BBS_RENTOU_MODE` は読まない。
 
 ## 設定
 
@@ -34,12 +49,12 @@ Workers Logs に 1 行の JSON で出す（`{"event":"post-rate","mode":"log","b
 | `timecount` / `timeclose` | `18` / `10` | 0〜1000 | 板設定だけ |
 | `BBS_SAMBA24` | `10` | 0〜86400 | 板設定だけ |
 | `BBS_THREAD_RENTOU` / `BBS_THREAD_RENTOU_RESET` | `40` / `3600` | 0〜1000 / 0〜315360000 | スレ設定 → 板設定 |
-| `BBS_RENTOU_MODE` | `log` | `off` / `log` / `on` | スレ設定 → 板設定 |
+| `BBS_FR_LEVEL` | 規制（キー無し） | `off` / `log` / 空 / 1 以上の整数 | スレ設定 → 板設定 |
 | `BBS_RENTOU_PASS` | `privileged` | `admin` / `staff` / `privileged` / `l10` / `login` | スレ設定 → 板設定 |
 | `BBS_RENTOU_KEYS` | `ip,shiki,aid` | カンマ区切り。`id` などは無視 | スレ設定 → 板設定 |
 
-不正な値は拒否せず既定値で動く。スレ立て時の設定の書き写しから `BBS_SAMBA24`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_*` を除く。
-`timecount` / `timeclose` は従来どおり書き写すが、板単位の規制は板設定だけを読むので効かない（書き写しをやめるかは承認待ち）。
+不正な値は拒否せず既定値で動く（`BBS_FR_LEVEL` の不正な値は規制モード）。スレ立て時の設定の書き写しから `BBS_SAMBA24`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_PASS`・`BBS_RENTOU_KEYS`・`BBS_FR_LEVEL` を除く。
+`timecount` / `timeclose` は従来どおり書き写すが、板単位の規制は板設定だけを読むので効かない（書き写しをやめるかは未決）。
 
 ## 保存・同時実行
 
@@ -63,8 +78,8 @@ Workers Logs に 1 行の JSON で出す（`{"event":"post-rate","mode":"log","b
 
 - `recentPosts`: `{t, ip, shiki, aid}` の配列（新しい順）。`BBS_THREAD_RENTOU_RESET` 秒以内・1,000 件まで。`dat`・`log` と同じ `put` で保存する。
 - `addRes` の `posting.rateLimit` があれば、排他区間内で スレ連投の判定 → スレ立て予約 → `Board.reservePost` → コピペ判定 → `put` → 両方の確定 の順に行う。
-  `put` が失敗したら両方の予約を取り消す。`on` で板単位に拒否したらスレ立て予約を取り消す。吸い込みは `completePost` だけして `put` しない。
-  `Board.reservePost` の失敗は `on` なら投稿の失敗、`log` なら無視する。
+  `put` が失敗したら両方の予約を取り消す。規制モードで板単位に拒否したらスレ立て予約を取り消す。吸い込みは `completePost` だけして `put` しない。
+  `Board.reservePost` の失敗は規制モードなら投稿の失敗、`log` なら無視する。
 - 戻り値は `{count, swallowed, observed}`。`observed` は試行モードで記録だけした判定のコード。`rateLimit` が無い呼び出し（管理画面・移動・テスト）は判定しない。
 
 ## 実装の置き場所

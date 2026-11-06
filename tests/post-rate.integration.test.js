@@ -6,7 +6,7 @@ import { unstable_dev } from 'wrangler';
 // 前提: `npm run v6:build` で dist/index.js が生成済みであること（無ければスキップ）。
 const built = existsSync(new URL('../dist/index.js', import.meta.url));
 
-test('Wrangler: BBS_RENTOU_MODE=on の板で Samba24 が返信を拒否する', {
+test('Wrangler: BBS_FR_LEVEL の無い板は規制モードで、Samba24 が返信を拒否する', {
   timeout: 120000,
   skip: built ? false : 'dist/index.js がありません（npm run v6:build を先に実行）'
 }, async t => {
@@ -30,7 +30,7 @@ test('Wrangler: BBS_RENTOU_MODE=on の板で Samba24 が返信を拒否する', 
   const saved = await fetch(origin + '/admin/board?bbs=rentou', {
     method: 'POST',
     headers: {authorization, origin},
-    body: new URLSearchParams({action: 'save', head: '', settings: 'BBS_TITLE=rentou\nBBS_RENTOU_MODE=on\nBBS_SAMBA24=60'}),
+    body: new URLSearchParams({action: 'save', head: '', settings: 'BBS_TITLE=rentou\nBBS_SAMBA24=60'}),
     redirect: 'manual'
   });
   assert.equal(saved.status, 303);

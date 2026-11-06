@@ -348,8 +348,8 @@ class ThreadSuite extends FunSuite {
     } yield ()
   }
 
-  private def rateLimit(mode: String = "on", ip: String = "ip-a", samba24: Int = 0, threadRentou: Int = 40): js.Dynamic = js.Dynamic.literal(
-    mode = mode, ip = ip, shiki = s"shiki-$ip", aid = "", timecount = 18, timeclose = 10, samba24 = samba24,
+  private def rateLimit(level: String = "", ip: String = "ip-a", samba24: Int = 0, threadRentou: Int = 40): js.Dynamic = js.Dynamic.literal(
+    level = level, ip = ip, shiki = s"shiki-$ip", aid = "", timecount = 18, timeclose = 10, samba24 = samba24,
     threadRentou = threadRentou, threadRentouReset = 3600, keys = "ip,shiki,aid")
   private def rated(key: String, limit: js.Dynamic, create: Boolean = false): js.Dynamic =
     js.Dynamic.literal(bbs = "board1", key = key, title = "t", create = create, rateLimit = limit)
@@ -401,7 +401,7 @@ class ThreadSuite extends FunSuite {
       _ = assertEquals((dat, log), (first, "1<>log\n"))
       page <- env.boardInstance("board1").state.storage.get[js.Array[js.Dynamic]]("postRateHistory:0").toFuture
       _ = assertEquals(page.get.toList.map(_.status.asInstanceOf[String]), List("completed"), "吸い込んだ投稿も連投履歴に数える")
-      logged <- env.thread("board1/1800000022").addRes("m<><>e<> 同じ本文 <>", "2<>log", rated("1800000022", rateLimit(mode = "log", ip = "ip-c"))).toFuture
+      logged <- env.thread("board1/1800000022").addRes("m<><>e<> 同じ本文 <>", "2<>log", rated("1800000022", rateLimit(level = "log", ip = "ip-c"))).toFuture
       _ = assertEquals((logged.count, logged.swallowed, logged.observed.toList), (2, false, List("post-rate:thread:copipe")))
       after <- env.thread("board1/1800000022").getDat().toFuture
       _ = assertEquals(after, first + "m<><>e<> 同じ本文 <>\n")
@@ -416,7 +416,7 @@ class ThreadSuite extends FunSuite {
       _ = assertEquals(rejected, "post-rate:thread:rentou")
       page <- env.boardInstance("board1").state.storage.get[js.Array[js.Dynamic]]("postRateHistory:0").toFuture
       _ = assertEquals(page.get.length, 1)
-      logged <- env.thread("board1/1800000023").addRes("n<><>d<> 2 <>", "2<>log", rated("1800000023", rateLimit(mode = "log", threadRentou = 1))).toFuture
+      logged <- env.thread("board1/1800000023").addRes("n<><>d<> 2 <>", "2<>log", rated("1800000023", rateLimit(level = "log", threadRentou = 1))).toFuture
       _ = assertEquals(logged.observed.toList, List("post-rate:thread:rentou"))
       other <- env.thread("board1/1800000023").addRes("n<><>d<> 3 <>", "3<>log", rated("1800000023", rateLimit(ip = "ip-z", threadRentou = 1))).toFuture
       _ = assertEquals(other.count, 3)

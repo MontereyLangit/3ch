@@ -64,7 +64,7 @@ object PostRateRejection {
   }
 }
 
-/** 試行モード（BBS_RENTOU_MODE=log）で拒否せずに記録した判定 */
+/** 試行モード（BBS_FR_LEVEL=log）で拒否せずに記録した判定 */
 enum PostRateFinding {
   case Rejected(rejection: PostRateRejection)
   /** コピペ吸い込みの対象 */

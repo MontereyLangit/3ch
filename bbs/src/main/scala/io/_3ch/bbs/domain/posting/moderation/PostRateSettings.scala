@@ -3,35 +3,51 @@ package io._3ch.bbs.domain.posting.moderation
 import io._3ch.bbs.domain.posting.moderation.PostRateLimit.{BoardSettings, ThreadSettings}
 import io._3ch.common.domain.BbsSettings
 
-/** 連投規制の試行モード（BBS_RENTOU_MODE）。Log は判定と記録だけして拒否しない */
-enum PostRateMode(val value: String) {
-  case Off extends PostRateMode("off")
-  case Log extends PostRateMode("log")
-  case On extends PostRateMode("on")
+/** 連投規制の段階（BBS_FR_LEVEL）。Log は判定と記録だけして拒否しない */
+enum PostRateLevel {
+  case Off
+  case Log
+  /** 拒否する。number は旧 3ch の広域連投規制の数値で、今は使わない */
+  case Enforce(number: Option[Int])
+
+  /** 設定に書く形の値。RPC でもこの形で渡す */
+  def value: String = this match {
+    case Off => "off"
+    case Log => "log"
+    case Enforce(number) => number.fold("")(_.toString)
+  }
 }
 
-object PostRateMode {
-  /** 設定の値を読む。空や知らない値は Log */
-  def parse(value: String): PostRateMode = values.find(_.value == value.trim).getOrElse(Log)
+object PostRateLevel {
+  /** 設定の値を読む。キーが無い・空・数値・知らない値はどれも Enforce にする */
+  def parse(value: Option[String]): PostRateLevel = value.map(_.trim) match {
+    case Some("off") => Off
+    case Some("log") => Log
+    case Some(text) if text.matches("[0-9]+") => Enforce(text.toIntOption.filter(_ > 0))
+    case _ => Enforce(None)
+  }
 }
 
 /** Thread.addRes に渡す連投規制の材料と設定。identity はハッシュ済み */
-final case class PostRateCheck(mode: PostRateMode, identity: PostRateIdentity, board: BoardSettings, thread: ThreadSettings) {
+final case class PostRateCheck(level: PostRateLevel, identity: PostRateIdentity, board: BoardSettings, thread: ThreadSettings) {
   /** 判定で拒否するか。偽なら記録だけする */
-  def enforce: Boolean = mode == PostRateMode.On
+  def enforce: Boolean = level match {
+    case PostRateLevel.Enforce(_) => true
+    case PostRateLevel.Off | PostRateLevel.Log => false
+  }
 }
 
-/** 連投規制の設定。不正な値は拒否せず既定値で動く */
-final case class PostRateSettings(mode: PostRateMode, pass: BypassLevel, live: Boolean, board: BoardSettings, thread: ThreadSettings) {
+/** 連投規制の設定。不正な値は拒否せず既定値で動き、BBS_FR_LEVEL だけは規制側に倒す */
+final case class PostRateSettings(level: PostRateLevel, pass: BypassLevel, live: Boolean, board: BoardSettings, thread: ThreadSettings) {
   /** この投稿を判定するか。off・BBS_LIVE・回避レベルで免除される投稿者は判定も記録もしない */
   def applies(cap: Boolean, authenticated: Boolean): Boolean =
-    mode != PostRateMode.Off && !live && !pass.exempts(cap, authenticated)
+    level != PostRateLevel.Off && !live && !pass.exempts(cap, authenticated)
 }
 
 object PostRateSettings {
   /** スレ立て時にスレ設定へ書き写さないキー */
   val NotCopiedToThread: Set[String] =
-    Set("BBS_SAMBA24", "BBS_THREAD_RENTOU", "BBS_THREAD_RENTOU_RESET", "BBS_RENTOU_PASS", "BBS_RENTOU_KEYS", "BBS_RENTOU_MODE")
+    Set("BBS_SAMBA24", "BBS_THREAD_RENTOU", "BBS_THREAD_RENTOU_RESET", "BBS_RENTOU_PASS", "BBS_RENTOU_KEYS", "BBS_FR_LEVEL")
 
   /**
     * board は板設定、merged は返信ならスレ設定を重ねたもの。
@@ -44,7 +60,7 @@ object PostRateSettings {
       source.get(name).map(_.trim).filter(_.matches("[0-9]+")).flatMap(_.toIntOption).filter(_ <= maximum).getOrElse(default)
     val keys = PostRateKey.parse(values.getOrElse("BBS_RENTOU_KEYS", ""))
     PostRateSettings(
-      mode = PostRateMode.parse(values.getOrElse("BBS_RENTOU_MODE", "")),
+      level = PostRateLevel.parse(values.get("BBS_FR_LEVEL")),
       pass = BypassLevel.parse(values.getOrElse("BBS_RENTOU_PASS", "")).getOrElse(BypassLevel.Privileged),
       live = values.get("BBS_LIVE").exists(value => value == "checked" || value == "1"),
       board = BoardSettings(

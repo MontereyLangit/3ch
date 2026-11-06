@@ -1,6 +1,6 @@
 package io._3ch.bbs.durable.codec
 
-import io._3ch.bbs.domain.posting.moderation.{PostRateCheck, PostRateIdentity, PostRateKey, PostRateMeta, PostRateMode, PostRateRecord, PostRateStatus, ThreadRecentPosts}
+import io._3ch.bbs.domain.posting.moderation.{PostRateCheck, PostRateIdentity, PostRateKey, PostRateLevel, PostRateMeta, PostRateRecord, PostRateStatus, ThreadRecentPosts}
 import io._3ch.bbs.domain.posting.moderation.PostRateLimit.{BoardSettings, Entry, ThreadSettings}
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -36,14 +36,14 @@ object PostRateCodec {
 
   /** Thread.addRes の posting.rateLimit */
   def encodeCheck(check: PostRateCheck): js.Dynamic = js.Dynamic.literal(
-    mode = check.mode.value, ip = check.identity.ip, shiki = check.identity.shiki, aid = check.identity.aid,
+    level = check.level.value, ip = check.identity.ip, shiki = check.identity.shiki, aid = check.identity.aid,
     timecount = check.board.timecount, timeclose = check.board.timeclose, samba24 = check.board.samba24,
     threadRentou = check.thread.count, threadRentouReset = check.thread.resetSeconds, keys = encodeKeys(check.board.keys))
 
   def decodeCheck(value: js.Dynamic): PostRateCheck = {
     val keys = PostRateKey.parse(text(value.keys))
     PostRateCheck(
-      PostRateMode.parse(text(value.mode)),
+      PostRateLevel.parse(Some(text(value.level))),
       decodeIdentity(value),
       BoardSettings(value.timecount.asInstanceOf[Int], value.timeclose.asInstanceOf[Int], value.samba24.asInstanceOf[Int], keys),
       ThreadSettings(value.threadRentou.asInstanceOf[Int], value.threadRentouReset.asInstanceOf[Double], keys))

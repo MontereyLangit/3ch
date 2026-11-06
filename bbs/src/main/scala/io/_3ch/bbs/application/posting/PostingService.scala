@@ -178,7 +178,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
       ip <- digest(context, canonicalIp(request.connectingIp.getOrElse("")))
       shiki <- digest(context, context.shikibetsu)
       aid <- digest(context, user.fold("")(_.accountKey))
-    } yield Some(PostRateCheck(settings.mode, PostRateIdentity(ip, shiki, aid), settings.board, settings.thread))
+    } yield Some(PostRateCheck(settings.level, PostRateIdentity(ip, shiki, aid), settings.board, settings.thread))
   }
 
   /** dat に追記する。連投規制のコピペで吸い込んだら真を返す */

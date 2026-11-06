@@ -68,6 +68,31 @@ Codex CLI / Gemini CLI レビューは未実施。
 - 設計 #6: 利用者の指示で ID/Password・Google は登録したユーザー ID を表示するので、ログイン ID は非公開にできなくなった。ログイン ID をユーザー ID として公開し、列挙と締め出しへの備えは（アカウント, keyIp）単位のロックと段階的遅延、所要時間の均一化だけにする（§2・§3.9・§13-34）。
 - 設計 #7: ログイン ID と自動採番の `uid` が同じ形式で重なりうるので、`AccountIndex("uid")` に両方を載せて一意にする。移行で使わなくなった `uid` も削除しない（§3.9・§3.10）。
 
+## 連投規制の段階の変更（2026-11-06）
+
+利用者の決定で、レビュー #17 で足した `BBS_RENTOU_MODE`（`off` / `log` / `on`、既定 `log`）を `BBS_FR_LEVEL` に置き換えた（§8.1・§8.8）。
+
+- 値は `off`（判定も記録もしない）・`log`（判定と記録だけ）・空・1 以上の整数。キーが無いときと、`0`・負数・不正な文字列も規制モードにする。
+  整数は旧 3ch の広域連投規制の数値で、意味は未実装。`PostRateLevel.Enforce` に保持だけしておく。
+- `off` / `log` は小文字だけに一致させた。`BBS_LIVE`（`checked` / `1`）や `BbsSettings.checked` と同じく値をそのまま比べる慣習に合わせ、
+  大文字の `OFF` などは不正な値として規制側に倒す。前後の空白は他の設定と同じく除く。
+- コード既定が規制モードになり、デプロイした時点で全板で拒否が始まる（§14-5、承認済み）。段 A-2（既定を `on` へ）は不要になった。
+- 吸い込みを同一投稿者に限らないこと（#14、§13-25）と吸い込み自体（§14-6）も承認された。`timecount` / `timeclose` の書き写し（§14-8）は未決のまま現状維持。
+- 既存のテストのうち、同じ投稿者（IP・識別子・認証主体）が 10 秒以内に続けて書くものは、既定の Samba24 に当たるようになった。
+  期待値は変えず、テストの板設定に `BBS_FR_LEVEL=off` を足して元の動きを確かめるようにした。
+  `PostingSuite` と管理画面の統合テストは独立したコミットにした。スナップショットの 3 件は、変更前だと `BBS_FR_LEVEL` がスレ設定に書き写されて
+  期待値とずれるので、書き写しから除く変更と同じコミットにした。
+
+| テスト | 当たった規制と理由 |
+| --- | --- |
+| `PostingSuite` のスレ立て規制（同一 IP・タイトル・UA・AS＋県、RESET 経過後、設定不正、設定キーの前後空白） | 同じ IP・UA から 1〜3 秒おきにスレ立てと返信をする。Samba24 |
+| `PostingSuite` の dat 行フォーマット（返信）・行数チェック・主（8 件）・threadSettings・BBS_MAX_MENU_THREAD・updateSubback の競合注入・dat 1000 行・全板共通スレ 900 | 同じ投稿者が時刻を進めずにスレ立てと返信を続ける。Samba24（主の 8 件は IP・識別子・認証主体のどれかが一致する組み合わせ） |
+| スナップショット `create-creation-limit-zero`・`create-creation-after-reset`・`error-creation-spaced-keys` | 前提の投稿と同じ IP から 1〜2 秒後にスレ立てする。Samba24 |
+| `tests/admin.integration.test.js` | 同じ IP からスレ立てと返信を続ける。Samba24 |
+
+スナップショットの期待値ファイル（`tests/snapshots/posting/`）は変えていない。連投規制のケースは、規制モードをキー無し（`error-post-rate-gontakure`・`error-post-rate-thread`・`reply-post-rate-live`）と
+空の値（ほか）で、試行モードを `BBS_FR_LEVEL=log` で設定するように改めた。
+
 ## レビューで未確認とされた事項
 
 workerd の PBKDF2 反復上限、COOP による `window.opener` 喪失、主要な専ブラが host-only の `Set-Cookie` を保持するか、

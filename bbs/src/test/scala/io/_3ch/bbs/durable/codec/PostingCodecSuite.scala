@@ -1,7 +1,7 @@
 package io._3ch.bbs.durable.codec
 
 import io._3ch.bbs.domain.posting.{ClientIdentity, ThreadOwner, ThreadPosting}
-import io._3ch.bbs.domain.posting.moderation.{PostRateCheck, PostRateIdentity, PostRateKey, PostRateLimit, PostRateMode, ThreadCreationLimit, ThreadCreationRateLimit, ThreadCreationRequest}
+import io._3ch.bbs.domain.posting.moderation.{PostRateCheck, PostRateIdentity, PostRateKey, PostRateLevel, PostRateLimit, ThreadCreationLimit, ThreadCreationRateLimit, ThreadCreationRequest}
 import munit.FunSuite
 import scala.scalajs.js
 
@@ -30,11 +30,11 @@ class PostingCodecSuite extends FunSuite {
 
   test("連投規制の材料は値が真のときだけ読み、往復する") {
     val keys = Set(PostRateKey.Ip, PostRateKey.Account)
-    val check = PostRateCheck(PostRateMode.On, PostRateIdentity("ip", "shiki", ""), PostRateLimit.BoardSettings(18, 10, 10, keys), PostRateLimit.ThreadSettings(40, 3600, keys))
+    val check = PostRateCheck(PostRateLevel.Enforce(Some(3)), PostRateIdentity("ip", "shiki", ""), PostRateLimit.BoardSettings(18, 10, 10, keys), PostRateLimit.ThreadSettings(40, 3600, keys))
     val reply = ThreadPosting(Some("sample"), Some("1"), None, rateLimit = Some(check))
     assertEquals(PostingCodec.decode(PostingCodec.encode(reply)), Some(reply))
     assertEquals(js.JSON.stringify(PostingCodec.encode(reply).rateLimit),
-      """{"mode":"on","ip":"ip","shiki":"shiki","aid":"","timecount":18,"timeclose":10,"samba24":10,"threadRentou":40,"threadRentouReset":3600,"keys":"ip,aid"}""")
+      """{"level":"3","ip":"ip","shiki":"shiki","aid":"","timecount":18,"timeclose":10,"samba24":10,"threadRentou":40,"threadRentouReset":3600,"keys":"ip,aid"}""")
     assertEquals(PostingCodec.decode(js.Dynamic.literal(rateLimit = null)), Some(ThreadPosting()))
   }
 
