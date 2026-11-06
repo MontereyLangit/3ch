@@ -93,6 +93,25 @@ Codex CLI / Gemini CLI レビューは未実施。
 スナップショットの期待値ファイル（`tests/snapshots/posting/`）は変えていない。連投規制のケースは、規制モードをキー無し（`error-post-rate-gontakure`・`error-post-rate-thread`・`reply-post-rate-live`）と
 空の値（ほか）で、試行モードを `BBS_FR_LEVEL=log` で設定するように改めた。
 
+## Samba24 の照合キーと広域連投規制（2026-11-06）
+
+レビュー #1 と §13-24 の推奨を利用者が採り、Samba24 の照合を `BBS_RENTOU_KEYS` から切り離した（§8.3・§8.3a）。
+
+- Samba24（`BBS_SAMBA24`、既定 10 秒）は `ip` か `aid` の一致だけを同一とみる。識別子だけが一致する別人（同じ地域・キャリア・機種）を 10 秒巻き込まない。
+- 識別子は新しい広域連投規制 `BBS_FR_SECOND`（既定 1 秒、0 で無効、上限 86,400、不正値は既定値、板設定だけ）で見る。
+  拒否コードは `post-rate:board:fr:<残り秒>`、文言は `広域連投規制中です。(あと n 秒) しばらく待ってから投稿してください。`。
+- ごんたくれとスレ連投は従来どおり `BBS_RENTOU_KEYS` を使う。
+- 判定順は利用者の指示「Samba24 → 広域 → ごんたくれ等」のうち既存の順序を崩さない形をとり、ごんたくれ → Samba24 → 広域連投規制にした
+  （ごんたくれを Samba24 より先に見る既存の順を入れ替えると、両方に当たる投稿の拒否文言が変わるため）。
+- キャップの識別子 `★` は照合値を空にした（§8.1 の「`★` は照合しない」を実装に合わせた）。既定の `privileged` ではキャップは免除されるので、
+  効くのは `BBS_RENTOU_PASS` を `admin` / `staff` にした板だけで、ごんたくれとスレ連投の照合からも `★` が外れる。
+- RPC（`Board.reservePost` の `settings`、`Thread.addRes` の `posting.rateLimit`）に `fr` を足した。無い旧形式は既定の 1 秒で読むので、
+  段階的なデプロイ中に旧版の Thread DO から呼ばれても動く。
+- 既存のテストで落ちたのは DO の単体テスト 2 件（`BoardSuite` の試行モード、`ThreadSuite` のスレ単位の連投）。どちらも同じ識別子で
+  1 秒以内に続けて予約し、`fr` の無い旧形式の設定を渡していたので既定の 1 秒に当たった。期待値は変えず、テスト用の設定の組み立てに `fr = 0` を足した。
+  `PostRateLimitSuite` の照合キーのテストは Samba24 で `BBS_RENTOU_KEYS` を確かめていたので、ごんたくれで確かめる形に書き直した。
+  スナップショットの既存の期待値は変わらず、広域連投規制の拒否（`error-post-rate-fr`）と、識別子だけ一致する投稿を Samba24 が通すケース（`reply-post-rate-same-shiki`）を足した。
+
 ## レビューで未確認とされた事項
 
 workerd の PBKDF2 反復上限、COOP による `window.opener` 喪失、主要な専ブラが host-only の `Set-Cookie` を保持するか、

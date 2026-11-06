@@ -11,6 +11,9 @@ object PostRateKey {
   /** 既定の照合キー（ip,shiki,aid） */
   val defaults: Set[PostRateKey] = values.toSet
 
+  /** Samba24 の照合キー。BBS_RENTOU_KEYS によらず固定 */
+  val samba24: Set[PostRateKey] = Set(Ip, Account)
+
   /** カンマ区切りの値を読む。知らない値（廃止した id など）は無視し、1 つも残らなければ既定 */
   def parse(text: String): Set[PostRateKey] = {
     val keys = text.split(",", -1).map(_.trim).flatMap(name => values.find(_.name == name)).toSet
@@ -38,13 +41,16 @@ enum PostRateRejection {
   case Gontakure
   /** Samba24。remainingSeconds は文言に出す残り秒数 */
   case Samba24(remainingSeconds: Int)
+  /** 識別子による広域連投規制（BBS_FR_SECOND）。remainingSeconds は文言に出す残り秒数 */
+  case Fr(remainingSeconds: Int)
   /** スレ単位の連投（BBS_THREAD_RENTOU） */
   case ThreadRentou
 
-  /** RPC とエラーコードに使う文字列。Samba24 は末尾に残り秒数を付ける */
+  /** RPC とエラーコードに使う文字列。Samba24 と Fr は末尾に残り秒数を付ける */
   def code: String = this match {
     case Gontakure => PostRateRejection.GontakureCode
     case Samba24(seconds) => s"${PostRateRejection.Samba24Prefix}$seconds"
+    case Fr(seconds) => s"${PostRateRejection.FrPrefix}$seconds"
     case ThreadRentou => PostRateRejection.ThreadRentouCode
   }
 }
@@ -52,16 +58,19 @@ enum PostRateRejection {
 object PostRateRejection {
   private val GontakureCode = "post-rate:board:gontakure"
   private val Samba24Prefix = "post-rate:board:samba24:"
+  private val FrPrefix = "post-rate:board:fr:"
   private val ThreadRentouCode = "post-rate:thread:rentou"
 
   /** code の文字列から戻す。知らない文字列なら None */
   def fromCode(code: String): Option[PostRateRejection] = code match {
     case GontakureCode => Some(Gontakure)
     case ThreadRentouCode => Some(ThreadRentou)
-    case _ if code.startsWith(Samba24Prefix) =>
-      code.stripPrefix(Samba24Prefix).toIntOption.filter(_ > 0).map(Samba24(_))
+    case _ if code.startsWith(Samba24Prefix) => seconds(code.stripPrefix(Samba24Prefix)).map(Samba24(_))
+    case _ if code.startsWith(FrPrefix) => seconds(code.stripPrefix(FrPrefix)).map(Fr(_))
     case _ => None
   }
+
+  private def seconds(text: String): Option[Int] = text.toIntOption.filter(_ > 0)
 }
 
 /** 試行モード（BBS_FR_LEVEL=log）で拒否せずに記録した判定 */
@@ -90,8 +99,11 @@ object PostRateLimit {
   /** ごんたくれで見る期間（秒） */
   val DaySeconds: Double = 86400
 
-  /** 板単位の設定。timecount・timeclose・samba24 は 0 で無効 */
-  final case class BoardSettings(timecount: Int, timeclose: Int, samba24: Int, keys: Set[PostRateKey])
+  /** 板単位の設定。timecount・timeclose・samba24・fr は 0 で無効。keys はごんたくれの照合キー */
+  final case class BoardSettings(timecount: Int, timeclose: Int, samba24: Int, fr: Int, keys: Set[PostRateKey]) {
+    /** 秒数で見る規制（Samba24・広域）が見る期間（秒）。どちらも無効なら 0 */
+    def windowSeconds: Int = math.max(samba24, fr)
+  }
 
   /** スレ単位の設定。count は 0 で無効 */
   final case class ThreadSettings(count: Int, resetSeconds: Double, keys: Set[PostRateKey])
@@ -100,18 +112,20 @@ object PostRateLimit {
   final case class Entry(timestampSeconds: Double, identity: PostRateIdentity)
 
   /**
-    * 板単位の判定。history は新しい順で、予約中も 1 件に数える。ごんたくれ、Samba24 の順に見る
+    * 板単位の判定。history は新しい順で、予約中も 1 件に数える。ごんたくれ、Samba24、広域の順に見る。
+    * Samba24 は ip・aid、広域は識別子だけで照合する
     */
   def checkBoard(settings: BoardSettings, history: Seq[Entry], identity: PostRateIdentity, nowSeconds: Double): Option[PostRateRejection] = {
-    def same(entry: Entry): Boolean = entry.identity.sameAs(identity, settings.keys)
     val gontakure = settings.timecount > 0 && settings.timeclose > 0 &&
-      history.take(settings.timecount).count(entry => entry.timestampSeconds >= nowSeconds - DaySeconds && same(entry)) >= settings.timeclose
-    def samba24: Option[PostRateRejection] =
-      if (settings.samba24 <= 0) None
-      else history.filter(entry => entry.timestampSeconds >= nowSeconds - settings.samba24 && same(entry))
-        .map(entry => entry.timestampSeconds + settings.samba24 - nowSeconds).maxOption
-        .map(remaining => PostRateRejection.Samba24(math.max(1, math.ceil(remaining).toInt)))
-    if (gontakure) Some(PostRateRejection.Gontakure) else samba24
+      history.take(settings.timecount).count(entry => entry.timestampSeconds >= nowSeconds - DaySeconds && entry.identity.sameAs(identity, settings.keys)) >= settings.timeclose
+    def within(seconds: Int, keys: Set[PostRateKey]): Option[Int] =
+      if (seconds <= 0) None
+      else history.filter(entry => entry.timestampSeconds >= nowSeconds - seconds && entry.identity.sameAs(identity, keys))
+        .map(entry => entry.timestampSeconds + seconds - nowSeconds).maxOption
+        .map(remaining => math.max(1, math.ceil(remaining).toInt))
+    if (gontakure) Some(PostRateRejection.Gontakure)
+    else within(settings.samba24, PostRateKey.samba24).map(PostRateRejection.Samba24(_))
+      .orElse(within(settings.fr, Set(PostRateKey.Shiki)).map(PostRateRejection.Fr(_)))
   }
 
   /** スレ単位の判定。recent はスレの直近の投稿で、RESET 秒以内の同一投稿者が count 件以上なら拒否 */

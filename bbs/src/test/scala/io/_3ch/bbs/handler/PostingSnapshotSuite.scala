@@ -155,6 +155,8 @@ class PostingSnapshotSuite extends FunSuite {
 
   private val Alice = Some(PostingUser("aid1", "alice"))
   private val OtherClient = Seq("CF-Connecting-IP" -> "192.0.2.77", "user-agent" -> "Mozilla/5.0 (OtherBrowser)")
+  /** IP だけが違い、識別子は既定の投稿者と同じになる */
+  private val SameShikiClient = Seq("CF-Connecting-IP" -> "192.0.2.78")
 
   /** 準備として at 秒に ExistingKey へ返信する（連投規制の履歴作り） */
   private def priorReply(at: Double, headers: Seq[(String, String)] = Nil, fields: Seq[(String, String)] = Nil): Env => Future[Unit] =
@@ -395,6 +397,8 @@ class PostingSnapshotSuite extends FunSuite {
     reply("reply-post-rate-copipe-swallowed", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=\n"), priorReply(Now - 100, OtherClient)))),
     reply("reply-post-rate-copipe-log", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=log\n"), priorReply(Now - 100, OtherClient)))),
     reply("reply-post-rate-samba24-log", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=log\n"), priorReply(Now - 3, fields = Seq("MESSAGE" -> "前の本文"))))),
+    reply("error-post-rate-fr", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=\n"), priorReply(Now - 1, SameShikiClient, Seq("MESSAGE" -> "前の本文"))))),
+    reply("reply-post-rate-same-shiki", _.copy(setup = all(existing(), boardSetting("BBS_FR_LEVEL=\n"), priorReply(Now - 3, SameShikiClient, Seq("MESSAGE" -> "前の本文"))))),
     reply("reply-post-rate-live", _.copy(setup = all(existing(), boardSetting("BBS_LIVE=checked\n"), priorReply(Now - 3, fields = Seq("MESSAGE" -> "前の本文"))))),
     reply("reply-post-rate-cap", c => withFields(c.copy(setup = all(existing(), caps, boardSetting("BBS_FR_LEVEL=\n"),
       priorReply(Now - 3, fields = Seq("MESSAGE" -> "前の本文", "mail" -> "#!weakpass")))), "mail" -> "#!weakpass")),

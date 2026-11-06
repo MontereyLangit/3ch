@@ -30,12 +30,20 @@ class PostingCodecSuite extends FunSuite {
 
   test("連投規制の材料は値が真のときだけ読み、往復する") {
     val keys = Set(PostRateKey.Ip, PostRateKey.Account)
-    val check = PostRateCheck(PostRateLevel.Enforce(Some(3)), PostRateIdentity("ip", "shiki", ""), PostRateLimit.BoardSettings(18, 10, 10, keys), PostRateLimit.ThreadSettings(40, 3600, keys))
+    val check = PostRateCheck(PostRateLevel.Enforce(Some(3)), PostRateIdentity("ip", "shiki", ""), PostRateLimit.BoardSettings(18, 10, 10, 1, keys), PostRateLimit.ThreadSettings(40, 3600, keys))
     val reply = ThreadPosting(Some("sample"), Some("1"), None, rateLimit = Some(check))
     assertEquals(PostingCodec.decode(PostingCodec.encode(reply)), Some(reply))
     assertEquals(js.JSON.stringify(PostingCodec.encode(reply).rateLimit),
-      """{"level":"3","ip":"ip","shiki":"shiki","aid":"","timecount":18,"timeclose":10,"samba24":10,"threadRentou":40,"threadRentouReset":3600,"keys":"ip,aid"}""")
+      """{"level":"3","ip":"ip","shiki":"shiki","aid":"","timecount":18,"timeclose":10,"samba24":10,"fr":1,"threadRentou":40,"threadRentouReset":3600,"keys":"ip,aid"}""")
     assertEquals(PostingCodec.decode(js.Dynamic.literal(rateLimit = null)), Some(ThreadPosting()))
+  }
+
+  test("連投規制の材料に fr が無い旧形式は既定の秒数で読む") {
+    val legacy = js.JSON.parse("""{"level":"","ip":"ip","shiki":"shiki","aid":"","timecount":18,"timeclose":10,"samba24":10,"threadRentou":40,"threadRentouReset":3600,"keys":"ip"}""")
+    assertEquals(PostRateCodec.decodeCheck(legacy).board.fr, 1)
+    val (board, enforce) = PostRateCodec.decodeBoardSettings(js.Dynamic.literal(timecount = 18, timeclose = 10, samba24 = 10, keys = "ip", enforce = true))
+    assertEquals((board.fr, board.samba24, enforce), (1, 10, true))
+    assertEquals(PostRateCodec.decodeBoardSettings(PostRateCodec.encodeBoardSettings(board.copy(fr = 0), enforce = false)), (board.copy(fr = 0), false))
   }
 
   test("null と undefined は投稿情報なし") {

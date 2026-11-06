@@ -88,6 +88,7 @@ object PostingText {
     case PostingError.ThreadCreation(_) => threadCreationNarrow
     case PostingError.PostRate(PostRateRejection.Gontakure) => "連続投稿ですか？？ しばらく待ってから投稿してください。"
     case PostingError.PostRate(PostRateRejection.Samba24(seconds)) => s"Samba24 で規制中です。(あと $seconds 秒) しばらく待ってから投稿してください。"
+    case PostingError.PostRate(PostRateRejection.Fr(seconds)) => s"広域連投規制中です。(あと $seconds 秒) しばらく待ってから投稿してください。"
     case PostingError.PostRate(PostRateRejection.ThreadRentou) => "このスレッドへの連続投稿が多すぎます。しばらく待ってから投稿してください。"
     case PostingError.ArchiveConflict(target, site) =>
       s"updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(${site.clock.label}:${site.time} bbs:${site.bbs} key:${site.key} number:${site.number} errmsg:updateSubback->${target}_update_conflicted!)"

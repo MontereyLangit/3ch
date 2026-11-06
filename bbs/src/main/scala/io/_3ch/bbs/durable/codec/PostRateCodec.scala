@@ -1,6 +1,6 @@
 package io._3ch.bbs.durable.codec
 
-import io._3ch.bbs.domain.posting.moderation.{PostRateCheck, PostRateIdentity, PostRateKey, PostRateLevel, PostRateMeta, PostRateRecord, PostRateStatus, ThreadRecentPosts}
+import io._3ch.bbs.domain.posting.moderation.{PostRateCheck, PostRateIdentity, PostRateKey, PostRateLevel, PostRateMeta, PostRateRecord, PostRateSettings, PostRateStatus, ThreadRecentPosts}
 import io._3ch.bbs.domain.posting.moderation.PostRateLimit.{BoardSettings, Entry, ThreadSettings}
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -28,16 +28,15 @@ object PostRateCodec {
 
   /** Board.reservePost の引数 settings。enforce は拒否するときに真 */
   def encodeBoardSettings(settings: BoardSettings, enforce: Boolean): js.Dynamic = js.Dynamic.literal(
-    timecount = settings.timecount, timeclose = settings.timeclose, samba24 = settings.samba24, keys = encodeKeys(settings.keys), enforce = enforce)
+    timecount = settings.timecount, timeclose = settings.timeclose, samba24 = settings.samba24, fr = settings.fr, keys = encodeKeys(settings.keys), enforce = enforce)
 
-  def decodeBoardSettings(value: js.Dynamic): (BoardSettings, Boolean) = (
-    BoardSettings(value.timecount.asInstanceOf[Int], value.timeclose.asInstanceOf[Int], value.samba24.asInstanceOf[Int], PostRateKey.parse(text(value.keys))),
-    value.enforce.asInstanceOf[Boolean])
+  /** fr の無い旧形式は既定の秒数で読む */
+  def decodeBoardSettings(value: js.Dynamic): (BoardSettings, Boolean) = (decodeBoard(value, PostRateKey.parse(text(value.keys))), value.enforce.asInstanceOf[Boolean])
 
   /** Thread.addRes の posting.rateLimit */
   def encodeCheck(check: PostRateCheck): js.Dynamic = js.Dynamic.literal(
     level = check.level.value, ip = check.identity.ip, shiki = check.identity.shiki, aid = check.identity.aid,
-    timecount = check.board.timecount, timeclose = check.board.timeclose, samba24 = check.board.samba24,
+    timecount = check.board.timecount, timeclose = check.board.timeclose, samba24 = check.board.samba24, fr = check.board.fr,
     threadRentou = check.thread.count, threadRentouReset = check.thread.resetSeconds, keys = encodeKeys(check.board.keys))
 
   def decodeCheck(value: js.Dynamic): PostRateCheck = {
@@ -45,7 +44,7 @@ object PostRateCodec {
     PostRateCheck(
       PostRateLevel.parse(Some(text(value.level))),
       decodeIdentity(value),
-      BoardSettings(value.timecount.asInstanceOf[Int], value.timeclose.asInstanceOf[Int], value.samba24.asInstanceOf[Int], keys),
+      decodeBoard(value, keys),
       ThreadSettings(value.threadRentou.asInstanceOf[Int], value.threadRentouReset.asInstanceOf[Double], keys))
   }
 
@@ -57,6 +56,11 @@ object PostRateCodec {
   def encodeRecent(recent: ThreadRecentPosts): js.Array[js.Dynamic] = recent.posts.map { entry =>
     js.Dynamic.literal(t = entry.timestampSeconds, ip = entry.identity.ip, shiki = entry.identity.shiki, aid = entry.identity.aid)
   }.toJSArray
+
+  private def decodeBoard(value: js.Dynamic, keys: Set[PostRateKey]): BoardSettings = {
+    val fr = if (js.isUndefined(value.fr) || value.fr == null) PostRateSettings.DefaultFrSeconds else value.fr.asInstanceOf[Int]
+    BoardSettings(value.timecount.asInstanceOf[Int], value.timeclose.asInstanceOf[Int], value.samba24.asInstanceOf[Int], fr, keys)
+  }
 
   private def encodeKeys(keys: Set[PostRateKey]): String = PostRateKey.values.filter(keys.contains).map(_.name).mkString(",")
 

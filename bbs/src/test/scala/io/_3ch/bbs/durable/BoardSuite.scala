@@ -122,8 +122,8 @@ class BoardSuite extends FunSuite {
   }
 
   private def entry(ip: String): js.Dynamic = js.Dynamic.literal(ip = ip, shiki = s"shiki-$ip", aid = "")
-  private def rate(samba24: Int = 10, timecount: Int = 18, timeclose: Int = 10, enforce: Boolean = true): js.Dynamic =
-    js.Dynamic.literal(timecount = timecount, timeclose = timeclose, samba24 = samba24, keys = "ip,shiki,aid", enforce = enforce)
+  private def rate(samba24: Int = 10, timecount: Int = 18, timeclose: Int = 10, fr: Int = 0, enforce: Boolean = true): js.Dynamic =
+    js.Dynamic.literal(timecount = timecount, timeclose = timeclose, samba24 = samba24, fr = fr, keys = "ip,shiki,aid", enforce = enforce)
 
   /** storage.put に渡されたキーを記録する */
   private def recordPuts(instance: Board): mutable.Buffer[Set[String]] = {
@@ -145,6 +145,21 @@ class BoardSuite extends FunSuite {
       _ = assert(results.exists(_.startsWith("post-rate:board:samba24:")), results.toString)
       other <- board.reservePost("3:c", entry("b"), rate()).toFuture
       _ = assertEquals(other, "")
+    } yield ()
+  }
+
+  test("広域連投規制は識別子の一致で拒否し、fr の無い旧形式の設定は既定の 1 秒で判定する") {
+    val board = DurableTestKit.newEnv().board("board1")
+    val sameShiki = js.Dynamic.literal(ip = "other", shiki = "shiki-a", aid = "")
+    val legacy = js.Dynamic.literal(timecount = 18, timeclose = 10, samba24 = 10, keys = "ip,shiki,aid", enforce = true)
+    for {
+      _ <- board.reservePost("1:a", entry("a"), rate(samba24 = 10, fr = 5)).toFuture
+      rejected <- board.reservePost("2:b", sameShiki, rate(samba24 = 10, fr = 5)).toFuture
+      _ = assert(rejected.startsWith("post-rate:board:fr:"), rejected)
+      allowed <- board.reservePost("3:b", sameShiki, rate(samba24 = 10, fr = 0)).toFuture
+      _ = assertEquals(allowed, "", "Samba24 は識別子だけの一致では拒否しない")
+      legacyRejected <- board.reservePost("4:c", js.Dynamic.literal(ip = "third", shiki = "shiki-a", aid = ""), legacy).toFuture
+      _ = assertEquals(legacyRejected, "post-rate:board:fr:1")
     } yield ()
   }
 

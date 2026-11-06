@@ -8,15 +8,18 @@
 | 規制 | 単位 | 内容 | 拒否コード |
 | --- | --- | --- | --- |
 | ごんたくれ | 板 | 板の履歴を新しい順に `timecount` 件取り、24 時間以内の同一投稿者が `timeclose` 件以上 | `post-rate:board:gontakure` |
-| Samba24 | 板 | 板の履歴に `BBS_SAMBA24` 秒以内の同一投稿者がいる。残り秒数を文言に出す | `post-rate:board:samba24:<秒>` |
+| Samba24 | 板 | 板の履歴に `BBS_SAMBA24` 秒以内の IP か `aid` が一致する投稿がある。残り秒数を文言に出す | `post-rate:board:samba24:<秒>` |
+| 広域連投規制 | 板 | 板の履歴に `BBS_FR_SECOND` 秒以内の識別子が一致する投稿がある。残り秒数を文言に出す | `post-rate:board:fr:<秒>` |
 | スレ連投 | スレ | `BBS_THREAD_RENTOU_RESET` 秒以内の同一投稿者が `BBS_THREAD_RENTOU` 件以上。>>1 は見ない | `post-rate:thread:rentou` |
 | コピペ | スレ | dat の末尾 2 行（あぼーん行は除く）の本文フィールドと完全一致。投稿者は問わない。>>1 は見ない | 成功画面のまま dat に残さない |
 
-- 同一投稿者は `BBS_RENTOU_KEYS` のキー（`ip`・`shiki`・`aid`）のどれかが一致すること。スレ連投にも同じキーを使う。
-  `ip` はスレ立て規制と同じ正規化、`shiki` は名前欄の識別子、`aid` は認証主体の `accountKey`（認証基盤ができるまでは常に空）。
+- ごんたくれとスレ連投の同一投稿者は `BBS_RENTOU_KEYS` のキー（`ip`・`shiki`・`aid`）のどれかが一致すること。
+  Samba24 は `BBS_RENTOU_KEYS` によらず `ip`・`aid` のどちらかの一致、広域連投規制は `shiki` の一致だけを見る。
+  識別子は同じ地域・キャリア・機種の別人でも一致するので、10 秒の Samba24 から外し、短い秒数の広域連投規制に分けた（2026-11-06 利用者決定）。
+  `ip` はスレ立て規制と同じ正規化、`shiki` は名前欄の識別子（キャップの `★` は空にする）、`aid` は認証主体の `accountKey`（認証基盤ができるまでは常に空）。
   値はどれもソルト付き SHA-256 で、空の値は照合しない。
 - 板の履歴では予約中も確定済みも 1 件に数える。吸い込んだ投稿も数える。拒否した投稿は数えない。
-- 判定順は スレ連投 → ごんたくれ → Samba24 → コピペ。
+- 判定順は スレ連投 → ごんたくれ → Samba24 → 広域連投規制 → コピペ。
 - 判定しない投稿: `BBS_FR_LEVEL=off`、`BBS_LIVE` が `checked` か `1`、`BBS_RENTOU_PASS` で免除される投稿者。
   権限と Lv がまだ無いので、免除されるのは `privileged`・`l10` ではキャップ（★）、`login` ではキャップと認証済、`admin`・`staff` では誰もいない。
   免除した投稿は履歴にも残さない。saku 板にも適用する。
@@ -48,12 +51,13 @@
 | --- | --- | --- | --- |
 | `timecount` / `timeclose` | `18` / `10` | 0〜1000 | 板設定だけ |
 | `BBS_SAMBA24` | `10` | 0〜86400 | 板設定だけ |
+| `BBS_FR_SECOND` | `1` | 0〜86400 | 板設定だけ |
 | `BBS_THREAD_RENTOU` / `BBS_THREAD_RENTOU_RESET` | `40` / `3600` | 0〜1000 / 0〜315360000 | スレ設定 → 板設定 |
 | `BBS_FR_LEVEL` | 規制（キー無し） | `off` / `log` / 空 / 1 以上の整数 | スレ設定 → 板設定 |
 | `BBS_RENTOU_PASS` | `privileged` | `admin` / `staff` / `privileged` / `l10` / `login` | スレ設定 → 板設定 |
 | `BBS_RENTOU_KEYS` | `ip,shiki,aid` | カンマ区切り。`id` などは無視 | スレ設定 → 板設定 |
 
-不正な値は拒否せず既定値で動く（`BBS_FR_LEVEL` の不正な値は規制モード）。スレ立て時の設定の書き写しから `BBS_SAMBA24`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_PASS`・`BBS_RENTOU_KEYS`・`BBS_FR_LEVEL` を除く。
+不正な値は拒否せず既定値で動く（`BBS_FR_LEVEL` の不正な値は規制モード）。スレ立て時の設定の書き写しから `BBS_SAMBA24`・`BBS_FR_SECOND`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_PASS`・`BBS_RENTOU_KEYS`・`BBS_FR_LEVEL` を除く。
 `timecount` / `timeclose` は従来どおり書き写すが、板単位の規制は板設定だけを読むので効かない（書き写しをやめるかは未決）。
 
 ## 保存・同時実行
@@ -67,9 +71,10 @@
 
 - `reservePost(key, entry, settings)`（空＝許可、それ以外は拒否コード）・`completePost(key)`・`cancelPost(key)`。どれも `DurableLock.serialized`。
   `settings.enforce` が偽（試行モード）なら拒否コードを返しつつ予約する。
-- 予約は最新ページとメタだけを書く。読むのは最新ページから、直近 `timecount` 件と `BBS_SAMBA24` 秒以内を読み終えるまで。
+- `settings` は `{timecount, timeclose, samba24, fr, keys, enforce}`。`fr` の無い旧形式は既定の 1 秒で読む（`Thread.addRes` の `posting.rateLimit` も同じ）。
+- 予約は最新ページとメタだけを書く。読むのは最新ページから、直近 `timecount` 件と `BBS_SAMBA24`・`BBS_FR_SECOND` の大きい方の秒数以内を読み終えるまで。
   確定と取消は記録を含むページだけを書く。
-- 保持: 直近 `max(timecount, 1)` 件・`BBS_SAMBA24` 秒以内・有効な予約（120 秒）のどれかを含むページまでを範囲に残す。
+- 保持: 直近 `max(timecount, 1)` 件・`BBS_SAMBA24` と `BBS_FR_SECOND` の大きい方の秒数以内・有効な予約（120 秒）のどれかを含むページまでを範囲に残す。
   上限は 16 ページ（1,024 件）で、超えたら古いページを範囲から外す。容量では拒否しない。範囲から外れたページは消さず、枠が次に使われるときに上書きする。
   読み込まなかった古いページの予約は範囲から外れることがあるが、判定は予約と確定を同じに数えるので結果は変わらない。
 - `meta` に件数は持たない（範囲から外したページの件数は読まないと分からないため）。

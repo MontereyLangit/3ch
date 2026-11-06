@@ -45,9 +45,12 @@ final case class PostRateSettings(level: PostRateLevel, pass: BypassLevel, live:
 }
 
 object PostRateSettings {
+  /** BBS_FR_SECOND の既定（秒） */
+  val DefaultFrSeconds: Int = 1
+
   /** スレ立て時にスレ設定へ書き写さないキー */
   val NotCopiedToThread: Set[String] =
-    Set("BBS_SAMBA24", "BBS_THREAD_RENTOU", "BBS_THREAD_RENTOU_RESET", "BBS_RENTOU_PASS", "BBS_RENTOU_KEYS", "BBS_FR_LEVEL")
+    Set("BBS_SAMBA24", "BBS_FR_SECOND", "BBS_THREAD_RENTOU", "BBS_THREAD_RENTOU_RESET", "BBS_RENTOU_PASS", "BBS_RENTOU_KEYS", "BBS_FR_LEVEL")
 
   /**
     * board は板設定、merged は返信ならスレ設定を重ねたもの。
@@ -67,6 +70,7 @@ object PostRateSettings {
         timecount = integer(boardValues, "timecount", 18, 1000),
         timeclose = integer(boardValues, "timeclose", 10, 1000),
         samba24 = integer(boardValues, "BBS_SAMBA24", 10, 86400),
+        fr = integer(boardValues, "BBS_FR_SECOND", DefaultFrSeconds, 86400),
         keys = keys),
       thread = ThreadSettings(
         count = integer(values, "BBS_THREAD_RENTOU", 40, 1000),

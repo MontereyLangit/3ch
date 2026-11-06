@@ -326,7 +326,7 @@ class PostingServiceSuite extends FunSuite {
       val check = fake.postings.head._3.rateLimit.getOrElse(fail("rateLimit が無い"))
       assertEquals(check.level, PostRateLevel.Enforce(None))
       assertEquals(check.identity, PostRateIdentity(s"s2(192.0.2.1:$salt)", s"s2(${outcome.context.shikibetsu}:$salt)", ""))
-      assertEquals((check.board.timecount, check.board.timeclose, check.board.samba24), (5, 10, 30))
+      assertEquals((check.board.timecount, check.board.timeclose, check.board.samba24, check.board.fr), (5, 10, 30, 1))
       assertEquals((check.thread.count, check.thread.resetSeconds), (40, 3600d))
       assert(outcome.isInstanceOf[PostingOutcome.Posted], outcome.toString)
     }
@@ -338,10 +338,10 @@ class PostingServiceSuite extends FunSuite {
   }
 
   test("板単位の件数と秒数は板設定だけ、スレ単位はスレ設定を優先して読む") {
-    val fake = Fake(boardSettings = "BBS_SAMBA24=20\nBBS_THREAD_RENTOU=3\n", threadSettings = "BBS_SAMBA24=0<>timecount=1<>BBS_THREAD_RENTOU=7<>")
+    val fake = Fake(boardSettings = "BBS_SAMBA24=20\nBBS_FR_SECOND=4\nBBS_THREAD_RENTOU=3\n", threadSettings = "BBS_SAMBA24=0<>BBS_FR_SECOND=0<>timecount=1<>BBS_THREAD_RENTOU=7<>")
     fake.post(reply()*)().map { _ =>
       val check = fake.postings.head._3.rateLimit.get
-      assertEquals((check.board.samba24, check.board.timecount, check.thread.count), (20, 18, 7))
+      assertEquals((check.board.samba24, check.board.fr, check.board.timecount, check.thread.count), (20, 4, 18, 7))
     }
   }
 
@@ -351,6 +351,14 @@ class PostingServiceSuite extends FunSuite {
       assert(outcome.isInstanceOf[PostingOutcome.Posted], outcome.toString)
       val check = fake.postings.head._3.rateLimit.get
       assertEquals((check.level, check.board.samba24, check.board.timecount), (PostRateLevel.Enforce(None), 10, 18))
+    }
+  }
+
+  test("キャップを判定するときは識別子（★）を照合値にしない") {
+    val fake = Fake(boardSettings = "BBS_RENTOU_PASS=admin\n", caps = Map("pass" -> "管理人"))
+    fake.post("mail" -> "#!pass")().map { outcome =>
+      assertEquals(outcome.context.shikibetsu, "★")
+      assertEquals(fake.postings.head._3.rateLimit.map(_.identity), Some(PostRateIdentity(s"s2(192.0.2.1:$salt)", "", "")))
     }
   }
 
@@ -366,7 +374,7 @@ class PostingServiceSuite extends FunSuite {
   }
 
   test("スレ立て時のスレ設定に連投規制の新しいキーを書き写さない") {
-    val fake = Fake(boardSettings = "BBS_TITLE=看板\nBBS_SAMBA24=5\nBBS_FR_LEVEL=log\ntimecount=3\n")
+    val fake = Fake(boardSettings = "BBS_TITLE=看板\nBBS_SAMBA24=5\nBBS_FR_SECOND=2\nBBS_FR_LEVEL=log\ntimecount=3\n")
     fake.post()().map(_ => assertEquals(fake.postings.head._3.initialSettings, Some("BBS_TITLE=看板<>timecount=3<>BBS_SHIKIBETSU=off<>")))
   }
 
@@ -378,6 +386,8 @@ class PostingServiceSuite extends FunSuite {
       assertEquals(r.error.code, "post-rate:board:samba24:7")
       assertEquals(PostingText.message(r.error), "Samba24 で規制中です。(あと 7 秒) しばらく待ってから投稿してください。")
       assertEquals(PostingText.message(PostingError.PostRate(PostRateRejection.Gontakure)), "連続投稿ですか？？ しばらく待ってから投稿してください。")
+      assertEquals(PostingError.PostRate(PostRateRejection.Fr(1)).code, "post-rate:board:fr:1")
+      assertEquals(PostingText.message(PostingError.PostRate(PostRateRejection.Fr(1))), "広域連投規制中です。(あと 1 秒) しばらく待ってから投稿してください。")
       assertEquals(PostingText.message(PostingError.PostRate(PostRateRejection.ThreadRentou)), "このスレッドへの連続投稿が多すぎます。しばらく待ってから投稿してください。")
       assertEquals(r.headers, Seq("Set-Cookie" -> pon))
       assert(!fake.calls.exists(_.startsWith("archive")))
@@ -385,7 +395,7 @@ class PostingServiceSuite extends FunSuite {
   }
 
   test("試行モードの判定は拒否せずに書き、ハッシュ済みの値だけを記録する") {
-    val findings = Seq(PostRateFinding.Rejected(PostRateRejection.Gontakure), PostRateFinding.Copipe)
+    val findings = Seq(PostRateFinding.Rejected(PostRateRejection.Fr(1)), PostRateFinding.Copipe)
     val fake = Fake(write = _ => Future.successful(ThreadWriteResult.Written(2, findings)))
     fake.post(reply()*)().map { outcome =>
       assert(outcome.isInstanceOf[PostingOutcome.Posted], outcome.toString)

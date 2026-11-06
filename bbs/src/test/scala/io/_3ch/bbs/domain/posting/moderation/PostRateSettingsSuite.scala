@@ -11,22 +11,33 @@ class PostRateSettingsSuite extends FunSuite {
   test("設定が無ければ既定値で、段階は規制") {
     val settings = PostRateSettings.from(none, none)
     assertEquals(settings, PostRateSettings(PostRateLevel.Enforce(None), BypassLevel.Privileged, live = false,
-      BoardSettings(18, 10, 10, PostRateKey.defaults), ThreadSettings(40, 3600, PostRateKey.defaults)))
+      BoardSettings(18, 10, 10, 1, PostRateKey.defaults), ThreadSettings(40, 3600, PostRateKey.defaults)))
   }
 
   test("不正な値は既定値で動き、上限を超えた値も既定値にする") {
-    val board = parse("timecount=-1\ntimeclose=abc\nBBS_SAMBA24=86401\nBBS_THREAD_RENTOU=1.5\nBBS_THREAD_RENTOU_RESET=\nBBS_FR_LEVEL=yes\nBBS_RENTOU_PASS=all\nBBS_RENTOU_KEYS=id\n")
+    val board = parse("timecount=-1\ntimeclose=abc\nBBS_SAMBA24=86401\nBBS_FR_SECOND=-1\nBBS_THREAD_RENTOU=1.5\nBBS_THREAD_RENTOU_RESET=\nBBS_FR_LEVEL=yes\nBBS_RENTOU_PASS=all\nBBS_RENTOU_KEYS=id\n")
     assertEquals(PostRateSettings.from(board, board), PostRateSettings.from(none, none))
     val maximum = parse("timecount=1000\nBBS_SAMBA24=86400\nBBS_THREAD_RENTOU_RESET=315360000\n")
     val parsed = PostRateSettings.from(maximum, maximum)
     assertEquals((parsed.board.timecount, parsed.board.samba24, parsed.thread.resetSeconds), (1000, 86400, 315360000d))
   }
 
+  test("BBS_FR_SECOND は既定 1 秒、0 で無効、上限 86400 で、不正な値は既定") {
+    def fr(text: String): Int = {
+      val settings = parse(text)
+      PostRateSettings.from(settings, settings).board.fr
+    }
+    val cases = Seq("" -> 1, "BBS_FR_SECOND=0\n" -> 0, "BBS_FR_SECOND=30\n" -> 30, "BBS_FR_SECOND=86400\n" -> 86400,
+      "BBS_FR_SECOND=86401\n" -> 1, "BBS_FR_SECOND=-5\n" -> 1, "BBS_FR_SECOND=1.5\n" -> 1, "BBS_FR_SECOND=abc\n" -> 1,
+      "BBS_FR_SECOND=\n" -> 1, " BBS_FR_SECOND = 5 \n" -> 5)
+    cases.foreach { case (text, expected) => assertEquals(fr(text), expected, text) }
+  }
+
   test("板単位の件数と秒数は板設定だけ、スレ単位と段階はスレ設定を優先する") {
-    val board = parse("timecount=5\nBBS_SAMBA24=20\nBBS_THREAD_RENTOU=3\nBBS_FR_LEVEL=\n")
-    val merged = board.merged(parse("timecount=1<>BBS_SAMBA24=0<>BBS_THREAD_RENTOU=7<>BBS_FR_LEVEL=off<>", "<>"))
+    val board = parse("timecount=5\nBBS_SAMBA24=20\nBBS_FR_SECOND=3\nBBS_THREAD_RENTOU=3\nBBS_FR_LEVEL=\n")
+    val merged = board.merged(parse("timecount=1<>BBS_SAMBA24=0<>BBS_FR_SECOND=0<>BBS_THREAD_RENTOU=7<>BBS_FR_LEVEL=off<>", "<>"))
     val settings = PostRateSettings.from(board, merged)
-    assertEquals((settings.board.timecount, settings.board.samba24), (5, 20))
+    assertEquals((settings.board.timecount, settings.board.samba24, settings.board.fr), (5, 20, 3))
     assertEquals((settings.thread.count, settings.level), (7, PostRateLevel.Off))
   }
 
@@ -91,7 +102,7 @@ class PostRateSettingsSuite extends FunSuite {
   }
 
   test("スレ立て時の書き写しから本書の新キーだけを除く") {
-    val settings = parse("BBS_TITLE=t\nBBS_SAMBA24=5\n BBS_FR_LEVEL =log\ntimecount=3\nBBS_LIVE=checked\n")
+    val settings = parse("BBS_TITLE=t\nBBS_SAMBA24=5\nBBS_FR_SECOND=2\n BBS_FR_LEVEL =log\ntimecount=3\nBBS_LIVE=checked\n")
     assertEquals(PostRateSettings.copiedToThread(settings).toThreadSettings, "BBS_TITLE=t<>timecount=3<>BBS_LIVE=checked<>")
   }
 }

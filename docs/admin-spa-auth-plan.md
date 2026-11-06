@@ -182,6 +182,7 @@ HTML の `style` 属性は CSP（`style-src 'self'`）で弾かれ、`bgcolor` �
 | 同一IP群からのスレッド作成規制数・広域スレッド作成規制数 | `BBS_THREAD_TATESUGI(_RESET)`・`BBS_THREAD_JUNBAN(_RESET)`・`BBS_THREAD_JUNBAN_AS_ONLY` | 数値・テキスト | 対応（現行のスレ立て規制フォームの検証を流用） |
 | 掲示板全体の連続投稿規制（`timecount` 回中 `timeclose` 回） | `timecount`・`timeclose` | 数値 2 つ | 設計書 §8.2。設計書 段 A（連投規制）以降に表示 |
 | 短時間投稿規制秒数 | `BBS_SAMBA24` | 数値 | 設計書 §8.3。設計書 段 A 以降 |
+| （モックに無い）広域連投規制秒数 | `BBS_FR_SECOND` | 数値 | 設計書 §8.3a。設計書 段 A 以降 |
 | 各スレッド内での連続投稿規制 | `BBS_THREAD_RENTOU`・`BBS_THREAD_RENTOU_RESET` | 数値 2 つ | 設計書 §8.4。設計書 段 A 以降 |
 | 連投規制類（レベル） | `BBS_FR_LEVEL`・`BBS_RENTOU_KEYS`・`BBS_RENTOU_PASS` | ラジオ・チェック群・選択 | 設計書 §8.1・§7。設計書 段 A 以降 |
 | 投稿時のログインを必須にする | `BBS_PHOEBE` | 数値（0〜10） | 設計書 §4.4。設計書 段 C 以降。ラベルは「書き込みに必要な最低 Lv」に変える（Web 版は常にログイン必須で、この値が効くのは専ブラの未ログインと Lv。設計書 §3.5） |

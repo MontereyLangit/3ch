@@ -526,7 +526,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 | 規制 | 指定場所 | 既定 | 備考 |
 | --- | --- | --- | --- |
 | `deny.cgi` / `ngwords.cgi` の各行 | 5 列目（省略可） | `privileged` | 現行の「★ 投稿は全規制スルー」に、`staff` の名無し投稿の免除が加わる（§14）。4 列の行はそのまま有効 |
-| 連投規制（§8 の 4 種） | 板設定 `BBS_RENTOU_PASS` | `privileged` | スレ設定で上書き可 |
+| 連投規制（§8 の 5 種） | 板設定 `BBS_RENTOU_PASS` | `privileged` | スレ設定で上書き可 |
 | スレ立て規制 | 板設定 `BBS_THREAD_PASS` | `privileged` | 現行の「キャップ除外」を置き換える。判定もせず履歴にも残さない点は維持 |
 | `BBS_PHOEBE` ゲート | 固定 | `staff` | §4.4 |
 
@@ -538,16 +538,16 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 
 ### 8.1 共通
 
-- **適用除外**: `BBS_LIVE` が `checked` または `1` の板・スレ（4 種すべて。既存の強制 sage は `checked` のときだけで変えない）。`BBS_RENTOU_PASS` で免除される投稿者。`saku` 板には適用する。
-- **照合キー**: 板設定 `BBS_RENTOU_KEYS`（§8.8）で選ぶ。スレ単位（§8.4）にも同じキーを使う（実装）。候補は `ip`（IPv6 は URL 正規化、スレ立て規制と同じ）、`shiki`（識別子。`D` を除いた `JP.AA CC-EEEFFFGGGZZZXXX`。`★` は照合しない）、`aid`（認証済のアカウント。移行しても変わらない）。選んだキーのいずれか 1 つでも一致すれば「同一」。
-  既定は `ip,shiki,aid`（原案の `id` は日付欄の ID の廃止で使えなくなったので外した）。値に `id` が書かれていれば無視する。**ただし `shiki` は同じキャリア・同じ地域・同じ機種の別人で一致しうる**（現行の `checked` 識別子は県・市・AS・UA のハッシュ。新書式でも iOS は機種クラス粒度）。Samba24 のような秒単位の板全体規制では巻き添えが起きるため、§13-24 で既定を決めた。巻き添えの実測は `BBS_FR_LEVEL=log`（下記）を書いた板で行う。
+- **適用除外**: `BBS_LIVE` が `checked` または `1` の板・スレ（5 種すべて。既存の強制 sage は `checked` のときだけで変えない）。`BBS_RENTOU_PASS` で免除される投稿者。`saku` 板には適用する。
+- **照合キー**: 板設定 `BBS_RENTOU_KEYS`（§8.8）で選ぶ。ごんたくれ（§8.2）とスレ単位（§8.4）に使う（実装）。Samba24（§8.3）は `ip,aid` 固定、広域連投規制（§8.3a）は `shiki` だけで照合する。候補は `ip`（IPv6 は URL 正規化、スレ立て規制と同じ）、`shiki`（識別子。`D` を除いた `JP.AA CC-EEEFFFGGGZZZXXX`。`★` は照合しない）、`aid`（認証済のアカウント。移行しても変わらない）。選んだキーのいずれか 1 つでも一致すれば「同一」。
+  既定は `ip,shiki,aid`（原案の `id` は日付欄の ID の廃止で使えなくなったので外した）。値に `id` が書かれていれば無視する。**ただし `shiki` は同じキャリア・同じ地域・同じ機種の別人で一致しうる**（現行の `checked` 識別子は県・市・AS・UA のハッシュ。新書式でも iOS は機種クラス粒度）。Samba24 のような秒単位の板全体規制では巻き添えが起きるため、§13-24 で Samba24 を `ip,aid` に限り、識別子は短い秒数の広域連投規制（§8.3a）で見ることにした。巻き添えの実測は `BBS_FR_LEVEL=log`（下記）を書いた板で行う。
 - **段階**: 板設定 `BBS_FR_LEVEL`。`off` は判定も記録もしない。`log` は判定と履歴の記録だけ行い、拒否せず Workers Logs に出す（試行モード）。
   値が空・キーが無い・1 以上の整数は規制モードで拒否する。整数は旧 3ch の広域連投規制の数値で、意味は未実装（型には保持する）。
   それ以外の値（`0`・負数・`OFF` などの不正な文字列）も規制モードにし、設定ミスで規制が外れないようにする。前後の空白は除き、`off` / `log` は小文字だけに一致させる（`BBS_LIVE` の `checked` と同じく値をそのまま比べる）。
   **コード既定は規制モード**（2026-11-06 利用者決定。デプロイした時点で全板で拒否が始まることも承認済み）。当初案の `BBS_RENTOU_MODE`（`off` / `log` / `on`、既定 `log`）は置き換え、読まない。
 - **保存値**: 全てソルト付き SHA-256（`hash(value + ":" + md5Salt)`。スレ立て規制と同じ `digest`）。空値は空のまま保存し照合しない。
 - **予約中の扱い**: 有効な予約（§8.7）は確定済みと同じく件数に 1 件として数える（スレ立て規制の「別枠で 1 件ずつ」と違い、ごんたくれの件数窓にも入れる）。
-- **判定主体**: 板単位（§8.2・8.3）は Board DO、スレ単位（§8.4・8.5）は Thread DO。純粋判定は `domain/posting/moderation/PostRateLimit.scala`。
+- **判定主体**: 板単位（§8.2・8.3・8.3a）は Board DO、スレ単位（§8.4・8.5）は Thread DO。純粋判定は `domain/posting/moderation/PostRateLimit.scala`。
 - **設定の出どころ**: 板単位の規制は**板設定だけ**で判定する（スレ設定の書き写しを見ない）。スレ単位の規制と `BBS_PHOEBE` は「明示的なスレ設定 → 板設定」の順。スレ立て時の設定書き写しから本書の新キーを除く（§8.8）。
 - **拒否**: HTTP 200 ＋ `<!-- 2ch_X:error -->`。dat・履歴・Lv を進めない。拒否コードは §8.9。
 
@@ -560,6 +560,13 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 ### 8.3 板ごと: Samba24（`BBS_SAMBA24`）
 
 板の履歴に `now − BBS_SAMBA24 ≤ t` で同一の投稿が 1 件でもあれば拒否。`0` で無効。既定 `10`（§13）。上限 86,400。
+同一は `BBS_RENTOU_KEYS` によらず IP か `aid` のどちらかが一致すること（§13-24、2026-11-06 利用者決定）。識別子だけが一致する投稿は §8.3a で見る。
+
+### 8.3a 板ごと: 広域連投規制（`BBS_FR_SECOND`）
+
+板の履歴に `now − BBS_FR_SECOND ≤ t` で識別子（`shiki`）が一致する投稿が 1 件でもあれば拒否。`0` で無効。既定 `1`、上限 86,400、不正値は既定値。
+識別子が空や `★`（キャップ。照合値を空にする）なら照合しない。判定は Samba24 の次（ごんたくれ → Samba24 → 広域連投規制）。
+同じ地域・キャリア・機種の別人を巻き込みうるので、秒数は短く置く（2026-11-06 利用者決定）。
 
 ### 8.4 スレごと（`BBS_THREAD_RENTOU` / `BBS_THREAD_RENTOU_RESET`）
 
@@ -590,7 +597,7 @@ checkRequest → readForm（名前欄の !id・!no を解釈。既存）→ proc
 → 本文コマンド（`!バルサン` / `!SETTING:BBS_PHOEBE:n` §4.4）の解釈
 → updateThread: Thread.addRes
      ├ スレ単位 連投判定（§8.4）        ← 拒否なら終了
-     ├ Board.reservePost（§8.2・8.3）    ← 拒否なら終了（`BBS_FR_LEVEL=log` なら記録だけ）
+     ├ Board.reservePost（§8.2・8.3・8.3a） ← 拒否なら終了（`BBS_FR_LEVEL=log` なら記録だけ）
      ├ コピペ判定（§8.5）                ← 吸い込みなら Board.completePost して `{swallowed}` で終了
      ├ storage.put（dat・log・recentPosts・ownerAid（>>1 のみ）・settings（コマンドがあれば））  失敗なら Board.cancelPost
      └ Board.updateThread（既存。引数に予約 key を足して completePost を兼ねる）
@@ -614,9 +621,9 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | `postRateHistory:<n>` | 64 件ごとのページ（追記専用のリングバッファ。`n` は通し番号を 16 で割った余り）。各件 `{key, t, ip, shiki, aid, status}`（`key` は予約 ID＝`{threadKey}:{nonce}`、`status` は `pending` / `completed`） |
 
 - RPC: `reservePost(key, entry, settings): String`（空＝許可、それ以外＝拒否コード）、`completePost(key)`、`cancelPost(key)`。いずれも `DurableLock.serialized`。
-- 書き込みは**最新ページと `postRateMeta` だけ**（スレ立て規制の全ページ読み書きを踏襲しない。全投稿で呼ばれるため）。読み込みは判定に要る件数分のページだけ（直近 `timecount` 件と `BBS_SAMBA24` 秒以内。最大でも 1,000 件＝16 ページ）。`complete` / `cancel` は `key` を含むページだけ書き換える。
+- 書き込みは**最新ページと `postRateMeta` だけ**（スレ立て規制の全ページ読み書きを踏襲しない。全投稿で呼ばれるため）。読み込みは判定に要る件数分のページだけ（直近 `timecount` 件と `BBS_SAMBA24`・`BBS_FR_SECOND` の大きい方の秒数以内。最大でも 1,000 件＝16 ページ）。`complete` / `cancel` は `key` を含むページだけ書き換える。
 - 判定は確定済みと有効な予約を合わせて件数窓で行う（§8.1）。予約の有効期限は 120 秒。期限切れの予約は確定済みと同じ扱い（保守的）。
-- 保持規則: **直近 `max(timecount, 1)` 件 ∪ `now − BBS_SAMBA24 ≤ t` の件 ∪ 有効な予約**。24 時間分を残さない（§8.2 は直近 `timecount` 件しか見ない）。上限 1,024 件（16 ページ）。超えたら古いページから捨てる。**容量で拒否しない**（板全体の投稿停止や意図的な埋め立てを防ぐ）。
+- 保持規則: **直近 `max(timecount, 1)` 件 ∪ `now − BBS_SAMBA24 ≤ t` の件 ∪ `now − BBS_FR_SECOND ≤ t` の件 ∪ 有効な予約**（秒数の 2 つは大きい方で足りる）。24 時間分を残さない（§8.2 は直近 `timecount` 件しか見ない）。上限 1,024 件（16 ページ）。超えたら古いページから捨てる。**容量で拒否しない**（板全体の投稿停止や意図的な埋め立てを防ぐ）。
 - 集約 `PostRateHistory`（純粋）が `reserve` / `complete` / `cancel` / `retained` を持ち、DO は `PostRateCodec` で変換して読み書きするだけ。
 
 **Thread DO**
@@ -636,22 +643,23 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | --- | --- | --- | --- |
 | `timecount` | `18` | 0〜1000 | §8.2 の件数窓。0 で無効 |
 | `timeclose` | `10` | 0〜1000 | §8.2 の同一件数。0 で無効 |
-| `BBS_SAMBA24` | `10` | 0〜86400 | §8.3 の秒数。0 で無効 |
+| `BBS_SAMBA24` | `10` | 0〜86400 | §8.3 の秒数。0 で無効。照合は `ip,aid` 固定 |
+| `BBS_FR_SECOND` | `1` | 0〜86400 | §8.3a の秒数。0 で無効 |
 | `BBS_THREAD_RENTOU` | `40` | 0〜1000 | §8.4 の件数。0 で無効 |
 | `BBS_THREAD_RENTOU_RESET` | `3600` | 0〜315360000 | §8.4 の秒数 |
 | `BBS_RENTOU_PASS` | `privileged` | §7 の値 | 連投規制の回避レベル |
-| `BBS_RENTOU_KEYS` | `ip,shiki,aid` | カンマ区切り | §8.1 の照合キー。§13-24 |
+| `BBS_RENTOU_KEYS` | `ip,shiki,aid` | カンマ区切り | §8.1 の照合キー（ごんたくれとスレ単位）。§13-24 |
 | `BBS_FR_LEVEL` | 規制（キー無し） | `off` / `log` / 空 / 1 以上の整数 | §8.1 の段階。空・整数・不正な値は規制 |
 | `BBS_LIVE` | 空 | `checked` / `1` | 連投規制の適用除外（既存の強制 sage 動作は `checked` のまま） |
 | `BBS_PHOEBE` | `0` | 0〜10 | §4.4 |
 
-実装（段 A-1）: 書き写しから除くのは `BBS_SAMBA24`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_PASS`・`BBS_RENTOU_KEYS`・`BBS_FR_LEVEL` だけ。
+実装（段 A-1）: 書き写しから除くのは `BBS_SAMBA24`・`BBS_FR_SECOND`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_PASS`・`BBS_RENTOU_KEYS`・`BBS_FR_LEVEL` だけ。
 `BBS_PHOEBE`・`BBS_THREAD_PASS` はそれぞれの段で足す。`timecount` / `timeclose` の書き写しをやめるのは既存の振る舞いを変えるので承認待ちとし、今は書き写す（板単位の規制は板設定だけを読むので効かない）。
 
 読み込みは統合後の `BbsSettings`（計画書 段 0）を使う。不正値は**返信も拒否せず既定値で動く**（`BBS_FR_LEVEL` だけは不正値を規制モードにする。§8.1。スレ立て規制が不正値で拒否するのと異なる。
 連投規制は設定ミスで板全体を止めるより通す方が被害が小さいため。管理画面の保存時には検証する）。
 **スレ立て時の設定書き写し**（現行はその時点の板設定を全キー `Thread.settings` に保存し、返信ではそれが板設定を上書きする）から、本書の新キー
-（`BBS_PHOEBE`・`BBS_SAMBA24`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_PASS`・`BBS_RENTOU_KEYS`・`BBS_FR_LEVEL`・`BBS_THREAD_PASS`）と既存の `timecount` / `timeclose` を除く。
+（`BBS_PHOEBE`・`BBS_SAMBA24`・`BBS_FR_SECOND`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_PASS`・`BBS_RENTOU_KEYS`・`BBS_FR_LEVEL`・`BBS_THREAD_PASS`）と既存の `timecount` / `timeclose` を除く。
 除かないと、荒らしの最中に板設定を変えても既存スレに効かず、Board DO の板単位判定がスレごとに違う設定で動く。スレ設定にこれらのキーがあるのは `!SETTING` 等で明示的に書いた場合だけとし、
 スレ単位の規制と `BBS_PHOEBE` はそれを板設定より優先する。既存キーの書き写しは変えない。
 
@@ -663,6 +671,7 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | --- | --- |
 | `post-rate:board:gontakure` | `連続投稿ですか？？ しばらく待ってから投稿してください。` |
 | `post-rate:board:samba24:<残り秒>` | `Samba24 で規制中です。(あと n 秒) しばらく待ってから投稿してください。` |
+| `post-rate:board:fr:<残り秒>` | `広域連投規制中です。(あと n 秒) しばらく待ってから投稿してください。` |
 | `post-rate:thread:rentou` | `このスレッドへの連続投稿が多すぎます。しばらく待ってから投稿してください。` |
 | `post-rate:thread:copipe` | （成功画面。§8.5） |
 | `auth:required:login` / `auth:required:level:<n>` | §3.5 の文言＋ URL |
@@ -674,7 +683,7 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | `auth:token:insecure` | `認証キーは HTTPS で接続したときだけ使えます。` |
 | `phoebe:command:denied` | （コマンドを無視して通常投稿。文言なし） |
 
-`x-post-error` ヘッダ（§3.8）にはコードの先頭 3 要素だけを載せる（`post-rate:board:samba24`）。段 A-1 ではこのヘッダはまだ出さない（応答ヘッダの追加は別途承認）。
+`x-post-error` ヘッダ（§3.8）にはコードの先頭 3 要素だけを載せる（`post-rate:board:samba24`・`post-rate:board:fr`）。段 A-1 ではこのヘッダはまだ出さない（応答ヘッダの追加は別途承認）。
 
 ## 9. ストレージ・バインディング
 
@@ -826,7 +835,7 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | 21 | パスワード再設定はメール認証済みのアカウントだけ（未登録は管理者対応） | そのとおり |
 | 22 | ロック閾値（（アカウント, keyIp）10 回/時、アカウント全体は段階的遅延、`keyIp` 30 回/時）と再設定申請 3 回/日 | 仮置き |
 | 23 | Google 連携の解除（Google → 他方式）を許さないこと、Google アカウント削除時の扱い | 許さない。退会のみ |
-| 24 | 連投規制の照合キー（`BBS_RENTOU_KEYS`）の既定。原案の `ip,id,shiki` は CGNAT・同一機種で別人が一致し、Samba24 で巻き添えが出る（レビュー #1）。`id` は ID 廃止で使えない | **決定（2026-11-06 利用者）**: `id` を外す。`ip,shiki,aid` を既定にし、`BBS_FR_LEVEL=log` の板の観測で決め直す。推奨は Samba24 を `ip,aid` に限る |
+| 24 | 連投規制の照合キー（`BBS_RENTOU_KEYS`）の既定。原案の `ip,id,shiki` は CGNAT・同一機種で別人が一致し、Samba24 で巻き添えが出る（レビュー #1）。`id` は ID 廃止で使えない | **決定（2026-11-06 利用者）**: `id` を外し、`ip,shiki,aid` を既定にする（ごんたくれとスレ単位に使う）。推奨どおり Samba24 は `BBS_RENTOU_KEYS` によらず `ip,aid` に限り、識別子は広域連投規制 `BBS_FR_SECOND`（既定 1 秒、§8.3a）で見る。既定は `BBS_FR_LEVEL=log` の板の観測で決め直す |
 | 25 | 吸い込み（§8.5）を同一投稿者（照合キー一致）に限るか | **決定（2026-11-06 利用者）**: 原案どおり投稿者を問わない（別人の投稿の写しも吸い込む） |
 | 26 | 初回デプロイを `BBS_RENTOU_MODE=log`（記録のみ）で始め、1 週間後に `on` にする手順 | **決定（2026-11-06 利用者）**: 採らない。設定キーを `BBS_FR_LEVEL` にし、コード既定を規制モードにする（§8.1）。観測は `BBS_FR_LEVEL=log` を書いた板だけで行う |
 | 27 | 板 top 等の Cookie による出し分けを SSR で行う（`private, no-cache`）か、ヘッダーだけ client で `/auth/session` を取る（共有キャッシュを保つ）か | SSR で行う |

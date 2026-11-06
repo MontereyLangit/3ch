@@ -170,13 +170,13 @@ final class PostingService(ports: PostingPorts, salt: String) {
       }
     }
 
-  /** 連投規制の材料。判定しない投稿（off・BBS_LIVE・回避レベルで免除）は None。aid は認証主体の accountKey（未認証は空） */
+  /** 連投規制の材料。判定しない投稿（off・BBS_LIVE・回避レベルで免除）は None。aid は認証主体の accountKey（未認証は空）、キャップの識別子（★）は空にして照合しない */
   private def postRateCheck(context: PostingContext, boardSettings: BbsSettings, user: Option[PostingUser], request: PostingRequest): Future[Option[PostRateCheck]] = {
     val settings = PostRateSettings.from(boardSettings, context.settings)
     if (!settings.applies(context.cap.isDefined, user.isDefined)) Future.successful(None)
     else for {
       ip <- digest(context, canonicalIp(request.connectingIp.getOrElse("")))
-      shiki <- digest(context, context.shikibetsu)
+      shiki <- digest(context, if (context.cap.isDefined) "" else context.shikibetsu)
       aid <- digest(context, user.fold("")(_.accountKey))
     } yield Some(PostRateCheck(settings.level, PostRateIdentity(ip, shiki, aid), settings.board, settings.thread))
   }

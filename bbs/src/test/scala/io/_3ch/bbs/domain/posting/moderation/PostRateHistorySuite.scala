@@ -8,8 +8,8 @@ class PostRateHistorySuite extends FunSuite {
   private val empty = PostRateHistory(PostRateHistory.InitialMeta, Vector(PostRatePage(0, Vector.empty)))
 
   private def who(name: String): PostRateIdentity = PostRateIdentity(s"ip-$name")
-  private def settings(timecount: Int = 18, timeclose: Int = 10, samba24: Int = 10): BoardSettings =
-    BoardSettings(timecount, timeclose, samba24, PostRateKey.defaults)
+  private def settings(timecount: Int = 18, timeclose: Int = 10, samba24: Int = 10, fr: Int = 0): BoardSettings =
+    BoardSettings(timecount, timeclose, samba24, fr, PostRateKey.defaults)
 
   private def reserve(history: PostRateHistory, key: String, name: String, s: BoardSettings = settings(), now: Double = t0, enforce: Boolean = true): PostRateHistory = {
     val result = history.reserve(key, who(name), s, enforce, now)
@@ -82,6 +82,7 @@ class PostRateHistorySuite extends FunSuite {
     assertEquals(store.load(s, t0).pages.map(_.number), Vector(2, 1), "最新ページは 2 件なので 1 つ前まで読む")
     assertEquals(store.load(settings(timecount = 1, samba24 = 0), t0).pages.map(_.number), Vector(2))
     assertEquals(store.load(settings(timecount = 1, samba24 = 2000), t0).pages.map(_.number), Vector(2, 1, 0), "Samba24 の秒数以内を読み切る")
+    assertEquals(store.load(settings(timecount = 1, samba24 = 0, fr = 2000), t0).pages.map(_.number), Vector(2, 1, 0), "広域連投規制の秒数以内も読み切る")
   }
 
   test("保持規則で古いページを範囲から外し、上限を超えても拒否しない") {
@@ -93,6 +94,14 @@ class PostRateHistorySuite extends FunSuite {
     (1 to 64 * 17 + 1).foreach(n => crowded.save(reserve(crowded.load(settings(timecount = 1000, timeclose = 0, samba24 = 0), t0), n.toString, n.toString, settings(timecount = 1000, timeclose = 0, samba24 = 0))))
     assertEquals(crowded.meta, PostRateMeta(17, 2), "16 ページを超えたら古いページを外す")
     assertEquals(crowded.load(settings(timecount = 1000, timeclose = 0, samba24 = 0), t0).records.size, 64 * 15 + 1)
+  }
+
+  test("保持規則は Samba24 と広域連投規制の大きい方の秒数以内を残す") {
+    val page0 = PostRatePage(0, Vector.tabulate(64)(n => PostRateRecord(s"c$n", t0 - 300, who("a"), PostRateStatus.Completed)))
+    def kept(s: BoardSettings): PostRateMeta = reserve(PostRateHistory(PostRateMeta(0, 0), Vector(page0)), "new", "b", s).meta
+    assertEquals(kept(settings(timecount = 1, timeclose = 0, samba24 = 0, fr = 300)), PostRateMeta(1, 0))
+    assertEquals(kept(settings(timecount = 1, timeclose = 0, samba24 = 300, fr = 1)), PostRateMeta(1, 0))
+    assertEquals(kept(settings(timecount = 1, timeclose = 0, samba24 = 10, fr = 299)), PostRateMeta(1, 1))
   }
 
   test("保持規則は期限内の予約を含むページを残す") {

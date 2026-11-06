@@ -349,7 +349,7 @@ class ThreadSuite extends FunSuite {
   }
 
   private def rateLimit(level: String = "", ip: String = "ip-a", samba24: Int = 0, threadRentou: Int = 40): js.Dynamic = js.Dynamic.literal(
-    level = level, ip = ip, shiki = s"shiki-$ip", aid = "", timecount = 18, timeclose = 10, samba24 = samba24,
+    level = level, ip = ip, shiki = s"shiki-$ip", aid = "", timecount = 18, timeclose = 10, samba24 = samba24, fr = 0,
     threadRentou = threadRentou, threadRentouReset = 3600, keys = "ip,shiki,aid")
   private def rated(key: String, limit: js.Dynamic, create: Boolean = false): js.Dynamic =
     js.Dynamic.literal(bbs = "board1", key = key, title = "t", create = create, rateLimit = limit)

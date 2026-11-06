@@ -45,11 +45,11 @@ final case class PostRateHistory(meta: PostRateMeta, pages: Vector[PostRatePage]
   /** 読み込んだページを古い側に足す */
   def withOlder(page: PostRatePage): PostRateHistory = copy(pages = pages :+ page)
 
-  /** 板単位の判定のために次に読むページ。直近 timecount 件と Samba24 の秒数の範囲を読み終えていれば None */
+  /** 板単位の判定のために次に読むページ。直近 timecount 件と Samba24・広域の秒数の範囲を読み終えていれば None */
   def nextPage(settings: BoardSettings, now: Double): Option[Int] = older.filter { _ =>
     val loaded = records
     pages.isEmpty || loaded.size < math.max(settings.timecount, 1) ||
-      (settings.samba24 > 0 && loaded.lastOption.exists(_.timestampSeconds >= now - settings.samba24))
+      (settings.windowSeconds > 0 && loaded.lastOption.exists(_.timestampSeconds >= now - settings.windowSeconds))
   }
 
   /**
@@ -69,12 +69,12 @@ final case class PostRateHistory(meta: PostRateMeta, pages: Vector[PostRatePage]
       PostRateHistory(PostRateMeta(number, math.max(meta.oldest, number - MaxPages + 1)), PostRatePage(number, Vector(record)) +: pages)
   }
 
-  /** 直近 max(timecount, 1) 件・Samba24 の秒数以内・期限内の予約のどれかを含むページまでを残し、それより古いページを範囲から外す */
+  /** 直近 max(timecount, 1) 件・Samba24 か広域の秒数以内・期限内の予約のどれかを含むページまでを残し、それより古いページを範囲から外す */
   def retained(settings: BoardSettings, now: Double): PostRateHistory = {
     val count = math.max(settings.timecount, 1)
     val kept = pages.flatMap(page => page.records.reverseIterator.map(page.number -> _)).zipWithIndex.collect {
       case ((number, record), index)
-        if index < count || (settings.samba24 > 0 && record.timestampSeconds >= now - settings.samba24) || record.isActivePending(now) => number
+        if index < count || (settings.windowSeconds > 0 && record.timestampSeconds >= now - settings.windowSeconds) || record.isActivePending(now) => number
     }
     val oldest = math.max(meta.oldest, kept.minOption.getOrElse(meta.newest))
     PostRateHistory(meta.copy(oldest = oldest), pages.filter(_.number >= oldest))
