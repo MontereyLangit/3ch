@@ -17,6 +17,16 @@
 
 手動確認には検証用のTurnstile設定を用意し、対象のホストを登録する。サーバーは検証応答のhostnameと要求先を完全一致で照合する。[Cloudflareのテスト用キー](https://developers.cloudflare.com/turnstile/troubleshooting/testing/) を使う場合も、その応答仕様を確認し、本番のキーと混ぜない。自動テストは外部認証の応答だけを差し替え、実際のHTTP処理とDOを呼ぶ。本番の秘密鍵は必要ない。
 
+## Googleログイン
+
+`GOOGLE_CLIENT_ID`（vars）と `GOOGLE_CLIENT_SECRET`（secret）が両方あるときだけ、認証画面のGoogleを選べるようにし、`/auth/google/start` と `/auth/google/callback/` を受け付ける。どちらかが無ければ画面は「準備中」、この2つは404にする。
+
+Google Cloud ConsoleでOAuthクライアント（ウェブアプリケーション）を作り、承認済みのリダイレクトURIに `https://www.3ch.io/auth/google/callback/` と、開発用の `http://localhost:8787/auth/google/callback/` を登録する。末尾のスラッシュも含めて一致させる。スコープは `openid email` だけ。2026-11-07の時点でクライアントは未登録で、実際のGoogleとの接続は確認していない。自動テストはトークンの交換とJWKSの応答を差し替え、テスト用のRSA鍵で署名したIDトークンで確かめている。
+
+## 登録に使えないユーザーID
+
+固定の予約語（`admin`・`root`・`test`・`3ch`・`saku`・`auth`・`mod`・`noname`）と既存の板名（R2の `{ID}/SETTING.TXT` がある名前）に加え、R2の `reserved-ids.txt` に1行1つで書いたIDを拒否する。空行と `#` で始まる行は読み飛ばす。R2を読めないときは登録しない。
+
 ## ローカルで確認する
 
 ```bash
@@ -27,7 +37,7 @@ npm run dev
 
 ブラウザでは `http://localhost:8787/` を開く。セッションは `__Host-ch3s_sid`、`Secure; HttpOnly; SameSite=Lax; Path=/` で発行する。開発時のHTTP発行を許すのは `localhost` だけで、`127.0.0.1` や任意のHTTPホストでは発行しない。本番はHTTPSを使う。
 
-`/auth/` で同意とTurnstile確認を行い、認証後のヘッダー、投稿の認証モーダル、`/auth/account/` のキー発行・失効とログアウトを確認する。未ログインで `/auth/account/` を開くと `/auth/?return=/auth/account/` へ移る。キーの平文は発行直後に一度だけ表示する。GET、SSR、ブラウザの保存領域には残さない。
+`/auth/` で同意とTurnstile確認を行い、認証後のヘッダー、投稿の認証モーダル、`/auth/account/` のキー発行・失効とログアウトを確認する。ID・パスワードは「ID・パスワード」で登録し、ログアウト後に「ログイン」タブから入り直せることを確認する。未ログインで `/auth/account/` を開くと `/auth/?return=/auth/account/` へ移る。キーの平文は発行直後に一度だけ表示する。GET、SSR、ブラウザの保存領域には残さない。
 
 ## Durable Objects
 

@@ -1,6 +1,6 @@
 # 認証実装の引き継ぎ
 
-作業ブランチは `ccr-9c002284-dbai2f`。2026-11-07（日本時間）の段BとE-1の途中成果を区切りとして引き継ぐ。ビルドとテストを通した小さな単位ごとにcommit・pushし、完了範囲と残件をこの文書へ記録する。
+作業ブランチは `ccr-9c002284-dbai2f`。2026-11-07（日本時間）の段Bの成果と、段E-1（ID・パスワードとGoogleログイン）の完了を区切りとして引き継ぐ。ビルドとテストを通した小さな単位ごとにcommit・pushし、完了範囲と残件をこの文書へ記録する。
 
 ## 前提と現在の範囲
 
@@ -20,40 +20,42 @@
 
 AS・地域・UA・日別識別子の観測集計（Account.seen）、AccountDirectoryへの反映、管理者用RPC・役割の管理も未実装。専ブラの表示名は製品名・版・既知のOSを抽出する限定的な実装で、段Cのv3解析表の移植とは区別する。接続元の表示は現在取得できるAS番号と地域・国を使い、AS名の取得は後続で揃える。iOSの既知プロファイル表はR2から読む口だけを用意しており、本番の表データを作成したわけではない。
 
-次の実施順は **E-1 → C → D → E-2**。段Bの基盤は `38615ac` でpush済み。後続で端末情報のUnicode空白の互換性を修正し、E-1の純粋モデルに着手した。段Bの残件と境界も引き続き確認する。
+次の実施順は **C → D → E-2**。E-1は完了した（下記「E-1の実装範囲」）。段Bの残件と境界も引き続き確認する。
 
 | 段 | 次に実装する内容 |
 | --- | --- |
-| E-1 | 入力規則・ログイン失敗計数・PBKDF2・資格情報codec・登録準備状態まで実装。パスワードの作成・照合RPC、HTTP登録・ログイン、Google認証と準備中UIの接続は未実装 |
+| E-1 | 完了。残りはGoogle OAuthのクライアント登録と本番での接続確認（外部設定）だけ |
 | C | PHOEBEの昇格・投稿数と経過時間、識別子の書式、Lv設定とコマンド、連投規制へのアカウントID連携を設計書と照合する |
 | D | 権限・回避レベル・管理画面のアカウント認証と操作画面、スレ立て規制の設定を進める。管理画面の別計画も参照する |
-| E-2 | メール認証、パスワード再設定、方式移行など。メール送信APIの提供元は未定のため、送信ポートと提供元の設定を分ける |
+| E-2 | メール認証（登録画面のメール欄もここで出す）、パスワード変更・再設定のHTTP（照合と `setPassword` のRPCはE-1で用意済み）、クライアントIDからの方式移行、退会、エッジ防御など。メール送信APIの提供元は未定のため、送信ポートと提供元の設定を分ける |
 
 ## 外部資料
 
 端末ハッシュの原本は `MontereyLangit/v6-base` の `develop`。`common` の端末関連実装、`common/src/jsMain/kotlin/fc/pages/AuthPage.kt` の `collectFp`・`detectFonts`、`docs/feature/ninja_auth_system.md` を参照した。OS軸はUA、arch軸は `navigator.platform`。候補フォント、順序、計測文字列などは互換材料なので、独自の別方式へ置き換えない。
 
-設計が参照するv3のUA解析表全体は未確認。段Cで元の資料を探してから移植する。Google OAuthのクライアント登録とメール送信APIの選定も後続作業。
+設計が参照するv3のUA解析表全体は未確認。段Cで元の資料を探してから移植する。メール送信APIの選定も後続作業。Google OAuthのクライアント登録はまだで、本番のGoogleとの接続は確認していない（[認証の検証設定](auth-integration.md)）。
 
 ## E-1の実装範囲
 
-LoginId、Password、LoginThrottle、PasswordCredentialをcommonに追加した。NFC後のUTF-8長、孤立サロゲート、予約語と板名、5回目からの遅延、10回目の接続元ロック、期限と別IPへの影響をJVM・Scala.jsで検証する。ID・パスワード方式で実際に登録・ログインできる段階ではない。
+E-1はID・パスワードの登録・ログイン・ロックと、Googleでのログイン・登録まで。設計書§3.9・§3.10の基本部分にあたる。レビューと設計からの差分は [レビュー記録](auth-implementation-review.md) の「段 E-1」にまとめた。
 
-全体の失敗窓は1時間とし、成功は該当する接続元の失敗だけを消す。登録時のパスワードでは、ASCIIの大文字小文字を区別せずIDの包含を拒否する。[実装メモ](auth-password-implementation-notes.md) の登録回復方式は未採用の候補であり、既存Bの10分の予約期限を変更していない。
+純粋モデルはcommonのLoginId、Password、LoginThrottle、PasswordCredential、GoogleIdToken（クレームの検証）、OAuthState（認可Cookieの書式）と、AccountStateの照合・利用開始・パスワード変更。PBKDF2はPBKDF2-HMAC-SHA256・100,000回・16バイトのソルトで、プラットフォームの上限は未測定。
 
-入力規則は `8f73077` でpush済み。後続のPasswordHasherはPBKDF2-HMAC-SHA256・100,000回・16バイト乱数ソルトで資格情報を作り、保存済みの方式と反復数で照合する。Password.parseは照合用のNFC・Unicode・長さだけを確認し、登録用のID包含規則を適用しない。暗号APIの欠落・同期例外・Promise拒否では利用不可を返す。
+Account DOのRPCは `create`（資格情報付き）、`activate`、`verifyPassword`、`setPassword`、`describeGoogle`。`verifyPassword` はDOのロック内でPBKDF2を計算し、接続元ごとの失敗計数とロックを同じ直列化の中で保存する。ロック中も計算を省かない。存在しないIDは固定の `Account("dummy")` に同じRPCを送り、固定の資格情報で計算して失敗にする（dummyのDOには何も保存しない）。応答の遅延（5回目から1秒ずつ、上限8秒）はDOのロック外、HTTP層で待つ。
 
-ScalaのプロバイダはNodeの実WebCryptoと独立した固定値で検証した。実workerdの追加テストはネイティブAPIの100,000回・100,001回の計算をNodeと照合するもので、ScalaプロバイダをDOから呼ぶ統合テストは次の区切りで追加する。今回の設定値は100,000回のままで、プラットフォーム上限は未測定。
+登録は uid と login（Googleなら google）の索引を予約し、作成→login（google）索引の確定→uid索引の確定→利用開始（activate）の順に進める。uidの確定が拒否されたら両方の予約を外し、応答だけが失われたらuidの所有者を確かめてから続ける。利用開始の前に止まったアカウントは、正しいパスワード（Googleなら検証済みのIDトークン）での次のログインで確定を再開する。既存の10分の予約期限は変えていない。[実装メモ](auth-password-implementation-notes.md) §4の候補（Accountに確定要求を記録する方式）は採らなかった。
 
-PBKDF2プロバイダは `70087bd` でpush済み。後続では、凍結などのprofile.statusから登録準備状態を分離し、activationがpendingのアカウントを認証に使わないようにした。readyのPasswordアカウントには正しい資格情報とUIDに一致するログインIDが必要。古いClient保存値にactivationが無い場合だけreadyとして読み、PasswordとGoogleの欠損・不明な準備状態は拒否する。
+HTTPは `POST /auth/register`・`/auth/login`・`/auth/google/start` と `GET /auth/google/callback/`。登録とログインはTurnstileと端末申告の突合を必須にし、AuthRateの register（1日5件）・login（1時間30回）を接続元ごとに数え、計数できなければ拒否する。ログインの失敗（未登録・不一致・ロック中）は同じ401と文言。使えないユーザーID（予約語・R2の `reserved-ids.txt`・既存の板名・使用済み）は同じ409と文言。
 
-資格情報は厳密なcodecで読み書きする。ソルト16バイトとハッシュ32バイトは小文字の16進数で保存し、必須項目・反復数・時刻・失敗計数を検証する。本人向けinspectと認証DTOには資格情報やactivationを含めない。登録を有効にするRPCと、実際のパスワード照合RPCはまだ追加していない。
+GoogleはOpenID Connectの認可コード＋PKCE。state・nonce・verifierを署名付きの `ch3s_oauth` Cookie（`Path=/auth/google`、10分）に保存し、callbackで一度だけ使う。IDトークンはGoogleのJWKS（RS256）で署名を検証してからクレームを確かめ、subのHMACで `AccountIndex("google")` を引く。未登録なら入力したユーザーIDでLv10のアカウントを作る。`GOOGLE_CLIENT_ID` と `GOOGLE_CLIENT_SECRET` が揃わない環境では画面は「準備中」で、開始とcallbackは404。
 
-この保存基盤は `a418e22` でpush済み。次のDO接続に向け、独立したテスト専用SQLite DOで同期KVとSQLの同時確定・同時rollbackを確認した。async getのキャッシュ整合と保存形式の相互読出しも検証している。これは基盤APIの検証であり、Accountの照合処理を実装済みという意味ではない。
+認証画面は「新しく登録する」「ログイン」のタブで、登録方法にかんたん登録・ID・パスワード・Googleを並べる。メールアドレス欄はメール認証を実装するE-2まで出さない。認証モーダルは同じ画面を埋め込むので、ID・パスワードもそのまま使える。Googleは埋め込み時に別のウィンドウで開き、BroadcastChannelと既存のポーリングで親へ伝える。
+
+E-1に含めなかったもの: クライアントIDからの方式移行（E-2）、パスワード変更・再設定・メール認証のHTTP（E-2）、Googleの開始へのエッジ防御（E-2）。ログイン中に新規登録すると別のアカウントになり、Cookieは新しいアカウントに切り替わる（移行はE-2）。
 
 ## 設定と検証
 
-[認証の検証設定](auth-integration.md) に従う。`AUTH_SECRET` がないと認証は有効にならない。登録には `AGREEMENT_VERSION`、`TURNSTILE_SITE_KEY`、`TURNSTILE_SECRET_KEY` も必要。秘密鍵は `.dev.vars` または環境のsecretで管理し、この文書やコミットへ書かない。
+[認証の検証設定](auth-integration.md) に従う。`AUTH_SECRET` がないと認証は有効にならない。登録には `AGREEMENT_VERSION`、`TURNSTILE_SITE_KEY`、`TURNSTILE_SECRET_KEY` も必要。Googleログインには `GOOGLE_CLIENT_ID` と `GOOGLE_CLIENT_SECRET` を足す。秘密鍵は `.dev.vars` または環境のsecretで管理し、この文書やコミットへ書かない。
 
 ローカルは `http://localhost:8787/` を使う。Secure CookieのHTTP開発例外はlocalhostだけで、127.0.0.1では発行しない。SQLite DOの `v2` はAccount・AccountIndex・AuthRateの3クラス。AccountDirectoryは後続で別の移行タグを追加し、適用済みタグを書き換えない。
 
@@ -69,11 +71,10 @@ npm run v6:typecheck
 
 | 検証 | この区切りの結果 |
 | --- | --- |
-| Scala単体テスト | sbt test 1,135件成功（commonJVM 151、commonJS 154、codegen 27、bbsClient 2、bbs 801）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功 |
-| workerd・SSR・hydration | npm test 67件成功、skipなし。npmのpretestも成功。実DOの競合・保存、Turnstile応答の差し替え、Cookie・再認証・キー失効と索引の削除、HTTPのログアウト（無効なセッションでもCookieを消す）、未ログインのアカウント設定の302、設定不足の404、既存投稿、SSR・hydration、ネイティブPBKDF2、SQLと同期KVの原子性を検証。画面のログアウトはboard-islandsで送信の形（フォーム形式の本文）と表示の切り替えを検証 |
-| ビルド | npm run v6:build成功。Workerの最終出力に5つのDOが公開されることも検証 |
-| dev起動 | npm run devをローカル・ダミーsaltで起動。トップ200、bbs.cgiのHTTP 200とエラーマーカー、管理者パスワード未設定時の503、各応答のAccept-CHを確認 |
+| Scala単体テスト | sbt test 1,181件成功（commonJVM 162、commonJS 165、codegen 27、bbsClient 2、bbs 825）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功 |
+| workerd・SSR・hydration | npm test 70件成功、skipなし。実workerdで登録→ログアウト→ログイン→投稿、未登録・不一致の同じ応答、十回の失敗による接続元のロックと応答の遅延、別の接続元からのログイン、認証画面の方式の表示を検証。board-islandsでタブを替えてもTurnstileを作り直さないこと、ログインと登録の送信内容、Googleの開始フォームを検証 |
+| ビルド | npm run v6:build成功 |
 | 型チェック | npm run v6:typecheck成功 |
-| コミット・push | 段B基盤は38615acで反映済み。レビュー指摘の修正は6d745cfから小さく分けてコミットした |
+| コミット | E-1はRPC・登録とログイン・HTTP・画面・Google・文書の順に小さく分けてコミットした（pushはオーケストレーターが行う） |
 
 本番へのデプロイ、secretの登録、本番データの変更はこの区切りには含めない。

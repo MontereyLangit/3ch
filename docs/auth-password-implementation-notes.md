@@ -1,18 +1,16 @@
 # ID・パスワード認証の実装メモ
 
-この文書は§3.9の実装前レビュー用であり、登録回復の方式は未採用である。
-認証Bの予約期限・索引・ハンドラは変更しない。Google・メール・方式移行は別の区切りとする。
+この文書は§3.9の実装前レビュー用に書いた。E-1の実装（2026-11-07）で採った登録回復の方式は§7に記録する。
+認証Bの予約期限・索引は変更していない。メール・方式移行はE-2で扱う。
 
 ## 1. 小さく実装する順序
 
 1. 純粋モデル：LoginId、Password、LoginThrottle、PasswordCredential（実装済み）。
 2. 実WebCryptoのPBKDF2プロバイダ（実装済み）。生成・照合と暗号APIの異常系を検証する。
-3. 資格情報のcodecとPending/Readyの準備状態は実装済み。次に作成・照合RPCを追加し、原子的な失敗計数とdummy照合まで検証する。
-4. 登録回復方式を選び、索引RPC・アカウント準備状態・期限の契約をレビューする。
-5. BのOrigin・Turnstile・端末確認・AuthRateを再利用してHTTP登録／ログインを実装する。
-6. 上記が通ってからUIの登録・ログイン方式を有効にする。
-
-第3段はHTTP登録を公開せず進められる。第4段の未解決事項を、実装済みの契約として扱わない。
+3. 資格情報のcodecとPending/Readyの準備状態、作成・照合RPC、原子的な失敗計数とdummy照合（実装済み）。
+4. 登録回復方式（実装済み。§7）。
+5. BのOrigin・Turnstile・端末確認・AuthRateを再利用したHTTP登録／ログイン（実装済み）。
+6. UIの登録・ログイン方式（実装済み）。
 
 ## 2. 先行する純粋モデルの契約
 
@@ -82,3 +80,13 @@ HTTP公開前には、各保存直後の応答消失、10分境界、全通信�
 [SyncKvStorage](https://github.com/cloudflare/workerd/blob/main/src/workerd/api/sync-kv.c++)と[非同期Storage](https://github.com/cloudflare/workerd/blob/main/src/workerd/api/actor-state.c++)は同じV8シリアライザを使う。SQLite DOの同一データベースで、transactionSyncはSAVEPOINTを作り、例外ではROLLBACK TOを行う。実装の参照先は[ActorSqlite](https://github.com/cloudflare/workerd/blob/main/src/workerd/io/actor-sqlite.c++)。
 
 永続化テストでは、非同期putを同期KVから読めること、同期KVとSQLの同時確定、JS例外とSQL制約違反によるprofile・credential・SQL全体の取消を確認する。温めた非同期getのキャッシュも同期書込後に更新され、Date・Uint8Array・null・undefinedは両方向で保持される。これはローカルランタイムの能力検証であり、Scalaの資格情報RPCの原子性や本番環境での動作確認を済ませたことにはしない。
+
+## 7. 採った登録回復の方式（E-1）
+
+§4の候補（Accountに確定要求を記録する方式）は採らず、既存の10分の予約期限を変えない次の方式にした。
+
+- 確定の順は「Accountを登録準備中で作成（資格情報付き）→ login（Googleならgoogle）索引の確定 → uid索引の確定 → `activate`」。取り消せない uid の確定を、取り消せる login の確定より後に置く。
+- uid の確定が明示的に拒否されたら、login と uid の自分の予約・確定を外す。応答だけが失われたときは uid を `lookup` し、自分の aid なら続け、そうでなければ外す。`lookup` も失敗したら何も外さず利用不可を返す。
+- `activate` の前で止まったアカウントは、本人確認（正しいパスワード、Googleなら検証済みのIDトークン）の後に再開する。DOは照合に成功したときだけ登録準備中であることと uid を返し、ハンドラは uid が同じ aid で確定済みか、自分の予約が残っていれば確定してから `activate` する。uid が別の aid に渡っていれば再開せず失敗にする。
+- 残る弱点: login の確定後に uid の確定の結果が分からず、`lookup` も失敗した場合、10分後に uid の予約が切れると、そのIDは誰も登録できない（login が死んだアカウントを指し続ける）。回収は管理画面の段で扱う。
+- Account DOからIndex DOを待つ呼出しは作っていない（相互待機なし）。

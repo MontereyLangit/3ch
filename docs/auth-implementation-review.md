@@ -77,3 +77,22 @@ KotlinJSの [生成済み空白表](https://github.com/JetBrains/kotlin/blob/v2.
 利用者の決定（2026-11-07）: かんたん登録のログアウトは注意書きで対応する（設計書 §13-36）。
 
 メール欄の扱いで認証を有効にした環境だけ従来と変わる点: `#cap sage` のようにパスワードの後ろに空白で続けた語は、キャップの照合と同じくパスワードの一部として除くので、sage として効かない（以前の除去では ` sage` が残っていた）。`#a#b` の 2 つ目の `#` 以降は残す。`!#` の終わりは文字の空白判定（Char.isWhitespace）で、キーの切り出しと揃えた。認証を有効にしていない環境は変えていない。
+
+## 段 E-1（2026-11-07、日本時間）
+
+対象は ID・パスワードの登録・ログイン・ロックと Google でのログイン・登録。範囲と残件は [引き継ぎ](claude-handoff.md) の「E-1の実装範囲」を参照する。
+
+| 観点 | 実装・確認 |
+| --- | --- |
+| DO はインフラのみ | Account DO はロック・読込・PBKDF2 の呼出し・保存だけを持つ。照合前のロック確認、失敗計数への反映、利用開始、パスワード変更、Google の照合は `AccountState` の純粋関数。照合の結果は enum（`PasswordAttempt`・`SignInResult`・`LoginOutcome`・`GoogleOutcome`）で返し、文言は handler で組み立てる |
+| 列挙の防止 | 未登録・不一致・ロック中は同じ 401 と文言。未登録は固定の `Account("dummy")` に同じ RPC を送り、PBKDF2 を 1 回計算する（AccountPasswordSuite で計算回数を数えた）。ログイン ID の書式が不正なときも dummy で照合する。パスワードの書式（長さ等）が不正なときは計算せずに失敗を返すが、これは入力した本人が分かることでアカウントの有無は漏れない |
+| 遅延の偏り | アカウント全体の失敗数による遅延は実在するアカウントにだけ付くので、5 回以上失敗させれば ID の有無が分かる。設計（§3.9）が想定する範囲として残し、接続元ごとの 30 回/時の上限で抑える |
+| dummy の直列化 | 未登録 ID の照合は 1 つの DO に集まり、PBKDF2 を直列に計算する。大量の試行で未登録 ID の応答が遅れうるが、AuthRate の上限の内側に収まる |
+| 登録の確定順 | login → uid → activate の順にし、uid の確定の応答喪失は所有者の確認で続ける。activate の前で止まった登録は本人確認後に再開する（実装メモ §7）。10 分の予約期限は変えていない |
+| 入力の順 | 入力規則は Turnstile の前に確かめる。設計 §3.9 の手順 2 は Turnstile → 突合 → 乱造検知 → 入力規則の順だが、入力の誤りで Turnstile のトークンを使い切らないよう前に出した。使えない ID の判定（R2 を読む）と計数は Turnstile の後 |
+| メール | 登録画面のメール欄は E-2 まで出さない。検証しないメールを保存すると、メールの一意性（§13-19）と L3 開始の扱いが決まらないため |
+| Google | redirect_uri は末尾スラッシュ付き（ルートに合わせる）。JWKS は `caches.default` ではなく isolate のメモリに `max-age` の間保持する。`error=access_denied` からの戻り先は、ログインとして始めたときだけ `mode=login` にする。開始への AuthRate とエッジ防御は設計に無い・E-2 なので付けていない |
+| 移行 | クライアント ID からの移行（§3.1・§3.9・§3.10 の `link`）は §12 で E-2 なので実装していない。ログイン中に登録すると別のアカウントになる |
+| UI | 既存の認証画面の部品と配色のまま、タブ・方式の選択・入力欄を足した。角丸なし。見出しはモックどおり「認証・登録」。Turnstile のウィジェットはタブを替えても同じものを使う。Google の開始はフォームの遷移で送り、埋め込み時は別のウィンドウで開く（ポップアップの小さな通知スクリプトだけは callback の HTML に置く） |
+| Scala・Hooks | AuthFormIsland は関数コンポーネントのまま、状態を useState、ウィジェットを useRef で持つ。業務処理は TS に置いていない（`app/server.ts` は callback のルートを足しただけ） |
+| テスト | common に PasswordLoginSuite・GoogleIdTokenSuite・OAuthStateSuite、LoginThrottleSuite に 1 件。bbs に AccountPasswordSuite・AccountRegistrationSuite・GoogleIdTokensSuite・GoogleHandlerSuite と AuthHandlerSuite の 5 件、BoardIndexSuite に 1 件。board-islands に 2 件、実 workerd の統合テストに 1 件。既存のスナップショット・PostingSuite・golden は変えていない |

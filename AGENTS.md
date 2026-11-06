@@ -92,9 +92,9 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 | `docs/v6s実装メモ.md`                                                                  | Scala.js 実装（`bbs/`）の設計背景。doc コメントから参照される                                                                                                                  |
 | `docs/トリップ・ID廃止とスレ主表示.md`                                                 | 2026-11-02 の仕様変更（トリップ・ID 廃止、`!id`、スレ主表示 ` (主)`）。認証ブランチとの差分を含む                                                                                      |
 | `docs/admin.md`                                                                        | 管理画面の利用手順・規制ルール書式                                                                                                                                                    |
-| `docs/auth-phoebe-rate-limit-design.md`                                                | 認証・PHOEBE（Lv）・連投規制と新UIの設計。段Aは実装済み、段Bは部分実装。E-1は入力規則と暗号プロバイダまで実装し、DO・登録・ログイン・Google認証は未接続。現在の範囲は `docs/claude-handoff.md` を参照                                                                                                               |
+| `docs/auth-phoebe-rate-limit-design.md`                                                | 認証・PHOEBE（Lv）・連投規制と新UIの設計。段Aは実装済み、段Bは部分実装、E-1（ID・パスワードの登録・ログイン・ロック、Googleログイン）は実装済み。次は段C。現在の範囲は `docs/claude-handoff.md` を参照                                                                                                               |
 | `docs/claude-handoff.md` | 段B・E-1の実装範囲・残件・設定・検証結果と、C→D→E-2への引き継ぎ |
-| `docs/auth-integration.md` | 認証の有効化、Turnstile、localhost、追加DOの開発・検証設定 |
+| `docs/auth-integration.md` | 認証の有効化、Turnstile、Googleログイン、localhost、追加DOの開発・検証設定 |
 | `docs/auth-implementation-review.md` | 認証・PHOEBE 実装のレビュー記録（段A・段B・E-1途中の指摘と対応） |
 | `docs/auth-password-implementation-notes.md` | ID・パスワード方式（E-1）の実装メモ。入力規則・PBKDF2・登録回復方式の候補 |
 | `docs/bbs-cgi-ddd-refactoring-plan.md`                                                 | bbs.cgi 投稿処理の DDD 化リファクタリング計画（段0〜9は完了。段10以降が認証・規制の実装）                                                                                                            |

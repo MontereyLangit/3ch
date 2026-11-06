@@ -4,7 +4,7 @@
 （リポジトリ外の `ninja_auth_system.md` 系。要点は §3.7 に転記）、および新 UI（`develop` に統合済みの板トップ。PR #37。
 `docs/ui/板top_書き込み欄と投稿後更新の方針.md`・`docs/islands-ssr.md`・`docs/handler-rendering.md`）をもとに、
 v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の挙動（§3.8）を設計する。
-**状態: 段Aは実装済み、段Bは部分実装、段E-1は途中（2026-11-07）。** E-1は入力規則・ログイン失敗の計数・PBKDF2・資格情報の保存形式・登録準備状態までで、DO・登録・ログイン・Google認証は未接続。段C以降は未実装。残件、設定、検証結果は [引き継ぎ](claude-handoff.md) を参照する。実装は§12の順で行い、本書を実装結果に合わせて訂正する。
+**状態: 段Aは実装済み、段Bは部分実装、段E-1は実装済み（2026-11-07）。** E-1はID・パスワードの登録・ログイン・ロックとGoogleでのログイン・登録まで。Googleのクライアント登録と本番での接続確認は未実施。段C・D・E-2は未実装。残件、設定、検証結果は [引き継ぎ](claude-handoff.md) を参照する。実装は§12の順で行い、本書を実装結果に合わせて訂正する。
 2026-11-02 に Opus 5 によるセルフレビューを行い、採用した指摘を反映した（[auth-phoebe-review.md](auth-phoebe-review.md)）。
 2026-11-05、トリップと日付欄の ID の廃止・`!id`・スレ主表示（[トリップ・ID廃止とスレ主表示](トリップ・ID廃止とスレ主表示.md)。`develop` で実装済み）に合わせて改めた。
 
@@ -236,7 +236,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 | 保存 | PBKDF2-HMAC-SHA256、反復 100,000、ソルト 16 バイト（`crypto.getRandomValues`）。`credential` に `{algo, iterations, salt, hash}` で持ち、`algo`・`iterations` を保存するので将来の強化（反復増・別アルゴリズム）はログイン成功時に再ハッシュして移行する |
 | 照合 | `Account.verifyPassword(password, keyIpHash, now)` が DO 内で PBKDF2 を計算し定数時間比較する。失敗回数の更新は同じ RPC で直列化する（Worker 側で照合すると失敗計数が競合する）。ロックの規則そのもの（回数・期間・段階的遅延）は `common/domain/account/LoginThrottle` の純粋関数で、DO は記録と呼び出しだけ |
 | ロック | （アカウント, `keyIp`）の組で直近 1 時間に 10 回失敗で 1 時間ロック（第三者が ID だけでアカウント全体を締め出せないようにする）。アカウント全体では失敗 5 回目から応答を 1 秒ずつ遅らせる（上限 8 秒）。`keyIp` 全体は 30 回/時（`AuthRate` DO）。ロック中も応答は失敗時と同じ文言 |
-| 所要時間 | 存在しない ID でも固定の `aid="dummy"` の DO に同じ `verifyPassword` を投げ、RPC と PBKDF2 の両方を同じ回数行う |
+| 所要時間 | 存在しない ID でも固定の `aid="dummy"` の DO に同じ `verifyPassword` を投げ、RPC と PBKDF2 の両方を同じ回数行う。dummy の DO には何も保存しない。失敗の遅延は DO のロックの外（HTTP 層）で待つ |
 | 文言 | 存在しない ID・パスワード不一致・ロック中のいずれも「ID またはパスワードが違います」。ログイン ID はユーザー ID として公開されるので、列挙はロックと所要時間の均一化（上記）で抑える |
 | 反復数 | 設定は100,000回。2026-11-07の実workerd検証では100,001回も受け付け、Nodeの独立した計算値に一致した。プラットフォーム上限は未測定で、100,000回がAPIの上限という従来の想定は採用しない。今回の保存値・発行時の方針は100,000回のままとする |
 
@@ -248,6 +248,12 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 4. メールがあれば正規化（下記）して `AccountIndex("email").register(hash(email), aid)`。衝突ならメール欄だけエラーにし、登録を続けない（§13-19）。
 5. `Account.create(profile, credential)` → `bindDevice` → 索引を `confirm`。失敗したら 3・4 の索引を `remove` して戻す。`pending` のまま 10 分過ぎた索引は次の `register` 時に掃除する（確定済みは消さない）。
 6. メールがあれば認証メール送信（下記）。`Set-Cookie`。初期 Lv は 1（メール認証完了で 3）。
+
+**実装（E-1）**: 入力規則と確認の一致は Turnstile より前に確かめる（Turnstile のトークンを無駄にしない）。メール欄は E-2 まで画面に出さず、受け取らない。
+確定は「`create`（資格情報付き・登録準備中）→ `login` の `confirm` → `uid` の `confirm` → `Account.activate` → `bindDevice`」の順。
+`uid` の `confirm` が拒否されたら両方の索引を `remove` し、応答だけが失われたら `uid` の `lookup` で所有者を確かめてから続ける（結果不明のまま取り消さない）。
+`activate` の前に止まったアカウントは、次のログインで正しいパスワードを確かめた後に `uid` の確定と `activate` を再開する。10 分の予約期限は変えない。
+使えないユーザー ID（予約語・`reserved-ids.txt`・板名・使用済み）は区別せず「このユーザーIDは使えません」にする。
 
 **ログイン**（`POST /auth/login`。`/auth/?mode=login`）
 
@@ -325,7 +331,8 @@ Turnstile は要求しない（原案「作成時の認証なし」）が、端�
 - Google アカウント 1 つ（`sub`）につき 3ch アカウント 1 つ。同じ人が ID/Password アカウントも別に持つことは許す（相互移行はしない）。
 - 連携解除・Google → 他方式の移行はしない（§13-23）。退会は §3.9 と同じ。
 - Google 側でアカウントが消えた・取り消された場合はログインできなくなるだけで、3ch 側のデータは残す。
-- `redirect_uri` は本番 `https://www.3ch.io/auth/google/callback` と開発 `http://127.0.0.1:8787/auth/google/callback` を Google Cloud Console に登録する。
+- `redirect_uri` は要求のオリジンに `/auth/google/callback/` を付けたもの（ルートの末尾スラッシュに合わせる）。本番 `https://www.3ch.io/auth/google/callback/` と開発 `http://localhost:8787/auth/google/callback/` を Google Cloud Console に登録する（Cookie を開発用の HTTP で発行するのは localhost だけ）。
+- JWKS は応答の `Cache-Control` の `max-age` の間 isolate のメモリに保持し、`kid` が無ければ 1 回だけ取り直す（`caches.default` は使っていない）。
   `GOOGLE_CLIENT_ID` は `vars`、`GOOGLE_CLIENT_SECRET` は secret（§9.3）。
 - エッジ防御（§3.6）のデータセンター ASN 拒否は `start` にも適用する。
 - テスト: `GoogleIdToken.verifyClaims(claims, now, nonce, clientId)` を `common` の純粋関数にして JVM でも検証。署名検証・トークン交換・JWKS は `AuthHandlerSuite` で `fetch` を差し替えて確認。
@@ -809,7 +816,7 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | B | 認証基盤: `Account` / `AccountIndex` DO、Cookie、`/auth/`（クライアント ID・Turnstile・法的確認）、端末ハッシュと突合、`Accept-CH`、専ブラキー、キャップのアカウント紐づけ、`userInfo` の `UID:` / `Device:`、`PostingUserResolver` の差し替え（`!id`・スレ主表示の `account`。§5.3）、新 UI の `SessionReader`・ヘッダー出し分け・`AuthModal` / `AccountNav`・投稿欄のヘッダ分岐（§3.8）、bbs.cgi の `x-auth-required` / `x-post-error` | `common` の `DeviceFingerprintHasher` / `ClientHints` golden、`CookieCodecSuite`、`AccountSuite`（状態遷移・一意性）、`DedicatedBrowserTokensSuite`（未使用の紐づけ・同じ UA での置き換え・UA 不一致・上限・失効・Cookie の `bind`）、`AuthHandlerSuite`（Turnstile はテスト用サイトキーで成功/失敗を固定）、`PostingSuite`（§3.4 の優先順・`!auth`・Web 版の認証要求とヘッダ）、`SessionReaderSuite`、`BoardIndexSuite`（未ログイン/ログイン済のヘッダーと投稿欄の SSR）、`tests/islands-hydration.test.js` に `AuthModal` の `message` → `ch3s:auth-changed` と再送の jsdom 検証 |
 | C | PHOEBE: Lv 昇格・`BBS_PHOEBE`・`!バルサン` / `!SETTING:BBS_PHOEBE:n`・識別子 `phoebe` 書式・連投規制への `aid` 追加 | `PhoebeSuite`（T(lv)/N(lv) 境界・上限・固定）、`IdentifierSuite`（軸ごとの値・欠損 `000`・`D` の `*`）、`UserAgentProfileSuite`（v3 表の golden） |
 | D | 権限・回避レベル・管理画面の認証機能画面（§6・§7・§11、改修計画 段 M3）、スレ立て規制の `BBS_THREAD_PASS` 化 | `BypassLevelSuite`、`ModerationSuite`（5 列目）、`AdminSuite` |
-| E-1 | ID/Password の登録・ログイン・ロック、Google ログイン（§3.9・§3.10 の基本部分）。管理画面のアカウント認証（改修計画 段 M2）の前提なので段 B の直後に行う | `PasswordSuite`・`LoginThrottleSuite`・`GoogleIdTokenSuite`、実 workerd |
+| E-1 | ID/Password の登録・ログイン・ロック、Google ログイン（§3.9・§3.10 の基本部分）。管理画面のアカウント認証（改修計画 段 M2）の前提なので段 B の直後に行う。**実装済み（2026-11-07）**。方式移行・パスワード変更と再設定の HTTP・メール欄は E-2 | `PasswordSuite`・`LoginThrottleSuite`・`PasswordLoginSuite`・`GoogleIdTokenSuite`・`OAuthStateSuite`、`AccountPasswordSuite`（直列化・ロック・dummy）、`AccountRegistrationSuite`（確定順・応答喪失・再開）、`AuthHandlerSuite`・`GoogleHandlerSuite`・`GoogleIdTokensSuite`、board-islands、実 workerd |
 | E-2 | メール認証・パスワード再設定・方式移行・退会・エッジ防御・乱造検知・Lv 上限ルール | `AccountSuite`（移行）、`EdgeDefenseSuite`、実 workerd |
 
 段 C の識別子既定値の切替は、不変条件 3.4 に触れるため `docs/既知不具合台帳.md` に影響を書き、承認後に独立コミットで行う。
