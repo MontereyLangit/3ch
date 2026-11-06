@@ -18,8 +18,9 @@ final case class LoginThrottleUpdate(state: LoginThrottle, decision: LoginThrott
 
 /** 一アカウントの直近一時間の失敗と接続元別ロック。時刻逆行では未来側の記録を残す */
 final case class LoginThrottle(failures: Vector[LoginFailure] = Vector.empty, locks: Map[String, Double] = Map.empty) {
-  def valid: Boolean = failures.forall(failure => DedicatedBrowserTokens.validHash(failure.keyIpHash) && AccountProfile.validTime(failure.t)) &&
-    locks.forall { case (hash, until) => DedicatedBrowserTokens.validHash(hash) && AccountProfile.validTime(until) }
+  def valid: Boolean = failures != null && locks != null &&
+    failures.forall(failure => failure != null && failure.keyIpHash != null && DedicatedBrowserTokens.validHash(failure.keyIpHash) && AccountProfile.validTime(failure.t)) &&
+    locks.forall { case (hash, until) => hash != null && DedicatedBrowserTokens.validHash(hash) && AccountProfile.validTime(until) }
 
   private def retained(now: Double): LoginThrottle = copy(failures = failures.filter(_.t > now - LoginThrottle.window), locks = locks.filter(_._2 > now))
 
@@ -27,7 +28,7 @@ final case class LoginThrottle(failures: Vector[LoginFailure] = Vector.empty, lo
     LoginThrottleDecision(locks.get(keyIpHash), math.min(8, math.max(0, failures.size - 4)))
 
   private def current(keyIpHash: String, now: Double): Either[LoginThrottleRejection, LoginThrottle] =
-    if (!valid || !DedicatedBrowserTokens.validHash(keyIpHash) || !AccountProfile.validTime(now)) Left(LoginThrottleRejection.Invalid)
+    if (!valid || keyIpHash == null || !DedicatedBrowserTokens.validHash(keyIpHash) || !AccountProfile.validTime(now)) Left(LoginThrottleRejection.Invalid)
     else Right(retained(now))
 
   /** 試行前の状態を返す。ロック中も呼び出し元で同じ暗号計算を行う */

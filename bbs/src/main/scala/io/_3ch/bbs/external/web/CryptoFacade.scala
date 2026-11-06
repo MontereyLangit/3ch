@@ -29,6 +29,7 @@ trait SubtleCrypto extends js.Object {
   def importKey(format: String, keyData: Uint8Array, algorithm: js.Object, extractable: Boolean, keyUsages: js.Array[String]): js.Promise[CryptoKey] = js.native
   def sign(algorithm: String, key: CryptoKey, data: Uint8Array): js.Promise[ArrayBuffer] = js.native
   def digest(algorithm: String, data: Uint8Array): js.Promise[ArrayBuffer] = js.native
+  def deriveBits(algorithm: js.Object, baseKey: CryptoKey, length: Int): js.Promise[ArrayBuffer] = js.native
 }
 
 @js.native

@@ -31,15 +31,20 @@ object Password {
     bytes + (if (c <= 0x7f) 1 else if (c <= 0x7ff) 2 else if (c >= '\ud800' && c <= '\udfff') 2 else 3)
   }
 
-  /** NFC 後の UTF-8 長を8〜128バイトで検証する。ID の包含は ASCII の大文字小文字を区別しない */
-  def create(raw: String, loginId: LoginId): Either[PasswordRejection, Password] = {
+  /** 照合用に NFC 正規化し、Unicode と UTF-8 長8〜128バイトを検証する */
+  def parse(raw: String): Either[PasswordRejection, Password] = {
     if (raw == null || !validUnicode(raw)) Left(PasswordRejection.InvalidUnicode)
     else {
       val value = AccountText.nfc(raw)
       val length = utf8Length(value)
       if (length < 8 || length > 128) Left(PasswordRejection.Length)
-      else if (LoginId.lowercase(value).contains(loginId.value)) Left(PasswordRejection.ContainsLoginId)
       else Right(new Password(value))
     }
+  }
+
+  /** 登録用に検証する。ID の包含は ASCII の大文字小文字を区別しない */
+  def create(raw: String, loginId: LoginId): Either[PasswordRejection, Password] = parse(raw).flatMap { password =>
+    if (LoginId.lowercase(password.value).contains(loginId.value)) Left(PasswordRejection.ContainsLoginId)
+    else Right(password)
   }
 }

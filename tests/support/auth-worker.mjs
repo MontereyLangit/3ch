@@ -20,9 +20,26 @@ globalThis.fetch = async (input, init) => {
   return Response.json({ success: token === 'accepted' || token === 'wrong-host', hostname: token === 'wrong-host' ? 'other.invalid' : 'localhost' });
 };
 
+// 固定の公開テスト値だけで workerd の PBKDF2 対応を調べる。Scala の Hasher は呼ばない。
+async function pbkdf2Probe() {
+  const salt = Uint8Array.from({ length: 16 }, (_, index) => index);
+  const password = new TextEncoder().encode('Cafe\u0301🔒password'.normalize('NFC'));
+  const key = await crypto.subtle.importKey('raw', password, { name: 'PBKDF2' }, false, ['deriveBits']);
+  const algorithm = { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100000 };
+  const bits = await crypto.subtle.deriveBits(algorithm, key, 256);
+  const hex = Array.from(new Uint8Array(bits), byte => byte.toString(16).padStart(2, '0')).join('');
+  const nextBits = await crypto.subtle.deriveBits({ ...algorithm, iterations: 100001 }, key, 256);
+  const hex100001 = Array.from(new Uint8Array(nextBits), byte => byte.toString(16).padStart(2, '0')).join('');
+  return Response.json({ iterations: algorithm.iterations, bits: 256, saltBytes: salt.length, hex, hex100001 });
+}
+
 export default {
   async fetch(request, env, context) {
     const url = new URL(request.url);
+    if (url.pathname === '/__test/pbkdf2') {
+      if (request.method !== 'GET') return new Response('', { status: 405 });
+      return pbkdf2Probe();
+    }
     if (url.pathname === '/__test/rpc') {
       const { binding, name, method, args = [] } = await request.json();
       if (!namespaces.has(binding)) return Response.json({ error: 'unknown binding' }, { status: 400 });

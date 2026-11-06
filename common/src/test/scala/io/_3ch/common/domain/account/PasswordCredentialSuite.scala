@@ -16,6 +16,16 @@ class PasswordCredentialSuite extends FunSuite {
       .foreach(value => assert(!value.valid))
   }
 
+  test("null の保存フィールドは例外を出さず不正と判定する") {
+    Seq(credential.copy(salt = null), credential.copy(hash = null), credential.copy(throttle = null),
+      credential.copy(throttle = LoginThrottle(failures = null)), credential.copy(throttle = LoginThrottle(locks = null)),
+      credential.copy(throttle = LoginThrottle(failures = Vector(null))),
+      credential.copy(throttle = LoginThrottle(failures = Vector(LoginFailure(null, 1)))),
+      credential.copy(throttle = LoginThrottle(locks = Map(null.asInstanceOf[String] -> 1d))))
+      .foreach(value => assert(!value.valid))
+    assertEquals(credential.copy(algo = null).toString, "PasswordCredential(invalid,100000,<redacted>)")
+  }
+
   test("以前の正しい反復数を読めるようにしログイン成功時の再計算を判定する") {
     assert(!credential.needsRehash)
     val old = credential.copy(iterations = 10000)

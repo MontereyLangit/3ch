@@ -57,6 +57,19 @@ class PasswordSuite extends FunSuite {
     assert(Password.create("abcdefgh\ud800\udc00", id).isRight)
   }
 
+  test("照合用 parse は ID の包含を許可し登録用 create と分ける") {
+    assertEquals(Password.parse("alice123").map(_.value), Right("alice123"))
+    assertEquals(Password.create("alice123", id), Left(PasswordRejection.ContainsLoginId))
+    assertEquals(Password.parse("123ALICE").map(_.value), Right("123ALICE"))
+  }
+
+  test("照合用 parse も NFC・UTF-8 長・Unicode と空白保持を確認する") {
+    assertEquals(Password.parse("e\u0301" * 4), Password.parse("é" * 4))
+    assertEquals(Password.parse(" AbCd12 ").map(_.value), Right(" AbCd12 "))
+    Seq("a" * 7, "a" * 129, "あ" * 43).foreach(value => assertEquals(Password.parse(value), Left(PasswordRejection.Length)))
+    Seq(null, "abcdefgh\ud800", "abcdefgh\udfff").foreach(value => assertEquals(Password.parse(value), Left(PasswordRejection.InvalidUnicode)))
+  }
+
   test("診断用の文字列に平文パスワードを含めない") {
     val password = Password.create("do-not-log-this", id).toOption.get
     assert(!password.toString.contains(password.value))

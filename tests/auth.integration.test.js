@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { createHmac, pbkdf2Sync } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { unstable_dev } from 'wrangler';
 
@@ -36,6 +36,20 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
   const session = cookie => fetch(origin + '/auth/session/', { headers: cookie ? { cookie } : {} }).then(response => response.json());
   const now = Math.floor(Date.now() / 1000);
   const profile = (aid, uid, extra = {}) => ({ aid, uid, kind: 'client', createdAt: now, agreedAt: now, agreementVersion: 'v1', status: 'active', generation: 0, ...extra });
+
+  await t.test('workerd の PBKDF2 は100000回と100001回で独立した派生値に一致する', async () => {
+    const response = await fetch(origin + '/__test/pbkdf2');
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    const expected = pbkdf2Sync(Buffer.from('Café🔒password', 'utf8'), Buffer.from('000102030405060708090a0b0c0d0e0f', 'hex'), 100000, 32, 'sha256').toString('hex');
+    assert.equal(result.iterations, 100000);
+    assert.equal(result.bits, 256);
+    assert.equal(result.saltBytes, 16);
+    assert.equal(result.hex, expected);
+    const expected100001 = pbkdf2Sync(Buffer.from('Café🔒password', 'utf8'), Buffer.from('000102030405060708090a0b0c0d0e0f', 'hex'), 100001, 32, 'sha256').toString('hex');
+    assert.equal(result.hex100001, expected100001);
+    assert.equal((await fetch(origin + '/__test/pbkdf2', { method: 'POST' })).status, 405);
+  });
 
   await t.test('新しい DO クラスを実際の migration と RPC で作成し世代・期限を照合する', async () => {
     const aid = 'aaaaaaaaaaaaaaaa';

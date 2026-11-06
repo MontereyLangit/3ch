@@ -10,6 +10,12 @@ class LoginThrottleSuite extends FunSuite {
   private def failed(state: LoginThrottle, keyIp: String, time: Double): LoginThrottleUpdate =
     state.recordFailure(keyIp, time).toOption.get
 
+  test("null の保存値と接続元ハッシュは例外を出さず不正と判定する") {
+    Seq(LoginThrottle(failures = null), LoginThrottle(locks = null), LoginThrottle(failures = Vector(null)),
+      LoginThrottle(failures = Vector(LoginFailure(null, 1))), LoginThrottle(locks = Map(null.asInstanceOf[String] -> 1d)))
+      .foreach(value => assert(!value.valid))
+  }
+
   test("五回目の失敗を含めて遅延を増やし十二回目から八秒で止める") {
     val updates = (1 to 14).foldLeft(Vector.empty[LoginThrottleUpdate]) { (updates, i) =>
       val state = updates.lastOption.fold(LoginThrottle())(_.state)
@@ -87,7 +93,11 @@ class LoginThrottleSuite extends FunSuite {
       assertEquals(LoginThrottle().recordFailure(ipA, time), Left(LoginThrottleRejection.Invalid))
       assertEquals(LoginThrottle().recordSuccess(ipA, time), Left(LoginThrottleRejection.Invalid))
     }
-    assertEquals(LoginThrottle().recordFailure("raw-ip", now), Left(LoginThrottleRejection.Invalid))
+    Seq(null, "raw-ip").foreach { key =>
+      assertEquals(LoginThrottle().check(key, now), Left(LoginThrottleRejection.Invalid))
+      assertEquals(LoginThrottle().recordFailure(key, now), Left(LoginThrottleRejection.Invalid))
+      assertEquals(LoginThrottle().recordSuccess(key, now), Left(LoginThrottleRejection.Invalid))
+    }
     assertEquals(LoginThrottle(Vector(LoginFailure(ipA, Double.NaN))).check(ipA, now), Left(LoginThrottleRejection.Invalid))
     assertEquals(LoginThrottle(locks = Map(ipA -> -1d)).check(ipA, now), Left(LoginThrottleRejection.Invalid))
   }

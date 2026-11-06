@@ -22,7 +22,7 @@ AS・地域・UA・日別識別子の観測集計（Account.seen）、AccountDir
 
 | 段 | 次に実装する内容 |
 | --- | --- |
-| E-1 | 入力規則・ログイン失敗計数・資格情報の値型まで実装。PBKDF2、資格情報の保存・照合RPC、HTTP登録・ログイン、Google認証と準備中UIの接続は未実装 |
+| E-1 | 入力規則・ログイン失敗計数・資格情報の値型・PBKDF2プロバイダまで実装。資格情報の保存・照合RPC、HTTP登録・ログイン、Google認証と準備中UIの接続は未実装 |
 | C | PHOEBEの昇格・投稿数と経過時間、識別子の書式、Lv設定とコマンド、連投規制へのアカウントID連携を設計書と照合する |
 | D | 権限・回避レベル・管理画面のアカウント認証と操作画面、スレ立て規制の設定を進める。管理画面の別計画も参照する |
 | E-2 | メール認証、パスワード再設定、方式移行など。メール送信APIの提供元は未定のため、送信ポートと提供元の設定を分ける |
@@ -33,11 +33,15 @@ AS・地域・UA・日別識別子の観測集計（Account.seen）、AccountDir
 
 設計が参照するv3のUA解析表全体は未確認。段Cで元の資料を探してから移植する。Google OAuthのクライアント登録とメール送信APIの選定も後続作業。
 
-## E-1の最初の区切り
+## E-1の実装範囲
 
 LoginId、Password、LoginThrottle、PasswordCredentialをcommonに追加した。NFC後のUTF-8長、孤立サロゲート、予約語と板名、5回目からの遅延、10回目の接続元ロック、期限と別IPへの影響をJVM・Scala.jsで検証する。ID・パスワード方式で実際に登録・ログインできる段階ではない。
 
 全体の失敗窓は1時間とし、成功は該当する接続元の失敗だけを消す。登録時のパスワードでは、ASCIIの大文字小文字を区別せずIDの包含を拒否する。[実装メモ](auth-password-implementation-notes.md) の登録回復方式は未採用の候補であり、既存Bの10分の予約期限を変更していない。
+
+入力規則は `8f73077` でpush済み。後続のPasswordHasherはPBKDF2-HMAC-SHA256・100,000回・16バイト乱数ソルトで資格情報を作り、保存済みの方式と反復数で照合する。Password.parseは照合用のNFC・Unicode・長さだけを確認し、登録用のID包含規則を適用しない。暗号APIの欠落・同期例外・Promise拒否では利用不可を返す。
+
+ScalaのプロバイダはNodeの実WebCryptoと独立した固定値で検証した。実workerdの追加テストはネイティブAPIの100,000回・100,001回の計算をNodeと照合するもので、ScalaプロバイダをDOから呼ぶ統合テストは次の区切りで追加する。今回の設定値は100,000回のままで、プラットフォーム上限は未測定。
 
 ## 設定と検証
 
@@ -57,8 +61,8 @@ npm run v6:typecheck
 
 | 検証 | この区切りの結果 |
 | --- | --- |
-| Scala単体テスト | sbt test 1,059件成功（commonJVM 133、commonJS 136、codegen 27、bbsClient 2、bbs 761）。既存の投稿goldenは変更なし |
-| workerd・SSR・hydration | npm test 62件成功、skipなし。npmのpretestも成功。実DOの競合・保存、Turnstile応答の差し替え、Cookie・再認証・キー失効・ログアウト、既存投稿、SSR・hydrationを検証 |
+| Scala単体テスト | sbt test 1,080件成功（commonJVM 137、commonJS 140、codegen 27、bbsClient 2、bbs 774）。既存の投稿goldenは変更なし |
+| workerd・SSR・hydration | npm test 63件成功、skipなし。npmのpretestも成功。実DOの競合・保存、Turnstile応答の差し替え、Cookie・再認証・キー失効・ログアウト、既存投稿、SSR・hydration、ネイティブPBKDF2を検証 |
 | ビルド | npm run v6:build成功。Workerの最終出力に5つのDOが公開されることも検証 |
 | dev起動 | npm run devをローカル・ダミーsaltで起動。トップ200、bbs.cgiのHTTP 200とエラーマーカー、管理者パスワード未設定時の503、各応答のAccept-CHを確認 |
 | 型チェック | npm run v6:typecheck成功 |
