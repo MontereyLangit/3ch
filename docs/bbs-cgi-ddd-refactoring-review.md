@@ -156,3 +156,14 @@ bbs/domain と common/domain の公開型・公開メソッドで doc が無か�
 | BBS_HEISA の統一 | DO の正規表現 (?:^|<>)BBS_HEISA=checked(?:<>|$) を、スレ設定を <> で区切った項目にちょうど BBS_HEISA=checked があるか、という同じ意味の判定にした（ThreadWriteGuard.closed）。ハンドラ側（現在はサービス）の解析済み設定による判定（前後の空白を除き、後勝ち）とは読み方が違うので、両方を残し、違いが出る場合（後で空に上書き、<<> に挟まれた項目、設定だけある key）を段 8 の前準備のスナップショットで固定した。読み方を 1 つにするのは振る舞いを変えるので、この段ではしない |
 | テスト | ThreadWriteGuardSuite（判定順、レス番号と末尾の空白、付帯情報なし、BBS_HEISA の境界、コードの往復。JVM / JS）、DatLineFormatterSuite に renumberLog、PostingTextSuite に ThreadRefused の文言とコード。ThreadSuite は拒否の確認を文言からコードに替え、拒否した追記が予約も保存もしないこと・log の番号の置き換えを足した。スナップショット 204 件は差分なし |
 | 計画との差分 | 計画書の ThreadWriteGuard.check(datLineCount, settings, create) は、停止・移動・削除の状態と付帯情報の有無（ThreadWriteKind の Raw）も受け、dat から次の番号を数える形にした。停止・移動・削除のときは従来どおり dat とスレ設定を読まない。RPC の戻り値の型（Promise[Int]）は変えず、拒否はスレ立て規制の予約と同じく Error の文言のコードで返す |
+
+## 段 9: テストの再配置
+
+| 項目 | 内容 |
+| --- | --- |
+| 配置 | 段 7・8 でドメインは common/src/test（JVM / JS）と bbs/src/test/.../domain、サービスは application/posting/PostingServiceSuite、ヘッダと本文の復号は application/posting の PostingRequestSuite・PostingFormDecoderSuite、DO は durable/、HTTP は handler/ に揃った。PostingSuite（旧 PostingHandlerSuite）とスナップショットは縮退させずに残した |
+| 固定時刻への依存 | 数値設定の境界（巨大な指数の文字数上限、BBS_ID_RESET の負のゼロ）を HTTP と withFixedTime で見ていた PostingNumericSettingsSuite を、PostingServiceSuite の固定の Clock を使うテストに移して削除した。投稿処理で Date・Math.random を差し替えるのは PostingSuite と PostingSnapshotSuite だけになった。どちらも HTTP の入出力をバイト単位で固定するためのもので、ポートでは置き換えない |
+| 並列実行 | sbt にはスイート単位で並列を切る設定が無く、HandlerTestKit を使うスイートだけを直列にすることはできない。一方、Scala.js のテストアダプタは sbt のスレッドごとに別の JS 実行環境を起動し、その中ではスイートを 1 つずつ最後まで動かすので、グローバルの差し替えはスイートをまたいで見えない（scalajs-sbt-test-adapter 1.22 の TestAdapter.getRunnerForThread）。そこで Test / parallelExecution を true にした。並列で bbs/test を 3 回続けて実行し、3 回とも全件成功した（直列 12 秒、並列 10 秒） |
+| 文書 | docs/v6s実装メモ.md 4 章に、テストの置き場所、並列実行してよい理由、投稿処理のスイートの分担（4.6）を書いた。ThreadSuite の説明（4.2）を段 8 の分担に合わせた。AGENTS.md 1.4 に application/・domain/・repository/ を足し、handler から消えた Moderation を外した |
+| 検証（段 7〜9 の後） | sbt test 計 755 件（common 68・74、codegen 27、bbs 586。投稿スナップショット 204 ケース全件一致）、-no-indent の Test/compile、npm run v6:build、npm run v6:typecheck、npm test（実 workerd を含む 46 件、スキップなし）、git diff --check が成功。PostingSuite は改名のみ、既存のスナップショット 196 件と golden は変更していない |
+| 未解決 | x-post-error などで拒否のコードを応答に出すこと、Swallowed の発生（連投規制）、BBS_HEISA の 2 通りの読み方の統一、KB-39 の undefined は振る舞いを変えるので段 10 以降に残した。BoardRepository が handler の PostingText.settingTxtDefault を参照する依存は以前からのまま |

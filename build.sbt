@@ -88,8 +88,9 @@ lazy val bbs = project
     Compile / durableObjectStubsFile := (Compile / sourceManaged).value / "io" / "_3ch" / "bbs" / "external" / "cloudflare" / "DurableObjectStubs.scala",
     Compile / generateDurableObjectStubs := generateDurableObjectStubsTask.value,
     Compile / sourceGenerators += (Compile / generateDurableObjectStubs).taskValue,
-    // テストが Date / Math.random / caches 等のグローバルを一時的に差し替えるため、スイート間は直列に実行する
-    Test / parallelExecution := false,
+    // テストは Date / Math.random / caches 等のグローバルを差し替えるが、Scala.js はスレッドごとに別の JS 実行環境で
+    // スイートを 1 つずつ動かすので、並列に実行しても差し替えは他のスイートに漏れない（docs/v6s実装メモ.md 4 章）
+    Test / parallelExecution := true,
     // 参照実装からの既知の地雷: `@JSImport("cloudflare:workers", "DurableObject")` を extends した
     // クラスが常にexportされるため、Testのリンク成果物にも巻き込まれる。素の NodeJSEnv では
     // cloudflare: スキームを解決できず Test 全体が起動できないため、Node の Module customization

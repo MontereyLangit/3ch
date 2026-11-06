@@ -7,7 +7,7 @@ import scala.collection.immutable.ListMap
 
 /**
   * 投稿処理の途中の状態。段ごとに copy で埋め、拒否したときはその時点の form と identity.host をエラー画面に出す
-  * time・unixtime は受付時刻のミリ秒と秒、settings は板設定を返信ならスレ設定で上書きしたもの、number はレス番号（書き込み後は確定した番号）
+  * settings は板設定を返信ならスレ設定で上書きしたもの、number はレス番号（書き込み後は確定した番号）、threadOwner は呼んだときに復号する返信先のスレ主
   */
 final case class PostingContext(
   form: PostForm,

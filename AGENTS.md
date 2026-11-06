@@ -61,7 +61,10 @@ bbs/
   src/main/scala/io/_3ch/bbs/
     Main.scala         Worker エントリ（JSExportTopLevel）
     handler/           PublicRoutes（dat, subject.txt, SETTING.TXT, bbsmenu 等）, Posting（投稿パイプライン）,
-                       Moderation, AdminHandler（/admin/*）, Responses
+                       AdminHandler（/admin/*）, Responses
+    application/       アプリケーションサービス。posting/PostingService が投稿の段の並びを持ち、ports/ に外部の読み書きの口を置く
+    domain/            ドメインモデル・ドメインサービス（js.RegExp を使う規則と投稿処理の型。正規表現を使わない規則は common/）
+    repository/        ports の実装。DO スタブ / R2 / KV を包み、js.Dynamic をここで止める
     durable/           Board DO, Thread DO
     external/cloudflare/  Workers / DO / R2 / KV の facade（DO の RPC スタブ `*DoStub` はコンパイル時に codegen が生成。docs/durable-object-stubs.md）
     hash/, util/       Web Crypto ハッシュ・MD5 の npm facade（`@noble/hashes`）, Shift_JIS 変換

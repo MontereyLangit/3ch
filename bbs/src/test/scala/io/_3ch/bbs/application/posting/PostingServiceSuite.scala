@@ -36,6 +36,7 @@ class PostingServiceSuite extends FunSuite {
     val calls: mutable.Buffer[String] = mutable.Buffer.empty
     val postings: mutable.Buffer[(String, String, ThreadPosting)] = mutable.Buffer.empty
     val writes: mutable.Buffer[(String, String)] = mutable.Buffer.empty
+    val md5Inputs: mutable.Buffer[String] = mutable.Buffer.empty
     private def called[A](name: String)(value: => A): Future[A] = { calls += name; Future(value) }
 
     val ports: PostingPorts = PostingPorts(
@@ -76,7 +77,7 @@ class PostingServiceSuite extends FunSuite {
         def current(): Future[Option[PostingUser]] = called("users")(user)
       },
       hasher = new Hasher {
-        def md5(value: String): String = s"m($value)"
+        def md5(value: String): String = { md5Inputs += value; s"m($value)" }
         def sha1Base64(value: String): Future[String] = Future.successful(s"s1($value)")
         def sha256Hex(value: String): Future[String] = Future.successful(s"s2($value)")
       },
@@ -284,6 +285,33 @@ class PostingServiceSuite extends FunSuite {
     fake.post("FROM" -> "名前!id")().map { outcome =>
       assert(outcome.context.form.name.startsWith("名前 </b>(@alice)<b> </b>("), outcome.context.form.name)
       assertEquals(fake.postings.head._3.owner.map(_.account), Some(s"s2(account:$salt)"))
+    }
+  }
+
+  test("巨大な指数の文字数上限は Infinity として読み、スレ立てと返信を受け付ける") {
+    val settings = "BBS_SUBJECT_COUNT=1e2147483648\nBBS_NAME_COUNT=1e2147483648\nBBS_MESSAGE_COUNT=1e2147483648\n"
+    for {
+      created <- Fake(boardSettings = settings).post("subject" -> "題" * 100, "FROM" -> "名" * 100)()
+      replied <- Fake(boardSettings = settings).post(reply("FROM" -> "名" * 100, "MESSAGE" -> "文" * 5000)*)()
+    } yield {
+      assert(created.isInstanceOf[PostingOutcome.Posted], created.toString)
+      assert(replied.isInstanceOf[PostingOutcome.Posted], replied.toString)
+    }
+  }
+
+  test("BBS_ID_RESET の負のゼロと負数のアンダーフローは同じ識別子の日付窓になる") {
+    def seed(reset: String): Future[Seq[String]] = {
+      val fake = Fake(boardSettings = s"BBS_ID_RESET=$reset\n")
+      fake.post()().map(_ => fake.md5Inputs.filter(_.startsWith("Mozilla")).toSeq)
+    }
+    for {
+      negativeZero <- seed("-0")
+      underflow <- seed("-1e-2147483649")
+      positive <- seed("86400")
+    } yield {
+      assertEquals(negativeZero, Seq("Mozilla/5.0 (Test)sample-Infinitym(salt)"))
+      assertEquals(negativeZero, underflow)
+      assertNotEquals(negativeZero, positive)
     }
   }
 }
