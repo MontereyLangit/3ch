@@ -2,6 +2,7 @@ package io._3ch.bbs.handler
 
 import munit.FunSuite
 import io._3ch.bbs.domain.posting.PostingUser
+import io._3ch.bbs.domain.posting.moderation.ThreadCreationSettings
 import io._3ch.bbs.durable.DurableTestKit
 import io._3ch.bbs.durable.DurableTestKit.Env
 import io._3ch.bbs.external.web.{Request, TextEncoder}
