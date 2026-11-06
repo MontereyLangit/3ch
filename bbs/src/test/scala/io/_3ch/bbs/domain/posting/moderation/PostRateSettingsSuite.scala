@@ -2,6 +2,7 @@ package io._3ch.bbs.domain.posting.moderation
 
 import io._3ch.bbs.domain.posting.moderation.PostRateLimit.{BoardSettings, ThreadSettings}
 import io._3ch.common.domain.BbsSettings
+import io._3ch.common.domain.account.{AccountRole, Roles}
 import munit.FunSuite
 
 class PostRateSettingsSuite extends FunSuite {
@@ -91,9 +92,9 @@ class PostRateSettingsSuite extends FunSuite {
   }
 
   test("off・BBS_LIVE・回避レベルで免除される投稿者には適用しない") {
-    def applies(text: String, cap: Boolean = false, authenticated: Boolean = false): Boolean = {
+    def applies(text: String, cap: Boolean = false, authenticated: Boolean = false, roles: Set[AccountRole] = Set.empty, lv: Int = 0): Boolean = {
       val settings = parse(text)
-      PostRateSettings.from(settings, settings).applies(cap, authenticated)
+      PostRateSettings.from(settings, settings).applies(BypassPoster(Roles(roles), cap, authenticated, lv))
     }
     assert(applies(""))
     assert(!applies("BBS_FR_LEVEL=off\n"))
@@ -104,13 +105,21 @@ class PostRateSettingsSuite extends FunSuite {
     assert(!applies("", cap = true), "既定の privileged はキャップを免除する")
     assert(applies("", authenticated = true))
     assert(!applies("BBS_RENTOU_PASS=login\n", authenticated = true))
-    assert(applies("BBS_RENTOU_PASS=admin\n", cap = true), "権限が無いので admin では誰も免除しない")
+    assert(applies("BBS_RENTOU_PASS=admin\n", cap = true))
+    assert(!applies("BBS_RENTOU_PASS=admin\n", roles = Set(AccountRole.Admin)))
     assert(applies("BBS_RENTOU_PASS=staff\n", cap = true))
+    assert(!applies("BBS_RENTOU_PASS=staff\n", roles = Set(AccountRole.Delete)))
+    assert(!applies("", roles = Set(AccountRole.Regulate)), "名無しの staff も既定で免除する")
+    assert(applies("", roles = Set(AccountRole.Cap), authenticated = true), "cap 権限は名無しでは使えない")
     assert(!applies("BBS_RENTOU_PASS=l10\n", cap = true))
+    assert(!applies("BBS_RENTOU_PASS=l10\n", authenticated = true, lv = 10))
+    assert(applies("BBS_RENTOU_PASS=l10\n", authenticated = true, lv = 9))
+    assert(applies("BBS_RENTOU_PASS=unknown\n", authenticated = true), "知らない値は privileged")
   }
 
   test("スレ立て時の書き写しから本書の新キーだけを除く") {
     val settings = parse("BBS_TITLE=t\nBBS_SAMBA24=5\nBBS_FR_SECOND=2\n BBS_FR_LEVEL =log\ntimecount=3\nBBS_LIVE=checked\nBBS_PHOEBE=3\n")
     assertEquals(PostRateSettings.copiedToThread(settings).toThreadSettings, "BBS_TITLE=t<>timecount=3<>BBS_LIVE=checked<>")
+    assertEquals(PostRateSettings.copiedToThread(parse("BBS_THREAD_PASS=admin\nBBS_TITLE=t\n")).toThreadSettings, "BBS_TITLE=t<>")
   }
 }

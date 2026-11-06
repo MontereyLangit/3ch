@@ -6,6 +6,7 @@ import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRule
 import io._3ch.bbs.handler.PostingText
 import io._3ch.bbs.external.web.TextEncoder
 import io._3ch.common.domain.{BbsSettings, BoardId}
+import io._3ch.common.domain.account.{AccountRole, Roles}
 import io._3ch.common.domain.posting.{CapHandle, ThreadPhoebeRequest}
 import munit.FunSuite
 
@@ -128,13 +129,14 @@ class PostingServiceSuite extends FunSuite {
   private val pon = s"PON=s1(s2(m(192.0.2.1)$salt)); Max-Age=63072000; path=/; Secure; HttpOnly"
 
   private final class AuthSource(user: Option[PostingUser] = None, failRecord: Boolean = false, device: String = "p012345678901234567",
-    refreshed: Option[String] = None, lv: Int = 1, staff: Boolean = false) extends PostingAccounts {
+    refreshed: Option[String] = None, lv: Int = 1, staff: Boolean = false, roles: Set[AccountRole] = Set.empty) extends PostingAccounts {
     var records = 0
     var recordFailures = 0
     val received: mutable.Buffer[(io._3ch.common.domain.posting.MailCommands, Option[String])] = mutable.Buffer.empty
     def authenticate(commands: io._3ch.common.domain.posting.MailCommands, capKey: Option[String], request: PostingRequest, now: Double) = {
       received += (commands -> capKey)
-      Future.successful(Right(PostingAccount(user, if (user.isEmpty) 0 else lv, device, sessionCookie = Some("auth=present"), staff = staff)))
+      Future.successful(Right(PostingAccount(user, if (user.isEmpty) 0 else lv, device, sessionCookie = Some("auth=present"),
+        roles = Roles(if (staff) roles + AccountRole.Delete else roles))))
     }
     def posted(context: io._3ch.bbs.domain.posting.PostingContext, request: PostingRequest, account: PostingAccount): Future[Option[String]] = {
       records += 1
@@ -499,6 +501,59 @@ class PostingServiceSuite extends FunSuite {
 
   private val member = Some(PostingUser("account-a", "user_a"))
   private val levelRequired = PostingError.AuthenticationLevel(3)
+
+  test("staff の名無し投稿は deny.cgi・ngwords.cgi・連投規制・スレ立て規制を既定で免除される") {
+    val rules = Map(ModerationRuleFile.Access -> "<><><>deny\n", ModerationRuleFile.NgWords -> "<><>本文<>deny\n")
+    val staff = Fake(rules = rules, authSource = Some(new AuthSource(member, roles = Set(AccountRole.Regulate))))
+    val capRole = Fake(rules = rules, authSource = Some(new AuthSource(member, roles = Set(AccountRole.Cap))))
+    for {
+      _ <- staff.post()()
+      refused <- capRole.post()()
+    } yield {
+      val posting = staff.postings.head._3
+      assertEquals((posting.creationLimit, posting.rateLimit), (None, None))
+      assertEquals(rejected(refused).error, PostingError.Moderated(ModerationDenial.Host), "cap 権限は名無しでは免除しない")
+    }
+  }
+
+  test("cap 権限者はキャップを付けた投稿だけ免除され、上の段階の行と設定には従う") {
+    val capRole = Some(new AuthSource(member, roles = Set(AccountRole.Cap)))
+    val named = Fake(caps = Map("pass" -> "管理人"), authSource = capRole)
+    val plain = Fake(authSource = capRole)
+    val strict = Fake(boardSettings = "BBS_THREAD_PASS=staff\nBBS_RENTOU_PASS=staff\n", caps = Map("pass" -> "管理人"), authSource = capRole,
+      rules = Map(ModerationRuleFile.Access -> "<><><>mark<>staff\n"))
+    for {
+      _ <- named.post("mail" -> "#!pass")()
+      _ <- plain.post()()
+      strictOutcome <- strict.post("mail" -> "#!pass")()
+    } yield {
+      assertEquals((named.postings.head._3.creationLimit, named.postings.head._3.rateLimit), (None, None))
+      assert(plain.postings.head._3.creationLimit.isDefined && plain.postings.head._3.rateLimit.isDefined)
+      assert(strict.postings.head._3.creationLimit.isDefined && strict.postings.head._3.rateLimit.isDefined)
+      assert(strictOutcome.context.form.name.startsWith("</b>[´・ω・｀]<b> "), strictOutcome.context.form.name)
+    }
+  }
+
+  test("BBS_THREAD_PASS で免除される投稿者はスレ立て規制を判定せず、設定の誤りでも拒否しない") {
+    val cases = Seq(
+      Fake(boardSettings = "BBS_THREAD_PASS=login\n", authSource = Some(new AuthSource(member))) -> None,
+      Fake(boardSettings = "BBS_THREAD_PASS=l10\n", authSource = Some(new AuthSource(member, lv = 10))) -> None,
+      Fake(boardSettings = "BBS_THREAD_PASS=l10\n", authSource = Some(new AuthSource(member, lv = 9))) -> Some(true),
+      Fake(boardSettings = "BBS_THREAD_PASS=admin\nBBS_THREAD_TATESUGI=bad\n", authSource = Some(new AuthSource(member, roles = Set(AccountRole.Admin)))) -> None,
+      Fake(boardSettings = "BBS_THREAD_PASS=unknown\n", caps = Map("pass" -> "管理人")) -> None)
+    Future.traverse(cases) { case (fake, _) => fake.post("mail" -> (if (fake eq cases.last._1) "#!pass" else ""))().map(_ => fake.postings.headOption.map(_._3.creationLimit.isDefined)) }
+      .map(results => assertEquals(results, cases.map(_._2.orElse(Some(false)))))
+  }
+
+  test("BBS_RENTOU_PASS は認証を有効にした環境で実効 Lv と役割を見る") {
+    val cases = Seq(
+      Fake(boardSettings = "BBS_RENTOU_PASS=l10\n", authSource = Some(new AuthSource(member, lv = 10))) -> false,
+      Fake(boardSettings = "BBS_RENTOU_PASS=l10\n", authSource = Some(new AuthSource(member, lv = 9))) -> true,
+      Fake(boardSettings = "BBS_RENTOU_PASS=admin\n", authSource = Some(new AuthSource(member, roles = Set(AccountRole.Delete)))) -> true,
+      Fake(boardSettings = "BBS_RENTOU_PASS=admin\n", authSource = Some(new AuthSource(member, roles = Set(AccountRole.Admin)))) -> false)
+    Future.traverse(cases) { case (fake, _) => fake.post()().map(_ => fake.postings.head._3.rateLimit.isDefined) }
+      .map(results => assertEquals(results, cases.map(_._2)))
+  }
 
   test("BBS_PHOEBE は Lv が足りない認証済の投稿を書き込む前に拒否する") {
     val fake = Fake(boardSettings = "BBS_PHOEBE=3\n", authSource = Some(new AuthSource(member, lv = 2)))

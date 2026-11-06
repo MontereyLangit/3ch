@@ -3,7 +3,7 @@ package io._3ch.bbs.application.posting
 import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, PostRateObservation, PostingAccount}
 import io._3ch.bbs.domain.account.AuthenticationFailure
 import io._3ch.bbs.domain.posting.{ClientIdentity, FailureClock, FailureSite, GlobalThread, KeyIp, NusiMark, PostFormLimits, PostRouting, PostingContext, PostingError, PostingIdentity, PostingStage, PostingUser, ReplyThread, ThreadOwner, ThreadPosting, ThreadWriteResult}
-import io._3ch.bbs.domain.posting.moderation.{ModerationDecision, ModerationInput, PostRateCheck, PostRateIdentity, PostRateSettings, ThreadCreationLimit, ThreadCreationNetwork, ThreadCreationRequest, ThreadCreationSettings}
+import io._3ch.bbs.domain.posting.moderation.{BypassPoster, ModerationDecision, ModerationInput, PostRateCheck, PostRateIdentity, PostRateSettings, ThreadCreationLimit, ThreadCreationNetwork, ThreadCreationRequest, ThreadCreationSettings}
 import io._3ch.bbs.external.web.URL
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
 import io._3ch.common.domain.account.Phoebe
@@ -34,17 +34,18 @@ final class PostingService(ports: PostingPorts, salt: String) {
       account <- authenticate(identifiedRaw, request)
       identified = identifiedRaw.copy(sessionCookie = account.sessionCookie)
       user = account.user
+      bypass = BypassPoster(account.roles, identified.cap.isDefined, user.isDefined, account.lv)
       _ = admit(identified, account, request)
       userInfo = UserInfo(if (authEnabled) user.fold("")(_.displayId) else "", identified.identity.host, identified.identity.asn, identified.identity.country, identified.identity.region,
         identified.identity.city, if (authEnabled && account.device.nonEmpty) account.device else identified.identity.deviceInfo, identified.identity.userAgent)
-      moderated <- moderate(identified, userInfo)
+      moderated <- moderate(identified, userInfo, bypass)
       sized = PostFormLimits.check(moderated.form, moderated.settings, moderated.number, moderated.cap.exists(_.strong))
         .fold(reject(_, moderated), form => moderated.copy(form = form))
-      creationLimit <- threadCreationLimit(sized, request, board.settings)
+      creationLimit <- threadCreationLimit(sized, request, board.settings, bypass)
       named <- makeShikibetsu(sized, account, request)
       (marked, owner) <- markNusi(named, user, board.settings)
       decided = marked.copy(sage = SageRule.sage(marked.number, marked.form.mail, marked.form.key, marked.unixtime, marked.settings, ports.random.next()))
-      rateLimit <- postRateCheck(decided, board.settings, user, request)
+      rateLimit <- postRateCheck(decided, board.settings, user, bypass, request)
       phoebe <- phoebeCommand(decided, account, board.settings)
       (written, swallowed) <- updateThread(decided, board, creationLimit, owner, rateLimit, phoebe, userInfo)
       recorded <- if (swallowed) Future.successful(written) else record(written, request, account)
@@ -148,20 +149,21 @@ final class PostingService(ports: PostingPorts, salt: String) {
     }
   }
 
-  private def moderate(context: PostingContext, userInfo: UserInfo): Future[PostingContext] = {
-    val input = ModerationInput(context.form, userInfo, context.cap.isDefined, context.identity.country, context.number.toDouble, context.settings)
+  private def moderate(context: PostingContext, userInfo: UserInfo, bypass: BypassPoster): Future[PostingContext] = {
+    val input = ModerationInput(context.form, userInfo, bypass, context.identity.country, context.number.toDouble, context.settings)
     PostingModeration.check(input, ports.rules).map {
       case ModerationDecision.Pass(form) => context.copy(form = form)
       case ModerationDecision.Deny(denial, form) => reject(PostingError.Moderated(denial), context.copy(form = form))
     }
   }
 
-  private def threadCreationLimit(context: PostingContext, request: PostingRequest, boardSettings: BbsSettings): Future[Option[ThreadCreationLimit]] =
+  /** スレ立て規制の材料。BBS_THREAD_PASS で免除される投稿者は判定も記録もせず、設定の誤りでも拒否しない */
+  private def threadCreationLimit(context: PostingContext, request: PostingRequest, boardSettings: BbsSettings, bypass: BypassPoster): Future[Option[ThreadCreationLimit]] =
     if (!context.creating) Future.successful(None)
     else {
       if (BoardId.create(context.form.bbs).isLeft) reject(PostingError.ForbiddenBoard, context)
       if (context.form.key.toLongOption.toRight("").flatMap(ThreadKey.create).isLeft) reject(PostingError.InvalidKey, context)
-      if (context.cap.isDefined) Future.successful(None)
+      if (ThreadCreationSettings.pass(boardSettings).exempts(bypass)) Future.successful(None)
       else {
         val settings = ThreadCreationSettings.fromSettings(boardSettings).fold(reason => reject(PostingError.InvalidCreationSettings(reason), context), identity)
         val network = ThreadCreationNetwork.group(request.country, request.asn, request.region, settings.asOnly)
@@ -232,9 +234,10 @@ final class PostingService(ports: PostingPorts, salt: String) {
     }
 
   /** 連投規制の材料。判定しない投稿（off・BBS_LIVE・回避レベルで免除）は None。aid は認証主体の accountKey（未認証は空）、キャップの識別子（★）は空にして照合しない */
-  private def postRateCheck(context: PostingContext, boardSettings: BbsSettings, user: Option[PostingUser], request: PostingRequest): Future[Option[PostRateCheck]] = {
+  private def postRateCheck(context: PostingContext, boardSettings: BbsSettings, user: Option[PostingUser], bypass: BypassPoster,
+                            request: PostingRequest): Future[Option[PostRateCheck]] = {
     val settings = PostRateSettings.from(boardSettings, context.settings)
-    if (!settings.applies(context.cap.isDefined, user.isDefined)) Future.successful(None)
+    if (!settings.applies(bypass)) Future.successful(None)
     else for {
       ip <- digest(context, canonicalIp(request.connectingIp.getOrElse("")))
       shiki <- digest(context, if (context.cap.isDefined) "" else context.shikibetsu)

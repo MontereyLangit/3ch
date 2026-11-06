@@ -2,6 +2,7 @@ package io._3ch.bbs.domain.posting.moderation
 
 import io._3ch.bbs.domain.posting.ModerationDenial
 import io._3ch.common.domain.BbsSettings
+import io._3ch.common.domain.account.{AccountRole, Roles}
 import io._3ch.common.domain.posting.{PostForm, UserInfo}
 import munit.FunSuite
 
@@ -9,12 +10,13 @@ import scala.collection.immutable.ListMap
 
 class ModerationServiceSuite extends FunSuite {
   private val form = PostForm(name = "名前", message = "本文", bbs = "sample")
-  private val input = ModerationInput(form, UserInfo("", "192.0.2.1", "", "JP", "", "", "", ""), false, "JP", 2, BbsSettings(ListMap.empty))
+  private val input = ModerationInput(form, UserInfo("", "192.0.2.1", "", "JP", "", "", "", ""), BypassPoster(), "JP", 2, BbsSettings(ListMap.empty))
 
-  test("免除を Tor より先に判定し、通常の投稿はルールの評価へ進める") {
+  test("saku 板と admin を Tor より先に通し、通常の投稿はルールの評価へ進める") {
     assertEquals(ModerationService.beforeRules(input), None)
     assertEquals(ModerationService.beforeRules(input.copy(country = "T1")), Some(ModerationDecision.Deny(ModerationDenial.Tor, form)))
-    assertEquals(ModerationService.beforeRules(input.copy(cap = true, country = "T1")), Some(ModerationDecision.Pass(form)))
+    assertEquals(ModerationService.beforeRules(input.copy(poster = BypassPoster(cap = true), country = "T1")), None, "キャップは Tor でも拒否せず、行ごとの段階で評価する")
+    assertEquals(ModerationService.beforeRules(input.copy(poster = BypassPoster(Roles(Set(AccountRole.Admin))), country = "T1")), Some(ModerationDecision.Pass(form)))
     val saku = form.copy(bbs = "saku")
     assertEquals(ModerationService.beforeRules(input.copy(form = saku, country = "T1")), Some(ModerationDecision.Pass(saku)))
   }
@@ -23,6 +25,20 @@ class ModerationServiceSuite extends FunSuite {
     val marked = form.copy(message = "加工済み")
     assertEquals(ModerationService.evaluate(input, marked, ModerationRuleSource.Missing), ModerationDecision.Pass(marked))
     assertEquals(ModerationService.evaluate(input, marked, ModerationRuleSource.Broken), ModerationDecision.Deny(ModerationDenial.BrokenRules, marked))
+    val staff = input.copy(poster = BypassPoster(Roles(Set(AccountRole.Delete))))
+    assertEquals(ModerationService.evaluate(staff, marked, ModerationRuleSource.Broken), ModerationDecision.Pass(marked))
+  }
+
+  test("行ごとの回避レベルで免除し、免除されない行だけを評価する") {
+    val rules = ModerationRuleSet.parse("<><><>mark<>staff\n<><>本文<>deny\n<><><>deny<>admin").toOption.get
+    val cap = input.copy(poster = BypassPoster(cap = true))
+    assertEquals(ModerationService.evaluate(cap, form, rules), ModerationDecision.Deny(ModerationDenial.Host, form.copy(name = "</b>[´・ω・｀]<b> 名前", message = "本文 <small>👀 Madakana: Caution</small>")))
+    val regulate = input.copy(poster = BypassPoster(Roles(Set(AccountRole.Regulate))))
+    assertEquals(ModerationService.evaluate(regulate, form, rules), ModerationDecision.Deny(ModerationDenial.Host, form))
+    val admin = input.copy(poster = BypassPoster(Roles(Set(AccountRole.Admin))))
+    assertEquals(ModerationService.evaluate(admin, form, rules), ModerationDecision.Pass(form))
+    val capRole = input.copy(poster = BypassPoster(Roles(Set(AccountRole.Cap)), authenticated = true, lv = 10))
+    assertEquals(ModerationService.evaluate(capRole, form, rules), ModerationDecision.Deny(ModerationDenial.NgWord, form.copy(name = "</b>[´・ω・｀]<b> 名前", message = "本文 <small>👀 Madakana: Caution</small>")))
   }
 
   test("照合は元の入力で行い、拒否時はそれまでの mark を残す") {

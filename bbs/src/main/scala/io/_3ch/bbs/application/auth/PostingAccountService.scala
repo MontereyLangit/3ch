@@ -25,7 +25,7 @@ final class PostingAccountService(accounts: AccountStore, credentials: PostingCr
       case Accepted(poster) =>
         val cookie = poster.session.filter(_ => poster.refreshSession).fold(Future.successful(Option.empty[String]))(credentials.issue(_, now))
         cookie.map(value => Right(PostingAccount(Some(PostingUser(poster.account.aid, poster.account.uid)), poster.account.lv, poster.device,
-          sessionCookie = value, authentication = Some(poster))))
+          sessionCookie = value, authentication = Some(poster), roles = poster.account.roles)))
     }
 
   def posted(context: PostingContext, request: PostingRequest, account: PostingAccount): Future[Option[String]] = account.authentication match {

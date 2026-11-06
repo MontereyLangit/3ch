@@ -74,6 +74,27 @@ class AdminHandlerSuite extends FunSuite {
     }
   }
 
+  test("規制ルールの 5 列目の回避レベルを検証し、正しい値と 4 列の行は保存する") {
+    val env = io._3ch.bbs.durable.DurableTestKit.newEnv()
+    val raw = env.worker.asInstanceOf[js.Dynamic]
+    raw.ADMIN_PASSWORD = "test"
+    def save(path: String, rules: String): Future[(Int, String)] = {
+      val req = request(s"https://example.test$path", Seq("authorization" -> basic("admin:test")), method = "POST", body = s"rules=${js.URIUtils.encodeURIComponent(rules)}")
+      admin(req, raw).flatMap(res => text(res).map(status(res) -> _))
+    }
+    val accepted = "<><><>deny\n<>AS1-<><>deny<>staff\n<><>語<>mark<>admin\n<><><>TateDame<>"
+    for {
+      invalid <- save("/admin/access", "<><><>deny\n<><><>deny<>everyone")
+      _ = assertEquals(invalid._1, 400)
+      _ = assert(invalid._2.contains("2行目: 回避レベルは admin・staff・privileged・l10・login のいずれかにしてください。"), invalid._2)
+      _ = assertEquals(env.r2Text("deny.cgi"), None)
+      saved <- save("/admin/ngwords", accepted)
+    } yield {
+      assertEquals(saved._1, 303)
+      assertEquals(env.r2Text("ngwords.cgi"), Some(accepted))
+    }
+  }
+
   test("スレ立て規制の専用フォームは読込後に他操作で更新されたSETTING.TXTを上書きしない") {
     val env = io._3ch.bbs.durable.DurableTestKit.newEnv()
     val raw = env.worker.asInstanceOf[js.Dynamic]

@@ -26,8 +26,8 @@ enum ModerationDecision {
   case Deny(denial: ModerationDenial, form: PostForm)
 }
 
-/** 規制の判定に使う投稿。form は規制前のフォーム、number はレス番号（スレ立ては 1） */
-final case class ModerationInput(form: PostForm, userInfo: UserInfo, cap: Boolean, country: String, number: Double, settings: BbsSettings) {
+/** 規制の判定に使う投稿。form は規制前のフォーム、poster は各行の回避レベルと照らす投稿者、number はレス番号（スレ立ては 1） */
+final case class ModerationInput(form: PostForm, userInfo: UserInfo, poster: BypassPoster, country: String, number: Double, settings: BbsSettings) {
   /** NG ワードを照合する文字列と、その文字参照を復元したもの */
   val contents: Seq[String] = {
     val content = s"FROM=${form.name} mail=${form.mail} MESSAGE=${form.message} subject=${form.subject}"
@@ -43,23 +43,30 @@ object ModerationService {
   private val NamedEntity = new js.RegExp("&(?:amp|lt|gt|quot|apos);", "g")
   private val Entities = Map("&amp;" -> "&", "&lt;" -> "<", "&gt;" -> ">", "&quot;" -> "\"", "&apos;" -> "'")
 
-  /** キャップと saku 板は対象外、Tor は拒否。ルールを読む必要があれば None */
+  /** saku 板と、どの段階でも免除される admin は対象外。キャップ以外の Tor は拒否する。ルールを読む必要があれば None */
   def beforeRules(input: ModerationInput): Option[ModerationDecision] =
-    if (input.cap || input.form.bbs == "saku") Some(ModerationDecision.Pass(input.form))
-    else if (input.country == "T1") Some(ModerationDecision.Deny(ModerationDenial.Tor, input.form))
+    if (input.form.bbs == "saku" || BypassLevel.Admin.exempts(input.poster)) Some(ModerationDecision.Pass(input.form))
+    else if (input.country == "T1" && !input.poster.cap) Some(ModerationDecision.Deny(ModerationDenial.Tor, input.form))
     else None
 
-  /** ファイルが無ければ通し、壊れていれば拒否し、読み取れたルールを評価する */
+  /** ルールが読めなくても通す投稿者か。行ごとの段階が分からないので既定の段階で判定する */
+  def exemptWithoutRules(input: ModerationInput): Boolean = BypassLevel.Default.exempts(input.poster)
+
+  /** ファイルが無ければ通し、壊れていれば既定の段階で免除されない投稿者を拒否し、読み取れたルールを評価する */
   def evaluate(input: ModerationInput, form: PostForm, source: ModerationRuleSource): ModerationDecision = source match {
     case ModerationRuleSource.Missing => ModerationDecision.Pass(form)
+    case ModerationRuleSource.Broken if exemptWithoutRules(input) => ModerationDecision.Pass(form)
     case ModerationRuleSource.Broken => ModerationDecision.Deny(ModerationDenial.BrokenRules, form)
     case ModerationRuleSource.Loaded(rules) => evaluate(input, form, rules)
   }
 
-  /** 1 つのルール一覧を評価する。照合は規制前の内容で行い、mark は form に重ねる。BBS_NO_MADAKANA なら拒否も mark にする */
+  /**
+    * 1 つのルール一覧を評価する。照合は規制前の内容で行い、mark は form に重ねる。BBS_NO_MADAKANA なら拒否も mark にする。
+    * 回避レベルで免除される行は飛ばす
+    */
   def evaluate(input: ModerationInput, form: PostForm, rules: ModerationRuleSet): ModerationDecision =
     rules.rules.foldLeft[ModerationDecision](ModerationDecision.Pass(form)) {
-      case (ModerationDecision.Pass(current), rule) if rule.matches(input.form.bbs, input.userInfo.text, input.contents) =>
+      case (ModerationDecision.Pass(current), rule) if !rule.bypass.exempts(input.poster) && rule.matches(input.form.bbs, input.userInfo.text, input.contents) =>
         if (rule.isWord && input.settings.checked("BBS_NGWORD_PASS")) ModerationDecision.Pass(current)
         else if (rule.action == ModerationAction.TateDame && input.number != 1) ModerationDecision.Pass(current)
         else if (rule.action == ModerationAction.Mark || input.settings.checked("BBS_NO_MADAKANA")) ModerationDecision.Pass(mark(current, rule.isWord))

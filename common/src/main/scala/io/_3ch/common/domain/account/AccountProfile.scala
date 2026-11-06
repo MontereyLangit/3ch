@@ -35,6 +35,10 @@ object AccountRole {
 /** アカウントの役割。クライアント ID には付与しない */
 final case class Roles(values: Set[AccountRole] = Set.empty) {
   def permitted(kind: AccountKind): Boolean = kind != AccountKind.Client || values.isEmpty
+  def admin: Boolean = values.contains(AccountRole.Admin)
+
+  /** 削除・規制・管理のいずれかを持つ。cap だけの人は含めない */
+  def staff: Boolean = values.exists(_ != AccountRole.Cap)
 }
 
 /** 公開 ID と認証方式、同意・状態・世代。資格情報は別に保存する */

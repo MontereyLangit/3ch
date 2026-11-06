@@ -15,13 +15,22 @@ class ModerationRuleSetSuite extends FunSuite {
     assertEquals(rules, Right(List(ModerationAction.Deny, ModerationAction.Deny, ModerationAction.Deny, ModerationAction.Mark, ModerationAction.TateDame)))
   }
 
+  test("5 列目の回避レベルを読み、4 列の行と空欄は privileged にする") {
+    val levels = parse("<><><>deny\n<><><>deny<>\n<><><>deny<>admin\n<><><>mark<>staff\n<><><>deny<> privileged \n<><><>deny<>l10\n<><><>TateDame<>login")
+      .map(_.rules.map(_.bypass))
+    assertEquals(levels, Right(List(BypassLevel.Privileged, BypassLevel.Privileged, BypassLevel.Admin, BypassLevel.Staff, BypassLevel.Privileged,
+      BypassLevel.L10, BypassLevel.Login)))
+  }
+
   test("NG ワード欄が空でなければ NG ワードのルール") {
     assertEquals(parse("<><>word<>deny\n<>AS1<><>deny").map(_.rules.map(_.isWord)), Right(List(true, false)))
   }
 
   test("書式の誤りは最初の行番号と種類を返す") {
     assertEquals(parse("# ok\nbad format"), Left(ModerationRuleError(2, ModerationRuleProblem.Format)))
-    assertEquals(parse("<><><><>deny"), Left(ModerationRuleError(1, ModerationRuleProblem.Format)))
+    assertEquals(parse("<><><><>deny"), Left(ModerationRuleError(1, ModerationRuleProblem.Bypass)))
+    assertEquals(parse("<><><>deny<>staff<>"), Left(ModerationRuleError(1, ModerationRuleProblem.Format)))
+    assertEquals(parse("<><><>deny<>Staff"), Left(ModerationRuleError(1, ModerationRuleProblem.Bypass)))
     assertEquals(parse("<><><>unknown"), Left(ModerationRuleError(1, ModerationRuleProblem.Action)))
     assertEquals(parse("<><><>Deny"), Left(ModerationRuleError(1, ModerationRuleProblem.Action)))
     assertEquals(parse("[<><><>deny"), Left(ModerationRuleError(1, ModerationRuleProblem.Pattern)))
