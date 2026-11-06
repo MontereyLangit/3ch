@@ -125,28 +125,46 @@ final case class AccountState(
     } yield description
   }
 
-  /** 所有アカウントとキャップが利用できる場合だけ投稿用の情報を返す */
+  /** 所有アカウントとキャップが利用できる場合だけ投稿用の情報を返す。自分で発行したキャップは役割を全て外すと使えない */
   def describeForCap(aid: String, hash: String, now: Double): Either[AccountRejection, (AccountDescription, AccountCap)] = {
     if (aid != profile.aid) Left(AccountRejection.Missing)
     else usable(now).flatMap { _ =>
-      caps.find(cap => cap.hash == hash && cap.revokedAt.isEmpty).toRight(AccountRejection.CapRevoked).map(cap => (description, cap))
+      caps.find(cap => cap.hash == hash && cap.active && (cap.issuedBy != profile.aid || roles.values.nonEmpty))
+        .toRight(AccountRejection.CapRevoked).map(cap => (description, cap))
     }
   }
 
-  /** 権限保持者は自分宛に一個まで登録でき、強キャップと他人宛の発行は管理者に限る */
+  /** 権限保持者は自分宛に一個まで登録でき、強キャップと他人宛の発行は管理者に限る。クライアント ID には登録しない */
   def bindCap(cap: AccountCap, issuerIsAdmin: Boolean, now: Double): Either[AccountRejection, AccountState] = usable(now).flatMap { _ =>
-    if (!cap.valid || cap.issuedAt > now || cap.revokedAt.isDefined) Left(AccountRejection.Invalid)
+    if (!cap.valid || cap.issuedAt > now || cap.revokedAt.isDefined || CapName.parse(cap.name) != Right(cap.name)) Left(AccountRejection.Invalid)
+    else if (profile.kind == AccountKind.Client) Left(AccountRejection.RolesForbidden)
     else if (caps.exists(c => c.capId == cap.capId || c.hash == cap.hash)) Left(AccountRejection.Exists)
-    else if (!issuerIsAdmin && (cap.issuedBy != profile.aid || roles.values.isEmpty || cap.strong || caps.exists(_.revokedAt.isEmpty))) Left(AccountRejection.RolesForbidden)
+    else if (!issuerIsAdmin && (cap.issuedBy != profile.aid || roles.values.isEmpty || cap.strong || caps.exists(_.active))) Left(AccountRejection.RolesForbidden)
     else Right(copy(caps = caps :+ cap))
   }
 
-  /** キャップの記録を残して失効させる。KV と索引の削除は呼び出し元で行う */
-  def revokeCap(capId: String, now: Double): Either[AccountRejection, AccountState] = usable(now).flatMap { _ =>
-    caps.find(_.capId == capId).toRight(AccountRejection.CapRevoked).map { _ =>
-      copy(caps = caps.map(cap => if (cap.capId == capId && cap.revokedAt.isEmpty) cap.copy(revokedAt = Some(now)) else cap))
+  /** キャップの記録を残して失効させ、失効させたキャップを返す。KV と索引の削除は呼び出し元で行う */
+  def revokeCap(capId: String, now: Double): Either[AccountRejection, (AccountState, AccountCap)] = usable(now).flatMap { _ =>
+    caps.find(_.capId == capId).toRight(AccountRejection.CapRevoked).map { found =>
+      val revoked = if (found.active) found.copy(revokedAt = Some(now)) else found
+      val updated = caps.map(cap => if (cap.capId == capId) revoked else cap)
+      val kept = updated.filterNot(_.active).sortBy(cap => -cap.revokedAt.getOrElse(0d)).take(AccountState.revokedCapLimit).map(_.capId).toSet
+      (copy(caps = updated.filter(cap => cap.active || kept.contains(cap.capId))), revoked)
     }
   }
+
+  /** 有効なキャップを失効させ、同じ表示名・強さで照合値だけ新しいキャップを同じ保存で登録する。失効させたものと新しいものを返す */
+  def reissueCap(capId: String, nextId: String, nextHash: String, issuedBy: String, issuerIsAdmin: Boolean,
+    now: Double): Either[AccountRejection, (AccountState, AccountCap, AccountCap)] =
+    caps.find(cap => cap.capId == capId && cap.active).toRight(AccountRejection.CapRevoked).flatMap { previous =>
+      val next = AccountCap(nextId, previous.name, nextHash, previous.strong, issuedBy, now)
+      revokeCap(capId, now).flatMap { case (revoked, old) => revoked.bindCap(next, issuerIsAdmin, now).map(state => (state, old, next)) }
+    }
+
+  /** 古い順の書き込み記録から、キャップごとの直近の書き込みを新しい順に返す */
+  def capPosts(log: Vector[AccountPost], limit: Int = 5): Map[String, Vector[AccountPost]] =
+    log.filter(post => post.via == AccountVia.Cap && post.result == "posted").groupBy(_.capId.getOrElse(""))
+      .collect { case (id, posts) if caps.exists(_.capId == id) => id -> posts.reverse.take(limit) }
 
   def agreementRequired(version: String): Boolean = version.isEmpty || profile.agreementVersion != version
 
@@ -275,6 +293,9 @@ final case class AccountState(
   }
 }
 object AccountState {
+  /** 失効させたキャップの記録を残す件数 */
+  val revokedCapLimit: Int = 20
+
   /** 同意・時刻・初期状態を確認して作成する。パスワード方式と Google は索引の確定まで登録準備中にする */
   def create(profile: AccountProfile, now: Double, credential: Option[PasswordCredential] = None): Either[AccountRejection, AccountState] = {
     val initial = profile.copy(expiresAt = if (profile.kind == AccountKind.Client) Some(profile.createdAt + AccountProfile.clientLifetime) else None)

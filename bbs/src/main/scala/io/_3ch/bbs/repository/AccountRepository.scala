@@ -18,11 +18,15 @@ final case class AccountTokenView(id: String, label: String, issuedAt: Double = 
   boundAt: Option[Double] = None, lastUsedAt: Option[Double] = None, revokedAt: Option[Double] = None,
   revokeReason: Option[String] = None, replacedTokenAt: Option[Double] = None,
   recentPosts: Vector[AccountTokenPostView] = Vector.empty, warnings: Vector[AccountTokenWarningView] = Vector.empty)
+/** 本人画面に出すキャップと直近の書き込み。照合値とパスワードは含めない */
+final case class AccountCapView(id: String, name: String, strong: Boolean, issuedAt: Double, revokedAt: Option[Double] = None,
+  recentPosts: Vector[AccountTokenPostView] = Vector.empty)
 /** 本人向けのアカウント情報とキー一覧。使用枠には有効な紐付け済みキーだけを数える */
-final case class AccountPanel(account: AccountDescription, tokens: Vector[AccountTokenView], activeCount: Int = 0, deviceCount: Int = 0)
+final case class AccountPanel(account: AccountDescription, tokens: Vector[AccountTokenView], activeCount: Int = 0, deviceCount: Int = 0,
+  caps: Vector[AccountCapView] = Vector.empty)
 
 /** アカウント RPC の値をアプリケーションの型に変換する */
-final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountManagementStore with AccountSignInStore with AccountRoleStore {
+final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountManagementStore with AccountSignInStore with AccountRoleStore with AccountCapStore {
   private def account(aid: String): AccountDoStub = env.ACCOUNT_DO.get(env.ACCOUNT_DO.idFromName(aid))
   private def index(kind: String): AccountIndexDoStub = env.ACCOUNT_INDEX_DO.get(env.ACCOUNT_INDEX_DO.idFromName(kind))
   private def raw(value: js.Promise[?]): Future[js.Any] = value.asInstanceOf[js.Promise[js.Any]].toFuture
@@ -143,6 +147,19 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
   /** Lv を固定する。None で固定を外す */
   def setLevel(aid: String, lvOverride: Option[Int], now: Double): Future[Unit] =
     raw(account(aid).setLevel(lvOverride.orUndefined, now)).map(checked)
+  def bindCap(aid: String, cap: AccountCap, issuerIsAdmin: Boolean, now: Double): Future[Unit] =
+    raw(account(aid).bindCap(AccountCodec.encodeCap(cap), issuerIsAdmin, now)).map(checked)
+  def revokeCap(aid: String, capId: String, now: Double): Future[String] = account(aid).revokeCap(capId, now).toFuture.map { v =>
+    checked(text(v, "code"))
+    text(v, "hash")
+  }
+  def reissueCap(aid: String, capId: String, nextId: String, nextHash: String, issuedBy: String, issuerIsAdmin: Boolean, now: Double): Future[CapReissue] =
+    account(aid).reissueCap(capId, nextId, nextHash, issuedBy, issuerIsAdmin, now).toFuture.map { v =>
+      checked(text(v, "code"))
+      val strong = record(v).selectDynamic("strong").asInstanceOf[js.Any]
+      if (js.typeOf(strong) != "boolean") invalid()
+      CapReissue(text(v, "hash"), text(v, "name") + (if (strong.asInstanceOf[Boolean]) "★" else ""))
+    }
   private def codes(roles: Roles): js.Array[String] = roles.values.toVector.map(_.code).sorted.toJSArray
   def setRoles(aid: String, roles: Roles, actor: Roles, now: Double): Future[Unit] = raw(account(aid).setRoles(codes(roles), codes(actor), now)).map(checked)
   def grantFirstAdmin(aid: String, now: Double): Future[Unit] = raw(account(aid).grantFirstAdmin(now)).map(checked)
@@ -156,12 +173,8 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
     checked(code)
     val description = decode(record(value.selectDynamic("account")), aid).fold(reason => throw AccountStoreException(reason), identity)
     val rejections = array(value, "rejections").map(record)
-    val tokens = array(value, "tokens").map { raw =>
-      val token = record(raw)
-      val id = identifier(text(token, "tokenId"))
-      val reason = optionalText(token, "revokeReason")
-      if (reason.exists(code => TokenRevokeReason.parse(code).isEmpty)) invalid()
-      val posts = array(token, "recentPosts").map { raw =>
+    def recentPosts(owner: js.Dynamic): Vector[AccountTokenPostView] = {
+      val posts = array(owner, "recentPosts").map { raw =>
         val post = record(raw)
         val excerpt = text(post, "excerpt")
         if (excerpt.length > 40) invalid()
@@ -169,6 +182,14 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
           integer(post.selectDynamic("resNum").asInstanceOf[js.Any]), excerpt, text(post, "network"))
       }
       if (posts.size > 5) invalid()
+      posts
+    }
+    val tokens = array(value, "tokens").map { raw =>
+      val token = record(raw)
+      val id = identifier(text(token, "tokenId"))
+      val reason = optionalText(token, "revokeReason")
+      if (reason.exists(code => TokenRevokeReason.parse(code).isEmpty)) invalid()
+      val posts = recentPosts(token)
       val warnings = rejections.filter(log => optionalText(log, "tokenId").contains(id) && text(log, "result") == AccountRejection.TokenUaMismatch.code)
         .map(log => AccountTokenWarningView(time(log, "t"), text(log, "uaLabel"))).sortBy(w => -w.t)
       val view = AccountTokenView(id, optionalText(token, "uaLabel").getOrElse(""), time(token, "issuedAt"), time(token, "expiresAt"),
@@ -182,7 +203,17 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
     if (tokens.map(_.id).distinct.size != tokens.size) invalid()
     val activeCount = tokens.count(token => token.boundAt.isDefined && token.revokedAt.isEmpty)
     if (activeCount > DedicatedBrowserTokens.boundLimit) invalid()
-    AccountPanel(description, tokens, activeCount, integer(value.selectDynamic("deviceCount").asInstanceOf[js.Any], 10))
+    val caps = array(value, "caps").map { raw =>
+      val cap = record(raw)
+      def flag(name: String): Boolean = {
+        val v = cap.selectDynamic(name).asInstanceOf[js.Any]
+        if (js.typeOf(v) != "boolean") invalid()
+        v.asInstanceOf[Boolean]
+      }
+      AccountCapView(identifier(text(cap, "capId")), text(cap, "name"), flag("strong"), time(cap, "issuedAt"), optionalTime(cap, "revokedAt"),
+        recentPosts(cap))
+    }
+    AccountPanel(description, tokens, activeCount, integer(value.selectDynamic("deviceCount").asInstanceOf[js.Any], 10), caps)
   }
   def rate(key: String, kind: String, now: Double): Future[AuthRateCounts] =
     env.AUTH_RATE_DO.get(env.AUTH_RATE_DO.idFromName(key)).hit(kind, now).toFuture.map { v =>

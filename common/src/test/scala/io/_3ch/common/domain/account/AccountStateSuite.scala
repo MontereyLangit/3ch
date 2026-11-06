@@ -74,7 +74,7 @@ class AccountStateSuite extends FunSuite {
     assertEquals(bound.bindCap(cap.copy(capId = "cap2", hash = "other"), false, now), Left(AccountRejection.RolesForbidden))
     assertEquals(state.bindCap(cap.copy(strong = true), false, now), Left(AccountRejection.RolesForbidden))
     assert(state.bindCap(cap.copy(strong = true), true, now).isRight)
-    val revoked = bound.revokeCap(cap.capId, now + 1).toOption.get
+    val revoked = bound.revokeCap(cap.capId, now + 1).toOption.get._1
     assertEquals(revoked.describeForCap(profile.aid, cap.hash, now + 1), Left(AccountRejection.CapRevoked))
   }
 

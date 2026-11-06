@@ -44,6 +44,10 @@ object Main {
   @JSExportTopLevel("AccountMenuJs", "client")
   final val accountMenu: js.Any = AccountMenuIsland.Component.toJsComponent.raw
 
+  @islands("account-cap.tsx")
+  @JSExportTopLevel("AccountCapJs", "client")
+  final val accountCap: js.Any = AccountCapIsland.Component.toJsComponent.raw
+
   @islands("account-logout.tsx")
   @JSExportTopLevel("AccountLogoutJs", "client")
   final val accountLogout: js.Any = AccountLogoutIsland.Component.toJsComponent.raw

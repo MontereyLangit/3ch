@@ -115,9 +115,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
   private def processCap(context: PostingContext): Future[PostingContext] = (if (authEnabled) context.mailCommands.capPassword else CapHandle.password(context.form.mail)) match {
     case None => Future.successful(context)
     case Some(password) =>
-      val hasher = ports.hasher
-      val key = if (password.startsWith("!")) Future.successful(password.drop(1)) else hasher.sha256Hex(hasher.md5(password) + context.identity.salt).flatMap(hasher.sha1Base64)
-      key.flatMap(value => ports.caps.find(value).map(cap => (value, cap))).map { case (value, cap) =>
+      CapKey.of(ports.hasher, password, context.identity.salt).flatMap(value => ports.caps.find(value).map(cap => (value, cap))).map { case (value, cap) =>
         context.copy(cap = cap, capKey = Option.when(cap.isDefined)(value), form = cap.fold(context.form)(handle => context.form.copy(name = handle.displayName(context.form.name))))
       }
   }

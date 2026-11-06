@@ -19,7 +19,7 @@ final case class AuthRateHistory(events: Vector[AuthRateEvent] = Vector.empty) {
   }
 }
 object AuthRateHistory {
-  def validKind(kind: String): Boolean = Set("verify", "register", "login", "reset", "token").contains(kind) ||
+  def validKind(kind: String): Boolean = Set("verify", "register", "login", "reset", "token", "cap").contains(kind) ||
     (kind.startsWith("deviceHash:") && kind.drop(11).matches("[pgu](?:[0-9a-f]{18}|[0-9a-f]{16})"))
 }
 
@@ -31,4 +31,6 @@ object AbuseThresholds {
   def reset(counts: AuthRateCounts): Boolean = counts.day <= 3
   /** 専ブラ用キーの発行は一アカウント一日十回まで */
   def tokenIssue(counts: AuthRateCounts): Boolean = counts.day <= 10
+  /** キャップの発行・再発行は一アカウント一日十回まで */
+  def capIssue(counts: AuthRateCounts): Boolean = counts.day <= 10
 }

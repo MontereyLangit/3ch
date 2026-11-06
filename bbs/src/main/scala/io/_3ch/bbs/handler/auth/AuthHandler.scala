@@ -1,14 +1,15 @@
 package io._3ch.bbs.handler.auth
 
-import io._3ch.bbs.application.auth.{AuthServiceException, AuthServiceFailure, AuthSettings, ClientAuthentication, DeviceEvidence, LoginOutcome, PasswordAuthentication, TokenIssuing}
-import io._3ch.bbs.application.auth.ports.{AuthenticationKeys, PasswordHashing, TokenProof}
-import io._3ch.bbs.components.{AccountComponent, AccountProps, AccountTokenProps, AccountPostProps, AccountTokenWarningProps, AuthComponent, AuthProps}
+import io._3ch.bbs.application.auth.{AuthServiceException, AuthServiceFailure, AuthSettings, CapIssuing, CapNameException, ClientAuthentication, DeviceEvidence, LoginOutcome, PasswordAuthentication, TokenIssuing}
+import io._3ch.bbs.application.auth.ports.{AccountStoreException, AuthenticationKeys, PasswordHashing, TokenProof}
+import io._3ch.bbs.application.posting.CapKey
+import io._3ch.bbs.components.{AccountCapProps, AccountComponent, AccountProps, AccountTokenProps, AccountPostProps, AccountTokenWarningProps, AuthComponent, AuthProps}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.hono.{HonoContextFacade, RenderProps}
 import io._3ch.bbs.external.web.{Request, Response, TextDecoder, URL}
 import io._3ch.bbs.handler.{PublicText, Responses}
-import io._3ch.bbs.hash.{AuthHmac, PasswordHasher}
-import io._3ch.bbs.repository.AccountRepository
+import io._3ch.bbs.hash.{AuthHmac, PasswordHasher, WebHasher}
+import io._3ch.bbs.repository.{AccountRepository, CapRepository}
 import io._3ch.common.domain.account.*
 import io._3ch.common.domain.device.{ClientHints, DeviceHashRef, DeviceRejection, IosDeviceProfile}
 import io._3ch.bbs.domain.posting.KeyIp
@@ -38,6 +39,9 @@ enum AuthApiError {
   case LoginId(reason: LoginIdRejection)
   case Password(reason: PasswordRejection)
   case Confirmation
+  /** キャップの発行・失効の拒否 */
+  case Cap(reason: AccountRejection)
+  case CapName(reason: CapNameRejection)
 
   def code: String = this match {
     case NotFound => "auth:not-found"
@@ -56,6 +60,8 @@ enum AuthApiError {
     case LoginId(_) => "auth:id:invalid"
     case Password(_) => "auth:password:invalid"
     case Confirmation => "auth:password:confirmation"
+    case Cap(reason) => reason.code
+    case CapName(_) => "auth:cap:name"
   }
 
   def status: Int = this match {
@@ -68,8 +74,8 @@ enum AuthApiError {
     case Service(AuthServiceFailure.Invalid) => 400
     case Service(_) | Unavailable => 503
     case LoginFailed => 401
-    case Refused(_) => 403
-    case Invalid | AgreementRequired | Turnstile | Device(_) | LoginId(_) | Password(_) | Confirmation => 400
+    case Refused(_) | Cap(_) => 403
+    case Invalid | CapName(_) | AgreementRequired | Turnstile | Device(_) | LoginId(_) | Password(_) | Confirmation => 400
   }
 
   /** セッションが無い・切れた・ログアウト済みで、ログインし直せば解消するか */
@@ -115,6 +121,12 @@ object AuthHandler {
     case AuthApiError.Password(PasswordRejection.ContainsLoginId) => "パスワードにユーザーIDを含めないでください。"
     case AuthApiError.Password(PasswordRejection.InvalidUnicode) => "パスワードに使えない文字が含まれています。"
     case AuthApiError.Confirmation => "確認用のパスワードが一致しません。"
+    case AuthApiError.Cap(AccountRejection.RolesForbidden | AccountRejection.Forbidden) =>
+      "キャップを発行できません。削除・規制などの権限を持つアカウントが、自分用に1個まで発行できます。"
+    case AuthApiError.Cap(AccountRejection.CapRevoked) => "このキャップはすでに無効です。"
+    case AuthApiError.Cap(_) => "キャップを操作できませんでした。"
+    case AuthApiError.CapName(CapNameRejection.Length) => s"キャップの名前は1〜${CapName.MaxLength}文字で入力してください。"
+    case AuthApiError.CapName(CapNameRejection.Character) => "キャップの名前に使えない文字が含まれています。"
     case _ => "認証を完了できませんでした。"
   }
   private def reason(error: Throwable): AuthApiError = error match {
@@ -216,8 +228,10 @@ object AuthHandler {
           token.recentPosts.map(post => AccountPostProps(post.t, post.bbs, post.key, post.title, post.resNum, post.excerpt, post.network)),
           token.warnings.map(warning => AccountTokenWarningProps(warning.t, warning.uaLabel))))
         val device = DeviceHashRef.parse(session.device).map(_.granularity)
+        val caps = panel.caps.map(cap => AccountCapProps(cap.id, cap.name, cap.strong, cap.issuedAt, cap.revokedAt,
+          cap.recentPosts.map(post => AccountPostProps(post.t, post.bbs, post.key, post.title, post.resNum, post.excerpt, post.network))))
         c.renderPromise(AccountComponent.Component(AccountProps(account.uid, account.lv, tokens, panel.activeCount,
-          kind = account.kind, expiresAt = account.expiresAt, device = device, deviceCount = panel.deviceCount)).rawElement, props).toFuture
+          kind = account.kind, expiresAt = account.expiresAt, device = device, deviceCount = panel.deviceCount, caps = caps, roles = account.roles)).rawElement, props).toFuture
       }
     }
   }
@@ -252,6 +266,10 @@ object AuthHandler {
             case "/auth/token/issue" => current(request, config.secret, repository, time).flatMap { case (_, account) =>
               if (account.agreementVersion != config.agreementVersion) throw Refused(AuthApiError.AgreementRequired)
               issueToken(repository, account, config.secret, time)
+            }
+            case "/auth/cap/issue" | "/auth/cap/revoke" | "/auth/cap/reissue" => current(request, config.secret, repository, time).flatMap { case (_, account) =>
+              if (account.agreementVersion != config.agreementVersion) throw Refused(AuthApiError.AgreementRequired)
+              cap(path, form, env, repository, account, config.secret, time)
             }
             case "/auth/token/revoke" => current(request, config.secret, repository, time).flatMap { case (_, account) =>
               val id = form.getOrElse("id", "")
@@ -390,6 +408,32 @@ object AuthHandler {
     def tokenId(): String = AuthHmac.randomBase32(16)
     def index(kind: String, value: String): Future[Option[String]] = AuthHmac.indexKey(secret, kind, value)
   }
+  private def capIssuing(env: WorkerEnv, repository: AccountRepository, secret: String): CapIssuing = {
+    val salt = WebHasher.md5(String.valueOf(env.salt))
+    new CapIssuing(repository, CapRepository.directory(env), keys(secret), password => CapKey.of(WebHasher, password, salt))
+  }
+
+  /** 本人のキャップを発行・失効・再発行する。パスワードは発行した応答でだけ返す。強キャップは admin だけが選べる */
+  private def cap(path: String, form: Map[String, String], env: WorkerEnv, repository: AccountRepository, account: AccountDescription,
+    secret: String, time: Double): Future[Response] = {
+    val service = capIssuing(env, repository, secret)
+    def id: String = {
+      val value = form.getOrElse("id", "")
+      if (!DedicatedBrowserTokens.validId(value)) throw Refused(AuthApiError.Invalid)
+      value
+    }
+    val result: Future[js.Dynamic] = path match {
+      case "/auth/cap/issue" => service.issue(account, account.aid, form.getOrElse("name", ""), form.get("strong").contains("1"), time)
+        .map(issued => js.Dynamic.literal(id = issued.capId, password = "#" + issued.password))
+      case "/auth/cap/reissue" => service.reissue(account, account.aid, id, time).map(issued => js.Dynamic.literal(id = issued.capId, password = "#" + issued.password))
+      case _ => service.revoke(account, account.aid, id, time).map(_ => js.Dynamic.literal(ok = true))
+    }
+    result.map(value => json(value)).recoverWith {
+      case AccountStoreException(reason) => Future.failed(Refused(AuthApiError.Cap(reason)))
+      case CapNameException(reason) => Future.failed(Refused(AuthApiError.CapName(reason)))
+    }
+  }
+
   private def issueToken(repository: AccountRepository, account: AccountDescription, secret: String, time: Double): Future[Response] =
     new TokenIssuing(repository, keys(secret)).issue(account, time).map(value =>
       json(js.Dynamic.literal(uid = account.uid, lv = account.lv, token = ("!#" + value.token))))

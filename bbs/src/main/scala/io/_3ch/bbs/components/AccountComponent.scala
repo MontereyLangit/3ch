@@ -2,7 +2,7 @@ package io._3ch.bbs.components
 
 import io._3ch.bbs.components.layout.{FooterComponent, HeaderComponent, HeaderProps}
 import io._3ch.bbs.generated.IslandComponents
-import io._3ch.common.domain.account.{AccountKind, SessionView}
+import io._3ch.common.domain.account.{AccountKind, Roles, SessionView}
 import io._3ch.common.domain.device.DeviceGranularity
 import io._3ch.common.text.JstTime
 import japgolly.scalajs.react.ScalaFnComponent
@@ -15,15 +15,25 @@ final case class AccountTokenProps(id: String, label: String, issuedAt: Double =
   boundAt: Option[Double] = None, lastUsedAt: Option[Double] = None, revokedAt: Option[Double] = None,
   revokeReason: Option[String] = None, replacedTokenAt: Option[Double] = None,
   recentPosts: Seq[AccountPostProps] = Nil, warnings: Seq[AccountTokenWarningProps] = Nil)
-/** アカウント設定画面の表示情報。device はこの端末の Cookie にある端末ハッシュの粒度 */
+/** 本人のキャップ。照合値とパスワードは持たない */
+final case class AccountCapProps(id: String, name: String, strong: Boolean, issuedAt: Double, revokedAt: Option[Double] = None, recentPosts: Seq[AccountPostProps] = Nil)
+/** アカウント設定画面の表示情報。device はこの端末の Cookie にある端末ハッシュの粒度、roles はキャップの発行欄の出し分けに使う */
 final case class AccountProps(uid: String, lv: Int, tokens: Seq[AccountTokenProps] = Nil, activeCount: Int = 0, nowSeconds: Double = js.Date.now() / 1000,
-  kind: AccountKind = AccountKind.Client, expiresAt: Option[Double] = None, device: Option[DeviceGranularity] = None, deviceCount: Int = 0)
+  kind: AccountKind = AccountKind.Client, expiresAt: Option[Double] = None, device: Option[DeviceGranularity] = None, deviceCount: Int = 0,
+  caps: Seq[AccountCapProps] = Nil, roles: Roles = Roles())
 
 /** アカウントの表示情報と専ブラ用キー・ログアウトの操作画面 */
 object AccountComponent {
+  private def postProps(p: AccountPostProps): js.Object =
+    js.Dynamic.literal(t = p.t, bbs = p.bbs, key = p.key, title = p.title, resNum = p.resNum, excerpt = p.excerpt, network = p.network)
+  private def capProps(cap: AccountCapProps): js.Object = {
+    val raw = js.Dynamic.literal(id = cap.id, name = cap.name, strong = cap.strong, issuedAt = cap.issuedAt, recentPosts = js.Array(cap.recentPosts.map(postProps)*))
+    cap.revokedAt.foreach(v => raw.updateDynamic("revokedAt")(v))
+    raw
+  }
   private def tokenProps(token: AccountTokenProps): js.Object = {
     val raw = js.Dynamic.literal(id = token.id, label = token.label, issuedAt = token.issuedAt, expiresAt = token.expiresAt,
-      recentPosts = js.Array(token.recentPosts.map(p => js.Dynamic.literal(t = p.t, bbs = p.bbs, key = p.key, title = p.title, resNum = p.resNum, excerpt = p.excerpt, network = p.network))*),
+      recentPosts = js.Array(token.recentPosts.map(postProps)*),
       warnings = js.Array(token.warnings.map(w => js.Dynamic.literal(t = w.t, uaLabel = w.uaLabel))*))
     Seq("boundAt" -> token.boundAt, "lastUsedAt" -> token.lastUsedAt, "revokedAt" -> token.revokedAt, "replacedTokenAt" -> token.replacedTokenAt).foreach { case (name, value) => value.foreach(v => raw.updateDynamic(name)(v)) }
     token.revokeReason.foreach(v => raw.updateDynamic("revokeReason")(v))
@@ -56,6 +66,8 @@ object AccountComponent {
         <.section(^.id := "upgrade", ^.className := "my-4 border border-[#d6dce3] bg-white p-4", <.h2(^.className := "mb-2 font-bold", "■ 登録方法の切り替え"),
           <.p("ID・パスワード、Googleへの切り替えは準備中です。")),
         IslandComponents.AccountMenuJs(js.Dynamic.literal(tokens = js.Array(props.tokens.map(tokenProps)*), activeCount = props.activeCount, nowSeconds = props.nowSeconds)),
+        IslandComponents.AccountCapJs(js.Dynamic.literal(caps = js.Array(props.caps.map(capProps)*), admin = props.roles.admin,
+          canIssue = props.roles.values.nonEmpty)),
         IslandComponents.AccountLogoutJs(js.Dynamic.literal(simple = props.kind == AccountKind.Client))),
       FooterComponent.Component())
   }

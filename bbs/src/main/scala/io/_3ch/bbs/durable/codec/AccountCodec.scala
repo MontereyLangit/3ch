@@ -79,7 +79,7 @@ object AccountCodec {
   private def encodeDevice(v: AccountDevice): js.Dynamic = js.Dynamic.literal(hash = v.hash, firstSeen = v.firstSeen, lastSeen = v.lastSeen, keyIpHash = v.keyIpHash)
 
   def decodeCap(v: js.Dynamic): AccountCap = AccountCap(string(v, "capId"), string(v, "name"), string(v, "hash"), bool(v, "strong"), string(v, "issuedBy"), decimal(v, "issuedAt"), optionalNumber(v, "revokedAt"))
-  private def encodeCap(v: AccountCap): js.Dynamic = js.Dynamic.literal(capId = v.capId, name = v.name, hash = v.hash, strong = v.strong, issuedBy = v.issuedBy, issuedAt = v.issuedAt, revokedAt = v.revokedAt.orUndefined)
+  def encodeCap(v: AccountCap): js.Dynamic = js.Dynamic.literal(capId = v.capId, name = v.name, hash = v.hash, strong = v.strong, issuedBy = v.issuedBy, issuedAt = v.issuedAt, revokedAt = v.revokedAt.orUndefined)
 
   def decodeState(values: js.Map[String, js.Any]): Option[AccountState] = values.get("profile").filterNot(missing).map { profile =>
     val decodedProfile = decodeProfile(profile.asInstanceOf[js.Dynamic])
@@ -122,6 +122,10 @@ object AccountCodec {
     result
   }
 
+  /** 失効させたキャップの照合値と、再発行なら新しいキャップの表示名と強さ */
+  def capRevocation(revoked: AccountCap, issued: Option[AccountCap]): js.Dynamic = js.Dynamic.literal(code = "", hash = revoked.hash,
+    name = issued.map(_.name).orUndefined, strong = issued.map(_.strong).orUndefined)
+
   def decodePost(v: js.Dynamic): AccountPost = AccountPost(decimal(v, "t"), AccountVia.parse(string(v, "via", "web")).getOrElse(invalid()),
     optionalText(v, "tokenId"), optionalText(v, "capId"), string(v, "result", "posted"), string(v, "bbs"), string(v, "key"), string(v, "title"), integer(v, "resNum"),
     string(v, "excerpt"), string(v, "asn"), string(v, "asName"), string(v, "country"), string(v, "region"), string(v, "uaLabel"), optionalText(v, "deviceHash"), string(v, "id"), string(v, "shikibetsu"), string(v, "network"))
@@ -152,7 +156,10 @@ object AccountCodec {
         recentPosts = token.recentPosts.map(encodeTokenPost).toJSArray, revokedAt = token.revokedAt.orUndefined, revokeReason = token.revokeReason.map(_.code).orUndefined)
     }
     js.Dynamic.literal(code = "", account = description(state.description), tokens = tokens.toJSArray, deviceCount = state.devices.size,
-      caps = state.caps.map(c => js.Dynamic.literal(capId = c.capId, name = c.name, strong = c.strong, issuedAt = c.issuedAt, revokedAt = c.revokedAt.orUndefined)).toJSArray,
+      caps = {
+        val posts = state.capPosts(logs)
+        state.caps.map(c => js.Dynamic.literal(capId = c.capId, name = c.name, strong = c.strong, issuedAt = c.issuedAt, revokedAt = c.revokedAt.orUndefined, recentPosts = posts.getOrElse(c.capId, Vector.empty).map(p => encodeTokenPost(p.tokenPost)).toJSArray)).toJSArray
+      },
       log = logs.map(encodePost).toJSArray, rejections = encodeRejections(rejections))
   }
 }

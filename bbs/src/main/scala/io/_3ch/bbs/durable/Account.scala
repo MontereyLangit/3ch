@@ -183,8 +183,26 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
   /** 発行者を確認済みのキャップを所有先に登録する */
   def bindCap(cap: js.Dynamic, issuerIsAdmin: Boolean, now: Double): js.Promise[String] = update(_.bindCap(AccountCodec.decodeCap(cap), issuerIsAdmin, now))
 
-  /** キャップを失効させる。KV と索引の更新は呼び出し元が行う */
-  def revokeCap(capId: String, now: Double): js.Promise[String] = update(_.revokeCap(capId, now))
+  /** キャップを失効させ、KV と索引から外すための照合値を返す。KV と索引の更新は呼び出し元が行う */
+  def revokeCap(capId: String, now: Double): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
+    current(error(AccountRejection.Missing)) { account =>
+      account.revokeCap(capId, now) match {
+        case Left(rejection) => Future.successful(error(rejection))
+        case Right((next, cap)) => save(next).map(_ => AccountCodec.capRevocation(cap, None))
+      }
+    }
+  }.toJSPromise
+
+  /** 有効なキャップを失効させ、同じ表示名・強さで照合値だけ新しいキャップを登録する。古い照合値と新しいキャップを返す */
+  def reissueCap(capId: String, nextId: String, nextHash: String, issuedBy: String, issuerIsAdmin: Boolean, now: Double): js.Promise[js.Dynamic] =
+    DurableLock.serialized(state) {
+      current(error(AccountRejection.Missing)) { account =>
+        account.reissueCap(capId, nextId, nextHash, issuedBy, issuerIsAdmin, now) match {
+          case Left(rejection) => Future.successful(error(rejection))
+          case Right((next, old, fresh)) => save(next).map(_ => AccountCodec.capRevocation(old, Some(fresh)))
+        }
+      }
+    }.toJSPromise
 
   /** actor の役割で役割を置き換える。admin 以外の操作と上位の役割を持つ相手への操作は拒否する */
   def setRoles(roles: js.Array[String], actorRoles: js.Array[String], now: Double): js.Promise[String] =
