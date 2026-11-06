@@ -101,4 +101,14 @@ class LoginThrottleSuite extends FunSuite {
     assertEquals(LoginThrottle(Vector(LoginFailure(ipA, Double.NaN))).check(ipA, now), Left(LoginThrottleRejection.Invalid))
     assertEquals(LoginThrottle(locks = Map(ipA -> -1d)).check(ipA, now), Left(LoginThrottleRejection.Invalid))
   }
+
+  test("失敗とロックはアカウントごとに上限まで残す") {
+    val start = 2000000000d
+    val throttle = (0 until 150).foldLeft(LoginThrottle()) { (state, i) =>
+      val key = f"$i%064x"
+      (0 until 10).foldLeft(state)((current, n) => current.recordFailure(key, start + i + n * 0.0).toOption.get.state)
+    }
+    assert(throttle.failures.size <= LoginThrottle.failureLimit)
+    assert(throttle.locks.size <= LoginThrottle.lockLimit)
+  }
 }

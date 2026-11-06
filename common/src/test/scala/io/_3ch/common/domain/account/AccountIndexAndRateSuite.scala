@@ -35,6 +35,7 @@ class AccountIndexAndRateSuite extends FunSuite {
     assertEquals(counts, AuthRateCounts(2, 3, 2))
     assert(!next.events.exists(_.t == now - 86400))
     assertEquals(next.hit("other", now), Left(AccountRejection.Invalid))
+    assert(next.hit("token", now).isRight)
     assertEquals(next.hit("verify", Double.PositiveInfinity), Left(AccountRejection.Invalid))
   }
 
@@ -42,7 +43,8 @@ class AccountIndexAndRateSuite extends FunSuite {
     assert(AbuseThresholds.verify(AuthRateCounts(10, 100, 5)))
     assert(!AbuseThresholds.verify(AuthRateCounts(11, 100, 5)))
     assert(!AbuseThresholds.verify(AuthRateCounts(1, 1, 6)))
-    assert(!AbuseThresholds.verify(AuthRateCounts(6, 6, 2), strict = true))
+    assert(AbuseThresholds.tokenIssue(AuthRateCounts(10, 10, 0)))
+    assert(!AbuseThresholds.tokenIssue(AuthRateCounts(1, 11, 0)))
     assert(!AbuseThresholds.registration(AuthRateCounts(1, 6, 0)))
     assert(!AbuseThresholds.login(AuthRateCounts(31, 31, 0)))
     assert(!AbuseThresholds.reset(AuthRateCounts(1, 4, 0)))

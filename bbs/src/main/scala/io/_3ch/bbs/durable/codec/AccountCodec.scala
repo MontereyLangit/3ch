@@ -129,10 +129,14 @@ object AccountCodec {
     val v = value.asInstanceOf[js.Dynamic]
     AccountLogPage(decodeLogPosition(field(v, "number")).next, array(field(v, "entries")).map(decodePost))
   }
+  /** 専ブラキーの照合で拒否した記録。保存キーは rejections */
+  val rejectionsKey: String = "rejections"
+  def decodeRejections(value: js.Any): Vector[AccountPost] = if (missing(value)) Vector.empty else array(value).map(decodePost)
+  def encodeRejections(entries: Vector[AccountPost]): js.Array[js.Dynamic] = entries.map(encodePost).toJSArray
   def encodeLogPage(page: AccountLogPage): js.Dynamic = js.Dynamic.literal(number = page.number.toDouble, entries = page.entries.map(encodePost).toJSArray)
 
   /** 本人向けのキー一覧から照合用ハッシュを除く */
-  def inspect(state: AccountState, logs: Vector[AccountPost], now: Double): js.Dynamic = {
+  def inspect(state: AccountState, logs: Vector[AccountPost], rejections: Vector[AccountPost], now: Double): js.Dynamic = {
     val tokens = DedicatedBrowserTokens.retained(state.tokens, now).map { token =>
       js.Dynamic.literal(tokenId = token.tokenId, issuedAt = token.issuedAt, expiresAt = token.expiresAt, uaLabel = token.uaLabel.orUndefined,
         boundAt = token.boundAt.orUndefined, replacedTokenAt = token.replacedTokenAt.orUndefined, lastUsedAt = token.lastUsedAt.orUndefined,
@@ -140,6 +144,6 @@ object AccountCodec {
     }
     js.Dynamic.literal(code = "", account = description(state.description), tokens = tokens.toJSArray, deviceCount = state.devices.size,
       caps = state.caps.map(c => js.Dynamic.literal(capId = c.capId, name = c.name, strong = c.strong, issuedAt = c.issuedAt, revokedAt = c.revokedAt.orUndefined)).toJSArray,
-      log = logs.map(encodePost).toJSArray)
+      log = logs.map(encodePost).toJSArray, rejections = encodeRejections(rejections))
   }
 }

@@ -84,7 +84,7 @@ class AccountInfrastructureSuite extends FunSuite {
     } yield ()
   }
 
-  test("キーの UA 不一致は拒否ログだけを保存し既存の UA 紐づけを維持する") {
+  test("キーの UA 不一致は上限付きの拒否記録だけに保存し既存の UA 紐づけと書き込みログを維持する") {
     val storage = new Storage(aid)
     val account = new Account(storage.state, js.Dynamic.literal())
     for {
@@ -98,8 +98,33 @@ class AccountInfrastructureSuite extends FunSuite {
       _ = assertEquals(saved.tokens.head.uaHash, Some("b" * 64))
       _ = assertEquals(saved.tokens.head.revokedAt, None)
       page = AccountCodec.decodeLogPage(storage.data("log:0"))
-      _ = assertEquals(page.entries.last.result, AccountRejection.TokenUaMismatch.code)
+      _ = assertEquals(page.entries.map(_.result), Vector("authenticated"))
+      _ = assertEquals(AccountCodec.decodeRejections(storage.data(AccountCodec.rejectionsKey)).map(_.result), Vector(AccountRejection.TokenUaMismatch.code))
+      _ <- Future.traverse((1 to 30).toVector)(i => account.useToken("token1", "c" * 64, "別の専ブラ", now + 2 + i).toFuture)
+      _ = assertEquals(AccountCodec.decodeRejections(storage.data(AccountCodec.rejectionsKey)).size, AccountRejectionLog.limit)
+      _ = assertEquals(AccountCodec.decodeLogPage(storage.data("log:0")).entries.size, 1)
     } yield ()
+  }
+
+  test("置き換え・失効で無効になったキーを token 索引から外す") {
+    val storage = new Storage(aid)
+    val removed = scala.collection.mutable.Buffer.empty[(String, String, String)]
+    val namespace = js.Dynamic.literal(
+      idFromName = ((name: String) => name): js.Function1[String, String],
+      get = ((name: String) => js.Dynamic.literal(remove = ((hash: String, owner: String) => {
+        removed += ((name, hash, owner)); js.Promise.resolve("")
+      }): js.Function2[String, String, js.Promise[String]])): js.Function1[String, js.Dynamic])
+    val account = new Account(storage.state, js.Dynamic.literal(ACCOUNT_INDEX_DO = namespace))
+    for {
+      _ <- account.create(AccountCodec.encodeProfile(profile), now).toFuture
+      _ <- account.issueToken("token1", hash, now).toFuture
+      _ = assert(removed.isEmpty)
+      _ <- account.issueToken("token2", "b" * 64, now + 1).toFuture
+      _ = assertEquals(removed.toList, List(("token", hash, aid)))
+      _ <- account.revokeToken("token2", now + 2).toFuture
+      _ = assertEquals(removed.last, ("token", "b" * 64, aid))
+      _ <- account.revokeToken("token2", now + 3).toFuture
+    } yield assertEquals(removed.size, 2)
   }
 
   test("成功投稿はアカウントとログを一括保存し失敗時には両方を維持する") {

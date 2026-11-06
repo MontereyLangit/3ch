@@ -1,6 +1,6 @@
 package io._3ch.common.domain.account
 
-/** 認証要求の計数イベント。deviceHash は端末の相異数を数えるための種類 */
+/** 認証要求の計数イベント。kind は verify・register・login・reset・token、または端末の相異数を数える deviceHash:<端末ハッシュ> */
 final case class AuthRateEvent(kind: String, t: Double)
 final case class AuthRateCounts(hour: Int, day: Int, distinctDevices24h: Int)
 
@@ -19,15 +19,16 @@ final case class AuthRateHistory(events: Vector[AuthRateEvent] = Vector.empty) {
   }
 }
 object AuthRateHistory {
-  def validKind(kind: String): Boolean = Set("verify", "register", "login", "reset").contains(kind) ||
+  def validKind(kind: String): Boolean = Set("verify", "register", "login", "reset", "token").contains(kind) ||
     (kind.startsWith("deviceHash:") && kind.drop(11).matches("[pgu](?:[0-9a-f]{18}|[0-9a-f]{16})"))
 }
 
 /** 認証の乱造検知の閾値。計数に失敗した場合は呼び出し元が認証を拒否する */
 object AbuseThresholds {
-  def verify(counts: AuthRateCounts, strict: Boolean = false): Boolean =
-    counts.hour <= (if (strict) 5 else 10) && counts.distinctDevices24h <= (if (strict) 2 else 5)
+  def verify(counts: AuthRateCounts): Boolean = counts.hour <= 10 && counts.distinctDevices24h <= 5
   def registration(counts: AuthRateCounts): Boolean = counts.day <= 5
   def login(counts: AuthRateCounts): Boolean = counts.hour <= 30
   def reset(counts: AuthRateCounts): Boolean = counts.day <= 3
+  /** 専ブラ用キーの発行は一アカウント一日十回まで */
+  def tokenIssue(counts: AuthRateCounts): Boolean = counts.day <= 10
 }

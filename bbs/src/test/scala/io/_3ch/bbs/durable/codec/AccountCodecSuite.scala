@@ -26,7 +26,7 @@ class AccountCodecSuite extends FunSuite {
 
   test("本人向けの一覧と認証結果にキー照合用ハッシュを含めない") {
     val token = state.tokens.head.copy(uaHash = Some("b" * 64), uaLabel = Some("専ブラ"), boundAt = Some(now))
-    val display = AccountCodec.inspect(state.copy(tokens = Vector(token)), Vector.empty, now)
+    val display = AccountCodec.inspect(state.copy(tokens = Vector(token)), Vector.empty, Vector.empty, now)
     val serialized = js.JSON.stringify(display)
     assert(!serialized.contains("a" * 64))
     assert(!serialized.contains("b" * 64))
@@ -135,7 +135,7 @@ class AccountCodecSuite extends FunSuite {
 
   test("本人向け一覧と投稿認証の DTO に資格情報と準備状態を含めない") {
     val ready = prepared.copy(credential = Some(credential), readiness = AccountReadiness.Ready)
-    val payloads = Seq(AccountCodec.inspect(ready, Vector.empty, now), AccountCodec.description(ready.description),
+    val payloads = Seq(AccountCodec.inspect(ready, Vector.empty, Vector.empty, now), AccountCodec.description(ready.description),
       AccountCodec.describe(ready.describe(profile.aid, 0, now)))
     payloads.foreach { payload =>
       val serialized = js.JSON.stringify(payload)

@@ -34,7 +34,7 @@ final class PostingAccountService(accounts: AccountStore, credentials: PostingCr
       val now = context.unixtime.toDouble
       val identity = context.identity
       val post = AccountPost(now, poster.via, poster.tokenId, poster.capId, bbs = context.form.bbs, key = context.form.key, title = context.title,
-        resNum = context.number, excerpt = context.form.message.replace("<br>", " ").take(40), asn = identity.asn, country = identity.country, region = identity.region,
+        resNum = context.number, excerpt = AccountPost.excerptOf(context.form.message), asn = identity.asn, country = identity.country, region = identity.region,
         uaLabel = if (poster.via == AccountVia.Token) DedicatedBrowserLabel.of(request.userAgent) else "",
         deviceHash = Option(poster.device).filter(_.nonEmpty), shikibetsu = context.shikibetsu,
         network = "AS" + identity.asn + " · " + (if (identity.country == "JP") identity.region else identity.country))

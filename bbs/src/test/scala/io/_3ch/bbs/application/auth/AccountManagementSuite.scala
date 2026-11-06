@@ -208,7 +208,7 @@ class AccountManagementSuite extends FunSuite {
     fixture.states.update(aid, initial)
     fixture.issuer.issue(initial.description, now).map { issued =>
       assertEquals(issued, IssuedToken("newtoken", "a" * 20))
-      assertEquals(fixture.trace.toVector, Vector("reserve:token", "issue", "confirm:token"))
+      assertEquals(fixture.trace.toVector, Vector("rate:token", "reserve:token", "issue", "confirm:token"))
       assert(fixture.entries.values.head.confirmed)
       assertEquals(fixture.states(aid).tokens.head.hash, fixture.entries.keys.head._2)
       assert(!fixture.states(aid).tokens.exists(_.hash == issued.token))
@@ -248,10 +248,21 @@ class AccountManagementSuite extends FunSuite {
       _ = assertEquals(error, "lost reservation")
       _ = assert(fixture.entries.isEmpty)
       _ = assertEquals(fixture.states(aid), initial)
-      _ = assertEquals(fixture.trace.toVector, Vector("reserve:token", "remove:token"))
+      _ = assertEquals(fixture.trace.toVector, Vector("rate:token", "reserve:token", "remove:token"))
       _ = fixture.cleanupFailure = true
       failedCleanup <- fixture.error(fixture.issuer.issue(initial.description, now))
       _ = assertEquals(failedCleanup, "lost reservation")
     } yield ()
+  }
+
+  test("キーの発行は一アカウント一日十回までにする") {
+    val fixture = new Fixture
+    fixture.states.update(aid, initial)
+    fixture.history = AuthRateHistory((1 to 10).map(i => AuthRateEvent("token", now - i)).toVector)
+    fixture.error(fixture.issuer.issue(initial.description, now)).map { error =>
+      assertEquals(error, "auth:rate")
+      assertEquals(fixture.trace.toVector, Vector("rate:token"))
+      assert(fixture.states(aid).tokens.isEmpty)
+    }
   }
 }

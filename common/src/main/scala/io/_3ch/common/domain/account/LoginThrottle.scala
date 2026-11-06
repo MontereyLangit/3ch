@@ -22,7 +22,8 @@ final case class LoginThrottle(failures: Vector[LoginFailure] = Vector.empty, lo
     failures.forall(failure => failure != null && failure.keyIpHash != null && DedicatedBrowserTokens.validHash(failure.keyIpHash) && AccountProfile.validTime(failure.t)) &&
     locks.forall { case (hash, until) => hash != null && DedicatedBrowserTokens.validHash(hash) && AccountProfile.validTime(until) }
 
-  private def retained(now: Double): LoginThrottle = copy(failures = failures.filter(_.t > now - LoginThrottle.window), locks = locks.filter(_._2 > now))
+  private def retained(now: Double): LoginThrottle =
+    copy(failures = failures.filter(_.t > now - LoginThrottle.window).takeRight(LoginThrottle.failureLimit), locks = locks.filter(_._2 > now))
 
   private def decision(keyIpHash: String): LoginThrottleDecision =
     LoginThrottleDecision(locks.get(keyIpHash), math.min(8, math.max(0, failures.size - 4)))
@@ -40,8 +41,9 @@ final case class LoginThrottle(failures: Vector[LoginFailure] = Vector.empty, lo
     current(keyIpHash, now).map { state =>
       if (state.locks.contains(keyIpHash)) LoginThrottleUpdate(state, state.decision(keyIpHash))
       else {
-        val failures = state.failures :+ LoginFailure(keyIpHash, now)
-        val locks = if (failures.count(_.keyIpHash == keyIpHash) >= 10) state.locks.updated(keyIpHash, now + LoginThrottle.window) else state.locks
+        val failures = (state.failures :+ LoginFailure(keyIpHash, now)).takeRight(LoginThrottle.failureLimit)
+        val counted = if (failures.count(_.keyIpHash == keyIpHash) >= 10) state.locks.updated(keyIpHash, now + LoginThrottle.window) else state.locks
+        val locks = counted.toVector.sortBy(lock => -lock._2).take(LoginThrottle.lockLimit).toMap
         val next = LoginThrottle(failures, locks)
         LoginThrottleUpdate(next, next.decision(keyIpHash))
       }
@@ -60,4 +62,8 @@ final case class LoginThrottle(failures: Vector[LoginFailure] = Vector.empty, lo
 
 object LoginThrottle {
   val window: Double = 3600
+  /** 一アカウントに残す失敗の最大数。超えたら古いものから捨てる */
+  val failureLimit: Int = 100
+  /** 一アカウントに残す接続元ロックの最大数。期限の遠いものから残す */
+  val lockLimit: Int = 100
 }

@@ -1,7 +1,7 @@
 package io._3ch.bbs.application.auth
 
 import io._3ch.bbs.application.auth.ports.{AccountManagementStore, AuthenticationKeys}
-import io._3ch.common.domain.account.{AccountDescription, AccountProfile, DedicatedBrowserTokens}
+import io._3ch.common.domain.account.{AbuseThresholds, AccountDescription, AccountProfile, DedicatedBrowserTokens}
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.util.control.NonFatal
@@ -11,7 +11,15 @@ final case class IssuedToken(tokenId: String, token: String)
 
 /** 専ブラキーを予約・発行・確定し、途中で失敗したキーを失効させる */
 final class TokenIssuing(accounts: AccountManagementStore, keys: AuthenticationKeys) {
-  def issue(account: AccountDescription, now: Double): Future[IssuedToken] = Future.unit.flatMap { _ =>
+  /** 一アカウント一日の発行回数を数えてから発行する */
+  def issue(account: AccountDescription, now: Double): Future[IssuedToken] = for {
+    key <- keys.index("token-issue", account.aid).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
+    counts <- accounts.rate(key, "token", now)
+    _ = if (!AbuseThresholds.tokenIssue(counts)) throw AuthServiceException(AuthServiceFailure.RateLimited)
+    issued <- issueCounted(account, now)
+  } yield issued
+
+  private def issueCounted(account: AccountDescription, now: Double): Future[IssuedToken] = Future.unit.flatMap { _ =>
     val token = keys.token()
     val id = keys.tokenId()
     if (!AccountProfile.validTime(now) || !token.matches("[a-z2-7]{20}") || !DedicatedBrowserTokens.validId(id)) {

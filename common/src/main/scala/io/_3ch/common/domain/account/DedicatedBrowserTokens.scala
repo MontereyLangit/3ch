@@ -47,15 +47,27 @@ object DedicatedBrowserTokens {
   val unusedLifetime: Double = 86400
   val retainedLifetime: Double = 30d * 86400
   val boundLimit: Int = 5
+  /** 無効にしたキーの記録を残す最大数。新しく無効にしたものから残す */
+  val revokedLimit: Int = 20
 
   def validId(id: String): Boolean = id.matches("[a-z0-9]{1,64}")
   def validHash(hash: String): Boolean = hash.matches("[0-9a-f]{64}")
 
-  /** 未使用で二十四時間を過ぎたキーを失効させ、無効化から三十日経った記録を除く */
-  def retained(tokens: Vector[DedicatedBrowserToken], now: Double): Vector[DedicatedBrowserToken] = tokens.map { token =>
-    if (token.revokedAt.isEmpty && token.uaHash.isEmpty && token.expiresAt <= now) token.revoke(token.expiresAt, TokenRevokeReason.Expired)
-    else token
-  }.filter(_.revokedAt.forall(_ > now - retainedLifetime))
+  /** 未使用で二十四時間を過ぎたキーを失効させ、無効化から三十日経った記録と上限を超えた古い記録を除く */
+  def retained(tokens: Vector[DedicatedBrowserToken], now: Double): Vector[DedicatedBrowserToken] = {
+    val current = tokens.map { token =>
+      if (token.revokedAt.isEmpty && token.uaHash.isEmpty && token.expiresAt <= now) token.revoke(token.expiresAt, TokenRevokeReason.Expired)
+      else token
+    }.filter(_.revokedAt.forall(_ > now - retainedLifetime))
+    val kept = current.filter(_.revokedAt.isDefined).sortBy(token => -token.revokedAt.get).take(revokedLimit).map(_.tokenId).toSet
+    current.filter(token => token.revokedAt.isEmpty || kept.contains(token.tokenId))
+  }
+
+  /** 前の状態で有効だったのに、次の状態で無効または削除になったキーの照合ハッシュ。索引から外すのに使う */
+  def released(before: Vector[DedicatedBrowserToken], after: Vector[DedicatedBrowserToken]): Vector[String] = {
+    val remaining = after.filter(_.revokedAt.isEmpty).map(_.hash).toSet
+    before.filter(_.revokedAt.isEmpty).map(_.hash).filterNot(remaining.contains).distinct
+  }
 
   /** 重複を拒否し、新しい未使用キーで以前の未使用キーを置き換える */
   def issue(tokens: Vector[DedicatedBrowserToken], tokenId: String, hash: String, now: Double): Either[AccountRejection, Vector[DedicatedBrowserToken]] = {
@@ -111,11 +123,11 @@ object DedicatedBrowserTokens {
     }
   }
 
-  /** 有効な紐付け済みキーの投稿を五件まで残し、改行タグを除いた抜粋を四十文字にする */
+  /** 有効な紐付け済みキーの投稿を五件まで残し、抜粋を四十文字以内にする */
   def recordPost(tokens: Vector[DedicatedBrowserToken], tokenId: String, post: TokenPost, now: Double): Vector[DedicatedBrowserToken] =
     retained(tokens, now).map { token =>
       if (token.tokenId == tokenId && token.active(now) && token.uaHash.isDefined)
-        token.copy(recentPosts = (post.copy(excerpt = post.excerpt.replace("<br>", " ").take(40)) +: token.recentPosts).take(5), lastUsedAt = Some(now))
+        token.copy(recentPosts = (post.copy(excerpt = AccountPost.excerptOf(post.excerpt)) +: token.recentPosts).take(5), lastUsedAt = Some(now))
       else token
     }
 }

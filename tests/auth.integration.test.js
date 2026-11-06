@@ -233,6 +233,7 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
     assert.match(entry.tokenId, /^[a-z2-7]{16}$/);
     assert.equal((await post('/auth/token/revoke/', { id: entry.tokenId }, { cookie })).status, 200);
     assert.equal((await account(fields[1], 'useToken', entry.tokenId, 'a'.repeat(64), 'Local', now)).code, 'auth:token:revoked');
+    assert.equal((await index('token', 'lookup', tokenHash)).code, 'auth:index:missing');
 
     const logout = await post('/auth/logout/', {}, { cookie });
     assert.equal(logout.status, 200);

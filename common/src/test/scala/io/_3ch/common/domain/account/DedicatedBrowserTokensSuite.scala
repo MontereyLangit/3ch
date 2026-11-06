@@ -57,4 +57,37 @@ class DedicatedBrowserTokensSuite extends FunSuite {
     assertEquals(DedicatedBrowserTokens.recordPost(revoked, "token1", posts.head.recentPosts.head, now + 8), revoked)
     assertEquals(DedicatedBrowserTokens.revoke(bound, "token1", Double.NaN), Left(AccountRejection.Invalid))
   }
+
+  test("無効にしたキーの記録は新しいものから上限まで残し、有効なキーは消さない") {
+    val revoked = (1 to 30).map(i => DedicatedBrowserToken(f"old$i%02d", f"$i%064x", now, now + 86400, revokedAt = Some(now + i), revokeReason = Some(TokenRevokeReason.Superseded))).toVector
+    val kept = DedicatedBrowserTokens.retained(bound ++ revoked, now + 100)
+    assertEquals(kept.count(_.revokedAt.isDefined), DedicatedBrowserTokens.revokedLimit)
+    assert(kept.exists(_.tokenId == "old30"))
+    assert(!kept.exists(_.tokenId == "old10"))
+    assert(kept.exists(_.tokenId == "token1"))
+  }
+
+  test("有効だったキーが無効・削除になったときだけ照合ハッシュを索引から外す対象にする") {
+    val renewed = DedicatedBrowserTokens.issue(issued, "token2", "c" * 64, now + 1).toOption.get
+    assertEquals(DedicatedBrowserTokens.released(issued, renewed), Vector(hash))
+    assertEquals(DedicatedBrowserTokens.released(renewed, renewed), Vector.empty)
+    val revoked = DedicatedBrowserTokens.revoke(bound, "token1", now + 2).toOption.get
+    assertEquals(DedicatedBrowserTokens.released(bound, revoked), Vector(hash))
+    assertEquals(DedicatedBrowserTokens.released(issued, DedicatedBrowserTokens.retained(issued, now + 86400)), Vector(hash))
+  }
+
+  test("抜粋は改行タグを空白にし、文字参照の途中で切らない") {
+    assertEquals(AccountPost.excerptOf("一行目<br>二行目"), "一行目 二行目")
+    val long = "あ" * 38 + "&gt;" + "い"
+    assertEquals(AccountPost.excerptOf(long), "あ" * 38)
+    assertEquals(AccountPost.excerptOf("あ" * 36 + "&gt;" + "い"), "あ" * 36 + "&gt;")
+    assertEquals(AccountPost.excerptOf("あ" * 39 + "& い"), "あ" * 39 + "&")
+    assertEquals(AccountPost.excerptOf("あ" * 50).length, 40)
+  }
+
+  test("拒否の記録は新しい順に上限まで残す") {
+    val entries = (1 to 25).foldLeft(Vector.empty[AccountPost])((log, i) => AccountRejectionLog.append(log, AccountPost(now + i, result = "auth:token:ua-mismatch")))
+    assertEquals(entries.size, AccountRejectionLog.limit)
+    assertEquals(entries.head.t, now + 25)
+  }
 }

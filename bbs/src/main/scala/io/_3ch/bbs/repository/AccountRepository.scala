@@ -127,7 +127,7 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
     val code = text(value, "code")
     checked(code)
     val description = decode(record(value.selectDynamic("account")), aid).fold(reason => throw AccountStoreException(reason), identity)
-    val logs = array(value, "log").map(record)
+    val rejections = array(value, "rejections").map(record)
     val tokens = array(value, "tokens").map { raw =>
       val token = record(raw)
       val id = identifier(text(token, "tokenId"))
@@ -141,7 +141,7 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
           integer(post.selectDynamic("resNum").asInstanceOf[js.Any]), excerpt, text(post, "network"))
       }
       if (posts.size > 5) invalid()
-      val warnings = logs.filter(log => optionalText(log, "tokenId").contains(id) && text(log, "result") == AccountRejection.TokenUaMismatch.code)
+      val warnings = rejections.filter(log => optionalText(log, "tokenId").contains(id) && text(log, "result") == AccountRejection.TokenUaMismatch.code)
         .map(log => AccountTokenWarningView(time(log, "t"), text(log, "uaLabel"))).sortBy(w => -w.t)
       val view = AccountTokenView(id, optionalText(token, "uaLabel").getOrElse(""), time(token, "issuedAt"), time(token, "expiresAt"),
         optionalTime(token, "boundAt"), optionalTime(token, "lastUsedAt"), optionalTime(token, "revokedAt"), reason,
@@ -156,8 +156,8 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
     if (activeCount > DedicatedBrowserTokens.boundLimit) invalid()
     AccountPanel(description, tokens, activeCount, integer(value.selectDynamic("deviceCount").asInstanceOf[js.Any], 10))
   }
-  def rate(keyIp: String, kind: String, now: Double): Future[AuthRateCounts] =
-    env.AUTH_RATE_DO.get(env.AUTH_RATE_DO.idFromName(keyIp)).hit(kind, now).toFuture.map { v =>
+  def rate(key: String, kind: String, now: Double): Future[AuthRateCounts] =
+    env.AUTH_RATE_DO.get(env.AUTH_RATE_DO.idFromName(key)).hit(kind, now).toFuture.map { v =>
       checked(text(v, "code"))
       val counts = AuthRateCounts(integer(v.selectDynamic("hour").asInstanceOf[js.Any]), integer(v.selectDynamic("day").asInstanceOf[js.Any]),
         integer(v.selectDynamic("distinctDevices24h").asInstanceOf[js.Any]))

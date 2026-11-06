@@ -42,8 +42,29 @@ final case class AccountPost(
   shikibetsu: String = "",
   network: String = ""
 ) {
-  def shortened: AccountPost = copy(excerpt = excerpt.take(40))
-  def tokenPost: TokenPost = TokenPost(t, bbs, key, title, resNum, excerpt.replace("<br>", " ").take(40), network)
+  def shortened: AccountPost = copy(excerpt = AccountPost.excerptOf(excerpt))
+  def tokenPost: TokenPost = TokenPost(t, bbs, key, title, resNum, AccountPost.excerptOf(excerpt), network)
+}
+object AccountPost {
+  val excerptLength: Int = 40
+
+  /** 本文の改行タグを空白にして四十文字以内に切る。HTML の文字参照の途中では切らない */
+  def excerptOf(message: String): String = {
+    val text = message.replace("<br>", " ")
+    if (text.length <= excerptLength) text
+    else {
+      val cut = text.take(excerptLength)
+      val amp = cut.lastIndexOf('&')
+      if (amp >= 0 && cut.indexOf(';', amp) < 0 && text.indexOf(';', amp) > 0 && text.indexOf(';', amp) - amp <= 10) cut.take(amp) else cut
+    }
+  }
+}
+
+/** 専ブラキーの照合で拒否した記録。ログ本体とは別に新しい順で上限まで残し、漏れたキーの試行で書き込み記録を押し出さない */
+object AccountRejectionLog {
+  val limit: Int = 20
+
+  def append(entries: Vector[AccountPost], entry: AccountPost): Vector[AccountPost] = (entry.shortened +: entries).take(limit)
 }
 
 /** 書き込み時に得た端末の情報。ハッシュの生成はアプリケーション層で行う */
