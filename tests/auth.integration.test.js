@@ -245,4 +245,61 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
     assert.equal(calls.filter(call => call.token === 'accepted').length, 3);
     assert.ok(calls.every(call => call.method === 'POST'));
   });
+
+  await t.test('ID・パスワードで登録し、ログアウト・ログインして書き込み、十回の失敗で接続元をロックする', async () => {
+    const headers = { 'user-agent': 'Mozilla/5.0 IntegrationBrowser', 'CF-Connecting-IP': '192.0.2.50' };
+    const registration = { id: 'Taro_2026', password: 'correct horse', password2: 'correct horse', agreement: 'v1', 'cf-turnstile-response': 'accepted' };
+    const registered = await post('/auth/register/', registration, headers);
+    const body = await registered.json();
+    assert.equal(registered.status, 200, JSON.stringify(body));
+    assert.deepEqual(body, { uid: 'taro_2026', lv: 1, returnPath: '/' });
+    const cookie = registered.headers.get('set-cookie').split(';')[0];
+    const aid = cookie.split('.')[1];
+    assert.equal((await account(aid, 'inspect')).account.kind, 'password');
+    const hash = (kind, value) => createHmac('sha256', secret).update(`${kind}:${value}`).digest('hex');
+    assert.equal((await index('login', 'lookup', hash('login', 'taro_2026'))).aid, aid);
+    assert.equal((await index('uid', 'lookup', hash('uid', 'taro_2026'))).aid, aid);
+    const duplicate = await post('/auth/register/', registration, { ...headers, 'CF-Connecting-IP': '192.0.2.51' });
+    assert.equal(duplicate.status, 409);
+
+    assert.equal((await post('/auth/logout/', {}, { ...headers, cookie })).status, 200);
+    assert.equal(await session(cookie), null);
+    const attempt = (id, password, ip = '192.0.2.50') =>
+      post('/auth/login/', { id, password, 'cf-turnstile-response': 'accepted' }, { ...headers, 'CF-Connecting-IP': ip });
+    const unknown = await attempt('nobody_here', 'correct horse');
+    const wrong = await attempt('taro_2026', 'wrong password');
+    assert.equal(unknown.status, 401);
+    assert.equal(wrong.status, 401);
+    assert.deepEqual(await unknown.json(), await wrong.json());
+    assert.equal(wrong.headers.get('set-cookie'), null);
+    const signedIn = await attempt('TARO_2026', 'correct horse');
+    assert.equal(signedIn.status, 200);
+    const loginCookie = signedIn.headers.get('set-cookie').split(';')[0];
+    assert.equal(loginCookie.split('.')[1], aid);
+    assert.equal(loginCookie.split('.')[3], '1');
+    assert.deepEqual(await session(loginCookie), { uid: 'taro_2026', lv: 1 });
+
+    const posted = await fetch(origin + '/test/bbs.cgi', {
+      method: 'POST',
+      headers: { ...headers, cookie: loginCookie, referer: 'http://127.0.0.1:8787/' },
+      body: new URLSearchParams({ bbs: 'authtest', key: '', MESSAGE: 'password account post', FROM: '', mail: '', subject: 'auth title', time: '1', submit: '書き込む' }),
+    });
+    const html = await posted.text();
+    assert.match(html, /書きこみました/, html);
+    assert.match(posted.headers.get('x-threadkey'), /^\d{10}$/);
+    const log = (await account(aid, 'inspect')).log;
+    assert.equal(log.length, 1);
+    assert.equal(log[0].bbs, 'authtest');
+
+    const lockedIp = createHmac('sha256', secret).update('key-ip:192.0.2.60').digest('hex');
+    for (let i = 0; i < 10; i++) {
+      assert.equal((await account(aid, 'verifyPassword', 'wrong password', lockedIp, now)).code, 'auth:login:failed');
+    }
+    const started = Date.now();
+    const locked = await attempt('taro_2026', 'correct horse', '192.0.2.60');
+    assert.equal(locked.status, 401);
+    assert.deepEqual(await locked.json(), { error: 'ユーザーIDまたはパスワードが違います。', code: 'auth:login:failed' });
+    assert.ok(Date.now() - started >= 5000, '失敗の多いアカウントは応答を遅らせる');
+    assert.equal((await attempt('taro_2026', 'correct horse', '192.0.2.61')).status, 200);
+  });
 });

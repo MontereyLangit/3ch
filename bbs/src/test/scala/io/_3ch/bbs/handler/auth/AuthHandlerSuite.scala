@@ -2,6 +2,7 @@ package io._3ch.bbs.handler.auth
 
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.handler.HandlerTestKit
+import scala.concurrent.Future
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -55,5 +56,148 @@ class AuthHandlerSuite extends munit.FunSuite {
     val request = HandlerTestKit.request(origin + "/auth/logout", headers = Seq("Content-Type" -> "application/x-www-form-urlencoded", "Origin" -> "https://evil.test"), method = "POST", body = "")
     val env = AuthTestEnv.env()
     AuthHandler.handle(request, env).toFuture.map(response => assertEquals(response.status, 403))
+  }
+
+  private val register = Seq("id" -> "Taro_2026", "password" -> "correct horse", "password2" -> "correct horse", "agreement" -> "v1", "cf-turnstile-response" -> "accepted")
+  private def login(id: String, password: String) = Seq("id" -> id, "password" -> password, "cf-turnstile-response" -> "accepted")
+
+  test("ID・パスワードで登録し、ログアウトしてから同じ ID とパスワードでログインし直せる") {
+    val t = new AuthSignInTestKit()
+    t.run {
+      for {
+        registered <- t.send(t.post("/auth/register", register :+ ("return" -> "/sample/")))
+        created <- t.body(registered)
+        _ = assertEquals(registered.status, 200, js.JSON.stringify(created))
+        _ = assertEquals(created.uid.asInstanceOf[String], "taro_2026")
+        _ = assertEquals(created.lv.asInstanceOf[Int], 1)
+        _ = assertEquals(created.returnPath.asInstanceOf[String], "/sample/")
+        cookie = t.cookie(registered, "__Host-ch3s_sid").get
+        session <- SessionCookies.verify(cookie, AuthTestEnv.secret, js.Date.now() / 1000)
+        _ = assertEquals(session.map(_.uid), Some("taro_2026"))
+        loginHash <- t.index("login", "taro_2026")
+        uidHash <- t.index("uid", "taro_2026")
+        byLogin <- t.kit.index("login").lookup(loginHash).toFuture
+        byUid <- t.kit.index("uid").lookup(uidHash).toFuture
+        _ = assertEquals(byLogin.aid.asInstanceOf[String], session.get.aid)
+        _ = assertEquals(byUid.aid.asInstanceOf[String], session.get.aid)
+        out <- t.send(t.post("/auth/logout", Nil, cookie = cookie))
+        _ = assertEquals(out.status, 200)
+        refused <- t.kit.account(session.get.aid).describeForPosting(session.get.aid, 0, math.floor(js.Date.now() / 1000)).toFuture
+        _ = assertEquals(refused.code.asInstanceOf[String], "auth:session:invalid")
+        again <- t.send(t.post("/auth/login", login("TARO_2026", "correct horse")))
+        signedIn <- t.body(again)
+        _ = assertEquals(again.status, 200, js.JSON.stringify(signedIn))
+        _ = assertEquals(signedIn.uid.asInstanceOf[String], "taro_2026")
+        next <- SessionCookies.verify(t.cookie(again, "__Host-ch3s_sid").get, AuthTestEnv.secret, js.Date.now() / 1000)
+      } yield {
+        assertEquals(next.map(c => (c.aid, c.generation)), Some((session.get.aid, 1L)))
+        assertEquals(again.headers.get("Cache-Control"), "private, no-store")
+        assert(again.headers.get("Content-Security-Policy").contains("frame-ancestors 'self'"))
+      }
+    }
+  }
+
+  test("存在しない ID・誤ったパスワード・ロック中は同じ状態と文言にし、どれも Account DO で照合する") {
+    val t = new AuthSignInTestKit()
+    t.run {
+      for {
+        _ <- t.send(t.post("/auth/register", register))
+        unknown <- t.send(t.post("/auth/login", login("nobody_here", "correct horse")))
+        unknownBody <- t.body(unknown)
+        _ = assert(t.kit.accountNames.contains("dummy"))
+        wrong <- t.send(t.post("/auth/login", login("taro_2026", "wrong password")))
+        wrongBody <- t.body(wrong)
+        key <- t.keyIp("192.0.2.10")
+        aid = t.kit.accountNames.find(_ != "dummy").get
+        _ <- Future.traverse((1 to 9).toVector)(_ => t.kit.account(aid).verifyPassword("wrong password", key, math.floor(js.Date.now() / 1000)).toFuture)
+        locked <- t.send(t.post("/auth/login", login("taro_2026", "correct horse")))
+        lockedBody <- t.body(locked)
+        elsewhere <- t.send(t.post("/auth/login", login("taro_2026", "correct horse"), ip = "198.51.100.7"))
+      } yield {
+        Seq(unknown, wrong, locked).foreach(response => assertEquals(response.status, 401))
+        Seq(unknownBody, wrongBody, lockedBody).foreach { value =>
+          assertEquals(js.JSON.stringify(value), js.JSON.stringify(unknownBody))
+          assertEquals(value.error.asInstanceOf[String], "ユーザーIDまたはパスワードが違います。")
+        }
+        assertEquals(locked.headers.get("Set-Cookie"), null)
+        assertEquals(t.delays.toVector, Vector(6d))
+        assertEquals(elsewhere.status, 200)
+      }
+    }
+  }
+
+  test("ログインは接続元ごとに一時間三十回、登録は一日五件までで、計数できなければ拒否する") {
+    val t = new AuthSignInTestKit()
+    t.run {
+      val now = math.floor(js.Date.now() / 1000)
+      for {
+        key <- t.keyIp("192.0.2.20")
+        _ <- Future.traverse((1 to 30).toVector)(_ => t.kit.worker.AUTH_RATE_DO.get(t.kit.worker.AUTH_RATE_DO.idFromName(key)).hit("login", now).toFuture)
+        limited <- t.send(t.post("/auth/login", login("taro_2026", "correct horse"), ip = "192.0.2.20"))
+        _ = assertEquals(limited.status, 429)
+        _ = assert(!t.kit.accountNames.contains("dummy"))
+        _ <- Future.traverse((1 to 5).toVector)(_ => t.kit.worker.AUTH_RATE_DO.get(t.kit.worker.AUTH_RATE_DO.idFromName(key)).hit("register", now).toFuture)
+        registerLimited <- t.send(t.post("/auth/register", register, ip = "192.0.2.20"))
+        _ = assertEquals(registerLimited.status, 429)
+        _ = t.env.asInstanceOf[js.Dynamic].AUTH_RATE_DO = js.undefined
+        unavailable <- t.send(t.post("/auth/login", login("taro_2026", "correct horse"), ip = "192.0.2.21"))
+        _ = assertEquals(unavailable.status, 503)
+        noRegister <- t.send(t.post("/auth/register", register, ip = "192.0.2.21"))
+      } yield {
+        assertEquals(noRegister.status, 503)
+        assertEquals(t.kit.accountNames, Set.empty[String])
+      }
+    }
+  }
+
+  test("Origin が無い・Turnstile に通らない登録とログインは DO に触れる前に拒否する") {
+    val t = new AuthSignInTestKit()
+    t.run {
+      for {
+        noOrigin <- t.send(t.post("/auth/register", register, requestOrigin = ""))
+        _ = assertEquals(noOrigin.status, 403)
+        foreign <- t.send(t.post("/auth/login", login("taro_2026", "correct horse"), requestOrigin = "https://evil.example"))
+        _ = assertEquals(foreign.status, 403)
+        rejected <- t.send(t.post("/auth/register", register.filterNot(_._1 == "cf-turnstile-response") :+ ("cf-turnstile-response" -> "rejected")))
+        rejectedBody <- t.body(rejected)
+        _ = assertEquals((rejected.status, rejectedBody.code.asInstanceOf[String]), (400, "auth:turnstile"))
+        loginRejected <- t.send(t.post("/auth/login", Seq("id" -> "taro_2026", "password" -> "correct horse")))
+        _ = assertEquals(loginRejected.status, 400)
+        noAgreement <- t.send(t.post("/auth/register", register.filterNot(_._1 == "agreement")))
+      } yield {
+        assertEquals(noAgreement.status, 400)
+        assertEquals(t.kit.accountNames, Set.empty[String])
+        assertEquals(t.external.count(_.contains("siteverify")), 1)
+      }
+    }
+  }
+
+  test("使えない ID は予約語・板名・使用済みを同じ文言にし、確認の不一致と ID を含むパスワードは確認の前に拒否する") {
+    val t = new AuthSignInTestKit()
+    t.kit.putR2("sample/SETTING.TXT", "BBS_TITLE=sample")
+    t.kit.putR2("reserved-ids.txt", "# 予約\nkanri\n")
+    def attempt(id: String, password: String = "correct horse", confirm: String = "correct horse") =
+      t.send(t.post("/auth/register", Seq("id" -> id, "password" -> password, "password2" -> confirm, "agreement" -> "v1", "cf-turnstile-response" -> "accepted"), ip = "192.0.2.30"))
+    t.run {
+      for {
+        first <- attempt("taro_2026")
+        _ = assertEquals(first.status, 200)
+        taken <- Future.sequence(Vector("taro_2026", "admin", "sample", "kanri").map(id => attempt(id).flatMap(r => t.body(r).map(r.status -> _.error.asInstanceOf[String]))))
+        _ = assertEquals(taken.distinct, Vector(409 -> "このユーザーIDは使えません。別のIDを入力してください。"))
+        before = t.external.size
+        mismatch <- attempt("jiro_2026", confirm = "correct horsf")
+        mismatchBody <- t.body(mismatch)
+        containing <- attempt("jiro_2026", password = "my-JIRO_2026", confirm = "my-JIRO_2026")
+        containingBody <- t.body(containing)
+        short <- attempt("jiro_2026", password = "short", confirm = "short")
+        badId <- attempt("ji")
+      } yield {
+        assertEquals((mismatch.status, mismatchBody.code.asInstanceOf[String]), (400, "auth:password:confirmation"))
+        assertEquals((containing.status, containingBody.error.asInstanceOf[String]), (400, "パスワードにユーザーIDを含めないでください。"))
+        assertEquals(short.status, 400)
+        assertEquals(badId.status, 400)
+        assertEquals(t.external.size, before)
+      }
+    }
   }
 }

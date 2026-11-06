@@ -1,13 +1,13 @@
 package io._3ch.bbs.handler.auth
 
-import io._3ch.bbs.application.auth.{AuthServiceException, AuthServiceFailure, AuthSettings, ClientAuthentication, DeviceEvidence, TokenIssuing}
-import io._3ch.bbs.application.auth.ports.{AuthenticationKeys, TokenProof}
+import io._3ch.bbs.application.auth.{AuthServiceException, AuthServiceFailure, AuthSettings, ClientAuthentication, DeviceEvidence, LoginOutcome, PasswordAuthentication, TokenIssuing}
+import io._3ch.bbs.application.auth.ports.{AuthenticationKeys, PasswordHashing, TokenProof}
 import io._3ch.bbs.components.{AccountComponent, AccountProps, AccountTokenProps, AccountPostProps, AccountTokenWarningProps, AuthComponent, AuthProps}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.hono.{HonoContextFacade, RenderProps}
 import io._3ch.bbs.external.web.{Request, Response, TextDecoder, URL}
 import io._3ch.bbs.handler.{PublicText, Responses}
-import io._3ch.bbs.hash.AuthHmac
+import io._3ch.bbs.hash.{AuthHmac, PasswordHasher}
 import io._3ch.bbs.repository.AccountRepository
 import io._3ch.common.domain.account.*
 import io._3ch.common.domain.device.{ClientHints, DeviceHashRef, DeviceRejection, IosDeviceProfile}
@@ -32,6 +32,12 @@ enum AuthApiError {
   case Device(reason: DeviceRejection)
   case Service(failure: AuthServiceFailure)
   case Unavailable
+  /** 不一致・ロック中・未登録を区別しないログインの失敗 */
+  case LoginFailed
+  case Refused(reason: AccountRejection)
+  case LoginId(reason: LoginIdRejection)
+  case Password(reason: PasswordRejection)
+  case Confirmation
 
   def code: String = this match {
     case NotFound => "auth:not-found"
@@ -45,6 +51,11 @@ enum AuthApiError {
     case Device(reason) => reason.code
     case Service(failure) => failure.code
     case Unavailable => "auth:unavailable"
+    case LoginFailed => AccountRejection.LoginFailed.code
+    case Refused(reason) => reason.code
+    case LoginId(_) => "auth:id:invalid"
+    case Password(_) => "auth:password:invalid"
+    case Confirmation => "auth:password:confirmation"
   }
 
   def status: Int = this match {
@@ -53,8 +64,12 @@ enum AuthApiError {
     case Origin => 403
     case LoginRequired | Session(_) => 401
     case Service(AuthServiceFailure.RateLimited) => 429
+    case Service(AuthServiceFailure.Taken) => 409
+    case Service(AuthServiceFailure.Invalid) => 400
     case Service(_) | Unavailable => 503
-    case Invalid | AgreementRequired | Turnstile | Device(_) => 400
+    case LoginFailed => 401
+    case Refused(_) => 403
+    case Invalid | AgreementRequired | Turnstile | Device(_) | LoginId(_) | Password(_) | Confirmation => 400
   }
 
   /** セッションが無い・切れた・ログアウト済みで、ログインし直せば解消するか */
@@ -66,24 +81,24 @@ enum AuthApiError {
 
 /** クライアント認証と本人のセッション・専ブラキーを扱う */
 object AuthHandler {
-  private final case class Refused(error: AuthApiError) extends RuntimeException(error.code)
+  private[auth] final case class Refused(error: AuthApiError) extends RuntimeException(error.code)
   private val AccountPath = "/auth/account/"
-  private def now: Double = math.floor(js.Date.now() / 1000)
-  private def header(request: Request, name: String): String = Option(request.headers.get(name)).getOrElse("")
-  private def json(value: js.Any, status: Int = 200, cookie: Option[String] = None): Response = {
+  private[auth] def now: Double = math.floor(js.Date.now() / 1000)
+  private[auth] def header(request: Request, name: String): String = Option(request.headers.get(name)).getOrElse("")
+  private[auth] def json(value: js.Any, status: Int = 200, cookie: Option[String] = None): Response = {
     val response = Responses.response(js.JSON.stringify(value), status, js.Dictionary("Content-Type" -> "application/json;charset=UTF-8"))
     secure(response)
     cookie.foreach(response.headers.append("Set-Cookie", _))
     response
   }
-  private def secure(response: Response): Response = {
+  private[auth] def secure(response: Response): Response = {
     response.headers.set("Cache-Control", "private, no-store")
     response.headers.set("Vary", "Cookie")
     response.headers.set("Referrer-Policy", "no-referrer")
     response.headers.set("Content-Security-Policy", "frame-ancestors 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; form-action 'self' https://accounts.google.com")
     response
   }
-  private def message(error: AuthApiError): String = error match {
+  private[auth] def message(error: AuthApiError): String = error match {
     case AuthApiError.AgreementRequired => "利用規約と投稿の法的責任への同意が必要です。"
     case AuthApiError.Device(DeviceRejection.DeclarationMismatch) => "最新のSafari・Chrome・Edge・Firefoxでお試しください。"
     case AuthApiError.Device(DeviceRejection.Fingerprint) => "端末情報を確認できませんでした。別のブラウザでお試しください。"
@@ -92,6 +107,14 @@ object AuthHandler {
     case AuthApiError.LoginRequired => "認証・登録が必要です。"
     case AuthApiError.Origin => "このページから送信してください。"
     case AuthApiError.Service(AuthServiceFailure.Unavailable) | AuthApiError.Unavailable => "認証を利用できません。しばらく待ってからお試しください。"
+    case AuthApiError.LoginFailed => "ユーザーIDまたはパスワードが違います。"
+    case AuthApiError.Refused(_) => "このアカウントは利用できません。"
+    case AuthApiError.Service(AuthServiceFailure.Taken) => "このユーザーIDは使えません。別のIDを入力してください。"
+    case AuthApiError.LoginId(LoginIdRejection.Invalid) => "ユーザーIDは半角英小文字・数字・_の3〜16文字で入力してください。"
+    case AuthApiError.Password(PasswordRejection.Length) => "パスワードは8文字以上、128バイト以内で入力してください。"
+    case AuthApiError.Password(PasswordRejection.ContainsLoginId) => "パスワードにユーザーIDを含めないでください。"
+    case AuthApiError.Password(PasswordRejection.InvalidUnicode) => "パスワードに使えない文字が含まれています。"
+    case AuthApiError.Confirmation => "確認用のパスワードが一致しません。"
     case _ => "認証を完了できませんでした。"
   }
   private def reason(error: Throwable): AuthApiError = error match {
@@ -99,17 +122,17 @@ object AuthHandler {
     case AuthServiceException(value) => AuthApiError.Service(value)
     case NonFatal(_) => AuthApiError.Unavailable
   }
-  private def failure(error: Throwable, cookie: Option[String] = None): Response = {
+  private[auth] def failure(error: Throwable, cookie: Option[String] = None): Response = {
     val value = reason(error)
     json(js.Dynamic.literal(error = message(value), code = value.code), value.status, cookie)
   }
   /** 認証を設定していない環境では、認証が無かったときと同じ 404 を返す */
-  private def notFound(request: Request): Response = {
+  private[auth] def notFound(request: Request): Response = {
     val path = Try(new URL(request.url).pathname).getOrElse("/auth/")
     val escaped = path.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
     Responses.response(PublicText.respond404(escaped), 404, js.Dictionary("content-type" -> "text/html;charset=UTF-8"))
   }
-  private def origin(url: String): String = new URL(url).origin
+  private[auth] def origin(url: String): String = new URL(url).origin
 
   /** 戻り先は同一オリジンの安全なパスだけを受け付ける */
   def safeReturn(value: String, requestUrl: String): String = {
@@ -131,7 +154,7 @@ object AuthHandler {
   }
   private def claims(account: AccountDescription, time: Double, device: String, binding: Option[SessionBinding] = None): SessionClaims =
     SessionClaims(account.aid, account.uid, account.generation.toLong, account.expiresAt.getOrElse(time + AccountProfile.clientLifetime).toLong, account.lv, device, binding)
-  private def signed(account: AccountDescription, device: String, request: Request, secret: String, time: Double, binding: Option[SessionBinding] = None): Future[String] =
+  private[auth] def signed(account: AccountDescription, device: String, request: Request, secret: String, time: Double, binding: Option[SessionBinding] = None): Future[String] =
     SessionCookies.issue(claims(account, time, device, binding), secret, request.url, time).map(_.getOrElse(throw Refused(AuthApiError.Unavailable)))
   private def current(request: Request, secret: String, repository: AccountRepository, time: Double): Future[(SessionClaims, AccountDescription)] =
     SessionCookies.verify(header(request, "Cookie"), secret, time).flatMap {
@@ -201,6 +224,8 @@ object AuthHandler {
         fields(request).flatMap { form =>
           path match {
             case "/auth/verify" => verify(request, env, repository, form, config, time)
+            case "/auth/register" => register(request, env, repository, form, config, time)
+            case "/auth/login" => login(request, env, repository, form, config, time)
             case "/auth/logout" => logout(request, config, repository, time)
             case "/auth/agree" => current(request, config.secret, repository, time).flatMap { case (_, account) =>
               if (!form.get("agreement").contains(config.agreementVersion)) throw Refused(AuthApiError.AgreementRequired)
@@ -234,33 +259,113 @@ object AuthHandler {
       }
   }
 
-  private def verify(request: Request, env: WorkerEnv, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] = {
+  /** 受信 IP の keyIp の HMAC。IP が無い要求や鍵の障害は利用不可 */
+  private[auth] def keyIp(request: Request, secret: String): Future[String] = {
     val ip = header(request, "CF-Connecting-IP")
+    if (ip.isEmpty) Future.failed(Refused(AuthApiError.Unavailable))
+    else AuthHmac.indexKey(secret, "key-ip", KeyIp.of(ip)).map(_.getOrElse(throw Refused(AuthApiError.Unavailable)))
+  }
+
+  /** 端末申告を受信ヘッダと突き合わせる。R2 の既知プロファイルが読めなければ表なしで照合する */
+  private[auth] def device(request: Request, env: WorkerEnv, raw: String): Future[DeviceEvidence] = {
     val hints = ClientHints.fromHeaders(header(request, "Sec-CH-UA-Platform"), header(request, "Sec-CH-UA-Platform-Version"), header(request, "Sec-CH-UA-Model"), header(request, "Sec-CH-UA-Arch"), header(request, "Sec-CH-UA-Mobile"))
-    if (!form.get("agreement").contains(config.agreementVersion)) Future.failed(Refused(AuthApiError.AgreementRequired))
-    else if (ip.isEmpty) Future.failed(Refused(AuthApiError.Unavailable))
-    else for {
-      keyIp <- AuthHmac.indexKey(config.secret, "key-ip", KeyIp.of(ip)).map(_.getOrElse(throw Refused(AuthApiError.Unavailable)))
-      verified <- TurnstileVerification.verify(config.turnstileSecretKey, form.getOrElse("cf-turnstile-response", ""), ip, new URL(request.url).hostname)
-      _ = if (!verified) throw Refused(AuthApiError.Turnstile)
-      profiles <- env.ch3www.get("ios-profiles.json").toFuture.flatMap(value =>
-        if (value == null) Future.successful(Vector.empty[IosDeviceProfile])
-        else value.text().toFuture.map(DeviceEvidence.profilesFromJson)).recover { case NonFatal(_) => Vector.empty }
-      evidence = DeviceEvidence.fromJson(form.getOrElse("device", ""), hints, header(request, "User-Agent"), profiles).fold(reason => {
+    env.ch3www.get("ios-profiles.json").toFuture.flatMap(value =>
+      if (value == null) Future.successful(Vector.empty[IosDeviceProfile])
+      else value.text().toFuture.map(DeviceEvidence.profilesFromJson)).recover { case NonFatal(_) => Vector.empty }.map { profiles =>
+      DeviceEvidence.fromJson(raw, hints, header(request, "User-Agent"), profiles).fold(reason => {
         if (reason == DeviceRejection.DeclarationMismatch) {
-          DeviceEvidence.declarationRuleFromJson(form.getOrElse("device", ""), hints, header(request, "User-Agent"))
-            .foreach(rule => js.Dynamic.global.console.warn(rule))
+          DeviceEvidence.declarationRuleFromJson(raw, hints, header(request, "User-Agent")).foreach(rule => js.Dynamic.global.console.warn(rule))
         }
         throw Refused(AuthApiError.Device(reason))
       }, identity)
+    }
+  }
+
+  /** keyIp を求めてから Turnstile と端末申告を確認する */
+  private def human(request: Request, env: WorkerEnv, form: Map[String, String], config: AuthSettings): Future[(String, DeviceEvidence)] = for {
+    key <- keyIp(request, config.secret)
+    verified <- TurnstileVerification.verify(config.turnstileSecretKey, form.getOrElse("cf-turnstile-response", ""), header(request, "CF-Connecting-IP"), new URL(request.url).hostname)
+    _ = if (!verified) throw Refused(AuthApiError.Turnstile)
+    evidence <- device(request, env, form.getOrElse("device", ""))
+  } yield key -> evidence
+
+  private def signedIn(request: Request, form: Map[String, String], config: AuthSettings, account: AccountDescription, evidence: DeviceEvidence, time: Double): Future[Response] =
+    signed(account, evidence.deviceHash, request, config.secret, time).map(cookie =>
+      json(js.Dynamic.literal(uid = account.uid, lv = account.lv, returnPath = safeReturn(form.getOrElse("return", "/"), request.url)), cookie = Some(cookie)))
+
+  private def verify(request: Request, env: WorkerEnv, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] = {
+    if (!form.get("agreement").contains(config.agreementVersion)) Future.failed(Refused(AuthApiError.AgreementRequired))
+    else for {
+      (key, evidence) <- human(request, env, form, config)
       existing <- current(request, config.secret, repository, time).map(value => Some(value)).recover {
         case Refused(error) if error.signedOut => None
       }
-      created <- new ClientAuthentication(repository, keys(config.secret), config.agreementVersion).verify(evidence.deviceHash, keyIp, time, existing.map(_._2))
+      created <- new ClientAuthentication(repository, keys(config.secret), config.agreementVersion).verify(evidence.deviceHash, key, time, existing.map(_._2))
       cookie <- signed(created, evidence.deviceHash, request, config.secret, time, existing.flatMap(_._1.binding))
     } yield json(js.Dynamic.literal(uid = created.uid, lv = created.lv, returnPath = safeReturn(form.getOrElse("return", "/"), request.url)), cookie = Some(cookie))
   }
-  private def keys(secret: String): AuthenticationKeys = new AuthenticationKeys {
+
+  /** 登録に使えないユーザー ID。固定の予約語に R2 の reserved-ids.txt と既存の板名を加える。R2 の障害では登録しない */
+  private[auth] def available(env: WorkerEnv, raw: String): Future[Either[LoginIdRejection, LoginId]] =
+    LoginId.parse(raw) match {
+      case Left(reason) => Future.successful(Left(reason))
+      case Right(id) => for {
+        reserved <- env.ch3www.get("reserved-ids.txt").toFuture.flatMap(value =>
+          if (value == null) Future.successful(Set.empty[String])
+          else value.text().toFuture.map(_.split("\\r?\\n").iterator.map(_.trim).filter(line => line.nonEmpty && !line.startsWith("#")).toSet))
+        board <- env.ch3www.get(id.value + "/SETTING.TXT").toFuture.map(value => value != null)
+      } yield LoginId.create(id.value, reserved, if (board) Set(id.value) else Set.empty)
+    }
+
+  private def hashing: PasswordHashing = new PasswordHashing {
+    def create(password: Password, now: Double): Future[Option[PasswordCredential]] = PasswordHasher.create(password, now).map(_.toOption)
+  }
+
+  /** 入力規則は Turnstile より前に確かめ、使えない ID は予約語と板名も含めて同じ文言にする */
+  private def register(request: Request, env: WorkerEnv, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] = {
+    val raw = form.getOrElse("id", "")
+    val validated = for {
+      id <- LoginId.parse(raw).left.map(AuthApiError.LoginId(_))
+      password <- Password.create(form.getOrElse("password", ""), id).left.map(AuthApiError.Password(_))
+      _ <- Either.cond(form.get("password2").contains(form.getOrElse("password", "")), (), AuthApiError.Confirmation)
+    } yield password
+    if (!form.get("agreement").contains(config.agreementVersion)) Future.failed(Refused(AuthApiError.AgreementRequired))
+    else validated match {
+      case Left(error) => Future.failed(Refused(error))
+      case Right(password) => for {
+        (key, evidence) <- human(request, env, form, config)
+        id <- available(env, raw).map(_.fold({
+          case LoginIdRejection.Reserved => throw Refused(AuthApiError.Service(AuthServiceFailure.Taken))
+          case reason => throw Refused(AuthApiError.LoginId(reason))
+        }, identity))
+        account <- new PasswordAuthentication(repository, keys(config.secret), hashing, config.agreementVersion).register(id, password, evidence.deviceHash, key, time)
+        response <- signedIn(request, form, config, account, evidence, time)
+      } yield response
+    }
+  }
+
+  /** 失敗は理由を区別せず同じ文言・状態にし、アカウント全体の失敗数に応じて応答を遅らせる */
+  private def login(request: Request, env: WorkerEnv, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] = for {
+    (key, evidence) <- human(request, env, form, config)
+    id = LoginId.parse(form.getOrElse("id", "")).toOption
+    outcome <- new PasswordAuthentication(repository, keys(config.secret), hashing, config.agreementVersion).login(id, form.getOrElse("password", ""), evidence.deviceHash, key, time)
+    response <- outcome match {
+      case LoginOutcome.Success(account) => signedIn(request, form, config, account, evidence, time)
+      case LoginOutcome.Refused(reason) => Future.failed(Refused(AuthApiError.Refused(reason)))
+      case LoginOutcome.Failed(delay) => pause(delay).flatMap(_ => Future.failed(Refused(AuthApiError.LoginFailed)))
+    }
+  } yield response
+
+  private def pause(seconds: Int): Future[Unit] = {
+    if (seconds <= 0) Future.unit
+    else {
+      val promise = scala.concurrent.Promise[Unit]()
+      js.timers.setTimeout(seconds * 1000d)(promise.success(()))
+      promise.future
+    }
+  }
+
+  private[auth] def keys(secret: String): AuthenticationKeys = new AuthenticationKeys {
     def aid(): String = AuthHmac.randomAid()
     def uid(): String = AuthHmac.randomUid()
     def token(): String = AuthHmac.randomBase32(20)
