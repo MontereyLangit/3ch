@@ -69,9 +69,9 @@ object PostRateSettings {
   /** BBS_FR_SECOND の既定（秒） */
   val DefaultFrSeconds: Int = 1
 
-  /** スレ立て時にスレ設定へ書き写さないキー */
+  /** スレ立て時にスレ設定へ書き写さないキー。BBS_PHOEBE はコマンドで書いたときだけスレ設定に置く */
   val NotCopiedToThread: Set[String] =
-    Set("BBS_SAMBA24", "BBS_FR_SECOND", "BBS_THREAD_RENTOU", "BBS_THREAD_RENTOU_RESET", "BBS_RENTOU_PASS", "BBS_RENTOU_KEYS", "BBS_FR_LEVEL")
+    Set("BBS_SAMBA24", "BBS_FR_SECOND", "BBS_THREAD_RENTOU", "BBS_THREAD_RENTOU_RESET", "BBS_RENTOU_PASS", "BBS_RENTOU_KEYS", "BBS_FR_LEVEL", "BBS_PHOEBE")
 
   /**
     * board は板設定、merged は返信ならスレ設定を重ねたもの。

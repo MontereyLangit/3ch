@@ -6,6 +6,7 @@ import io._3ch.bbs.domain.posting.{ClientIdentity, FailureClock, FailureSite, Gl
 import io._3ch.bbs.domain.posting.moderation.{ModerationDecision, ModerationInput, PostRateCheck, PostRateIdentity, PostRateSettings, ThreadCreationLimit, ThreadCreationNetwork, ThreadCreationRequest, ThreadCreationSettings}
 import io._3ch.bbs.external.web.URL
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
+import io._3ch.common.domain.account.Phoebe
 import io._3ch.common.domain.identity.{DateSalt, ShikibetsuFormat, ShikibetsuMode, ShikibetsuSeeds}
 import io._3ch.common.domain.posting.{ArchiveIndexText, CapHandle, MailCommands, DatLineFormatter, NameField, PostForm, PostKind, SageRule, UserInfo}
 import io._3ch.common.text.JsNumber
@@ -73,11 +74,11 @@ final class PostingService(ports: PostingPorts, salt: String) {
       .map(_.fold(reason => reject(PostingError.Authentication(reason), context), identity))
   }
 
-  /** 認証を有効にした環境の書き込み条件。Web 版と !auth はログイン必須、BBS_PHOEBE は Lv を求める。旧キャップは対象外 */
+  /** 認証を有効にした環境の書き込み条件。Web 版と !auth はログイン必須、BBS_PHOEBE（スレ設定を優先）は Lv を求める。旧キャップは対象外 */
   private def admit(context: PostingContext, account: PostingAccount, request: PostingRequest): Unit = if (authEnabled && !account.legacyCap) {
     if (account.user.isEmpty && (!request.isMonazilla || context.mailCommands.auth)) reject(PostingError.Authentication(AuthenticationFailure.LoginRequired), context)
-    val required = context.settings.get("BBS_PHOEBE").flatMap(_.toIntOption).getOrElse(0)
-    if (account.lv < required) {
+    val required = Phoebe.required(context.settings.get("BBS_PHOEBE"))
+    if (!Phoebe.admits(account.lv, required, account.staff)) {
       if (account.user.isEmpty) reject(PostingError.Authentication(AuthenticationFailure.LoginRequired), context)
       else reject(PostingError.AuthenticationLevel(required), context)
     }

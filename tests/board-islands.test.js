@@ -835,6 +835,27 @@ test('認証モーダル: キャンセル時は再送せず下書きを保持す
   assert.notEqual(window.localStorage.getItem(DRAFT), null);
 });
 
+test('Lv不足: 応答の必要Lvを表示し、認証モーダルを開かず再送もしない', async () => {
+  window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+  let posts = 0;
+  globalThis.fetch = async () => {
+    posts++;
+    const response = postResponse(ERROR_HTML);
+    const headers = { 'content-type': 'text/html; charset=UTF-8', 'x-auth-required': 'level', 'x-phoebe-required': '5', 'x-post-error': 'auth:required:level' };
+    response.headers.get = name => headers[name] ?? null;
+    return response;
+  };
+  await mount(client.AuthModalJs, {});
+  await mountForm({ ...formProps, authEnabled: true, session: { uid: 'member', lv: 1 }, requiredLevel: 3 });
+  await fillForm();
+  await submitForm('form.posting-form button[type="submit"]');
+  await flush();
+  assert.equal(posts, 1);
+  assert.equal(query('dialog').open, false);
+  assert.match(document.body.textContent, /Lv5以上が必要です/);
+  assert.deepEqual(values(), FILLED);
+});
+
 test('認証表示: SSRと最初のhydrationが一致し通知で表示だけを更新する', async () => {
   const props = { authEnabled: true, session: { uid: 'member', lv: 3 }, returnPath: '/sample/' };
   const container = document.body.appendChild(document.createElement('div'));

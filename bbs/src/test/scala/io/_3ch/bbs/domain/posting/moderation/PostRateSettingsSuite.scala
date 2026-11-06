@@ -110,7 +110,7 @@ class PostRateSettingsSuite extends FunSuite {
   }
 
   test("スレ立て時の書き写しから本書の新キーだけを除く") {
-    val settings = parse("BBS_TITLE=t\nBBS_SAMBA24=5\nBBS_FR_SECOND=2\n BBS_FR_LEVEL =log\ntimecount=3\nBBS_LIVE=checked\n")
+    val settings = parse("BBS_TITLE=t\nBBS_SAMBA24=5\nBBS_FR_SECOND=2\n BBS_FR_LEVEL =log\ntimecount=3\nBBS_LIVE=checked\nBBS_PHOEBE=3\n")
     assertEquals(PostRateSettings.copiedToThread(settings).toThreadSettings, "BBS_TITLE=t<>timecount=3<>BBS_LIVE=checked<>")
   }
 }
