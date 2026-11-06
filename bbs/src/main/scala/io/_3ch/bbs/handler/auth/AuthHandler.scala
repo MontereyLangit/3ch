@@ -1,6 +1,6 @@
 package io._3ch.bbs.handler.auth
 
-import io._3ch.bbs.application.auth.{AuthServiceException, AuthServiceFailure, AuthSettings, CapIssuing, CapNameException, ClientAuthentication, DeviceEvidence, LoginOutcome, PasswordAuthentication, TokenIssuing}
+import io._3ch.bbs.application.auth.{AccountUpgrade, UpgradeOutcome, AuthServiceException, AuthServiceFailure, AuthSettings, CapIssuing, CapNameException, ClientAuthentication, DeviceEvidence, LoginOutcome, PasswordAuthentication, TokenIssuing}
 import io._3ch.bbs.application.auth.ports.{AccountStoreException, AuthenticationKeys, PasswordHashing, TokenProof}
 import io._3ch.bbs.application.posting.CapKey
 import io._3ch.bbs.components.{AccountCapProps, AccountComponent, AccountProps, AccountTokenProps, AccountPostProps, AccountTokenWarningProps, AuthComponent, AuthProps, AuthTokenComponent, AuthTokenProps}
@@ -211,6 +211,8 @@ object AuthHandler {
     case "device" => Some(message(AuthApiError.Device(DeviceRejection.Fingerprint)))
     case "account" => Some(message(AuthApiError.Refused(AccountRejection.Frozen)))
     case "unavailable" => Some(message(AuthApiError.Unavailable))
+    case "google_linked" => Some("このGoogleアカウントは既に別のアカウントに連携されています。")
+    case "session" => Some("ログインし直してから、もう一度お試しください。")
     case _ => None
   }
 
@@ -221,12 +223,13 @@ object AuthHandler {
       case None => js.Promise.resolve[Response](notFound(request))
       case Some(config) =>
         val props = new RenderProps {}
-        props.title = if (accountPage) "アカウント設定" else "認証・登録"
+        val upgrade = c.req.query("upgrade").contains("1")
+        props.title = if (accountPage) "アカウント設定" else if (upgrade) "登録方法の切り替え" else "認証・登録"
         val rendered = Future.unit.flatMap { _ =>
           if (accountPage) account(c, config, props)
           else c.renderPromise(AuthComponent.Component(AuthProps(config.turnstileSiteKey, safeReturn(c.req.query("return").getOrElse("/"), request.url),
             c.req.query("embed").contains("1"), c.req.query("mode").contains("login"), config.agreementVersion,
-            AuthEnv.google(c.env).isDefined, notice(c.req.query("error").getOrElse("")).getOrElse(""), MailSenders.from(c.env).isDefined)).rawElement, props).toFuture
+            AuthEnv.google(c.env).isDefined, notice(c.req.query("error").getOrElse("")).getOrElse(""), MailSenders.from(c.env).isDefined, upgrade)).rawElement, props).toFuture
         }
         rendered.map(secure).recover {
           case Refused(error) if accountPage && error.signedOut =>
@@ -411,13 +414,24 @@ object AuthHandler {
     else validated match {
       case Left(error) => Future.failed(Refused(error))
       case Right((password, email)) => for {
+        upgrading <- if (!form.get("upgrade").contains("1")) Future.successful(None)
+          else current(request, config.secret, repository, time).map { case (_, account) =>
+            if (account.kind != AccountKind.Client) throw Refused(AuthApiError.Refused(AccountRejection.KindForbidden))
+            Some(account)
+          }
         (key, evidence) <- human(request, env, form, config)
         id <- available(env, raw).map(_.fold({
           case LoginIdRejection.Reserved => throw Refused(AuthApiError.Service(AuthServiceFailure.Taken))
           case reason => throw Refused(AuthApiError.LoginId(reason))
         }, identity))
-        _ <- email.fold(Future.unit)(AccountMailHandler.check(env, repository, config, "", _))
-        account <- new PasswordAuthentication(repository, keys(config.secret), hashing, config.agreementVersion).register(id, password, evidence.deviceHash, key, time)
+        _ <- email.fold(Future.unit)(AccountMailHandler.check(env, repository, config, upgrading.fold("")(_.aid), _))
+        account <- upgrading match {
+          case None => new PasswordAuthentication(repository, keys(config.secret), hashing, config.agreementVersion).register(id, password, evidence.deviceHash, key, time)
+          case Some(client) => new AccountUpgrade(repository, keys(config.secret)).toPassword(client, id, password, hashing, evidence.deviceHash, key, time).map {
+            case UpgradeOutcome.Converted(converted) => converted
+            case _ => throw Refused(AuthApiError.Service(AuthServiceFailure.Taken))
+          }
+        }
         mail <- AccountMailHandler.afterRegistration(env, repository, config, request, account, email, time)
         response <- signedIn(request, form, config, account, evidence, time, mail)
       } yield response

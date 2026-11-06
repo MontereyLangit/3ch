@@ -27,7 +27,20 @@ class OAuthStateSuite extends FunSuite {
     }
     val encoded = OAuthStateCodec.encode(state, signature).get
     assertEquals(OAuthStateCodec.parse(encoded.replace("|1|taro", "|2|taro")), None)
+    assertEquals(OAuthStateCodec.parse(encoded.replace("|s||", "|x||")), None)
     assertEquals(OAuthStateCodec.parse(encoded + "|extra"), None)
     assertEquals(OAuthStateCodec.encode(state, "bad"), None)
+  }
+
+  test("移行と退会の認可はアカウントの aid を持ち、ログインは aid を持たない。以前の書式の Cookie は読まない") {
+    val link = state.copy(purpose = OAuthPurpose.Link, aid = Some("abcdefghijklmnop"))
+    assertEquals(OAuthStateCodec.parse(OAuthStateCodec.encode(link, signature).get).map(_.state), Some(link))
+    val delete = state.copy(uid = None, purpose = OAuthPurpose.Delete, aid = Some("abcdefghijklmnop"))
+    assertEquals(OAuthStateCodec.parse(OAuthStateCodec.encode(delete, signature).get).map(_.state), Some(delete))
+    Seq(state.copy(aid = Some("abcdefghijklmnop")), state.copy(purpose = OAuthPurpose.Link), link.copy(aid = Some("SHORT"))).foreach { value =>
+      assertEquals(OAuthStateCodec.payload(value), None, value.toString)
+    }
+    val encoded = OAuthStateCodec.encode(state, signature).get
+    assertEquals(OAuthStateCodec.parse("1" + encoded.drop(1)), None)
   }
 }

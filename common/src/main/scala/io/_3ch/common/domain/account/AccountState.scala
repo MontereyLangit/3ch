@@ -70,6 +70,12 @@ object AccountRejectionLog {
 /** 書き込み時に得た端末の情報。ハッシュの生成はアプリケーション層で行う */
 final case class AccountObservation(deviceHash: String = "", keyIpHash: String = "")
 
+/** クライアント ID からの移行先。パスワード方式は新しい資格情報、Google は sub の HMAC と参考のアドレスを持つ */
+enum AccountConversion {
+  case ToPassword(credential: PasswordCredential)
+  case ToGoogle(subHash: String, email: Option[String])
+}
+
 /** パスワード照合の結果。失敗にはアカウント全体の失敗数による応答の遅延を付ける */
 enum PasswordAttempt {
   case Accepted
@@ -320,6 +326,29 @@ final case class AccountState(
     pendingFor(PendingKind.Reset, hash, now).flatMap { _ =>
       if (!resettable) Left(AccountRejection.KindForbidden)
       else setPassword(next, now).map(_.copy(pending = pending - PendingKind.Reset))
+    }
+
+  /**
+    * クライアント ID を ID・パスワードか Google に移す。aid・Lv・端末・履歴はそのままにし、uid を登録した ID に替えて期限を外し、世代を進める。
+    * Google は種別の規則で Lv10 にする。generation は移行を始めたセッションの世代
+    */
+  def convert(target: AccountConversion, uid: String, generation: Int, now: Double): Either[AccountRejection, AccountState] =
+    usable(now).flatMap { _ =>
+      if (generation != profile.generation) Left(AccountRejection.Generation)
+      else if (profile.kind != AccountKind.Client) Left(AccountRejection.KindForbidden)
+      else {
+        val moved = target match {
+          case AccountConversion.ToPassword(next) => copy(profile = profile.copy(kind = AccountKind.Password, uid = uid, expiresAt = None, loginId = Some(uid)),
+            credential = Some(next.copy(throttle = LoginThrottle())))
+          case AccountConversion.ToGoogle(subHash, email) => copy(profile = profile.copy(kind = AccountKind.Google, uid = uid, expiresAt = None, googleSubHash = Some(subHash),
+            email = email, emailVerifiedAt = email.map(_ => now)), level = AccountLevel(Phoebe.initial(AccountKind.Google, emailVerified = false), now, 0, level.lvOverride))
+        }
+        val valid = target match {
+          case AccountConversion.ToPassword(next) => next != null && next.valid && next.updatedAt <= now
+          case AccountConversion.ToGoogle(subHash, _) => DedicatedBrowserTokens.validHash(subHash)
+        }
+        if (!valid || !moved.valid) Left(AccountRejection.Invalid) else moved.bumpGeneration
+      }
     }
 
   /** 成功投稿だけで期限・投稿数と Lv・端末とキーの直近五件を更新する。失効済み ID は復活させない */

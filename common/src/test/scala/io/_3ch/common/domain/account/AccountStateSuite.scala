@@ -174,4 +174,18 @@ class AccountStateSuite extends FunSuite {
     assertEquals((reset.credential.map(_.hash), reset.profile.generation, reset.pending.get(PendingKind.Reset)), (Some(next.hash), 1, None))
     assertEquals(issued.copy(roles = Roles(Set(AccountRole.Delete))).resetPassword(hash, next, now + 1), Left(AccountRejection.KindForbidden))
   }
+
+  test("クライアント ID だけを移行でき、Lv と書き込み数を引き継いで期限を外し世代を進める。Google は Lv10") {
+    val client = account.copy(level = AccountLevel(4, now - 100, 9))
+    val moved = client.convert(AccountConversion.ToPassword(credential), "taro_2026", 0, now).toOption.get
+    assertEquals((moved.profile.kind, moved.profile.uid, moved.profile.loginId, moved.profile.expiresAt, moved.profile.generation),
+      (AccountKind.Password, "taro_2026", Some("taro_2026"), None, 1))
+    assertEquals((moved.profile.aid, moved.level), (client.profile.aid, client.level))
+    val google = client.convert(AccountConversion.ToGoogle("c" * 64, Some("t@example.com")), "taro_2026", 0, now).toOption.get
+    assertEquals((google.profile.kind, google.level.lv, google.profile.googleSubHash, google.profile.emailVerifiedAt), (AccountKind.Google, 10, Some("c" * 64), Some(now)))
+    assertEquals(client.convert(AccountConversion.ToPassword(credential), "taro_2026", 1, now), Left(AccountRejection.Generation))
+    assertEquals(moved.convert(AccountConversion.ToGoogle("c" * 64, None), "taro_2026", 1, now), Left(AccountRejection.KindForbidden))
+    assertEquals(client.convert(AccountConversion.ToPassword(credential), "x", 0, now), Left(AccountRejection.Invalid))
+    assertEquals(client.convert(AccountConversion.ToGoogle("short", None), "taro_2026", 0, now), Left(AccountRejection.Invalid))
+  }
 }

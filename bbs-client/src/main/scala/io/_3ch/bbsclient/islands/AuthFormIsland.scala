@@ -22,13 +22,15 @@ object AuthFormIsland {
 
   /** Google の開始はフォームの遷移で送る。埋め込み時は別のウィンドウで開く */
   private def startGoogle(raw: js.Object, uid: String, agreed: Boolean): Unit = {
+    val upgrade = AuthClient.flag(raw, "upgrade")
     val form = dom.document.createElement("form").asInstanceOf[dom.html.Form]
     form.method = "post"
     form.action = "/auth/google/start"
     form.target = if AuthClient.flag(raw, "embed") then "_blank" else "_self"
     val values = Seq("uid" -> uid, "return" -> AuthClient.text(raw, "returnPath", "/"), "popup" -> (if AuthClient.flag(raw, "embed") then "1" else "0"),
       "device" -> js.JSON.stringify(BrowserFingerprintCollector.collect())) ++
-      (if agreed then Seq("agreement" -> AuthClient.text(raw, "agreementVersion")) else Nil)
+      (if agreed then Seq("agreement" -> AuthClient.text(raw, "agreementVersion")) else Nil) ++
+      (if upgrade then Seq("purpose" -> "upgrade") else Nil)
     values.foreach { case (name, value) =>
       val field = dom.document.createElement("input").asInstanceOf[dom.html.Input]
       field.`type` = "hidden"
@@ -43,8 +45,8 @@ object AuthFormIsland {
 
   final val Component = ScalaFnComponent[js.Object] { raw =>
     for {
-      login <- useState(AuthClient.flag(raw, "login"))
-      chosen <- useState(AuthMethod.Client)
+      login <- useState(AuthClient.flag(raw, "login") && !AuthClient.flag(raw, "upgrade"))
+      chosen <- useState(if AuthClient.flag(raw, "upgrade") then AuthMethod.Password else AuthMethod.Client)
       agreed <- useState(false)
       userId <- useState("")
       password <- useState("")
@@ -88,6 +90,7 @@ object AuthFormIsland {
     } yield {
       val google = AuthClient.flag(raw, "googleEnabled")
       val mail = AuthClient.flag(raw, "mailEnabled")
+      val upgrade = AuthClient.flag(raw, "upgrade")
       val registering = !login.value
       val choice = chosen.value
       def resetTurnstile(): Unit = {
@@ -142,7 +145,7 @@ object AuthFormIsland {
           else choice match {
             case AuthMethod.Client => post("/auth/verify", Seq("agreement" -> AuthClient.text(raw, "agreementVersion")))
             case AuthMethod.Password => post("/auth/register", Seq("agreement" -> AuthClient.text(raw, "agreementVersion"), "id" -> userId.value,
-              "password" -> password.value, "password2" -> confirmation.value, "email" -> email.value.trim))
+              "password" -> password.value, "password2" -> confirmation.value, "email" -> email.value.trim) ++ (if upgrade then Seq("upgrade" -> "1") else Nil))
             case AuthMethod.Google => startGoogle(raw, userId.value, agreed = true)
           }
         }
@@ -161,12 +164,12 @@ object AuthFormIsland {
             ^.onChange ==> ((e: ReactEventFromInput) => set(e.target.value))))
       val idHint = "（半角英小文字・数字・_、3〜16文字。名前欄に!idと書くと表示されます）"
       <.form(^.className := "border border-[#d6dce3] bg-white p-4", ^.onSubmit ==> submit,
-        <.nav(^.className := "mb-4 flex gap-4 border-b border-[#d6dce3]", ^.role := "tablist", ^.aria.label := "登録・ログイン",
+        if upgrade then EmptyVdom else <.nav(^.className := "mb-4 flex gap-4 border-b border-[#d6dce3]", ^.role := "tablist", ^.aria.label := "登録・ログイン",
           tab("新しく登録する", registering, toLogin = false), tab("ログイン", !registering, toLogin = true)),
         if registering then <.div(^.key := "register",
-          <.h2(^.className := "mb-2 font-bold", "登録方法を選ぶ"),
+          <.h2(^.className := "mb-2 font-bold", if upgrade then "切り替える方法を選ぶ" else "登録方法を選ぶ"),
           <.div(^.role := "radiogroup", ^.className := "mb-4",
-            option(AuthMethod.Client, "かんたん登録", "この端末だけの仮登録です。Lv1から。1年書き込まないと失効します。"),
+            if upgrade then EmptyVdom else option(AuthMethod.Client, "かんたん登録", "この端末だけの仮登録です。Lv1から。1年書き込まないと失効します。"),
             option(AuthMethod.Password, "ID・パスワード", if mail then "ほかの端末からもログインできます。Lv1から、メール認証でLv3。" else "ほかの端末からもログインできます。Lv1から。"),
             option(AuthMethod.Google, if google then "Googleで続ける" else "Googleで続ける（準備中）", "Googleアカウントで登録します。Lv10。", google)),
           if choice != AuthMethod.Client then field("ユーザーID", idHint, userId.value, userId.setState, "text", "username") else EmptyVdom,
@@ -203,7 +206,8 @@ object AuthFormIsland {
           if busy.value then "認証中…"
           else if !registering && forgot.value then "再設定のメールを送る"
           else if !registering then "ログイン"
-          else if choice == AuthMethod.Google then "Googleで登録する"
+          else if choice == AuthMethod.Google then (if upgrade then "Googleに切り替える" else "Googleで登録する")
+          else if upgrade then "ID・パスワードに切り替える"
           else "認証して登録する"),
         if !registering && !forgot.value then <.button(^.`type` := "button", ^.className := s"$button ml-2", ^.disabled := !google,
           ^.onClick --> Callback(startGoogle(raw, "", agreed = false)), if google then "Googleでログイン" else "Googleでログイン（準備中）")

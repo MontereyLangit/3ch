@@ -35,7 +35,7 @@ class GoogleHandlerSuite extends FunSuite {
         }
         assert(url.searchParams.get("code_challenge").matches("[A-Za-z0-9_-]{43}"))
         val cookie = response.headers.get("Set-Cookie")
-        assert(cookie.startsWith("ch3s_oauth=1|"), cookie)
+        assert(cookie.startsWith("ch3s_oauth=2|"), cookie)
         assert(cookie.contains("; Max-Age=600; Path=/auth/google; Secure; HttpOnly; SameSite=Lax"))
         assert(cookie.contains(url.searchParams.get("state")))
         assert(!cookie.contains(url.searchParams.get("code_challenge")))

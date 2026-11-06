@@ -168,6 +168,24 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
+  /** クライアント ID を移す。kind が password なら credential、google なら googleSubHash（と参考の email）を渡す */
+  def convert(kind: String, uid: String, generation: Int, now: Double, credential: js.UndefOr[js.Dynamic] = js.undefined,
+    googleSubHash: js.UndefOr[String] = js.undefined, email: js.UndefOr[String] = js.undefined): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
+    val target = AccountKind.parse(kind) match {
+      case Some(AccountKind.Password) => credential.toOption.map(c => AccountConversion.ToPassword(PasswordCredentialCodec.decode(c)))
+      case Some(AccountKind.Google) => googleSubHash.toOption.map(AccountConversion.ToGoogle(_, email.toOption))
+      case _ => None
+    }
+    target.fold(Future.successful(error(AccountRejection.Invalid))) { value =>
+      current(error(AccountRejection.Missing)) { account =>
+        account.convert(value, uid, generation, now) match {
+          case Left(rejection) => Future.successful(error(rejection))
+          case Right(next) => save(next).map(_ => AccountCodec.description(next.description))
+        }
+      }
+    }
+  }.toJSPromise
+
   /** Google の sub の HMAC が一致すれば、ログインに使うアカウントの情報を返す */
   def describeGoogle(subHash: String, now: Double): js.Promise[js.Dynamic] =
     read().map(_.fold(error(AccountRejection.Missing))(account => AccountCodec.signIn(account.describeGoogle(subHash, now), account.profile.uid))).toJSPromise

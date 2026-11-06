@@ -27,7 +27,7 @@ final case class AccountPanel(account: AccountDescription, tokens: Vector[Accoun
 
 /** アカウント RPC の値をアプリケーションの型に変換する */
 final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountManagementStore with AccountSignInStore with AccountRoleStore with AccountCapStore
-  with AccountEmailStore {
+  with AccountEmailStore with AccountConversionStore {
   private def account(aid: String): AccountDoStub = env.ACCOUNT_DO.get(env.ACCOUNT_DO.idFromName(aid))
   private def index(kind: String): AccountIndexDoStub = env.ACCOUNT_INDEX_DO.get(env.ACCOUNT_INDEX_DO.idFromName(kind))
   private def raw(value: js.Promise[?]): Future[js.Any] = value.asInstanceOf[js.Promise[js.Any]].toFuture
@@ -151,6 +151,15 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
     account(aid).verifyEmail(hash, now).toFuture.map(v => EmailVerified(described(aid)(v), optionalText(v, "previousEmail")))
   def resetPassword(aid: String, hash: String, credential: PasswordCredential, now: Double): Future[AccountDescription] =
     account(aid).resetPassword(hash, PasswordCredentialCodec.encode(credential), now).toFuture.map(described(aid))
+  def convert(aid: String, target: AccountConversion, uid: String, generation: Int, now: Double): Future[AccountDescription] = {
+    val stub = account(aid)
+    val result = target match {
+      case AccountConversion.ToPassword(credential) =>
+        stub.convert(AccountKind.Password.code, uid, generation, now, PasswordCredentialCodec.encode(credential), js.undefined, js.undefined)
+      case AccountConversion.ToGoogle(subHash, email) => stub.convert(AccountKind.Google.code, uid, generation, now, js.undefined, subHash, email.orUndefined)
+    }
+    result.toFuture.map(described(aid))
+  }
   def setPassword(aid: String, credential: PasswordCredential, now: Double): Future[AccountDescription] =
     account(aid).setPassword(PasswordCredentialCodec.encode(credential), now).toFuture.map(described(aid))
   def bindDevice(aid: String, device: String, keyIp: String, now: Double): Future[Unit] = raw(account(aid).bindDevice(device, keyIp, now)).map(checked)
