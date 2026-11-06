@@ -7,7 +7,7 @@ import io._3ch.bbs.domain.posting.moderation.{ModerationDecision, ModerationInpu
 import io._3ch.bbs.external.web.URL
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
 import io._3ch.common.domain.account.Phoebe
-import io._3ch.common.domain.identity.{DateSalt, ShikibetsuFormat, ShikibetsuMode, ShikibetsuSeeds}
+import io._3ch.common.domain.identity.{DateSalt, IdentifierAxes, IdentifierAxis, ShikibetsuFormat, ShikibetsuMode, ShikibetsuSeeds}
 import io._3ch.common.domain.posting.{ArchiveIndexText, CapHandle, MailCommands, DatLineFormatter, NameField, PhoebeCommand, PostForm, PostKind, SageRule, ThreadPhoebeRequest, UserInfo}
 import io._3ch.common.text.JsNumber
 
@@ -41,7 +41,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
       sized = PostFormLimits.check(moderated.form, moderated.settings, moderated.number, moderated.cap.exists(_.strong))
         .fold(reject(_, moderated), form => moderated.copy(form = form))
       creationLimit <- threadCreationLimit(sized, request, board.settings)
-      named <- makeShikibetsu(sized, user)
+      named <- makeShikibetsu(sized, account, request)
       (marked, owner) <- markNusi(named, user, board.settings)
       decided = marked.copy(sage = SageRule.sage(marked.number, marked.form.mail, marked.form.key, marked.unixtime, marked.settings, ports.random.next()))
       rateLimit <- postRateCheck(decided, board.settings, user, request)
@@ -174,7 +174,8 @@ final class PostingService(ports: PostingPorts, salt: String) {
       }
     }
 
-  private def makeShikibetsu(context: PostingContext, user: Option[PostingUser]): Future[PostingContext] = {
+  private def makeShikibetsu(context: PostingContext, account: PostingAccount, request: PostingRequest): Future[PostingContext] = {
+    val user = account.user
     val identity = context.identity
     val date = DateSalt.window(context.unixtime, context.settings.orElse("BBS_ID_RESET", "86400")).toString
     val seeds = ShikibetsuSeeds(identity.region, identity.city, identity.asn, identity.userAgent, context.settings.orElse("BBS_ID_GROUP", context.form.bbs), date, identity.salt)
@@ -187,6 +188,16 @@ final class PostingService(ports: PostingPorts, salt: String) {
           city <- id(seeds.citySeed)
           asn <- id(seeds.asnSeed)
         } yield ShikibetsuFormat.checked(identity.country, region, city, asn, hasher.md5(seeds.userAgentSeed))
+      case ShikibetsuMode.Phoebe =>
+        for {
+          axes <- identifierAxes(account, request)
+          region <- id(seeds.regionSeed)
+          asn <- id(seeds.asnSeed)
+          parts <- Future.traverse(IdentifierAxis.values.toSeq) { axis =>
+            val value = axes.value(axis)
+            if (value.isEmpty) Future.successful(IdentifierAxes.Missing) else id(seeds.axisSeed(axis, value)).map(_.take(3))
+          }
+        } yield ShikibetsuFormat.phoebe(identity.country, region, asn, parts, account.lv)
       case mode => Future.successful(ShikibetsuFormat.plain(mode, identity.country, identity.region, identity.city, identity.asn))
     }
     shikibetsu.map { value =>
@@ -194,6 +205,15 @@ final class PostingService(ports: PostingPorts, salt: String) {
       context.copy(shikibetsu = value, form = context.form.copy(name = NameField.withIdentity(context.form.name, suffix, value)))
     }
   }
+
+  /** phoebe 書式の5軸。認証済で端末ハッシュがあればそれを、無ければ UA 解析表で解析した値を使う */
+  private def identifierAxes(account: PostingAccount, request: PostingRequest): Future[IdentifierAxes] =
+    IdentifierAxes.fromDevice(account.device).filter(_ => authEnabled) match {
+      case Some(axes) => Future.successful(axes)
+      case None => ports.agents.load().map { table =>
+        IdentifierAxes.fromAgent(table.profile(request.userAgent), request.userAgent, request.secChUaFullVersionList.getOrElse(request.secChUa), request.acceptLanguage)
+      }
+    }
 
   /** スレ立て時のスレ主を返し、返信者がスレ主なら名前欄に (主) を付ける。キャップは対象外 */
   private def markNusi(context: PostingContext, user: Option[PostingUser], boardSettings: BbsSettings): Future[(PostingContext, Option[ThreadOwner])] =

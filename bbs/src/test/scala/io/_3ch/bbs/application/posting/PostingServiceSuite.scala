@@ -1,7 +1,7 @@
 package io._3ch.bbs.application.posting
 
-import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingAccount, PostingAccounts, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore}
-import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureClock, FailureSite, ModerationDenial, PostingError, PostingStage, PostingUser, ThreadOwner, ThreadPosting, ThreadWriteResult}
+import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingAccount, PostingAccounts, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore, UserAgentTableStore}
+import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureClock, FailureSite, ModerationDenial, PostingError, PostingStage, PostingUser, ThreadOwner, ThreadPosting, ThreadWriteResult, UserAgentRule, UserAgentTable}
 import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, PostRateFinding, PostRateIdentity, PostRateLevel, PostRateRejection, ThreadCreationRejection, ThreadCreationRateLimit}
 import io._3ch.bbs.handler.PostingText
 import io._3ch.bbs.external.web.TextEncoder
@@ -34,7 +34,8 @@ class PostingServiceSuite extends FunSuite {
     roll: Double = 0.5,
     write: ThreadPosting => Future[ThreadWriteResult] = posting => Future.successful(ThreadWriteResult.Written(if (posting.create) 1 else 2)),
     indexWritten: Boolean = true,
-    record: PostRateObservation => Unit = _ => ()
+    record: PostRateObservation => Unit = _ => (),
+    agents: UserAgentTableStore = UserAgentTableStore.empty
   ) {
     val calls: mutable.Buffer[String] = mutable.Buffer.empty
     val postings: mutable.Buffer[(String, String, ThreadPosting)] = mutable.Buffer.empty
@@ -81,6 +82,7 @@ class PostingServiceSuite extends FunSuite {
         def current(): Future[Option[PostingUser]] = called("users")(user)
       },
       accounts = authSource,
+      agents = agents,
       hasher = new Hasher {
         def md5(value: String): String = { md5Inputs += value; s"m($value)" }
         def sha1Base64(value: String): Future[String] = Future.successful(s"s1($value)")
@@ -575,6 +577,46 @@ class PostingServiceSuite extends FunSuite {
     } yield {
       assertEquals(phoebeOf(staff), Some(ThreadPhoebeRequest(0, lower = true, 0)))
       assertEquals(phoebeOf(creator), Some(ThreadPhoebeRequest(4, lower = false, 0)))
+    }
+  }
+
+  private val phoebeBoard = "BBS_ID_SHIKIBETSU=phoebe\n"
+  private val windowsTable: UserAgentTableStore = () => Future.successful(UserAgentTable(
+    UserAgentRule.create("\\(Test\\)", "", "Windows 11").toSeq, Nil, UserAgentRule.create("Mozilla", "", "PC").toSeq))
+  private def seed(value: String, axis: String): String = s"$value|${axis}sample19676m(salt)"
+  private def nameOf(fake: Fake): String = fake.postings.head._1.split("<>")(0)
+
+  test("phoebe 書式の未ログインは UA 解析表と UA・Client Hints・言語から5軸を作り、取れない軸は 000、D は 0") {
+    val fake = Fake(boardSettings = phoebeBoard, agents = windowsTable)
+    fake.post(reply()*)(_.copy(secChUa = "\"Chromium\";v=\"130\"", acceptLanguage = "ja")).map { _ =>
+      val axis = "s1("
+      assertEquals(nameOf(fake), s"名無しさん＠３ちゃんねる </b>(JP.s1 s1-${axis}000${axis}${axis}${axis}0)<b>")
+      assert(fake.md5Inputs.contains(seed("Windows 11", "E")))
+      assert(fake.md5Inputs.contains(seed("PC", "G")))
+      assert(fake.md5Inputs.contains(seed("Mozilla/5.0 (Test)", "Z")))
+      assert(fake.md5Inputs.contains(seed("\"Chromium\";v=\"130\"|ja", "X")))
+      assert(!fake.md5Inputs.exists(_.contains("|F")))
+    }
+  }
+
+  test("phoebe 書式の認証済は端末ハッシュを軸に分け、D に Lv を出して 10 は *") {
+    val fake = Fake(boardSettings = phoebeBoard, agents = () => Future.failed(new IllegalStateException("表は読まない")),
+      authSource = Some(new AuthSource(member, device = "p0123456789abcdef01", lv = 10)))
+    fake.post(reply()*)().map { _ =>
+      assert(nameOf(fake).endsWith("*)<b>"), nameOf(fake))
+      assertEquals(Seq("0123" -> "E", "456789" -> "F", "abcd" -> "G", "ef" -> "Z", "01" -> "X").count { case (v, a) => fake.md5Inputs.contains(seed(v, a)) }, 5)
+    }
+  }
+
+  test("phoebe 書式で端末ハッシュの無い認証済は UA 解析で埋め、キャップは ★ のまま") {
+    val keyed = Fake(boardSettings = phoebeBoard, authSource = Some(new AuthSource(member, device = "", lv = 4)))
+    val capped = Fake(boardSettings = phoebeBoard, caps = Map("cap" -> "管理人"))
+    for {
+      _ <- keyed.post(reply()*)()
+      _ <- capped.post(reply("mail" -> "#!cap")*)()
+    } yield {
+      assertEquals(nameOf(keyed), "名無しさん＠３ちゃんねる </b>(JP.s1 s1-000000000s1(0004)<b>")
+      assert(nameOf(capped).contains("(★)"), nameOf(capped))
     }
   }
 
