@@ -23,7 +23,7 @@ object ThreadRepository {
   /** dat 行と log 行を追記し、確定したレス番号を返す。スレの状態とスレ立て規制による拒否は結果で返し、それ以外の障害は Future の失敗 */
   def addRes(board: BoardId, key: String, datLine: String, logLine: String, posting: ThreadPosting, e: WorkerEnv): Future[ThreadWriteResult] =
     stub(board, key, e).addRes(datLine, logLine, PostingCodec.encode(posting)).toFuture
-      .map(ThreadWriteResult.Written(_))
+      .map(result => ThreadWriteResult.Written(result.count))
       .recover { case Refusal(result) => result }
 
   /** 投稿処理のポート */

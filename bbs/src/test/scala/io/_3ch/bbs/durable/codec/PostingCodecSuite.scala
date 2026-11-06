@@ -1,7 +1,7 @@
 package io._3ch.bbs.durable.codec
 
 import io._3ch.bbs.domain.posting.{ClientIdentity, ThreadOwner, ThreadPosting}
-import io._3ch.bbs.domain.posting.moderation.{ThreadCreationLimit, ThreadCreationRateLimit, ThreadCreationRequest}
+import io._3ch.bbs.domain.posting.moderation.{PostRateCheck, PostRateIdentity, PostRateKey, PostRateLimit, PostRateMode, ThreadCreationLimit, ThreadCreationRateLimit, ThreadCreationRequest}
 import munit.FunSuite
 import scala.scalajs.js
 
@@ -20,12 +20,22 @@ class PostingCodecSuite extends FunSuite {
   test("RPC の外形は従来のプレーンオブジェクト") {
     val encoded = PostingCodec.encode(create)
     assertEquals(js.Object.keys(encoded.asInstanceOf[js.Object]).toList,
-      List("bbs", "key", "title", "sage", "maxThreads", "create", "initialSettings", "creationLimit", "owner"))
+      List("bbs", "key", "title", "sage", "maxThreads", "create", "initialSettings", "creationLimit", "owner", "rateLimit"))
     assertEquals(js.JSON.stringify(encoded.creationLimit),
       """{"ip":"ip","userAgent":"ua","networkGroup":"net","title":"title","tatesugi":2,"tatesugiResetSeconds":3600,"junban":1,"junbanResetSeconds":60}""")
     assertEquals(js.JSON.stringify(encoded.owner), """{"ip":"iph","shikibetsu":"JP.x","account":""}""")
     val reply = PostingCodec.encode(ThreadPosting(Some("sample"), Some("1"), None))
     assert(js.isUndefined(reply.initialSettings) && js.isUndefined(reply.creationLimit) && js.isUndefined(reply.owner) && js.isUndefined(reply.title))
+  }
+
+  test("連投規制の材料は値が真のときだけ読み、往復する") {
+    val keys = Set(PostRateKey.Ip, PostRateKey.Account)
+    val check = PostRateCheck(PostRateMode.On, PostRateIdentity("ip", "shiki", ""), PostRateLimit.BoardSettings(18, 10, 10, keys), PostRateLimit.ThreadSettings(40, 3600, keys))
+    val reply = ThreadPosting(Some("sample"), Some("1"), None, rateLimit = Some(check))
+    assertEquals(PostingCodec.decode(PostingCodec.encode(reply)), Some(reply))
+    assertEquals(js.JSON.stringify(PostingCodec.encode(reply).rateLimit),
+      """{"mode":"on","ip":"ip","shiki":"shiki","aid":"","timecount":18,"timeclose":10,"samba24":10,"threadRentou":40,"threadRentouReset":3600,"keys":"ip,aid"}""")
+    assertEquals(PostingCodec.decode(js.Dynamic.literal(rateLimit = null)), Some(ThreadPosting()))
   }
 
   test("null と undefined は投稿情報なし") {

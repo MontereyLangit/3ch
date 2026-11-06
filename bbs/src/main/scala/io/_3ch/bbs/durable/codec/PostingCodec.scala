@@ -1,6 +1,8 @@
 package io._3ch.bbs.durable.codec
 
 import io._3ch.bbs.domain.posting.ThreadPosting
+import io._3ch.bbs.domain.posting.moderation.PostRateFinding
+import io._3ch.bbs.external.cloudflare.ThreadAddResult
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 
@@ -10,9 +12,10 @@ object PostingCodec {
     bbs = posting.bbs.orUndefined, key = posting.key.orUndefined, title = posting.title.orUndefined, sage = posting.sage,
     maxThreads = posting.maxThreads.orUndefined, create = posting.create, initialSettings = posting.initialSettings.orUndefined,
     creationLimit = posting.creationLimit.map(ThreadCreationCodec.encodeRequest).orUndefined,
-    owner = posting.owner.map(ThreadOwnerCodec.encode).orUndefined)
+    owner = posting.owner.map(ThreadOwnerCodec.encode).orUndefined,
+    rateLimit = posting.rateLimit.map(PostRateCodec.encodeCheck).orUndefined)
 
-  /** null と undefined は投稿情報なし。初期スレ設定・スレ立て規制・スレ主は create が真で値が真のときだけ読む */
+  /** null と undefined は投稿情報なし。初期スレ設定・スレ立て規制・スレ主は create が真で値が真のときだけ、連投規制は値が真のときだけ読む */
   def decode(value: js.UndefOr[js.Dynamic]): Option[ThreadPosting] = {
     val raw = value.asInstanceOf[js.Any]
     if (isNullish(raw)) None
@@ -29,9 +32,14 @@ object PostingCodec {
         create = create,
         initialSettings = created(p.initialSettings).map(str),
         creationLimit = created(p.creationLimit).map(ThreadCreationCodec.decodeRequest),
-        owner = created(p.owner).map(ThreadOwnerCodec.decode)))
+        owner = created(p.owner).map(ThreadOwnerCodec.decode),
+        rateLimit = if (truth(p.rateLimit)) Some(PostRateCodec.decodeCheck(p.rateLimit)) else None))
     }
   }
+
+  /** addRes の戻り値 */
+  def encodeResult(count: Int, swallowed: Boolean, observed: Seq[PostRateFinding]): ThreadAddResult =
+    js.Dynamic.literal(count = count, swallowed = swallowed, observed = observed.map(_.code).toJSArray).asInstanceOf[ThreadAddResult]
 
   private def isNullish(value: js.Any): Boolean = value == null || js.isUndefined(value)
   private def truth(value: js.Any): Boolean = js.Dynamic.global.Boolean(value).asInstanceOf[Boolean]

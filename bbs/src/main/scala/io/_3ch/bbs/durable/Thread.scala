@@ -1,8 +1,9 @@
 package io._3ch.bbs.durable
 
 import io._3ch.bbs.external.cloudflare.*
-import io._3ch.bbs.durable.codec.{PostingCodec, ThreadCreationCodec, ThreadOwnerCodec}
+import io._3ch.bbs.durable.codec.{PostRateCodec, PostingCodec, ThreadCreationCodec, ThreadOwnerCodec}
 import io._3ch.bbs.domain.posting.ThreadPosting
+import io._3ch.bbs.domain.posting.moderation.{PostRateFinding, PostRateLimit, ThreadRecentPosts}
 import io._3ch.bbs.durable.support.DurableLock
 import io._3ch.common.domain.posting.{DatLineFormatter, ThreadWriteGuard, ThreadWriteKind}
 
@@ -149,13 +150,13 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
   def setSettings(settings: String): js.Promise[Unit] = put("settings" -> settings).toJSPromise
 
   /**
-   * 新しいレスを追加します。追記できないときは ThreadWriteRejection のコードを Error の文言にして失敗します
+   * 新しいレスを追加します。追記できないときは ThreadWriteRejection・ThreadCreationRejection・PostRateRejection のコードを Error の文言にして失敗します
    * @param datLine - dat形式の新しい行データ
    * @param logLine - log形式の新しい行データ
    * @param posting - 投稿の付帯情報（PostingCodec の形式）。null と省略は付帯情報なし
-   * @return 追加後のレス数
+   * @return 追加後のレス数と、連投規制で吸い込んだか・試行モードで記録した判定
    */
-  def addRes(datLine: String, logLine: String, posting: js.UndefOr[js.Dynamic] = js.undefined): js.Promise[Int] = locked {
+  def addRes(datLine: String, logLine: String, posting: js.UndefOr[js.Dynamic] = js.undefined): js.Promise[ThreadAddResult] = locked {
     val decoded = PostingCodec.decode(posting)
     val p = decoded.getOrElse(ThreadPosting())
     val kind = if decoded.isEmpty then ThreadWriteKind.Raw else if p.create then ThreadWriteKind.Create else ThreadWriteKind.Reply
@@ -163,6 +164,17 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
     val boardName = p.bbs.getOrElse("undefined")
     val keyName = p.key.getOrElse("undefined")
     val creationLimit = if p.create then p.creationLimit else None
+    val rate = if kind == ThreadWriteKind.Raw then None else p.rateLimit
+    val reply = kind == ThreadWriteKind.Reply
+    val nowMillis = js.Date.now()
+    val now = nowMillis / 1000
+    lazy val rateKey = s"$keyName:${js.Dynamic.global.crypto.randomUUID()}"
+    def cancelCreation(): Future[Unit] =
+      if creationLimit.isDefined then board(boardName).cancelThreadCreation(keyName).toFuture.recover { case _ => () } else Future.unit
+    def cancelPost(): Future[Unit] =
+      if rate.isDefined then board(boardName).cancelPost(rateKey).toFuture.recover { case _ => () } else Future.unit
+    def completePost(): Future[Unit] =
+      if rate.isDefined then board(boardName).completePost(rateKey).toFuture.recover { case _ => () } else Future.unit
     for {
       hidden <- read("hidden")
       stopped <- if truth(hidden) then Future.successful[js.Any](true) else read("stopped")
@@ -172,21 +184,35 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
       settings <- if unavailable then Future.successful("") else text("settings")
       count = ThreadWriteGuard.check(unavailable, dat, settings, kind).fold(rejection => fail(rejection.code), identity)
       log <- text("log")
-      update = js.Dictionary[js.Any]("dat" -> (dat + datLine + "\n"), "log" -> (log + DatLineFormatter.renumberLog(logLine, count) + "\n"), "modifiedAt" -> js.Date.now())
+      recent <- if rate.isDefined then read("recentPosts").map(PostRateCodec.decodeRecent) else Future.successful(ThreadRecentPosts.empty)
+      threadRejection = rate.filter(_ => reply).flatMap(r => recent.check(r.thread, r.identity, now))
+      _ = if rate.exists(_.enforce) then threadRejection.foreach(rejection => fail(rejection.code))
+      update = js.Dictionary[js.Any]("dat" -> (dat + datLine + "\n"), "log" -> (log + DatLineFormatter.renumberLog(logLine, count) + "\n"), "modifiedAt" -> nowMillis)
       _ = if p.create then update("settings") = p.initialSettings.getOrElse("")
       _ = if p.create then p.owner.foreach(owner => update("owner") = ThreadOwnerCodec.encode(owner))
+      _ = rate.foreach(r => update("recentPosts") = PostRateCodec.encodeRecent(recent.appended(PostRateLimit.Entry(now, r.identity), r.thread, now)))
       _ <- creationLimit.fold(Future.unit) { limit =>
         board(boardName).reserveThreadCreation(keyName, ThreadCreationCodec.encodeRequest(limit)).toFuture.map { error =>
           if error.nonEmpty then fail(error)
         }
       }
-      _ <- state.storage.put(update).toFuture.recoverWith { case error =>
-        if creationLimit.isDefined then board(boardName).cancelThreadCreation(keyName).toFuture.transformWith(_ => Future.failed(error))
-        else Future.failed(error)
+      boardCode <- rate.fold(Future.successful("")) { r =>
+        board(boardName).reservePost(rateKey, PostRateCodec.encodeIdentity(r.identity), PostRateCodec.encodeBoardSettings(r.board, r.enforce)).toFuture
+          .recoverWith { case error => if r.enforce then cancelCreation().transformWith(_ => Future.failed(error)) else Future.successful("") }
       }
-      _ <- if creationLimit.isDefined then board(boardName).completeThreadCreation(keyName).toFuture.recover { case _ => () } else Future.unit
-      _ <- if kind != ThreadWriteKind.Raw then board(boardName).updateThread(js.Dynamic.literal(key = p.key.orUndefined, title = p.title.orUndefined, resNum = count), p.sage, p.maxThreads.orUndefined).toFuture else Future.unit
-    } yield count
+      _ <- if rate.exists(_.enforce) && boardCode.nonEmpty then cancelCreation().map(_ => fail(boardCode)) else Future.unit
+      copipe = rate.isDefined && reply && PostRateLimit.copipe(dat, datLine)
+      observed = threadRejection.map(PostRateFinding.Rejected(_)).toSeq ++ PostRateFinding.fromCode(boardCode) ++ Option.when(copipe)(PostRateFinding.Copipe)
+      result <- if copipe && rate.exists(_.enforce) then completePost().map(_ => PostingCodec.encodeResult(count, swallowed = true, Nil))
+        else for {
+          _ <- state.storage.put(update).toFuture.recoverWith { case error =>
+            cancelCreation().flatMap(_ => cancelPost()).transformWith(_ => Future.failed(error))
+          }
+          _ <- if creationLimit.isDefined then board(boardName).completeThreadCreation(keyName).toFuture.recover { case _ => () } else Future.unit
+          _ <- completePost()
+          _ <- if kind != ThreadWriteKind.Raw then board(boardName).updateThread(js.Dynamic.literal(key = p.key.orUndefined, title = p.title.orUndefined, resNum = count), p.sage, p.maxThreads.orUndefined).toFuture else Future.unit
+        } yield PostingCodec.encodeResult(count, swallowed = false, observed)
+    } yield result
   }.toJSPromise
 
   /** 管理画面向けの一括状態。結果は `Object.fromEntries` のプレーンオブジェクト（[[ThreadInspectResult]]）。 */

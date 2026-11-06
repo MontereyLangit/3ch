@@ -66,6 +66,14 @@ trait ThreadInspectResult extends js.Object {
   val importedFrom: js.UndefOr[String] = js.native
 }
 
+/** `Thread.addRes` の結果。count は確定（吸い込みなら採番予定）のレス番号、observed は試行モードで記録だけした判定のコード */
+@js.native
+trait ThreadAddResult extends js.Object {
+  val count: Int = js.native
+  val swallowed: Boolean = js.native
+  val observed: js.Array[String] = js.native
+}
+
 /** 
  * R2 オブジェクト
  * 未存在キーは `null` なので `js.UndefOr` にしないこと
