@@ -22,7 +22,7 @@ AS・地域・UA・日別識別子の観測集計（Account.seen）、AccountDir
 
 | 段 | 次に実装する内容 |
 | --- | --- |
-| E-1 | 入力規則・ログイン失敗計数・資格情報の値型・PBKDF2プロバイダまで実装。資格情報の保存・照合RPC、HTTP登録・ログイン、Google認証と準備中UIの接続は未実装 |
+| E-1 | 入力規則・ログイン失敗計数・PBKDF2・資格情報codec・登録準備状態まで実装。パスワードの作成・照合RPC、HTTP登録・ログイン、Google認証と準備中UIの接続は未実装 |
 | C | PHOEBEの昇格・投稿数と経過時間、識別子の書式、Lv設定とコマンド、連投規制へのアカウントID連携を設計書と照合する |
 | D | 権限・回避レベル・管理画面のアカウント認証と操作画面、スレ立て規制の設定を進める。管理画面の別計画も参照する |
 | E-2 | メール認証、パスワード再設定、方式移行など。メール送信APIの提供元は未定のため、送信ポートと提供元の設定を分ける |
@@ -43,6 +43,10 @@ LoginId、Password、LoginThrottle、PasswordCredentialをcommonに追加した�
 
 ScalaのプロバイダはNodeの実WebCryptoと独立した固定値で検証した。実workerdの追加テストはネイティブAPIの100,000回・100,001回の計算をNodeと照合するもので、ScalaプロバイダをDOから呼ぶ統合テストは次の区切りで追加する。今回の設定値は100,000回のままで、プラットフォーム上限は未測定。
 
+PBKDF2プロバイダは `70087bd` でpush済み。後続では、凍結などのprofile.statusから登録準備状態を分離し、activationがpendingのアカウントを認証に使わないようにした。readyのPasswordアカウントには正しい資格情報とUIDに一致するログインIDが必要。古いClient保存値にactivationが無い場合だけreadyとして読み、PasswordとGoogleの欠損・不明な準備状態は拒否する。
+
+資格情報は厳密なcodecで読み書きする。ソルト16バイトとハッシュ32バイトは小文字の16進数で保存し、必須項目・反復数・時刻・失敗計数を検証する。本人向けinspectと認証DTOには資格情報やactivationを含めない。登録を有効にするRPCと、実際のパスワード照合RPCはまだ追加していない。
+
 ## 設定と検証
 
 [認証の検証設定](auth-integration.md) に従う。`AUTH_SECRET` がないと認証は有効にならない。登録には `AGREEMENT_VERSION`、`TURNSTILE_SITE_KEY`、`TURNSTILE_SECRET_KEY` も必要。秘密鍵は `.dev.vars` または環境のsecretで管理し、この文書やコミットへ書かない。
@@ -61,7 +65,7 @@ npm run v6:typecheck
 
 | 検証 | この区切りの結果 |
 | --- | --- |
-| Scala単体テスト | sbt test 1,080件成功（commonJVM 137、commonJS 140、codegen 27、bbsClient 2、bbs 774）。既存の投稿goldenは変更なし |
+| Scala単体テスト | sbt test 1,096件成功（commonJVM 140、commonJS 143、codegen 27、bbsClient 2、bbs 784）。既存の投稿goldenは変更なし |
 | workerd・SSR・hydration | npm test 63件成功、skipなし。npmのpretestも成功。実DOの競合・保存、Turnstile応答の差し替え、Cookie・再認証・キー失効・ログアウト、既存投稿、SSR・hydration、ネイティブPBKDF2を検証 |
 | ビルド | npm run v6:build成功。Workerの最終出力に5つのDOが公開されることも検証 |
 | dev起動 | npm run devをローカル・ダミーsaltで起動。トップ200、bbs.cgiのHTTP 200とエラーマーカー、管理者パスワード未設定時の503、各応答のAccept-CHを確認 |

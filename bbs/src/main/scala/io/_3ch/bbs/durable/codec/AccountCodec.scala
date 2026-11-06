@@ -6,7 +6,7 @@ import scala.scalajs.js.JSConverters.*
 
 /** Account の保存値と RPC の DTO を純粋モデルへ変換する */
 object AccountCodec {
-  val stateKeys: js.Array[String] = js.Array("profile", "level", "roles", "tokens", "devices", "caps")
+  val stateKeys: js.Array[String] = js.Array("profile", "level", "roles", "tokens", "devices", "caps", "activation", "credential")
 
   private def invalid(): Nothing = throw js.JavaScriptException(new js.Error("invalid-account-data"))
   private def field(value: js.Dynamic, name: String): js.Any = {
@@ -82,13 +82,21 @@ object AccountCodec {
   private def encodeCap(v: AccountCap): js.Dynamic = js.Dynamic.literal(capId = v.capId, name = v.name, hash = v.hash, strong = v.strong, issuedBy = v.issuedBy, issuedAt = v.issuedAt, revokedAt = v.revokedAt.orUndefined)
 
   def decodeState(values: js.Map[String, js.Any]): Option[AccountState] = values.get("profile").filterNot(missing).map { profile =>
-    val state = AccountState(decodeProfile(profile.asInstanceOf[js.Dynamic]), decodeLevel(values.get("level").getOrElse(invalid()).asInstanceOf[js.Dynamic]),
-      decodeRoles(values.get("roles").orNull), array(values.get("tokens").orNull).map(decodeToken), array(values.get("devices").orNull).map(decodeDevice), array(values.get("caps").orNull).map(decodeCap))
+    val decodedProfile = decodeProfile(profile.asInstanceOf[js.Dynamic])
+    val activation: js.Any = values.get("activation").getOrElse(js.undefined)
+    // activation が無い既存クライアント ID だけは、これまでどおり利用可能として読む
+    val readiness = if (js.isUndefined(activation) && decodedProfile.kind == AccountKind.Client) AccountReadiness.Ready
+    else AccountReadiness.parse(text(activation)).getOrElse(invalid())
+    val credential = values.get("credential").filterNot(missing).map(PasswordCredentialCodec.decode)
+    val state = AccountState(decodedProfile, decodeLevel(values.get("level").getOrElse(invalid()).asInstanceOf[js.Dynamic]),
+      decodeRoles(values.get("roles").orNull), array(values.get("tokens").orNull).map(decodeToken), array(values.get("devices").orNull).map(decodeDevice), array(values.get("caps").orNull).map(decodeCap),
+      credential, readiness)
     if (!state.valid) invalid()
     state
   }
   def encodeState(state: AccountState): js.Dictionary[js.Any] = js.Dictionary[js.Any]("profile" -> encodeProfile(state.profile), "level" -> encodeLevel(state.level),
-    "roles" -> encodeRoles(state.roles), "tokens" -> state.tokens.map(encodeToken).toJSArray, "devices" -> state.devices.map(encodeDevice).toJSArray, "caps" -> state.caps.map(encodeCap).toJSArray)
+    "roles" -> encodeRoles(state.roles), "tokens" -> state.tokens.map(encodeToken).toJSArray, "devices" -> state.devices.map(encodeDevice).toJSArray, "caps" -> state.caps.map(encodeCap).toJSArray,
+    "activation" -> state.readiness.code, "credential" -> state.credential.fold[js.Any](null)(PasswordCredentialCodec.encode))
 
   def describe(value: Either[AccountRejection, AccountDescription]): js.Dynamic = value.fold(error => js.Dynamic.literal(code = error.code), description)
   def description(v: AccountDescription): js.Dynamic = js.Dynamic.literal(code = "", aid = v.aid, uid = v.uid, kind = v.kind.code, generation = v.generation,

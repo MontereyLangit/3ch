@@ -698,6 +698,7 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | キー | 内容 |
 | --- | --- |
 | `profile` | `{aid, uid, kind: client\|password\|google, createdAt, expiresAt?, loginId?, email?, emailVerifiedAt?, googleSubHash?, agreedAt, agreementVersion, status, generation}` |
+| `activation` | 登録準備状態の `pending` / `ready`。凍結等のstatusとは別。準備中は認証不可。既存Clientだけはキー欠損をreadyとして読み、PasswordとGoogleは必須。readyのPasswordには有効なcredentialとUIDに一致するloginIdも必要 |
 | `credential` | ID/Password: `{algo: "pbkdf2-sha256", iterations, salt, hash, updatedAt, failures: [t…], lockedUntil?}`。メール認証・パスワード再設定の保留トークンは `pending: {kind, hash, expiresAt, email?}`（§3.9） |
 | `level` | `{lv, lvSince, lvPosts, lvOverride?}` |
 | `roles` | `["admin", ...]` |

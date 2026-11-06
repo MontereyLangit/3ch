@@ -8,6 +8,14 @@ class AccountCodecSuite extends FunSuite {
   private val now = 2000000000d
   private val profile = AccountProfile("abcdefghijklmnop", "user1234", AccountKind.Client, now, None, now, "v1")
   private val state = AccountState.create(profile, now).toOption.get.issueToken("token1", "a" * 64, now).toOption.get
+  private val credential = PasswordCredential(PasswordAlgorithm.Pbkdf2Sha256, 100000, Vector.tabulate(16)(i => (i * 17).toByte), Vector.fill(32)(2.toByte), now)
+  private val prepared = AccountState.create(profile.copy(kind = AccountKind.Password, loginId = Some(profile.uid)), now).toOption.get
+
+  private def stored(state: AccountState): js.Map[String, js.Any] = {
+    val values = js.Map[String, js.Any]()
+    AccountCodec.encodeState(state).foreach { case (key, value) => values.update(key, value) }
+    values
+  }
 
   test("アカウントの保存項目は型と任意値を保って往復する") {
     val values = js.Map[String, js.Any]()
@@ -63,5 +71,77 @@ class AccountCodecSuite extends FunSuite {
       }
     }
     assertEquals(AccountCodec.decodeProfile(AccountCodec.encodeProfile(frozen)), frozen)
+  }
+
+  test("以前のクライアント保存値だけは準備状態のキーが無くても利用できる") {
+    val legacy = stored(state)
+    legacy.subtractOne("activation")
+    legacy.subtractOne("credential")
+    val restored = AccountCodec.decodeState(legacy).get
+    assertEquals(restored, state)
+    assert(restored.usable(now).isRight)
+    assertEquals(AccountCodec.encodeState(restored)("credential"), null)
+    assertEquals(AccountCodec.stateKeys.toSet, Set("profile", "level", "roles", "tokens", "devices", "caps", "activation", "credential"))
+    legacy.update("activation", null)
+    intercept[Throwable](AccountCodec.decodeState(legacy))
+  }
+
+  test("パスワード方式は準備中と資格情報の有無を別々に保存する") {
+    Seq(prepared, prepared.copy(credential = Some(credential))).foreach { state =>
+      val restored = AccountCodec.decodeState(stored(state)).get
+      assertEquals(restored, state)
+      assertEquals(restored.describe(profile.aid, 0, now), Left(AccountRejection.Pending))
+    }
+    val ready = prepared.copy(credential = Some(credential), readiness = AccountReadiness.Ready)
+    val restored = AccountCodec.decodeState(stored(ready)).get
+    assertEquals(restored, ready)
+    assert(restored.describe(profile.aid, 0, now).isRight)
+  }
+
+  test("クライアント以外は準備状態を必須とし不明な値を利用可能に補正しない") {
+    val google = AccountState.create(profile.copy(kind = AccountKind.Google), now).toOption.get
+    Seq(prepared, google).foreach { state =>
+      Seq[js.Any](js.undefined, null, "unknown", true).foreach { activation =>
+        val fields = stored(state)
+        fields.update("activation", activation)
+        intercept[Throwable](AccountCodec.decodeState(fields))
+      }
+      val missing = stored(state)
+      missing.subtractOne("activation")
+      intercept[Throwable](AccountCodec.decodeState(missing))
+    }
+    assertEquals(AccountCodec.decodeState(stored(google)), Some(google))
+  }
+
+  test("利用可能なパスワード方式の資格情報欠損とログイン ID の不一致を拒否する") {
+    val ready = prepared.copy(credential = Some(credential), readiness = AccountReadiness.Ready)
+    Seq[js.Any](js.undefined, null, js.Dynamic.literal()).foreach { missing =>
+      val fields = stored(ready)
+      fields.update("credential", missing)
+      intercept[Throwable](AccountCodec.decodeState(fields))
+    }
+    val missing = stored(ready)
+    missing.subtractOne("credential")
+    intercept[Throwable](AccountCodec.decodeState(missing))
+    Seq[js.Any](js.undefined, "otherid", "USER1234").foreach { loginId =>
+      val fields = stored(ready)
+      fields("profile").asInstanceOf[js.Dynamic].loginId = loginId
+      intercept[Throwable](AccountCodec.decodeState(fields))
+    }
+    val clientCredential = stored(state)
+    clientCredential.update("credential", PasswordCredentialCodec.encode(credential))
+    intercept[Throwable](AccountCodec.decodeState(clientCredential))
+  }
+
+  test("本人向け一覧と投稿認証の DTO に資格情報と準備状態を含めない") {
+    val ready = prepared.copy(credential = Some(credential), readiness = AccountReadiness.Ready)
+    val payloads = Seq(AccountCodec.inspect(ready, Vector.empty, now), AccountCodec.description(ready.description),
+      AccountCodec.describe(ready.describe(profile.aid, 0, now)))
+    payloads.foreach { payload =>
+      val serialized = js.JSON.stringify(payload)
+      Seq("credential", "activation", "salt", "hash", "throttle", "00112233445566778899aabbccddeeff", "02" * 32).foreach { secret =>
+        assert(!serialized.contains(secret), secret)
+      }
+    }
   }
 }

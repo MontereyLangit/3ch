@@ -56,7 +56,8 @@ final case class AccountProfile(
   def valid: Boolean = aid.matches("[a-z0-9]{16}") && uid.matches("[a-z0-9_]{3,16}") &&
     AccountProfile.validTime(createdAt) && AccountProfile.validTime(agreedAt) && agreementVersion.nonEmpty && generation >= 0 &&
     expiresAt.forall(AccountProfile.validTime) && emailVerifiedAt.forall(AccountProfile.validTime) &&
-    (kind != AccountKind.Client || (uid.matches("[a-z0-9]{8}") && expiresAt.exists(_ > createdAt)))
+    (kind != AccountKind.Client || (uid.matches("[a-z0-9]{8}") && expiresAt.exists(_ > createdAt))) &&
+    (kind != AccountKind.Password || loginId.exists(id => id == uid && LoginId.parse(id).exists(_.value == id)))
 
   def expired(now: Double): Boolean = kind == AccountKind.Client && expiresAt.forall(_ <= now)
 
@@ -80,6 +81,7 @@ enum AccountRejection(val code: String) {
   case Invalid extends AccountRejection("auth:invalid")
   case Exists extends AccountRejection("auth:account:exists")
   case Missing extends AccountRejection("auth:account:missing")
+  case Pending extends AccountRejection("auth:account:pending")
   case Generation extends AccountRejection("auth:session:invalid")
   case Expired extends AccountRejection("auth:session:expired")
   case Frozen extends AccountRejection("auth:frozen")

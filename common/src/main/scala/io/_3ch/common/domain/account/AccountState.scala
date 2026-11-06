@@ -56,19 +56,27 @@ final case class AccountState(
   roles: Roles = Roles(),
   tokens: Vector[DedicatedBrowserToken] = Vector.empty,
   devices: Vector[AccountDevice] = Vector.empty,
-  caps: Vector[AccountCap] = Vector.empty
+  caps: Vector[AccountCap] = Vector.empty,
+  credential: Option[PasswordCredential] = None,
+  readiness: AccountReadiness = AccountReadiness.Ready
 ) {
   def valid: Boolean = profile.valid && level.valid && roles.permitted(profile.kind) &&
     tokens.forall(_.valid) && tokens.map(_.tokenId).distinct.size == tokens.size && tokens.map(_.hash).distinct.size == tokens.size &&
     devices.size <= 10 && devices.forall(_.valid) && devices.map(_.hash).distinct.size == devices.size &&
-    caps.forall(_.valid) && caps.map(_.capId).distinct.size == caps.size && caps.map(_.hash).distinct.size == caps.size
+    caps.forall(_.valid) && caps.map(_.capId).distinct.size == caps.size && caps.map(_.hash).distinct.size == caps.size &&
+    readiness != null && credential != null && (profile.kind match {
+      case AccountKind.Password => credential.forall(value => value != null && value.valid) &&
+        (readiness == AccountReadiness.Pending || credential.isDefined)
+      case _ => credential.isEmpty
+    })
 
   def description: AccountDescription = AccountDescription(profile.aid, profile.uid, profile.kind, profile.generation,
     profile.expiresAt, level.effective, roles, profile.agreedAt, profile.agreementVersion)
 
-  /** 凍結・停止・退会とクライアント ID の期限切れを拒否する */
+  /** 不正な状態・登録準備中・凍結・停止・退会とクライアント ID の期限切れを拒否する */
   def usable(now: Double): Either[AccountRejection, Unit] = {
-    if (!AccountProfile.validTime(now)) Left(AccountRejection.Invalid)
+    if (!AccountProfile.validTime(now) || !valid) Left(AccountRejection.Invalid)
+    else if (readiness == AccountReadiness.Pending) Left(AccountRejection.Pending)
     else profile.status match {
       case AccountStatus.Frozen => Left(AccountRejection.Frozen)
       case AccountStatus.Banned => Left(AccountRejection.Banned)
@@ -175,12 +183,13 @@ final case class AccountState(
   }
 }
 object AccountState {
-  /** 同意・時刻・初期状態を確認し、登録方式に応じた Lv と有効期限で作成する */
+  /** 同意・時刻・初期状態を確認して作成する。パスワード方式は登録準備中にする */
   def create(profile: AccountProfile, now: Double): Either[AccountRejection, AccountState] = {
     val initial = profile.copy(expiresAt = if (profile.kind == AccountKind.Client) Some(profile.createdAt + AccountProfile.clientLifetime) else None)
     if (!initial.valid || !AccountProfile.validTime(now) || profile.createdAt > now || profile.agreedAt > now ||
       profile.emailVerifiedAt.exists(_ > now) || profile.status != AccountStatus.Active || profile.generation != 0 || initial.expired(now)) Left(AccountRejection.Invalid)
-    else Right(AccountState(initial, AccountLevel(if (profile.kind == AccountKind.Google) 10 else if (profile.kind == AccountKind.Password && profile.emailVerifiedAt.isDefined) 3 else 1, now)))
+    else Right(AccountState(initial, AccountLevel(if (profile.kind == AccountKind.Google) 10 else if (profile.kind == AccountKind.Password && profile.emailVerifiedAt.isDefined) 3 else 1, now),
+      readiness = if (profile.kind == AccountKind.Password) AccountReadiness.Pending else AccountReadiness.Ready))
   }
 }
 

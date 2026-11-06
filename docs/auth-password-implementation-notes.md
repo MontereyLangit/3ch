@@ -7,7 +7,7 @@
 
 1. 純粋モデル：LoginId、Password、LoginThrottle、PasswordCredential（実装済み）。
 2. 実WebCryptoのPBKDF2プロバイダ（実装済み）。生成・照合と暗号APIの異常系を検証する。
-3. 資格情報の保存・照合RPC。原子的な失敗計数とdummy照合まで検証する。
+3. 資格情報のcodecとPending/Readyの準備状態は実装済み。次に作成・照合RPCを追加し、原子的な失敗計数とdummy照合まで検証する。
 4. 登録回復方式を選び、索引RPC・アカウント準備状態・期限の契約をレビューする。
 5. BのOrigin・Turnstile・端末確認・AuthRateを再利用してHTTP登録／ログインを実装する。
 6. 上記が通ってからUIの登録・ログイン方式を有効にする。
