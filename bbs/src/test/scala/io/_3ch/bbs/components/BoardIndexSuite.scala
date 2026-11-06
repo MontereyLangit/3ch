@@ -177,4 +177,19 @@ class BoardIndexSuite extends munit.FunSuite {
     assert(html.contains("新しいキーへ置き換え"))
     assert(!html.contains("<script>"))
   }
+
+  test("アカウント画面は登録方法・有効期限（日本時間）・この端末とログアウトの注意を出す") {
+    val html = visible(BoardMarkup(AccountComponent.Component(AccountProps("member", 1, kind = io._3ch.common.domain.account.AccountKind.Client,
+      expiresAt = Some(1830265200), device = Some(io._3ch.common.domain.device.DeviceGranularity.Personal), deviceCount = 2)).rawElement))
+    assert(html.contains("かんたん登録（クライアントID）"))
+    assert(html.contains("2028/01/01まで有効"))
+    assert(html.contains("準個体（p）"))
+    assert(html.contains("登録した端末2台"))
+    assert(html.contains("ログアウトするとこの端末から戻せません"))
+    val password = visible(BoardMarkup(AccountComponent.Component(AccountProps("member", 3, kind = io._3ch.common.domain.account.AccountKind.Password)).rawElement))
+    assert(password.contains("ID・パスワード"))
+    assert(!password.contains("まで有効"))
+    assert(!password.contains("戻せません"))
+    assert(password.contains("端末情報なし"))
+  }
 }

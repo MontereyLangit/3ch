@@ -18,15 +18,16 @@ object AuthFormIsland {
       busy <- useState(false)
       error <- useState("")
       container <- useRefToVdom[dom.html.Div]
+      widget <- useRef(Option.empty[String])
+      mounted <- useRef(false)
       _ <- useEffectOnMount(CallbackTo {
-        var widget: Option[String] = None
-        var active = true
-        def render(): Unit = if active then container.get.runNow().foreach { el =>
+        mounted.value = true
+        def render(): Unit = if mounted.value then container.get.runNow().foreach { el =>
           val turnstile = js.Dynamic.global.selectDynamic("turnstile")
-          if !js.isUndefined(turnstile) && widget.isEmpty then {
-            val callback: js.Function1[String, Unit] = value => if active then token.setState(value).runNow()
-            val expired: js.Function0[Unit] = () => if active then token.setState("").runNow()
-            widget = Some(turnstile.render(el, js.Dynamic.literal("sitekey" -> AuthClient.text(raw, "turnstileSiteKey"), "callback" -> callback,
+          if !js.isUndefined(turnstile) && widget.value.isEmpty then {
+            val callback: js.Function1[String, Unit] = value => if mounted.value then token.setState(value).runNow()
+            val expired: js.Function0[Unit] = () => if mounted.value then token.setState("").runNow()
+            widget.value = Some(turnstile.render(el, js.Dynamic.literal("sitekey" -> AuthClient.text(raw, "turnstileSiteKey"), "callback" -> callback,
               "expired-callback" -> expired, "error-callback" -> expired)).asInstanceOf[String])
           }
         }
@@ -34,12 +35,13 @@ object AuthFormIsland {
         script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
         script.async = true
         script.onload = _ => render()
-        val onError: js.Function1[dom.Event, Unit] = _ => if active then error.setState("確認欄を読み込めませんでした。再読み込みしてください").runNow()
+        val onError: js.Function1[dom.Event, Unit] = _ => if mounted.value then error.setState("確認欄を読み込めませんでした。再読み込みしてください").runNow()
         script.addEventListener("error", onError)
         if !js.isUndefined(js.Dynamic.global.selectDynamic("turnstile")) then render() else dom.document.head.appendChild(script)
         Callback {
-          active = false
-          widget.foreach(id => Try(js.Dynamic.global.turnstile.remove(id)))
+          mounted.value = false
+          widget.value.foreach(id => Try(js.Dynamic.global.turnstile.remove(id)))
+          widget.value = None
           script.onload = null
           script.removeEventListener("error", onError)
           script.remove()
@@ -86,7 +88,16 @@ object AuthFormIsland {
         <.h2(^.className := "mb-2 font-bold", "利用規約と投稿の責任"),
         <.p(^.className := "mb-2 border border-[#d6dce3] bg-[#fafafa] p-3 text-sm", "投稿の責任は投稿者にあります。他人の権利を侵害する投稿や、法令に反する投稿は禁止です。削除・規制のため、接続情報（IPアドレス・回線・端末）を記録します。法令に基づく開示請求に応じることがあります。"),
         <.label(^.className := "mb-4 block", <.input(^.`type` := "checkbox", ^.checked := agreed.value, ^.onChange ==> ((e: ReactEventFromInput) => agreed.setState(e.target.checked))), " 利用規約を読み、投稿内容に責任を持つことに同意します"),
-        <.p(^.className := "my-3 text-sm text-[#697785]", "Safari・Chrome・Edge・Firefoxの最新版で開いてください。アプリ内ブラウザやPC版サイトでは認証できないことがあります。"),
+        <.h2(^.className := "mb-2 font-bold", "認証の前にお読みください"),
+        <.div(^.className := "mb-4 border border-[#d6dce3] bg-[#fafafa] p-3 text-sm",
+          <.p(<.b("推奨環境"), "：Safari・Chrome・Edge・Firefoxの最新版"),
+          <.p(^.className := "mt-2", <.b("認証できないとき")),
+          <.ul(^.className := "ml-5 list-disc",
+            <.li("専ブラの内蔵ブラウザ → このページを推奨ブラウザで開き直す"),
+            <.li("X・LINE・Discordなどのアプリ内ブラウザ →「ブラウザで開く」"),
+            <.li("「PC版サイト」「デスクトップ表示」→ オフにして再読み込み"),
+            <.li("UAを変える拡張機能 → 切って再読み込み"))),
+        <.h2(^.className := "mb-2 font-bold", "人間であることの確認"),
         <.div().withRef(container),
         if error.value.nonEmpty then <.p(^.role := "alert", ^.className := "my-2 text-[#f00]", error.value) else EmptyVdom,
         <.button(^.`type` := "submit", ^.className := s"$button border-[#f66]", ^.disabled := (!agreed.value || token.value.isEmpty || busy.value), if busy.value then "認証中…" else "認証して登録する"),

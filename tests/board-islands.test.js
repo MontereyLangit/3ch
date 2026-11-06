@@ -977,3 +977,16 @@ test('専ブラ用キー: 対象IDで失効し使用枠と失効理由を更新�
   assert.match(container.textContent, /手動で無効化/);
   assert.equal([...container.querySelectorAll('button')].filter(button => button.textContent === 'このブラウザのキーを無効にする').length, 0);
 });
+
+test('専ブラ用キー: 日時は日本時間で出し、無効化の理由はサーバの値から決める', async () => {
+  const container = await mount(client.AccountMenuJs, {
+    activeCount: 0, nowSeconds: 1800000100,
+    tokens: [
+      { id: 'manual', label: '手動の専ブラ', boundAt: 1799990000, issuedAt: 1799980000, expiresAt: 1800066400, revokedAt: 1800000000, revokeReason: 'revoked' },
+      { id: 'expired', label: '期限の専ブラ', issuedAt: 1799900000, expiresAt: 1799986400, revokedAt: 1799986400, revokeReason: 'expired' },
+    ],
+  });
+  assert.match(container.textContent, /手動の専ブラ 2027\/01\/15 17:00 手動で無効化/);
+  assert.match(container.textContent, /期限の専ブラ 2027\/01\/15 13:13 未使用のまま失効/);
+  assert.doesNotMatch(container.textContent, /UTC/);
+});

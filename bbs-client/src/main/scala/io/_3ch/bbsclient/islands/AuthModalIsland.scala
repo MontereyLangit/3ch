@@ -18,6 +18,8 @@ object AuthModalIsland {
       frame <- useRefToVdom[dom.html.IFrame]
       finish <- useRef(Option.empty[js.Function1[Boolean, Unit]])
       cleanup <- useRef[() => Unit](() => ())
+      generation <- useRef(0)
+      checking <- useRef(false)
       _ <- useEffectOnMount(CallbackTo {
         def close(ok: Boolean): Unit = {
           cleanup.value()
@@ -34,13 +36,17 @@ object AuthModalIsland {
           detail.updateDynamic("handled")(true)
           finish.value = Some(detail.resolve.asInstanceOf[js.Function1[Boolean, Unit]])
           url.setState(Some("/auth/?embed=1&return=" + URIUtils.encodeURIComponent(dom.window.location.pathname + dom.window.location.search))).runNow()
-          var active = true
-          var checking = false
-          def recheck(): Unit = if active && !checking then {
-            checking = true
+          generation.value += 1
+          val opened = generation.value
+          def active: Boolean = generation.value == opened
+          checking.value = false
+          def recheck(): Unit = if active && !checking.value then {
+            checking.value = true
             AuthClient.readSession().foreach { session =>
-              checking = false
-              if active then session.foreach { s => AuthClient.changed(Some(s)); close(true) }
+              if active then {
+                checking.value = false
+                session.foreach { s => AuthClient.changed(Some(s)); close(true) }
+              }
             }
           }
           val message: js.Function1[dom.MessageEvent, Unit] = event => {
@@ -57,7 +63,7 @@ object AuthModalIsland {
           val cancel: js.Function1[dom.Event, Unit] = _ => close(false)
           dom.window.addEventListener("ch3s:auth-cancel", cancel)
           cleanup.value = () => {
-            active = false
+            generation.value += 1
             dom.window.clearInterval(interval)
             dom.window.clearTimeout(timeout)
             dom.window.removeEventListener("message", message)
