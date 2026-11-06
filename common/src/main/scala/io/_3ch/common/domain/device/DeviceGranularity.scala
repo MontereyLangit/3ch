@@ -17,8 +17,8 @@ object DeviceGranularity {
   /** Apple GPUとタッチを先に見て、次にヒントと申告UAから共有範囲を判定する */
   def detect(fingerprint: Option[ClientFingerprint], hints: ClientHints = ClientHints()): DeviceGranularity = {
     val fp = fingerprint.getOrElse(ClientFingerprint())
-    val ua = DeviceText.lowercase(fp.os.trim)
-    val renderer = DeviceText.lowercase(fp.webgl.trim)
+    val ua = DeviceText.lowercase(DeviceStrings.trim(fp.os))
+    val renderer = DeviceText.lowercase(DeviceStrings.trim(fp.webgl))
     val appleGpu = renderer.contains("apple")
     val claimsIos = List("iphone", "ipad", "ipod").exists(ua.contains) ||
       (fp.touch && List("macintosh", "mac os x").exists(ua.contains))

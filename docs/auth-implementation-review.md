@@ -41,3 +41,11 @@
 | 追加テスト | BoardIndexSuiteで未ログイン・ログイン・Lv不足と埋め込みSSRを検証。RendererShellSuite・HonoRenderSuiteは共通モーダルのSSRを検証。board-islands.test.jsに通知の送信元照合、再送上限、下書き保持、hydration一致、Turnstileと同意、キー平文の保存防止を追加。最終の実行結果は引き継ぎに記録する |
 
 端末情報の原本は `MontereyLangit/v6-base` の `develop` を確認した。ブラウザ収集は `common/src/jsMain/kotlin/fc/pages/AuthPage.kt` の `collectFp` と `detectFonts` を参照し、OS軸にはUA、arch軸には `navigator.platform` をそのまま使う。フォント候補・順序・計測文字列・WebGLの材料を変えない。関連設計は同リポジトリの `docs/feature/ninja_auth_system.md`。v3のUA解析表全体はまだ確認できていない。
+
+## 段Bの端末情報の空白処理（2026-11-07、日本時間）
+
+原本のKotlin 2.3.21のtrimとScalaのString.trimで空白の範囲が異なり、NBSPや全角空白付きの機種名で端末ハッシュが変わる問題を修正した。Client Hints、申告UA、粒度、旧保存値の前後空白にも同じ原本の規則を適用する。
+
+KotlinJSの [生成済み空白表](https://github.com/JetBrains/kotlin/blob/v2.3.21/libraries/stdlib/js/src/generated/_WhitespaceChars.kt) の28文字をcommonのDeviceStringsで固定する。範囲は0009〜000D・001C〜0020・00A0・1680・2000〜200A・2028・2029・202F・205F・3000。KotlinJVMのCharacter.isWhitespaceまたはisSpaceCharとも一致する。NUL・NEL・BOMは含まない。既存のJsTextはECMAScriptのtrim用でBOMを取り除くため流用しない。
+
+新しいgoldenのdevice-whitespace-reference.jsonに出典と期待値を追加し、モデル、引用符内外のClient Hints、UAの完全一致、粒度、粒度付き新形式と公開鍵付き旧形式をJVMとJSで照合する。既存のgoldenと投稿スナップショット、パスワードとAuthHmacの空白処理は変更しない。

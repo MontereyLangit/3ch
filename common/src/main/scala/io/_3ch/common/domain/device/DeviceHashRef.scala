@@ -27,7 +27,7 @@ object DeviceHashRef {
 
   /** 保存値を読む。粒度なしの旧形式は粒度不明とし、不正な桁数・文字種は受け付けない */
   def parse(stored: String): Option[DeviceHashRef] = {
-    val raw = Option(stored).getOrElse("").trim
+    val raw = DeviceStrings.trim(Option(stored).getOrElse(""))
     val separator = raw.indexOf(':')
     if (separator < 0) {
       val granularity = raw.headOption.flatMap(DeviceGranularity.fromCode)

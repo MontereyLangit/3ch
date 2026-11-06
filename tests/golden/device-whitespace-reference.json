@@ -1,0 +1,292 @@
+{
+  "source": {
+    "original": "MontereyLangit/v6-base develop build.gradle.kts Kotlin 2.3.21; device/*.kt trim() calls",
+    "kotlinTrim": "https://github.com/JetBrains/kotlin/blob/v2.3.21/libraries/stdlib/src/kotlin/text/Strings.kt",
+    "kotlinJsWhitespace": "https://github.com/JetBrains/kotlin/blob/v2.3.21/libraries/stdlib/js/src/generated/_WhitespaceChars.kt",
+    "kotlinJvmWhitespace": "https://github.com/JetBrains/kotlin/blob/v2.3.21/libraries/stdlib/jvm/src/kotlin/text/CharJVM.kt",
+    "notes": "Expected whitespace ranges copied from KotlinJS generated table, not JVM String.trim or ECMAScript trim; current grain-only refs are v6 adaptation, legacy :pubkey refs follow original"
+  },
+  "whitespace": [
+    9,
+    10,
+    11,
+    12,
+    13,
+    28,
+    29,
+    30,
+    31,
+    32,
+    160,
+    5760,
+    8192,
+    8193,
+    8194,
+    8195,
+    8196,
+    8197,
+    8198,
+    8199,
+    8200,
+    8201,
+    8202,
+    8232,
+    8233,
+    8239,
+    8287,
+    12288
+  ],
+  "nonWhitespace": [
+    0,
+    8,
+    14,
+    27,
+    133,
+    6158,
+    8203,
+    8288,
+    65279
+  ],
+  "fingerprint": [
+    {
+      "name": "nbsp-model",
+      "model": " Pixel 9 ",
+      "expected": "32673d0b890667fdcf"
+    },
+    {
+      "name": "ideographic-model",
+      "model": "　Pixel 9　",
+      "expected": "32673d0b890667fdcf"
+    },
+    {
+      "name": "control-separator-model",
+      "model": "\u001cPixel 9\u001f",
+      "expected": "32673d0b890667fdcf"
+    },
+    {
+      "name": "nul-model-retained",
+      "model": "\u0000Pixel 9\u0000",
+      "expected": "32673d0b890667fd1f"
+    },
+    {
+      "name": "bom-model-retained",
+      "model": "﻿Pixel 9﻿",
+      "expected": "32673d0b890667fded"
+    },
+    {
+      "name": "nbsp-empty-model",
+      "model": " 　",
+      "expected": "32673d0b890667fd81"
+    }
+  ],
+  "hints": [
+    {
+      "name": "quoted-unicode-padding",
+      "platform": " \"　Android　\" ",
+      "mobile": " \"　?1　\" ",
+      "arch": "　Linux armv8l ",
+      "ua": "Android Mobile",
+      "headerUa": "",
+      "decodedPlatform": "Android",
+      "decodedMobile": true,
+      "mobilePresent": true,
+      "rule": ""
+    },
+    {
+      "name": "unicode-platform-R6",
+      "platform": "　Android ",
+      "mobile": "?1",
+      "arch": "",
+      "ua": "Windows Mobile",
+      "headerUa": "",
+      "decodedPlatform": "Android",
+      "decodedMobile": true,
+      "mobilePresent": true,
+      "rule": "R6"
+    },
+    {
+      "name": "unicode-arch-prefix",
+      "platform": "Windows",
+      "mobile": "?0",
+      "arch": " Win32　",
+      "ua": "Windows",
+      "headerUa": "",
+      "decodedPlatform": "Windows",
+      "decodedMobile": false,
+      "mobilePresent": true,
+      "rule": ""
+    },
+    {
+      "name": "unicode-empty-UA-skips-R6",
+      "platform": "Windows",
+      "mobile": "?1",
+      "arch": "Win32",
+      "ua": " 　",
+      "headerUa": " ",
+      "decodedPlatform": "Windows",
+      "decodedMobile": true,
+      "mobilePresent": true,
+      "rule": ""
+    },
+    {
+      "name": "unicode-UA-header-fallback",
+      "platform": "Android",
+      "mobile": "?1",
+      "arch": "Linux",
+      "ua": " 　",
+      "headerUa": "Windows Mobile",
+      "decodedPlatform": "Android",
+      "decodedMobile": true,
+      "mobilePresent": true,
+      "rule": "R6"
+    },
+    {
+      "name": "nul-platform-retained",
+      "platform": "\u0000\"Android\"\u0000",
+      "mobile": "?0",
+      "arch": "",
+      "ua": "Windows",
+      "headerUa": "",
+      "decodedPlatform": "\u0000\"Android\"\u0000",
+      "decodedMobile": false,
+      "mobilePresent": true,
+      "rule": ""
+    },
+    {
+      "name": "bom-platform-retained",
+      "platform": "﻿Android﻿",
+      "mobile": "?0",
+      "arch": "",
+      "ua": "Windows",
+      "headerUa": "",
+      "decodedPlatform": "﻿Android﻿",
+      "decodedMobile": false,
+      "mobilePresent": true,
+      "rule": ""
+    },
+    {
+      "name": "nbsp-ios-platform",
+      "platform": " iOS　",
+      "mobile": "?1",
+      "arch": " iPhone　",
+      "ua": "iPhone Mobile",
+      "headerUa": "",
+      "decodedPlatform": "iOS",
+      "decodedMobile": true,
+      "mobilePresent": true,
+      "rule": ""
+    }
+  ],
+  "declarations": [
+    {
+      "name": "unicode-UA-padding",
+      "header": "UA",
+      "declared": " UA　",
+      "mismatched": false
+    },
+    {
+      "name": "unicode-empty-declaration",
+      "header": "UA",
+      "declared": " 　",
+      "mismatched": false
+    },
+    {
+      "name": "control-UA-padding",
+      "header": "UA",
+      "declared": "\u001cUA\u001f",
+      "mismatched": false
+    },
+    {
+      "name": "nul-UA-retained",
+      "header": "UA",
+      "declared": "\u0000UA\u0000",
+      "mismatched": true
+    },
+    {
+      "name": "bom-UA-retained",
+      "header": "UA",
+      "declared": "﻿UA﻿",
+      "mismatched": true
+    },
+    {
+      "name": "nel-UA-retained",
+      "header": "UA",
+      "declared": "UA",
+      "mismatched": true
+    }
+  ],
+  "granularity": [
+    {
+      "name": "unicode-empty-UA",
+      "ua": " 　",
+      "touch": false,
+      "webgl": "",
+      "platform": "",
+      "expected": "u"
+    },
+    {
+      "name": "unicode-empty-ios-renderer",
+      "ua": "iPhone",
+      "touch": true,
+      "webgl": " 　",
+      "platform": "",
+      "expected": "g"
+    },
+    {
+      "name": "unicode-ios-hint",
+      "ua": "iPhone",
+      "touch": true,
+      "webgl": "",
+      "platform": " iOS　",
+      "expected": "g"
+    },
+    {
+      "name": "nul-renderer-retained",
+      "ua": "iPhone",
+      "touch": true,
+      "webgl": "\u0000",
+      "platform": "",
+      "expected": "p"
+    },
+    {
+      "name": "bom-UA-retained",
+      "ua": "﻿",
+      "touch": false,
+      "webgl": "",
+      "platform": "",
+      "expected": "p"
+    }
+  ],
+  "refs": [
+    {
+      "name": "current-nbsp",
+      "stored": " p0123456789abcdef01　",
+      "expected": "p0123456789abcdef01"
+    },
+    {
+      "name": "legacy-nbsp",
+      "stored": "　g0123456789abcdef:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08 ",
+      "expected": "g0123456789abcdef:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+    },
+    {
+      "name": "legacy-unprefixed-unicode",
+      "stored": " 0123456789abcdef:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08　",
+      "expected": "u0123456789abcdef:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+    },
+    {
+      "name": "current-control-separators",
+      "stored": "\u001cp0123456789abcdef01\u001f",
+      "expected": "p0123456789abcdef01"
+    },
+    {
+      "name": "current-nul-retained",
+      "stored": "\u0000p0123456789abcdef01\u0000",
+      "expected": null
+    },
+    {
+      "name": "legacy-bom-retained",
+      "stored": "﻿g0123456789abcdef:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08﻿",
+      "expected": null
+    }
+  ]
+}

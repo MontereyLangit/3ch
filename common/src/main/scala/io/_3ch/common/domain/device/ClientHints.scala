@@ -16,7 +16,7 @@ final case class ClientHints(
   def isNotEmpty: Boolean = !isEmpty
 
   /** iOS・iPadOSを名乗っているか */
-  def claimsIos: Boolean = Set("ios", "ipados").contains(DeviceText.lowercase(platform.trim))
+  def claimsIos: Boolean = Set("ios", "ipados").contains(DeviceText.lowercase(DeviceStrings.trim(platform)))
 
   /** 申告と受信ヘッダに矛盾があるか */
   def contradicts(fingerprint: Option[ClientFingerprint], headerUserAgent: String = ""): Boolean =
@@ -25,10 +25,10 @@ final case class ClientHints(
   /** 申告と矛盾する最初の規則。材料が無ければ判定しない */
   def contradictionRule(fingerprint: Option[ClientFingerprint], headerUserAgent: String = ""): Option[ClientHints.Rule] = {
     import ClientHints.Rule
-    val platformLower = DeviceText.lowercase(platform.trim)
-    val navigatorPlatform = fingerprint.fold("")(fp => DeviceText.lowercase(fp.arch.trim))
-    val declared = fingerprint.fold("")(_.os.trim)
-    val userAgent = DeviceText.lowercase(if (declared.nonEmpty) declared else headerUserAgent.trim)
+    val platformLower = DeviceText.lowercase(DeviceStrings.trim(platform))
+    val navigatorPlatform = fingerprint.fold("")(fp => DeviceText.lowercase(DeviceStrings.trim(fp.arch)))
+    val declared = fingerprint.fold("")(fp => DeviceStrings.trim(fp.os))
+    val userAgent = DeviceText.lowercase(if (declared.nonEmpty) declared else DeviceStrings.trim(headerUserAgent))
     val expectedPrefix = Map("windows" -> "win", "macos" -> "mac").get(platformLower)
     val markers = Map("android" -> List("android"), "windows" -> List("windows"),
       "macos" -> List("mac os", "macintosh"), "linux" -> List("linux", "x11")).get(platformLower)
@@ -48,8 +48,8 @@ object ClientHints {
   /** ヘッダの引用符と前後空白を除き、mobile は ?0・?1 だけを有効とする */
   def fromHeaders(platform: String, platformVersion: String, model: String, cpuArch: String, mobile: String): ClientHints = {
     def unquote(raw: String): String = {
-      val value = Option(raw).getOrElse("").trim
-      if (value.length >= 2 && value.head == '"' && value.last == '"') value.substring(1, value.length - 1).trim else value
+      val value = DeviceStrings.trim(Option(raw).getOrElse(""))
+      if (value.length >= 2 && value.head == '"' && value.last == '"') DeviceStrings.trim(value.substring(1, value.length - 1)) else value
     }
     val mobileValue = unquote(mobile)
     ClientHints(unquote(platform), unquote(platformVersion), unquote(model), unquote(cpuArch),
