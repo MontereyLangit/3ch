@@ -51,4 +51,12 @@ object Main {
   @islands("account-logout.tsx")
   @JSExportTopLevel("AccountLogoutJs", "client")
   final val accountLogout: js.Any = AccountLogoutIsland.Component.toJsComponent.raw
+
+  @islands("auth-token.tsx")
+  @JSExportTopLevel("AuthTokenJs", "client")
+  final val authToken: js.Any = AuthTokenIsland.Component.toJsComponent.raw
+
+  @islands("account-credentials.tsx")
+  @JSExportTopLevel("AccountCredentialsJs", "client")
+  final val accountCredentials: js.Any = AccountCredentialsIsland.Component.toJsComponent.raw
 }

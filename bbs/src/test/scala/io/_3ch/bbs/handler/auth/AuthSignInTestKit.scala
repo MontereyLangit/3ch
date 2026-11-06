@@ -12,7 +12,11 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
 /** 実 DO を記憶域だけ差し替えて動かし、外部の Turnstile と Google の応答を固定する */
-final class AuthSignInTestKit(google: Boolean = false) {
+final class AuthSignInTestKit(google: Boolean = false, mail: Boolean = false) {
+  /** 送ったメール（宛先・件名・本文）。mail が真のときだけ送信先を設定する */
+  val outbox = mutable.ArrayBuffer.empty[(String, String, String)]
+  /** 真なら送信先が失敗を返す */
+  var mailFails: Boolean = false
   val origin = "https://www.3ch.io"
   val kit: DurableTestKit.Env = DurableTestKit.newEnv()
   val env: WorkerEnv = {
@@ -21,6 +25,15 @@ final class AuthSignInTestKit(google: Boolean = false) {
     raw.AGREEMENT_VERSION = "v1"
     raw.TURNSTILE_SITE_KEY = "test-site-key"
     raw.TURNSTILE_SECRET_KEY = "test-server-key"
+    if (mail) {
+      raw.MAIL_SENDER = js.Dynamic.literal(send = ((message: js.Dynamic) => {
+        if (mailFails) js.Promise.reject(new js.Error("mail down"))
+        else {
+          outbox += ((message.to.asInstanceOf[String], message.subject.asInstanceOf[String], message.text.asInstanceOf[String]))
+          js.Promise.resolve[js.Any](js.undefined)
+        }
+      }): js.Function1[js.Dynamic, js.Promise[js.Any]])
+    }
     if (google) {
       raw.GOOGLE_CLIENT_ID = "test-client.apps.googleusercontent.com"
       raw.GOOGLE_CLIENT_SECRET = "test-client-secret"
@@ -49,6 +62,12 @@ final class AuthSignInTestKit(google: Boolean = false) {
     HandlerTestKit.request(origin + path, headers = Seq("CF-Connecting-IP" -> ip) ++ (if (cookie.nonEmpty) Seq("Cookie" -> cookie) else Nil))
 
   def send(request: Request): Future[Response] = AuthHandler.handle(request, env).toFuture
+
+  /** 送ったメールの本文にあるリンクのトークン */
+  def mailedToken(index: Int = -1): String = {
+    val text = if (index < 0) outbox.last._3 else outbox(index)._3
+    "token=([a-z0-9]{16}\\.[A-Za-z0-9_-]{43})".r.findFirstMatchIn(text).map(_.group(1)).getOrElse("")
+  }
 
   def body(response: Response): Future[js.Dynamic] = response.json().toFuture.map(_.asInstanceOf[js.Dynamic])
 

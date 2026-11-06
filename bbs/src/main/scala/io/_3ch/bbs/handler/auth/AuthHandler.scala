@@ -3,13 +3,13 @@ package io._3ch.bbs.handler.auth
 import io._3ch.bbs.application.auth.{AuthServiceException, AuthServiceFailure, AuthSettings, CapIssuing, CapNameException, ClientAuthentication, DeviceEvidence, LoginOutcome, PasswordAuthentication, TokenIssuing}
 import io._3ch.bbs.application.auth.ports.{AccountStoreException, AuthenticationKeys, PasswordHashing, TokenProof}
 import io._3ch.bbs.application.posting.CapKey
-import io._3ch.bbs.components.{AccountCapProps, AccountComponent, AccountProps, AccountTokenProps, AccountPostProps, AccountTokenWarningProps, AuthComponent, AuthProps}
+import io._3ch.bbs.components.{AccountCapProps, AccountComponent, AccountProps, AccountTokenProps, AccountPostProps, AccountTokenWarningProps, AuthComponent, AuthProps, AuthTokenComponent, AuthTokenProps}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.hono.{HonoContextFacade, RenderProps}
 import io._3ch.bbs.external.web.{Request, Response, TextDecoder, URL}
 import io._3ch.bbs.handler.{PublicText, Responses}
 import io._3ch.bbs.hash.{AuthHmac, PasswordHasher, WebHasher}
-import io._3ch.bbs.repository.{AccountRepository, CapRepository}
+import io._3ch.bbs.repository.{AccountRepository, CapRepository, MailSenders}
 import io._3ch.common.domain.account.*
 import io._3ch.common.domain.device.{ClientHints, DeviceHashRef, DeviceRejection, IosDeviceProfile}
 import io._3ch.bbs.domain.posting.KeyIp
@@ -42,6 +42,11 @@ enum AuthApiError {
   /** キャップの発行・失効の拒否 */
   case Cap(reason: AccountRejection)
   case CapName(reason: CapNameRejection)
+  case Email(reason: EmailRejection)
+  /** メールの送信先が設定されていない */
+  case MailUnavailable
+  /** メールのリンクが無効か期限切れ */
+  case LinkInvalid
 
   def code: String = this match {
     case NotFound => "auth:not-found"
@@ -62,6 +67,10 @@ enum AuthApiError {
     case Confirmation => "auth:password:confirmation"
     case Cap(reason) => reason.code
     case CapName(_) => "auth:cap:name"
+    case Email(EmailRejection.Invalid) => "auth:email:invalid"
+    case Email(EmailRejection.Disposable) => "auth:email:disposable"
+    case MailUnavailable => "auth:mail:unavailable"
+    case LinkInvalid => AccountRejection.PendingInvalid.code
   }
 
   def status: Int = this match {
@@ -70,12 +79,12 @@ enum AuthApiError {
     case Origin => 403
     case LoginRequired | Session(_) => 401
     case Service(AuthServiceFailure.RateLimited) => 429
-    case Service(AuthServiceFailure.Taken) => 409
+    case Service(AuthServiceFailure.Taken | AuthServiceFailure.EmailTaken) => 409
     case Service(AuthServiceFailure.Invalid) => 400
-    case Service(_) | Unavailable => 503
+    case Service(_) | Unavailable | MailUnavailable => 503
     case LoginFailed => 401
     case Refused(_) | Cap(_) => 403
-    case Invalid | CapName(_) | AgreementRequired | Turnstile | Device(_) | LoginId(_) | Password(_) | Confirmation => 400
+    case Invalid | CapName(_) | Email(_) | LinkInvalid | AgreementRequired | Turnstile | Device(_) | LoginId(_) | Password(_) | Confirmation => 400
   }
 
   /** セッションが無い・切れた・ログアウト済みで、ログインし直せば解消するか */
@@ -114,6 +123,7 @@ object AuthHandler {
     case AuthApiError.Origin => "このページから送信してください。"
     case AuthApiError.Service(AuthServiceFailure.Unavailable) | AuthApiError.Unavailable => "認証を利用できません。しばらく待ってからお試しください。"
     case AuthApiError.LoginFailed => "ユーザーIDまたはパスワードが違います。"
+    case AuthApiError.Refused(AccountRejection.KindForbidden) => "この登録方法では使えません。"
     case AuthApiError.Refused(_) => "このアカウントは利用できません。"
     case AuthApiError.Service(AuthServiceFailure.Taken) => "このユーザーIDは使えません。別のIDを入力してください。"
     case AuthApiError.LoginId(LoginIdRejection.Invalid) => "ユーザーIDは半角英小文字・数字・_の3〜16文字で入力してください。"
@@ -121,6 +131,13 @@ object AuthHandler {
     case AuthApiError.Password(PasswordRejection.ContainsLoginId) => "パスワードにユーザーIDを含めないでください。"
     case AuthApiError.Password(PasswordRejection.InvalidUnicode) => "パスワードに使えない文字が含まれています。"
     case AuthApiError.Confirmation => "確認用のパスワードが一致しません。"
+    case AuthApiError.Password(PasswordRejection.RoleLength) => s"権限のあるアカウントのパスワードは${Password.RoleMinimum}文字以上にしてください。"
+    case AuthApiError.Email(EmailRejection.Invalid) => "メールアドレスを確認してください。"
+    case AuthApiError.Email(EmailRejection.Disposable) => "このメールアドレスは使えません。普段お使いのアドレスを入力してください。"
+    case AuthApiError.Service(AuthServiceFailure.EmailTaken) => "このメールアドレスはほかのアカウントで使われています。"
+    case AuthApiError.Service(AuthServiceFailure.MailFailed) => "確認メールを送れませんでした。しばらく待ってから送り直してください。"
+    case AuthApiError.MailUnavailable => "メールによる認証は準備中です。"
+    case AuthApiError.LinkInvalid => "リンクが無効か、期限が切れています。"
     case AuthApiError.Cap(AccountRejection.RolesForbidden | AccountRejection.Forbidden) =>
       "キャップを発行できません。削除・規制などの権限を持つアカウントが、自分用に1個まで発行できます。"
     case AuthApiError.Cap(AccountRejection.CapRevoked) => "このキャップはすでに無効です。"
@@ -168,7 +185,7 @@ object AuthHandler {
     SessionClaims(account.aid, account.uid, account.generation.toLong, account.expiresAt.getOrElse(time + AccountProfile.clientLifetime).toLong, account.lv, device, binding)
   private[auth] def signed(account: AccountDescription, device: String, request: Request, secret: String, time: Double, binding: Option[SessionBinding] = None): Future[String] =
     SessionCookies.issue(claims(account, time, device, binding), secret, request.url, time).map(_.getOrElse(throw Refused(AuthApiError.Unavailable)))
-  private def current(request: Request, secret: String, repository: AccountRepository, time: Double): Future[(SessionClaims, AccountDescription)] =
+  private[auth] def current(request: Request, secret: String, repository: AccountRepository, time: Double): Future[(SessionClaims, AccountDescription)] =
     SessionCookies.verify(header(request, "Cookie"), secret, time).flatMap {
       case None => Future.failed(Refused(AuthApiError.LoginRequired))
       case Some(session) if !session.generation.isValidInt || session.generation < 0 => Future.failed(Refused(AuthApiError.LoginRequired))
@@ -209,13 +226,27 @@ object AuthHandler {
           if (accountPage) account(c, config, props)
           else c.renderPromise(AuthComponent.Component(AuthProps(config.turnstileSiteKey, safeReturn(c.req.query("return").getOrElse("/"), request.url),
             c.req.query("embed").contains("1"), c.req.query("mode").contains("login"), config.agreementVersion,
-            AuthEnv.google(c.env).isDefined, notice(c.req.query("error").getOrElse("")).getOrElse(""))).rawElement, props).toFuture
+            AuthEnv.google(c.env).isDefined, notice(c.req.query("error").getOrElse("")).getOrElse(""), MailSenders.from(c.env).isDefined)).rawElement, props).toFuture
         }
         rendered.map(secure).recover {
           case Refused(error) if accountPage && error.signedOut =>
             secure(Responses.response(null, 302, js.Dictionary("Location" -> s"/auth/?return=$AccountPath")))
           case error => failure(error)
         }.toJSPromise
+    }
+  }
+
+  /** メールのリンクの画面。トークンの消費は画面のボタンからの POST で行う */
+  def tokenPage(c: HonoContextFacade, reset: Boolean): js.Promise[Response] = {
+    val request = c.req.raw
+    AuthEnv.settings(c.env) match {
+      case None => js.Promise.resolve[Response](notFound(request))
+      case Some(_) =>
+        val props = new RenderProps {}
+        props.title = if (reset) "パスワードの再設定" else "メールアドレスの確認"
+        val token = c.req.query("token").filter(value => PendingLink.parse(value).isDefined).getOrElse("")
+        c.renderPromise(AuthTokenComponent.Component(AuthTokenProps(reset, token, MailSenders.from(c.env).isDefined)).rawElement, props)
+          .toFuture.map(secure).recover { case error => failure(error) }.toJSPromise
     }
   }
 
@@ -231,7 +262,8 @@ object AuthHandler {
         val caps = panel.caps.map(cap => AccountCapProps(cap.id, cap.name, cap.strong, cap.issuedAt, cap.revokedAt,
           cap.recentPosts.map(post => AccountPostProps(post.t, post.bbs, post.key, post.title, post.resNum, post.excerpt, post.network))))
         c.renderPromise(AccountComponent.Component(AccountProps(account.uid, account.lv, tokens, panel.activeCount,
-          kind = account.kind, expiresAt = account.expiresAt, device = device, deviceCount = panel.deviceCount, caps = caps, roles = account.roles)).rawElement, props).toFuture
+          kind = account.kind, expiresAt = account.expiresAt, device = device, deviceCount = panel.deviceCount, caps = caps, roles = account.roles,
+          email = panel.email, pendingEmail = panel.pendingEmail, mailEnabled = MailSenders.from(c.env).isDefined)).rawElement, props).toFuture
       }
     }
   }
@@ -271,6 +303,11 @@ object AuthHandler {
               if (account.agreementVersion != config.agreementVersion) throw Refused(AuthApiError.AgreementRequired)
               cap(path, form, env, repository, account, config.secret, time)
             }
+            case "/auth/email" => AccountMailHandler.email(request, env, repository, form, config, time)
+            case "/auth/email/verify" => AccountMailHandler.verify(request, env, repository, form, config, time)
+            case "/auth/password" => AccountMailHandler.password(request, repository, form, config, time)
+            case "/auth/reset/request" => AccountMailHandler.resetRequest(request, env, repository, form, config, time)
+            case "/auth/reset" => AccountMailHandler.reset(env, repository, form, config, time)
             case "/auth/token/revoke" => current(request, config.secret, repository, time).flatMap { case (_, account) =>
               val id = form.getOrElse("id", "")
               if (!DedicatedBrowserTokens.validId(id)) throw Refused(AuthApiError.Invalid)
@@ -318,16 +355,20 @@ object AuthHandler {
   }
 
   /** keyIp を求めてから Turnstile と端末申告を確認する */
-  private def human(request: Request, env: WorkerEnv, form: Map[String, String], config: AuthSettings): Future[(String, DeviceEvidence)] = for {
+  private[auth] def human(request: Request, env: WorkerEnv, form: Map[String, String], config: AuthSettings): Future[(String, DeviceEvidence)] = for {
     key <- keyIp(request, config.secret)
     verified <- TurnstileVerification.verify(config.turnstileSecretKey, form.getOrElse("cf-turnstile-response", ""), header(request, "CF-Connecting-IP"), new URL(request.url).hostname)
     _ = if (!verified) throw Refused(AuthApiError.Turnstile)
     evidence <- device(request, env, form.getOrElse("device", ""))
   } yield key -> evidence
 
-  private def signedIn(request: Request, form: Map[String, String], config: AuthSettings, account: AccountDescription, evidence: DeviceEvidence, time: Double): Future[Response] =
-    signed(account, evidence.deviceHash, request, config.secret, time).map(cookie =>
-      json(js.Dynamic.literal(uid = account.uid, lv = account.lv, returnPath = safeReturn(form.getOrElse("return", "/"), request.url)), cookie = Some(cookie)))
+  private def signedIn(request: Request, form: Map[String, String], config: AuthSettings, account: AccountDescription, evidence: DeviceEvidence, time: Double,
+    mail: String = ""): Future[Response] =
+    signed(account, evidence.deviceHash, request, config.secret, time).map { cookie =>
+      val body = js.Dynamic.literal(uid = account.uid, lv = account.lv, returnPath = safeReturn(form.getOrElse("return", "/"), request.url))
+      if (mail.nonEmpty) body.mail = mail
+      json(body, cookie = Some(cookie))
+    }
 
   private def verify(request: Request, env: WorkerEnv, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] = {
     if (!form.get("agreement").contains(config.agreementVersion)) Future.failed(Refused(AuthApiError.AgreementRequired))
@@ -353,7 +394,7 @@ object AuthHandler {
       } yield LoginId.create(id.value, reserved, if (board) Set(id.value) else Set.empty)
     }
 
-  private def hashing: PasswordHashing = new PasswordHashing {
+  private[auth] def hashing: PasswordHashing = new PasswordHashing {
     def create(password: Password, now: Double): Future[Option[PasswordCredential]] = PasswordHasher.create(password, now).map(_.toOption)
   }
 
@@ -364,18 +405,21 @@ object AuthHandler {
       id <- LoginId.parse(raw).left.map(AuthApiError.LoginId(_))
       password <- Password.create(form.getOrElse("password", ""), id).left.map(AuthApiError.Password(_))
       _ <- Either.cond(form.get("password2").contains(form.getOrElse("password", "")), (), AuthApiError.Confirmation)
-    } yield password
+      email <- AccountMailHandler.parse(env, form.get("email"))
+    } yield (password, email)
     if (!form.get("agreement").contains(config.agreementVersion)) Future.failed(Refused(AuthApiError.AgreementRequired))
     else validated match {
       case Left(error) => Future.failed(Refused(error))
-      case Right(password) => for {
+      case Right((password, email)) => for {
         (key, evidence) <- human(request, env, form, config)
         id <- available(env, raw).map(_.fold({
           case LoginIdRejection.Reserved => throw Refused(AuthApiError.Service(AuthServiceFailure.Taken))
           case reason => throw Refused(AuthApiError.LoginId(reason))
         }, identity))
+        _ <- email.fold(Future.unit)(AccountMailHandler.check(env, repository, config, "", _))
         account <- new PasswordAuthentication(repository, keys(config.secret), hashing, config.agreementVersion).register(id, password, evidence.deviceHash, key, time)
-        response <- signedIn(request, form, config, account, evidence, time)
+        mail <- AccountMailHandler.afterRegistration(env, repository, config, request, account, email, time)
+        response <- signedIn(request, form, config, account, evidence, time, mail)
       } yield response
     }
   }
@@ -392,7 +436,7 @@ object AuthHandler {
     }
   } yield response
 
-  private def pause(seconds: Int): Future[Unit] = {
+  private[auth] def pause(seconds: Int): Future[Unit] = {
     if (seconds <= 0) Future.unit
     else {
       val promise = scala.concurrent.Promise[Unit]()
@@ -406,6 +450,7 @@ object AuthHandler {
     def uid(): String = AuthHmac.randomUid()
     def token(): String = AuthHmac.randomBase32(20)
     def tokenId(): String = AuthHmac.randomBase32(16)
+    def linkSecret(): String = AuthHmac.randomUrlSafe(43)
     def index(kind: String, value: String): Future[Option[String]] = AuthHmac.indexKey(secret, kind, value)
   }
   private def capIssuing(env: WorkerEnv, repository: AccountRepository, secret: String): CapIssuing = {

@@ -21,6 +21,7 @@ class AccountRolesSuite extends FunSuite {
     def uid(): String = AuthHmac.randomUid()
     def token(): String = AuthHmac.randomBase32(20)
     def tokenId(): String = AuthHmac.randomBase32(16)
+    def linkSecret(): String = AuthHmac.randomUrlSafe(43)
     def index(kind: String, value: String): Future[Option[String]] = AuthHmac.indexKey(secret, kind, value)
   }
 

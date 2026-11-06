@@ -23,10 +23,11 @@ final case class AccountCapView(id: String, name: String, strong: Boolean, issue
   recentPosts: Vector[AccountTokenPostView] = Vector.empty)
 /** 本人向けのアカウント情報とキー一覧。使用枠には有効な紐付け済みキーだけを数える */
 final case class AccountPanel(account: AccountDescription, tokens: Vector[AccountTokenView], activeCount: Int = 0, deviceCount: Int = 0,
-  caps: Vector[AccountCapView] = Vector.empty)
+  caps: Vector[AccountCapView] = Vector.empty, email: Option[String] = None, pendingEmail: Option[String] = None)
 
 /** アカウント RPC の値をアプリケーションの型に変換する */
-final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountManagementStore with AccountSignInStore with AccountRoleStore with AccountCapStore {
+final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountManagementStore with AccountSignInStore with AccountRoleStore with AccountCapStore
+  with AccountEmailStore {
   private def account(aid: String): AccountDoStub = env.ACCOUNT_DO.get(env.ACCOUNT_DO.idFromName(aid))
   private def index(kind: String): AccountIndexDoStub = env.ACCOUNT_INDEX_DO.get(env.ACCOUNT_INDEX_DO.idFromName(kind))
   private def raw(value: js.Promise[?]): Future[js.Any] = value.asInstanceOf[js.Promise[js.Any]].toFuture
@@ -133,6 +134,25 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
     account(aid).verifyPassword(password, keyIpHash, now).toFuture.map(signIn(_, aid))
   def describeGoogle(aid: String, subHash: String, now: Double): Future[SignInResult] =
     account(aid).describeGoogle(subHash, now).toFuture.map(signIn(_, aid))
+  private def described(aid: String)(v: js.Dynamic): AccountDescription = decode(v, aid).fold(reason => throw AccountStoreException(reason), identity)
+  def issuePending(aid: String, kind: PendingKind, hash: String, email: Option[String], now: Double): Future[Option[String]] =
+    account(aid).issuePending(kind.code, hash, email.orUndefined, now).toFuture.map { v =>
+      checked(text(v, "code"))
+      optionalText(v, "email")
+    }
+  def checkPending(aid: String, kind: PendingKind, hash: String, now: Double): Future[PendingCheck] =
+    account(aid).checkPending(kind.code, hash, now).toFuture.map { v =>
+      checked(text(v, "code"))
+      val uid = text(v, "uid")
+      if (!uid.matches("[a-z0-9_]{3,16}")) invalid()
+      PendingCheck(uid, optionalText(v, "email"))
+    }
+  def verifyEmail(aid: String, hash: String, now: Double): Future[EmailVerified] =
+    account(aid).verifyEmail(hash, now).toFuture.map(v => EmailVerified(described(aid)(v), optionalText(v, "previousEmail")))
+  def resetPassword(aid: String, hash: String, credential: PasswordCredential, now: Double): Future[AccountDescription] =
+    account(aid).resetPassword(hash, PasswordCredentialCodec.encode(credential), now).toFuture.map(described(aid))
+  def setPassword(aid: String, credential: PasswordCredential, now: Double): Future[AccountDescription] =
+    account(aid).setPassword(PasswordCredentialCodec.encode(credential), now).toFuture.map(described(aid))
   def bindDevice(aid: String, device: String, keyIp: String, now: Double): Future[Unit] = raw(account(aid).bindDevice(device, keyIp, now)).map(checked)
   def logout(aid: String, generation: Int, now: Double): Future[Unit] = raw(account(aid).bumpGeneration(now)).map { next =>
     if (integer(next) <= generation) throw AccountStoreException(AccountRejection.Generation)
@@ -213,7 +233,8 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
       AccountCapView(identifier(text(cap, "capId")), text(cap, "name"), flag("strong"), time(cap, "issuedAt"), optionalTime(cap, "revokedAt"),
         recentPosts(cap))
     }
-    AccountPanel(description, tokens, activeCount, integer(value.selectDynamic("deviceCount").asInstanceOf[js.Any], 10), caps)
+    AccountPanel(description, tokens, activeCount, integer(value.selectDynamic("deviceCount").asInstanceOf[js.Any], 10), caps,
+      optionalText(value, "email"), optionalText(value, "pendingEmail"))
   }
   def rate(key: String, kind: String, now: Double): Future[AuthRateCounts] =
     env.AUTH_RATE_DO.get(env.AUTH_RATE_DO.idFromName(key)).hit(kind, now).toFuture.map { v =>

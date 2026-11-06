@@ -6,7 +6,11 @@ import scala.scalajs.js.JSConverters.*
 
 /** Account の保存値と RPC の DTO を純粋モデルへ変換する */
 object AccountCodec {
-  val stateKeys: js.Array[String] = js.Array("profile", "level", "roles", "tokens", "devices", "caps", "activation", "credential")
+  val stateKeys: js.Array[String] = js.Array("profile", "level", "roles", "tokens", "devices", "caps", "activation", "credential",
+    pendingKey(PendingKind.Email), pendingKey(PendingKind.Reset))
+
+  /** 保留トークンの保存キー。種別ごとに分けて、メール認証と再設定が上書きし合わないようにする */
+  def pendingKey(kind: PendingKind): String = "pending:" + kind.code
 
   private def invalid(): Nothing = throw js.JavaScriptException(new js.Error("invalid-account-data"))
   private def field(value: js.Dynamic, name: String): js.Any = {
@@ -81,6 +85,9 @@ object AccountCodec {
   def decodeCap(v: js.Dynamic): AccountCap = AccountCap(string(v, "capId"), string(v, "name"), string(v, "hash"), bool(v, "strong"), string(v, "issuedBy"), decimal(v, "issuedAt"), optionalNumber(v, "revokedAt"))
   def encodeCap(v: AccountCap): js.Dynamic = js.Dynamic.literal(capId = v.capId, name = v.name, hash = v.hash, strong = v.strong, issuedBy = v.issuedBy, issuedAt = v.issuedAt, revokedAt = v.revokedAt.orUndefined)
 
+  private def decodePending(v: js.Dynamic): PendingToken = PendingToken(string(v, "hash"), requiredTime(v, "expiresAt"), optionalText(v, "email"))
+  private def encodePending(v: PendingToken): js.Dynamic = js.Dynamic.literal(hash = v.hash, expiresAt = v.expiresAt, email = v.email.orUndefined)
+
   def decodeState(values: js.Map[String, js.Any]): Option[AccountState] = values.get("profile").filterNot(missing).map { profile =>
     val decodedProfile = decodeProfile(profile.asInstanceOf[js.Dynamic])
     val activation: js.Any = values.get("activation").getOrElse(js.undefined)
@@ -90,13 +97,15 @@ object AccountCodec {
     val credential = values.get("credential").filterNot(missing).map(PasswordCredentialCodec.decode)
     val state = AccountState(decodedProfile, decodeLevel(values.get("level").getOrElse(invalid()).asInstanceOf[js.Dynamic]),
       decodeRoles(values.get("roles").orNull), array(values.get("tokens").orNull).map(decodeToken), array(values.get("devices").orNull).map(decodeDevice), array(values.get("caps").orNull).map(decodeCap),
-      credential, readiness)
+      credential, readiness, PendingKind.values.flatMap(kind => values.get(pendingKey(kind)).filterNot(missing).map(v => kind -> decodePending(v.asInstanceOf[js.Dynamic]))).toMap)
     if (!state.valid) invalid()
     state
   }
   def encodeState(state: AccountState): js.Dictionary[js.Any] = js.Dictionary[js.Any]("profile" -> encodeProfile(state.profile), "level" -> encodeLevel(state.level),
     "roles" -> encodeRoles(state.roles), "tokens" -> state.tokens.map(encodeToken).toJSArray, "devices" -> state.devices.map(encodeDevice).toJSArray, "caps" -> state.caps.map(encodeCap).toJSArray,
-    "activation" -> state.readiness.code, "credential" -> state.credential.fold[js.Any](null)(PasswordCredentialCodec.encode))
+    "activation" -> state.readiness.code, "credential" -> state.credential.fold[js.Any](null)(PasswordCredentialCodec.encode),
+    pendingKey(PendingKind.Email) -> state.pending.get(PendingKind.Email).fold[js.Any](null)(encodePending),
+    pendingKey(PendingKind.Reset) -> state.pending.get(PendingKind.Reset).fold[js.Any](null)(encodePending))
 
   def describe(value: Either[AccountRejection, AccountDescription]): js.Dynamic = value.fold(error => js.Dynamic.literal(code = error.code), description)
   def description(v: AccountDescription): js.Dynamic = js.Dynamic.literal(code = "", aid = v.aid, uid = v.uid, kind = v.kind.code, generation = v.generation,
@@ -107,6 +116,10 @@ object AccountCodec {
     case Left(AccountRejection.Pending) => js.Dynamic.literal(code = AccountRejection.Pending.code, uid = uid)
     case other => describe(other)
   }
+
+  /** 保留トークンの発行結果。再設定では送り先のアドレスを返す */
+  def pending(state: AccountState, kind: PendingKind): js.Dynamic =
+    js.Dynamic.literal(code = "", email = (if (kind == PendingKind.Reset) state.profile.email else None).orUndefined)
 
   /** ログインの失敗。delay はアカウント全体の失敗数から決めた応答の遅延秒数 */
   def loginFailure(delay: Int): js.Dynamic = js.Dynamic.literal(code = AccountRejection.LoginFailed.code, delay = delay)
@@ -156,6 +169,8 @@ object AccountCodec {
         recentPosts = token.recentPosts.map(encodeTokenPost).toJSArray, revokedAt = token.revokedAt.orUndefined, revokeReason = token.revokeReason.map(_.code).orUndefined)
     }
     js.Dynamic.literal(code = "", account = description(state.description), tokens = tokens.toJSArray, deviceCount = state.devices.size,
+      email = state.profile.email.orUndefined,
+      pendingEmail = state.pending.get(PendingKind.Email).filter(_.expiresAt > now).flatMap(_.email).orUndefined,
       caps = {
         val posts = state.capPosts(logs)
         state.caps.map(c => js.Dynamic.literal(capId = c.capId, name = c.name, strong = c.strong, issuedAt = c.issuedAt, revokedAt = c.revokedAt.orUndefined, recentPosts = posts.getOrElse(c.capId, Vector.empty).map(p => encodeTokenPost(p.tokenPost)).toJSArray)).toJSArray

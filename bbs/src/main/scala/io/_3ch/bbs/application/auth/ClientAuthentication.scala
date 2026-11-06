@@ -13,6 +13,10 @@ enum AuthServiceFailure(val code: String) {
   case Unavailable extends AuthServiceFailure("auth:unavailable")
   /** ユーザー ID が使用済み・予約語・予約中 */
   case Taken extends AuthServiceFailure("auth:id:taken")
+  /** メールアドレスが他のアカウントで使われている */
+  case EmailTaken extends AuthServiceFailure("auth:email:taken")
+  /** 確認メールを送れなかった */
+  case MailFailed extends AuthServiceFailure("auth:mail:failed")
 }
 
 /** AuthServiceFailure を Future の失敗として運ぶ */

@@ -20,7 +20,7 @@ final case class AccountCapProps(id: String, name: String, strong: Boolean, issu
 /** アカウント設定画面の表示情報。device はこの端末の Cookie にある端末ハッシュの粒度、roles はキャップの発行欄の出し分けに使う */
 final case class AccountProps(uid: String, lv: Int, tokens: Seq[AccountTokenProps] = Nil, activeCount: Int = 0, nowSeconds: Double = js.Date.now() / 1000,
   kind: AccountKind = AccountKind.Client, expiresAt: Option[Double] = None, device: Option[DeviceGranularity] = None, deviceCount: Int = 0,
-  caps: Seq[AccountCapProps] = Nil, roles: Roles = Roles())
+  caps: Seq[AccountCapProps] = Nil, roles: Roles = Roles(), email: Option[String] = None, pendingEmail: Option[String] = None, mailEnabled: Boolean = false)
 
 /** アカウントの表示情報と専ブラ用キー・ログアウトの操作画面 */
 object AccountComponent {
@@ -65,6 +65,8 @@ object AccountComponent {
             <.dt(^.className := term, "この端末"), <.dd(deviceLabel(props.device), <.small(^.className := "ml-2 text-[#697785]", s"登録した端末${props.deviceCount}台")))),
         <.section(^.id := "upgrade", ^.className := "my-4 border border-[#d6dce3] bg-white p-4", <.h2(^.className := "mb-2 font-bold", "■ 登録方法の切り替え"),
           <.p("ID・パスワード、Googleへの切り替えは準備中です。")),
+        if props.kind == AccountKind.Password then IslandComponents.AccountCredentialsJs(js.Dynamic.literal(email = props.email.getOrElse(""),
+          pendingEmail = props.pendingEmail.getOrElse(""), mailEnabled = props.mailEnabled)) else EmptyVdom,
         IslandComponents.AccountMenuJs(js.Dynamic.literal(tokens = js.Array(props.tokens.map(tokenProps)*), activeCount = props.activeCount, nowSeconds = props.nowSeconds)),
         IslandComponents.AccountCapJs(js.Dynamic.literal(caps = js.Array(props.caps.map(capProps)*), admin = props.roles.admin,
           canIssue = props.roles.values.nonEmpty)),

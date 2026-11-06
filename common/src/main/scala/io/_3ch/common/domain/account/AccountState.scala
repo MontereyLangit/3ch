@@ -85,12 +85,14 @@ final case class AccountState(
   devices: Vector[AccountDevice] = Vector.empty,
   caps: Vector[AccountCap] = Vector.empty,
   credential: Option[PasswordCredential] = None,
-  readiness: AccountReadiness = AccountReadiness.Ready
+  readiness: AccountReadiness = AccountReadiness.Ready,
+  pending: Map[PendingKind, PendingToken] = Map.empty
 ) {
   def valid: Boolean = profile.valid && level.valid && roles.permitted(profile.kind) &&
     tokens.forall(_.valid) && tokens.map(_.tokenId).distinct.size == tokens.size && tokens.map(_.hash).distinct.size == tokens.size &&
     devices.size <= 10 && devices.forall(_.valid) && devices.map(_.hash).distinct.size == devices.size &&
     caps.forall(_.valid) && caps.map(_.capId).distinct.size == caps.size && caps.map(_.hash).distinct.size == caps.size &&
+    pending != null && pending.forall { case (kind, token) => token.valid && (kind == PendingKind.Email) == token.email.isDefined } &&
     readiness != null && credential != null && (profile.kind match {
       case AccountKind.Password => credential.forall(value => value != null && value.valid) &&
         (readiness == AccountReadiness.Pending || credential.isDefined)
@@ -279,6 +281,46 @@ final case class AccountState(
   def describeGoogle(subHash: String, now: Double): Either[AccountRejection, AccountDescription] =
     if (profile.kind != AccountKind.Google || !profile.googleSubHash.contains(subHash)) Left(AccountRejection.Invalid)
     else usable(now).map(_ => description)
+
+  /** メールによるパスワード再設定を使えるか。メール認証済みで役割の無い ID・パスワードのアカウントだけ */
+  def resettable: Boolean =
+    profile.kind == AccountKind.Password && profile.email.isDefined && profile.emailVerifiedAt.isDefined && roles.values.isEmpty
+
+  /**
+    * 保留トークンを種別ごとに一つ置き換えて保存する。メール認証は ID・パスワードのアカウントの確認先アドレスを持ち、
+    * 再設定は resettable なアカウントに限る
+    */
+  def issuePending(kind: PendingKind, hash: String, email: Option[String], now: Double): Either[AccountRejection, AccountState] =
+    usable(now).flatMap { _ =>
+      val token = PendingToken(hash, now + kind.lifetime, email)
+      if (!token.valid || (kind == PendingKind.Email) != email.isDefined) Left(AccountRejection.Invalid)
+      else if (profile.kind != AccountKind.Password || (kind == PendingKind.Reset && !resettable)) Left(AccountRejection.KindForbidden)
+      else Right(copy(pending = pending.updated(kind, token)))
+    }
+
+  /** 一致する期限内の保留トークン。消費はしない */
+  def pendingFor(kind: PendingKind, hash: String, now: Double): Either[AccountRejection, PendingToken] =
+    usable(now).flatMap(_ => pending.get(kind).filter(_.accepts(hash, now)).toRight(AccountRejection.PendingInvalid))
+
+  /**
+    * メール認証のトークンを消費してアドレスを確定させ、Lv が 3 未満なら 3 にする（下げない）。
+    * 置き換えた前のアドレスがあれば一緒に返す
+    */
+  def verifyEmail(hash: String, now: Double): Either[AccountRejection, (AccountState, Option[String])] =
+    pendingFor(PendingKind.Email, hash, now).flatMap { token =>
+      token.email.toRight(AccountRejection.Invalid).map { email =>
+        val next = copy(profile = profile.copy(email = Some(email), emailVerifiedAt = Some(now)), level = level.atLeast(Phoebe.initial(profile.kind, emailVerified = true), now),
+          pending = pending - PendingKind.Email)
+        (next, profile.email.filter(_ != email))
+      }
+    }
+
+  /** 再設定のトークンを消費してパスワードを置き換え、世代を進める。役割を得たアカウントでは使えない */
+  def resetPassword(hash: String, next: PasswordCredential, now: Double): Either[AccountRejection, AccountState] =
+    pendingFor(PendingKind.Reset, hash, now).flatMap { _ =>
+      if (!resettable) Left(AccountRejection.KindForbidden)
+      else setPassword(next, now).map(_.copy(pending = pending - PendingKind.Reset))
+    }
 
   /** 成功投稿だけで期限・投稿数と Lv・端末とキーの直近五件を更新する。失効済み ID は復活させない */
   def recordPost(now: Double, post: AccountPost, observation: AccountObservation): Either[AccountRejection, AccountState] = {

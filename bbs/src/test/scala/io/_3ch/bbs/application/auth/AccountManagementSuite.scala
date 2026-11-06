@@ -37,6 +37,7 @@ class AccountManagementSuite extends FunSuite {
       def uid(): String = f"$attempts%08x"
       def token(): String = "a" * 20
       def tokenId(): String = "newtoken"
+      def linkSecret(): String = "s" * 43
       def index(kind: String, value: String): Future[Option[String]] = {
         sequence += 1
         Future.successful(if (keyFailure) None else Some(f"$sequence%064x"))

@@ -81,7 +81,8 @@ class AccountCodecSuite extends FunSuite {
     assertEquals(restored, state)
     assert(restored.usable(now).isRight)
     assertEquals(AccountCodec.encodeState(restored)("credential"), null)
-    assertEquals(AccountCodec.stateKeys.toSet, Set("profile", "level", "roles", "tokens", "devices", "caps", "activation", "credential"))
+    assertEquals(AccountCodec.stateKeys.toSet, Set("profile", "level", "roles", "tokens", "devices", "caps", "activation", "credential",
+      "pending:email", "pending:reset"))
     legacy.update("activation", null)
     intercept[Throwable](AccountCodec.decodeState(legacy))
   }

@@ -74,4 +74,13 @@ class PasswordSuite extends FunSuite {
     val password = Password.create("do-not-log-this", id).toOption.get
     assert(!password.toString.contains(password.value))
   }
+
+  test("役割のあるアカウントは 16 文字以上を求め、役割が無ければ登録と同じ規則にする") {
+    val id = LoginId.parse("taro_2026").toOption.get
+    val roles = Roles(Set(AccountRole.Cap))
+    assertEquals(Password.create("fifteen chars!!", id, roles), Left(PasswordRejection.RoleLength))
+    assert(Password.create("sixteen chars!!!", id, roles).isRight)
+    assert(Password.create("fifteen chars!!", id, Roles()).isRight)
+    assertEquals(Password.create("short", id, roles), Left(PasswordRejection.Length))
+  }
 }

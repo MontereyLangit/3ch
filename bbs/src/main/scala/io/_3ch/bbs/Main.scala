@@ -53,6 +53,16 @@ object Main {
   @JSExportTopLevel("authAccountHandler", "server")
   def authAccountHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.page(c.asInstanceOf[HonoContextFacade], accountPage = true)
 
+  /** メールアドレスの確認リンクの画面を描画する */
+  @route("auth/email/verify/index.ts")
+  @JSExportTopLevel("authEmailVerifyHandler", "server")
+  def authEmailVerifyHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.tokenPage(c.asInstanceOf[HonoContextFacade], reset = false)
+
+  /** パスワードの再設定リンクの画面を描画する */
+  @route("auth/reset/index.ts")
+  @JSExportTopLevel("authResetHandler", "server")
+  def authResetHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.tokenPage(c.asInstanceOf[HonoContextFacade], reset = true)
+
   /** 本文と状態を保って応答を複製し、変更可能なヘッダへClient Hintsを付ける */
   @JSExportTopLevel("acceptClientHints", "server")
   def acceptClientHints(response: Response): Response = {

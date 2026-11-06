@@ -97,6 +97,9 @@ final case class AccountLevel(lv: Int, lvSince: Double, lvPosts: Int = 0, lvOver
     if (reached) AccountLevel(lv + 1, now) else counted
   }
 
+  /** Lv が minimum 未満なら minimum にして数え直す。固定値は保つ */
+  def atLeast(minimum: Int, now: Double): AccountLevel = if (lv >= minimum) this else AccountLevel(minimum, now, 0, lvOverride)
+
   /** 管理者による固定値を設定する。None で固定を外す */
   def overridden(value: Option[Int]): Option[AccountLevel] =
     Option.when(value.forall(n => n >= 0 && n <= Phoebe.MaxLevel))(copy(lvOverride = value))
@@ -126,4 +129,8 @@ enum AccountRejection(val code: String) {
   case IndexOwnership extends AccountRejection("auth:index:ownership")
   case IndexPermanent extends AccountRejection("auth:index:permanent")
   case LoginFailed extends AccountRejection("auth:login:failed")
+  /** 保留トークンが無い・一致しない・期限切れ */
+  case PendingInvalid extends AccountRejection("auth:pending:invalid")
+  /** この登録方式では使えない操作 */
+  case KindForbidden extends AccountRejection("auth:kind:forbidden")
 }

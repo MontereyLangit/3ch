@@ -1,6 +1,6 @@
 package io._3ch.common.domain.account
 
-/** 認証要求の計数イベント。kind は verify・register・login・reset・token、または端末の相異数を数える deviceHash:<端末ハッシュ> */
+/** 認証要求の計数イベント。kind は verify・register・login・reset・token・cap・email、または端末の相異数を数える deviceHash:<端末ハッシュ> */
 final case class AuthRateEvent(kind: String, t: Double)
 final case class AuthRateCounts(hour: Int, day: Int, distinctDevices24h: Int)
 
@@ -19,7 +19,7 @@ final case class AuthRateHistory(events: Vector[AuthRateEvent] = Vector.empty) {
   }
 }
 object AuthRateHistory {
-  def validKind(kind: String): Boolean = Set("verify", "register", "login", "reset", "token", "cap").contains(kind) ||
+  def validKind(kind: String): Boolean = Set("verify", "register", "login", "reset", "token", "cap", "email").contains(kind) ||
     (kind.startsWith("deviceHash:") && kind.drop(11).matches("[pgu](?:[0-9a-f]{18}|[0-9a-f]{16})"))
 }
 
@@ -31,6 +31,8 @@ object AbuseThresholds {
   def reset(counts: AuthRateCounts): Boolean = counts.day <= 3
   /** 専ブラ用キーの発行は一アカウント一日十回まで */
   def tokenIssue(counts: AuthRateCounts): Boolean = counts.day <= 10
+  /** 確認メールの送信は一アカウント一日三回まで */
+  def emailSend(counts: AuthRateCounts): Boolean = counts.day <= 3
   /** キャップの発行・再発行は一アカウント一日十回まで */
   def capIssue(counts: AuthRateCounts): Boolean = counts.day <= 10
 }
