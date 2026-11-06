@@ -14,16 +14,38 @@ class AuthHandlerSuite extends munit.FunSuite {
       assertEquals(AuthHandler.safeReturn(value, origin + "/auth/"), "/", value)
     }
   }
-  test("設定していない認証エンドポイントは503を返す") {
+  test("設定が揃っていない環境の認証エンドポイントは認証が無いときと同じ404にする") {
     val request = HandlerTestKit.request(origin + "/auth/session")
-    AuthHandler.handle(request, js.Dynamic.literal().asInstanceOf[WorkerEnv]).toFuture.map { response =>
-      assertEquals(response.status, 503)
-      assertEquals(response.headers.get("Cache-Control"), "private, no-store")
+    val partial = Seq(
+      js.Dynamic.literal(),
+      js.Dynamic.literal(AUTH_SECRET = AuthTestEnv.secret),
+      js.Dynamic.literal(AUTH_SECRET = "short-secret", AGREEMENT_VERSION = "v1", TURNSTILE_SITE_KEY = "site", TURNSTILE_SECRET_KEY = "server"))
+    scala.concurrent.Future.traverse(partial)(env => AuthHandler.handle(request, env.asInstanceOf[WorkerEnv]).toFuture).map { responses =>
+      responses.foreach { response =>
+        assertEquals(response.status, 404)
+        assert(response.headers.get("content-type").startsWith("text/html"))
+      }
+    }
+  }
+  test("ログアウトはセッションが無効でも Cookie を消す") {
+    val request = HandlerTestKit.request(origin + "/auth/logout", headers = Seq("Content-Type" -> "application/x-www-form-urlencoded", "Origin" -> origin,
+      "Cookie" -> "__Host-ch3s_sid=1.forged"), method = "POST", body = "")
+    AuthHandler.handle(request, AuthTestEnv.env()).toFuture.map { response =>
+      assertEquals(response.status, 200)
+      assertEquals(response.headers.get("Set-Cookie"), "__Host-ch3s_sid=; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Lax")
+    }
+  }
+  test("本文の不正な % は要求の誤りにする") {
+    val request = HandlerTestKit.request(origin + "/auth/verify", headers = Seq("Content-Type" -> "application/x-www-form-urlencoded", "Origin" -> origin),
+      method = "POST", body = "agreement=%E3%81")
+    AuthHandler.handle(request, AuthTestEnv.env()).toFuture.flatMap { response =>
+      assertEquals(response.status, 400)
+      response.json().toFuture.map(value => assertEquals(value.asInstanceOf[js.Dynamic].code.asInstanceOf[String], "auth:invalid"))
     }
   }
   test("Origin が無い変更要求は DO と Turnstile より先に拒否する") {
     val request = HandlerTestKit.request(origin + "/auth/verify", headers = Seq("Content-Type" -> "application/x-www-form-urlencoded"), method = "POST", body = "agreement=v1")
-    val env = js.Dynamic.literal(AUTH_SECRET = "test-secret", AGREEMENT_VERSION = "v1").asInstanceOf[WorkerEnv]
+    val env = AuthTestEnv.env()
     AuthHandler.handle(request, env).toFuture.flatMap { response =>
       assertEquals(response.status, 403)
       response.json().toFuture.map(value => assertEquals(value.asInstanceOf[js.Dynamic].code.asInstanceOf[String], "auth:origin"))
@@ -31,7 +53,7 @@ class AuthHandlerSuite extends munit.FunSuite {
   }
   test("一致しない Origin は拒否する") {
     val request = HandlerTestKit.request(origin + "/auth/logout", headers = Seq("Content-Type" -> "application/x-www-form-urlencoded", "Origin" -> "https://evil.test"), method = "POST", body = "")
-    val env = js.Dynamic.literal(AUTH_SECRET = "test-secret", AGREEMENT_VERSION = "v1").asInstanceOf[WorkerEnv]
+    val env = AuthTestEnv.env()
     AuthHandler.handle(request, env).toFuture.map(response => assertEquals(response.status, 403))
   }
 }

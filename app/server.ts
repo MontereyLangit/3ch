@@ -26,7 +26,9 @@ const app = createApp({
     }));
   },
 });
-app.all("/auth/*", (c) => authApi(c.req.raw, c.env));
+// 認証 API。画面（/auth/ と /auth/account/）はファイルルートが描画する。
+app.get("/auth/session/", (c) => authApi(c.req.raw, c.env));
+app.post("/auth/*", (c) => authApi(c.req.raw, c.env));
 
 // ファイルルートに一致しないリクエストは既存の公開ハンドラで処理する(LegacyDispatch)
 app.all("*", (c) => publicHandler(c));

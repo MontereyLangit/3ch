@@ -5,5 +5,6 @@ declare module "scalajs:server.js" {
     children: import("react").ReactNode,
     title: string | undefined,
     clientScriptSrc: string,
+    authModal: boolean | undefined,
   ): import("react").ReactElement;
 }

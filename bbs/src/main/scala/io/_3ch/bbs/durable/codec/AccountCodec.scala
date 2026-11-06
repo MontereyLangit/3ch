@@ -138,7 +138,7 @@ object AccountCodec {
         boundAt = token.boundAt.orUndefined, replacedTokenAt = token.replacedTokenAt.orUndefined, lastUsedAt = token.lastUsedAt.orUndefined,
         recentPosts = token.recentPosts.map(encodeTokenPost).toJSArray, revokedAt = token.revokedAt.orUndefined, revokeReason = token.revokeReason.map(_.code).orUndefined)
     }
-    js.Dynamic.literal(code = "", account = description(state.description), tokens = tokens.toJSArray,
+    js.Dynamic.literal(code = "", account = description(state.description), tokens = tokens.toJSArray, deviceCount = state.devices.size,
       caps = state.caps.map(c => js.Dynamic.literal(capId = c.capId, name = c.name, strong = c.strong, issuedAt = c.issuedAt, revokedAt = c.revokedAt.orUndefined)).toJSArray,
       log = logs.map(encodePost).toJSArray)
   }

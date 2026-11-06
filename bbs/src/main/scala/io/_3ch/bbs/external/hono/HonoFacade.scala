@@ -9,6 +9,7 @@ import scala.scalajs.js.|
 
 trait RenderProps extends js.Object {
   var title: js.UndefOr[String] = js.undefined
+  var authModal: js.UndefOr[Boolean] = js.undefined
 }
 
 /** Hono の `c.req` / `c.env` 用の最小手書き facade */

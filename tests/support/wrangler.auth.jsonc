@@ -4,7 +4,7 @@
   "main": "auth-worker.mjs",
   "compatibility_date": "2026-10-02",
   "vars": {
-    "AUTH_SECRET": "local-auth-integration-secret",
+    "AUTH_SECRET": "local-auth-integration-secret-0123456789",
     "AGREEMENT_VERSION": "v1",
     "TURNSTILE_SITE_KEY": "local-turnstile-site-key",
     "TURNSTILE_SECRET_KEY": "local-turnstile-secret",

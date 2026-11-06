@@ -31,6 +31,15 @@ private[islands] object AuthClient {
     val e = js.Dynamic.newInstance(js.Dynamic.global.CustomEvent)(name, js.Dynamic.literal(detail = detail)).asInstanceOf[dom.Event]
     dom.window.dispatchEvent(e)
   }
+  /** ログアウトを送る。成功したら表示をログアウト状態にする */
+  def logout(): Future[Boolean] = {
+    dom.fetch("/auth/logout", new dom.RequestInit {
+      method = dom.HttpMethod.POST; credentials = dom.RequestCredentials.`same-origin`; body = new dom.URLSearchParams()
+    }).toFuture.map { r =>
+      if r.ok then changed(None)
+      r.ok
+    }.recover { case _ => false }
+  }
   def changed(value: Option[SessionView]): Unit = event("ch3s:auth-changed", value.fold[js.Object](js.Dynamic.literal())(s => js.Dynamic.literal(uid = s.uid, lv = s.lv)))
   def requestLogin(): Future[Boolean] = {
     val promise = Promise[Boolean]()

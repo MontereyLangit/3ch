@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { unstable_dev } from 'wrangler';
 
 const built = existsSync(new URL('../dist/index.js', import.meta.url));
-const secret = 'local-auth-integration-secret';
+const secret = 'local-auth-integration-secret-0123456789';
 const cookieName = '__Host-ch3s_sid';
 const sign = payload => `${payload}.${createHmac('sha256', secret).update(payload).digest().subarray(0, 16).toString('base64url')}`;
 const signedCookie = fields => `${cookieName}=${sign(fields.join('.'))}`;
@@ -150,11 +150,17 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
     }
     const wrongType = await fetch(origin + '/auth/verify/', { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: '{}' });
     assert.equal(wrongType.status, 400);
-    for (const path of ['/__test/no-secret/auth/session/', '/__test/no-turnstile/auth/verify/']) {
-      const response = path.includes('session') ? await fetch(origin + path) : await post(path, { agreement: 'v1' });
-      assert.equal(response.status, 503);
-      assert.equal((await response.json()).code, 'auth:unavailable');
+    for (const path of ['/__test/no-secret/auth/session/', '/__test/no-turnstile/auth/verify/', '/__test/no-secret/auth/', '/__test/no-secret/auth/account/']) {
+      const response = path.includes('verify') ? await post(path, { agreement: 'v1' }) : await fetch(origin + path);
+      assert.equal(response.status, 404, path);
+      assert.match(response.headers.get('content-type'), /^text\/html/);
     }
+    const signedOut = await fetch(origin + '/auth/account/', { redirect: 'manual' });
+    assert.equal(signedOut.status, 302);
+    assert.equal(signedOut.headers.get('location'), '/auth/?return=/auth/account/');
+    const staleLogout = await post('/auth/logout/', {}, { cookie: `${cookieName}=1.stale` });
+    assert.equal(staleLogout.status, 200);
+    assert.match(staleLogout.headers.get('set-cookie'), /^__Host-ch3s_sid=; Max-Age=0;/);
     for (const token of ['rejected', 'wrong-host', 'unavailable', 'malformed']) {
       const response = await post('/auth/verify/', { agreement: 'v1', 'cf-turnstile-response': token });
       assert.equal(response.status, 400, token);
@@ -203,6 +209,11 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
     const panel = await account(fields[1], 'inspect');
     assert.equal(panel.account.uid, body.uid);
     assert.equal(panel.account.generation, 0);
+    const accountPage = await fetch(origin + '/auth/account/', { headers: { cookie }, redirect: 'manual' });
+    assert.equal(accountPage.status, 200);
+    const accountHtml = await accountPage.text();
+    for (const text of [`@${body.uid}`, 'かんたん登録（クライアントID）', '準個体（p）', '登録した端末1台', 'ログアウトするとこの端末から戻せません']) assert.ok(accountHtml.includes(text), text);
+    assert.equal(accountPage.headers.get('cache-control'), 'private, no-store');
 
     for (const invalid of [
       `${cookieName}=${fields.map((value, index) => index === 2 ? 'forged01' : value).join('.')}`,

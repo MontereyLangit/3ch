@@ -14,7 +14,7 @@ import scala.scalajs.js.JSConverters.*
 class AuthVerifyBindingSuite extends munit.FunSuite {
   test("verify で既存キー Cookie の binding を保持し、キーの失効後は投稿を認証しない") {
     val time = 1800000000d
-    val secret = "test-secret"
+    val secret = AuthTestEnv.secret
     val userAgent = "Monazilla/1.00 Test/1.0"
     val account = AccountDescription("abcdefghijklmnop", "abcdefgh", AccountKind.Client, 1, Some(time + 31536000), 1, Roles(), time - 1, "v1")
     var revoked = false
@@ -28,9 +28,8 @@ class AuthVerifyBindingSuite extends munit.FunSuite {
       idFromName = ((value: String) => value): js.Function1[String, String],
       get = ((_: js.Any) => stub): js.Function1[js.Any, js.Dynamic])
     val rate = js.Dynamic.literal(hit = ((_: String, _: Double) => js.Promise.resolve(js.Dynamic.literal(code = "", hour = 1, day = 1, distinctDevices24h = 0))): js.Function2[String, Double, js.Promise[js.Dynamic]])
-    val env = js.Dynamic.literal(AUTH_SECRET = secret, AGREEMENT_VERSION = "v1", TURNSTILE_SECRET_KEY = "test-server-key",
-      ACCOUNT_DO = namespace(accountStub), AUTH_RATE_DO = namespace(rate),
-      ch3www = js.Dynamic.literal(get = ((_: String) => js.Promise.resolve[js.Any](null)): js.Function1[String, js.Promise[js.Any]])).asInstanceOf[WorkerEnv]
+    val env = AuthTestEnv.env("ACCOUNT_DO" -> namespace(accountStub), "AUTH_RATE_DO" -> namespace(rate),
+      "ch3www" -> js.Dynamic.literal(get = ((_: String) => js.Promise.resolve[js.Any](null)): js.Function1[String, js.Promise[js.Any]]))
     val global = HandlerTestKit.global
     val originalFetch = global.fetch
     global.fetch = ((_: String, _: js.Any) => js.Promise.resolve(js.Dynamic.literal(ok = true,

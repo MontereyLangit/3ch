@@ -6,8 +6,15 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.util.control.NonFatal
 
-/** 本人認証の拒否理由。文言と HTTP 状態はハンドラで決める */
-final case class AuthServiceException(code: String) extends RuntimeException(code)
+/** 本人認証・キー発行を続けられない理由。文言と HTTP 状態はハンドラで決める */
+enum AuthServiceFailure(val code: String) {
+  case Invalid extends AuthServiceFailure("auth:invalid")
+  case RateLimited extends AuthServiceFailure("auth:rate")
+  case Unavailable extends AuthServiceFailure("auth:unavailable")
+}
+
+/** AuthServiceFailure を Future の失敗として運ぶ */
+final case class AuthServiceException(failure: AuthServiceFailure) extends RuntimeException(failure.code)
 
 /** 投稿同意・Turnstile・端末申告を確認した後の計数とアカウント登録 */
 final class ClientAuthentication(accounts: AccountManagementStore, keys: AuthenticationKeys, agreementVersion: String) {
@@ -16,14 +23,14 @@ final class ClientAuthentication(accounts: AccountManagementStore, keys: Authent
     Future.unit.flatMap { _ =>
       if (!AccountProfile.validTime(now) || !DedicatedBrowserTokens.validHash(keyIp) || agreementVersion.isEmpty ||
         (deviceHash.nonEmpty && !deviceHash.matches("[pgu](?:[0-9a-f]{18}|[0-9a-f]{16})"))) {
-        throw AuthServiceException("auth:invalid")
+        throw AuthServiceException(AuthServiceFailure.Invalid)
       }
       val counted = if (deviceHash.isEmpty) Future.unit
       else accounts.rate(keyIp, "deviceHash:" + deviceHash, now).map(_ => ())
       for {
         _ <- counted
         counts <- accounts.rate(keyIp, "verify", now)
-        _ = if (!AbuseThresholds.verify(counts)) throw AuthServiceException("auth:rate")
+        _ = if (!AbuseThresholds.verify(counts)) throw AuthServiceException(AuthServiceFailure.RateLimited)
         account <- existing match {
           case None => createClient(deviceHash, keyIp, now, 8)
           case Some(account) => for {
@@ -35,12 +42,12 @@ final class ClientAuthentication(accounts: AccountManagementStore, keys: Authent
     }
 
   private def createClient(deviceHash: String, keyIp: String, now: Double, attempts: Int): Future[AccountDescription] = {
-    if (attempts <= 0) Future.failed(AuthServiceException("auth:unavailable"))
+    if (attempts <= 0) Future.failed(AuthServiceException(AuthServiceFailure.Unavailable))
     else Future.unit.flatMap { _ =>
       val aid = keys.aid()
       val uid = keys.uid()
       keys.index("uid", uid).flatMap {
-        case None => Future.failed(AuthServiceException("auth:unavailable"))
+        case None => Future.failed(AuthServiceException(AuthServiceFailure.Unavailable))
         case Some(hash) => accounts.reserve("uid", hash, aid, now).recoverWith { case NonFatal(error) =>
           accounts.remove("uid", hash, aid).recover { case NonFatal(_) => () }.flatMap(_ => Future.failed(error))
         }.flatMap {

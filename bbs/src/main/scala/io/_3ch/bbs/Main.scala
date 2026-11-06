@@ -19,8 +19,8 @@ object Main {
 
   /** HonoX の renderer から HTML ドキュメント全体を組み立てる。 */
   @JSExportTopLevel("renderShell", "server")
-  def renderShell(children: js.Any, title: js.UndefOr[String], clientScriptSrc: String): React.Element =
-    RendererShell.render(children, title, clientScriptSrc)
+  def renderShell(children: js.Any, title: js.UndefOr[String], clientScriptSrc: String, authModal: js.UndefOr[Boolean] = js.undefined): React.Element =
+    RendererShell.render(children, title, clientScriptSrc, authModal.getOrElse(false))
 
   @JSExportTopLevel("admin", "server")
   def admin(request: Request, env: WorkerEnv): js.Promise[Response] = handler.AdminHandler.handle(request, env)
@@ -49,7 +49,7 @@ object Main {
   def authPageHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.page(c.asInstanceOf[HonoContextFacade])
 
   /** 本人のアカウント設定画面を描画する */
-  @route("auth/account.ts")
+  @route("auth/account/index.ts")
   @JSExportTopLevel("authAccountHandler", "server")
   def authAccountHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.page(c.asInstanceOf[HonoContextFacade], accountPage = true)
 

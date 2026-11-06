@@ -853,6 +853,30 @@ test('認証表示: SSRと最初のhydrationが一致し通知で表示だけを
   assert.match(container.textContent, /Lv\*/);
 });
 
+test('ログアウト: フォーム形式の空の本文で送り、成功したら未ログイン表示にする', async () => {
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url, init });
+    return { ok: true, json: async () => ({ ok: true }) };
+  };
+  const container = await mount(client.AccountNavJs, { authEnabled: true, session: { uid: 'member', lv: 3 }, returnPath: '/sample/' });
+  await click([...container.querySelectorAll('button')].find(button => button.textContent === 'ログアウト'));
+  await flush();
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, '/auth/logout');
+  assert.equal(requests[0].init.method, 'POST');
+  assert.ok(requests[0].init.body instanceof window.URLSearchParams || requests[0].init.body instanceof URLSearchParams);
+  assert.match(container.textContent, /認証・登録/);
+  assert.doesNotMatch(container.textContent, /@member/);
+});
+
+test('アカウント設定のログアウト: かんたん登録には戻せない注意を出す', async () => {
+  const simple = await mount(client.AccountLogoutJs, { simple: true });
+  assert.match(simple.textContent, /かんたん登録のアカウントは、ログアウトするとこの端末から戻せません/);
+  const other = await mount(client.AccountLogoutJs, { simple: false });
+  assert.doesNotMatch(other.textContent, /戻せません/);
+});
+
 test('専ブラ用キー: 発行したキーはメモリ上にだけ表示し、再マウントすると消える', async () => {
   let issueCalls = 0;
   globalThis.fetch = async (url) => {

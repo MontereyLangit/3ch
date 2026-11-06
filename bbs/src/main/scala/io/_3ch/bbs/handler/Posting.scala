@@ -2,9 +2,12 @@ package io._3ch.bbs.handler
 
 import io._3ch.bbs.application.posting.{PostingOutcome, PostingPorts, PostingRequest, PostingService}
 import io._3ch.bbs.application.posting.ports.{Clock, PostRateLog, Random}
+import io._3ch.bbs.domain.account.AuthenticationFailure
+import io._3ch.bbs.domain.posting.PostingError
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.hash.WebHasher
+import io._3ch.common.domain.account.AccountRejection
 import io._3ch.bbs.repository.{ArchiveIndexRepository, BoardRepository, CapRepository, ModerationRuleRepository, ThreadRepository}
 
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -20,32 +23,35 @@ object Posting {
       rules = ModerationRuleRepository.store(env),
       caps = CapRepository.store(env),
       archive = ArchiveIndexRepository.store(env),
-      users = if (env.AUTH_SECRET.exists(_.nonEmpty)) new io._3ch.bbs.repository.PostingAccountSource(request, env) else () => resolveUser(request, env),
+      users = if (io._3ch.bbs.handler.auth.AuthEnv.settings(env).isDefined) new io._3ch.bbs.repository.PostingAccountSource(request, env) else () => resolveUser(request, env),
       hasher = WebHasher,
       clock = Clock.system,
       random = Random.system,
       rateLog = PostRateLog.console
     )
-    new PostingService(ports, String.valueOf(env.salt)).post(PostingRequest.from(request)).map(outcome => respond(outcome, env.AUTH_SECRET.exists(_.nonEmpty))).toJSPromise
+    new PostingService(ports, String.valueOf(env.salt)).post(PostingRequest.from(request)).map(outcome => respond(outcome, io._3ch.bbs.handler.auth.AuthEnv.settings(env).isDefined)).toJSPromise
   }
 
   private def respond(outcome: PostingOutcome, authenticated: Boolean): Response = {
     val context = outcome.context
     val charset = if (context.form.isSJIS) "Shift_JIS" else "UTF-8"
-    val posted = outcome match {
-      case PostingOutcome.Rejected(_, _, _) => Nil
+    val result = outcome match {
+      case PostingOutcome.Rejected(error, rejected, _) => if (authenticated) rejectionHeaders(error, rejected.form.bbs) else Nil
       case _ => Seq("x-threadkey" -> context.form.key, "x-resnum" -> context.number.toString)
     }
-    RendererShell.legacyReact(PostingPages.render(outcome, charset), encoding = charset, extra = outcome.headers ++ posted ++ (if (authenticated) outcome match {
-      case PostingOutcome.Rejected(error, context, _) =>
-        val authUrl = "/auth/?return=/" + context.form.bbs + "/"
-        val headers = Seq("x-post-error" -> error.code)
-        error match {
-          case io._3ch.bbs.domain.posting.PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.LoginRequired) => headers ++ Seq("x-auth-required" -> "login", "x-auth-url" -> authUrl)
-          case io._3ch.bbs.domain.posting.PostingError.AuthenticationLevel(required) => headers ++ Seq("x-auth-required" -> "level", "x-phoebe-required" -> required.toString, "x-auth-url" -> authUrl)
-          case _ => headers
-        }
-      case _ => Nil
-    } else Nil))
+    RendererShell.legacyReact(PostingPages.render(outcome, charset), encoding = charset, extra = outcome.headers ++ result)
+  }
+
+  /** 認証を有効にした環境の拒否に付ける追加ヘッダ。ログインと再同意はモーダルで、Lv 不足は必要 Lv を返す */
+  private[handler] def rejectionHeaders(error: PostingError, bbs: String): Seq[(String, String)] = {
+    val authUrl = "/auth/?return=/" + bbs + "/"
+    val code = Seq("x-post-error" -> error.code)
+    error match {
+      case PostingError.Authentication(AuthenticationFailure.LoginRequired | AuthenticationFailure.Account(AccountRejection.Agreement)) =>
+        code ++ Seq("x-auth-required" -> "login", "x-auth-url" -> authUrl)
+      case PostingError.AuthenticationLevel(required) =>
+        code ++ Seq("x-auth-required" -> "level", "x-phoebe-required" -> required.toString, "x-auth-url" -> authUrl)
+      case _ => code
+    }
   }
 }

@@ -61,7 +61,7 @@ object PostingText {
       case io._3ch.bbs.domain.account.AuthenticationFailure.LoginRequired => "この板（スレ）に書き込むには認証が必要です。"
       case io._3ch.bbs.domain.account.AuthenticationFailure.TokenInsecure => "HTTPSで接続してください。"
       case io._3ch.bbs.domain.account.AuthenticationFailure.TokenNotDedicated => "専用ブラウザから認証キーを使用してください。"
-      case io._3ch.bbs.domain.account.AuthenticationFailure.Account(io._3ch.common.domain.account.AccountRejection.Agreement) => "アカウント設定で利用規約への同意を確認してください。"
+      case io._3ch.bbs.domain.account.AuthenticationFailure.Account(io._3ch.common.domain.account.AccountRejection.Agreement) => "利用規約が改定されました。認証・登録の画面で同意してから書き込んでください。"
       case _ => "認証を確認できませんでした。認証・登録から再度お試しください。"
     }
     case PostingError.AuthenticationLevel(required) => s"この板（スレ）に書き込むには認証が必要です（必要Lv:$required）。"

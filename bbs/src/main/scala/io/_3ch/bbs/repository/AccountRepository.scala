@@ -19,7 +19,7 @@ final case class AccountTokenView(id: String, label: String, issuedAt: Double = 
   revokeReason: Option[String] = None, replacedTokenAt: Option[Double] = None,
   recentPosts: Vector[AccountTokenPostView] = Vector.empty, warnings: Vector[AccountTokenWarningView] = Vector.empty)
 /** 本人向けのアカウント情報とキー一覧。使用枠には有効な紐付け済みキーだけを数える */
-final case class AccountPanel(account: AccountDescription, tokens: Vector[AccountTokenView], activeCount: Int = 0)
+final case class AccountPanel(account: AccountDescription, tokens: Vector[AccountTokenView], activeCount: Int = 0, deviceCount: Int = 0)
 
 /** アカウント RPC の値をアプリケーションの型に変換する */
 final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountManagementStore {
@@ -154,7 +154,7 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
     if (tokens.map(_.id).distinct.size != tokens.size) invalid()
     val activeCount = tokens.count(token => token.boundAt.isDefined && token.revokedAt.isEmpty)
     if (activeCount > DedicatedBrowserTokens.boundLimit) invalid()
-    AccountPanel(description, tokens, activeCount)
+    AccountPanel(description, tokens, activeCount, integer(value.selectDynamic("deviceCount").asInstanceOf[js.Any], 10))
   }
   def rate(keyIp: String, kind: String, now: Double): Future[AuthRateCounts] =
     env.AUTH_RATE_DO.get(env.AUTH_RATE_DO.idFromName(keyIp)).hit(kind, now).toFuture.map { v =>

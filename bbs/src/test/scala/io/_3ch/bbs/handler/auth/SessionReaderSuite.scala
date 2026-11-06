@@ -11,7 +11,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
 class SessionReaderSuite extends FunSuite {
-  private val secret = "test-session-secret"
+  private val secret = AuthTestEnv.secret
   private val now = 2000000000d
   private val claims = SessionClaims("abcdefghijklmnop", "user_123", 2, 2000003600L, 3)
   private val https = "https://www.example.test/auth/"
@@ -57,7 +57,7 @@ class SessionReaderSuite extends FunSuite {
     for {
       cookie <- signed(claims.copy(expiresAt = (js.Date.now() / 1000).toLong + 3600))
       request = js.Dynamic.literal(headers = js.Dynamic.literal(get = ((_: String) => cookie): js.Function1[String, String])).asInstanceOf[Request]
-      env = js.Dynamic.literal(AUTH_SECRET = secret).asInstanceOf[WorkerEnv]
+      env = AuthTestEnv.env()
       result <- SessionReader.fromRequest(request, env)
       missing <- SessionReader.fromRequest(request, js.Dynamic.literal().asInstanceOf[WorkerEnv])
       context = js.Dynamic.literal(req = js.Dynamic.literal(header = ((_: String) => cookie): js.Function1[String, String]), env = env).asInstanceOf[HonoContextFacade]
