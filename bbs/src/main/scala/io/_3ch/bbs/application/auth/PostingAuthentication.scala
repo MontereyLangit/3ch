@@ -1,18 +1,18 @@
 package io._3ch.bbs.application.auth
 
 import io._3ch.bbs.application.auth.ports.{AccountStore, PostingCredentials, TokenProof}
-import io._3ch.bbs.domain.account.AuthenticationFailure
+import io._3ch.bbs.domain.account.{AuthenticatedPoster, AuthenticationFailure}
 import io._3ch.common.domain.account.{AccountDescription, AccountRejection, AccountVia, DedicatedBrowserLabel, SessionBinding, SessionClaims}
 
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.util.control.NonFatal
 
-/** 投稿の認証結果。account と session はサーバ内だけで使い、表示用 props には渡さない */
+/** 投稿の認証結果。LegacyCap は所有者のない旧キャップ */
 enum PostingAuthenticationResult {
   case Anonymous
   case LegacyCap
-  case Accepted(account: AccountDescription, via: AccountVia, tokenId: Option[String], capId: Option[String], device: String, session: Option[SessionClaims], refreshSession: Boolean = true)
+  case Accepted(poster: AuthenticatedPoster)
   case Rejected(reason: AuthenticationFailure)
 }
 
@@ -97,7 +97,7 @@ final class PostingAuthentication(accounts: AccountStore, credentials: PostingCr
   private def accepted(account: AccountDescription, via: AccountVia, tokenId: Option[String], capId: Option[String], device: String,
     session: Option[SessionClaims], refreshSession: Boolean = true): PostingAuthenticationResult =
     if (agreementVersion.isEmpty || account.agreementVersion != agreementVersion) Rejected(AuthenticationFailure.Account(AccountRejection.Agreement))
-    else Accepted(account, via, tokenId, capId, device, session, refreshSession)
+    else Accepted(AuthenticatedPoster(account, via, tokenId, capId, device, session, refreshSession))
 
   private def claimsFor(account: AccountDescription, now: Double, device: String, binding: Option[SessionBinding]): SessionClaims =
     SessionClaims(account.aid, account.uid, account.generation.toLong, account.expiresAt.getOrElse(now + 365d * 86400).toLong,

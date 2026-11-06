@@ -1,14 +1,16 @@
 package io._3ch.bbs.handler
 
+import io._3ch.bbs.application.auth.PostingAccountService
 import io._3ch.bbs.application.posting.{PostingOutcome, PostingPorts, PostingRequest, PostingService}
 import io._3ch.bbs.application.posting.ports.{Clock, PostRateLog, Random}
 import io._3ch.bbs.domain.account.AuthenticationFailure
 import io._3ch.bbs.domain.posting.PostingError
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.web.{Request, Response}
+import io._3ch.bbs.handler.auth.{AuthEnv, SessionCredentials}
 import io._3ch.bbs.hash.WebHasher
 import io._3ch.common.domain.account.AccountRejection
-import io._3ch.bbs.repository.{ArchiveIndexRepository, BoardRepository, CapRepository, ModerationRuleRepository, ThreadRepository}
+import io._3ch.bbs.repository.{AccountRepository, ArchiveIndexRepository, BoardRepository, CapRepository, ModerationRuleRepository, ThreadRepository}
 
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
@@ -17,19 +19,22 @@ import scala.scalajs.js.JSConverters.*
 /** bbs.cgi の書き込み。リクエストを PostingRequest にしてサービスに渡し、結果を画面にする */
 object Posting {
   def entry(request: Request, env: WorkerEnv, resolveUser: PostingUserResolver.Resolver = PostingUserResolver.unresolved): js.Promise[Response] = {
+    val settings = AuthEnv.settings(env)
     val ports = PostingPorts(
       threads = ThreadRepository.store(env),
       settings = BoardRepository.settingsStore(env),
       rules = ModerationRuleRepository.store(env),
       caps = CapRepository.store(env),
       archive = ArchiveIndexRepository.store(env),
-      users = if (io._3ch.bbs.handler.auth.AuthEnv.settings(env).isDefined) new io._3ch.bbs.repository.PostingAccountSource(request, env) else () => resolveUser(request, env),
+      users = () => resolveUser(request, env),
       hasher = WebHasher,
       clock = Clock.system,
       random = Random.system,
-      rateLog = PostRateLog.console
+      rateLog = PostRateLog.console,
+      accounts = settings.map(config => new PostingAccountService(new AccountRepository(env), new SessionCredentials(config.secret, request.url),
+        config.agreementVersion, _ => js.Dynamic.global.console.warn("account post recording failed")))
     )
-    new PostingService(ports, String.valueOf(env.salt)).post(PostingRequest.from(request)).map(outcome => respond(outcome, io._3ch.bbs.handler.auth.AuthEnv.settings(env).isDefined)).toJSPromise
+    new PostingService(ports, String.valueOf(env.salt)).post(PostingRequest.from(request)).map(outcome => respond(outcome, settings.isDefined)).toJSPromise
   }
 
   private def respond(outcome: PostingOutcome, authenticated: Boolean): Response = {

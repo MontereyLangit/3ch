@@ -24,7 +24,7 @@ final case class PostingContext(
   ponCookie: Option[String] = None,
   capKey: Option[String] = None,
   authMail: String = "",
-  authHeaders: Seq[(String, String)] = Nil
+  sessionCookie: Option[String] = None
 ) {
   /** スレ立てか。レス番号が 1 のとき */
   def creating: Boolean = number == 1

@@ -1,6 +1,6 @@
 package io._3ch.bbs.application.posting
 
-import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore}
+import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingAccount, PostingAccounts, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore}
 import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureClock, FailureSite, ModerationDenial, PostingError, PostingStage, PostingUser, ThreadOwner, ThreadPosting, ThreadWriteResult}
 import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, PostRateFinding, PostRateIdentity, PostRateLevel, PostRateRejection, ThreadCreationRejection, ThreadCreationRateLimit}
 import io._3ch.bbs.handler.PostingText
@@ -30,7 +30,7 @@ class PostingServiceSuite extends FunSuite {
     rules: Map[ModerationRuleFile, String] = Map.empty,
     caps: Map[String, String] = Map.empty,
     user: Option[PostingUser] = None,
-    authSource: Option[PostingUserSource] = None,
+    authSource: Option[PostingAccounts] = None,
     roll: Double = 0.5,
     write: ThreadPosting => Future[ThreadWriteResult] = posting => Future.successful(ThreadWriteResult.Written(if (posting.create) 1 else 2)),
     indexWritten: Boolean = true,
@@ -77,9 +77,10 @@ class PostingServiceSuite extends FunSuite {
           called("archive.writeHeadline")(())
         }
       },
-      users = authSource.getOrElse(new PostingUserSource {
+      users = new PostingUserSource {
         def current(): Future[Option[PostingUser]] = called("users")(user)
-      }),
+      },
+      accounts = authSource,
       hasher = new Hasher {
         def md5(value: String): String = { md5Inputs += value; s"m($value)" }
         def sha1Base64(value: String): Future[String] = Future.successful(s"s1($value)")
@@ -124,18 +125,17 @@ class PostingServiceSuite extends FunSuite {
   private val salt = "m(salt)"
   private val pon = s"PON=s1(s2(m(192.0.2.1)$salt)); Max-Age=63072000; path=/; Secure; HttpOnly"
 
-  private final class AuthSource(user: Option[PostingUser] = None, failRecord: Boolean = false) extends PostingUserSource {
-    override val configured = true
+  private final class AuthSource(user: Option[PostingUser] = None, failRecord: Boolean = false, device: String = "p012345678901234567",
+    refreshed: Option[String] = None) extends PostingAccounts {
     var records = 0
     var recordFailures = 0
-    def current(): Future[Option[PostingUser]] = Future.successful(user)
-    override def authenticate(mail: String, capKey: Option[String], request: PostingRequest, now: Double) =
-      Future.successful(Right(io._3ch.bbs.application.posting.ports.PostingAccount(user, 1, "p012345678901234567", headers = Seq("Set-Cookie" -> "auth=present"))))
-    override def posted(context: io._3ch.bbs.domain.posting.PostingContext, request: PostingRequest, account: io._3ch.bbs.application.posting.ports.PostingAccount): Future[Seq[(String, String)]] = {
+    def authenticate(mail: String, capKey: Option[String], request: PostingRequest, now: Double) =
+      Future.successful(Right(PostingAccount(user, 1, device, sessionCookie = Some("auth=present"))))
+    def posted(context: io._3ch.bbs.domain.posting.PostingContext, request: PostingRequest, account: PostingAccount): Future[Option[String]] = {
       records += 1
-      if (failRecord) Future.failed(new IllegalStateException("unavailable")) else Future.successful(Nil)
+      if (failRecord) Future.failed(new IllegalStateException("unavailable")) else Future.successful(refreshed)
     }
-    override def recordFailed(error: Throwable): Unit = { recordFailures += 1 }
+    def recordFailed(error: Throwable): Unit = { recordFailures += 1 }
   }
 
   test("認証未設定の既存利用者ポートは UID ログの互換性を保つ") {
@@ -170,6 +170,20 @@ class PostingServiceSuite extends FunSuite {
       assert(fake.postings.head._2.contains("Device:p012345678901234567"))
       assertEquals(source.records, 1)
       assertEquals(outcome.headers.count(_._1 == "Set-Cookie"), 2)
+    }
+  }
+
+  test("投稿後に発行し直した Cookie は認証時の Cookie と差し替え、Set-Cookie を重ねない") {
+    val source = new AuthSource(Some(PostingUser("account-a", "user_a")), refreshed = Some("auth=refreshed"))
+    val fake = Fake(authSource = Some(source))
+    fake.post()().map(outcome => assertEquals(outcome.headers.filter(_._1 == "Set-Cookie").map(_._2), Seq(pon, "auth=refreshed")))
+  }
+
+  test("端末ハッシュの無い認証投稿と匿名投稿は従来の端末情報を記録する") {
+    val source = new AuthSource(device = "")
+    val fake = Fake(authSource = Some(source))
+    fake.post()(r => r.copy(userAgent = "Monazilla/1.00 Test", deviceInformation = "legacy-device")).map { _ =>
+      assert(fake.postings.head._2.contains("Device:legacy-device"), fake.postings.head._2)
     }
   }
 

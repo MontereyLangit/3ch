@@ -5,7 +5,8 @@ import io._3ch.bbs.durable.codec.AccountCodec
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.handler.HandlerTestKit
 import io._3ch.bbs.hash.AuthHmac
-import io._3ch.bbs.repository.PostingAccountSource
+import io._3ch.bbs.application.auth.PostingAccountService
+import io._3ch.bbs.repository.AccountRepository
 import io._3ch.common.domain.account.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
@@ -47,7 +48,7 @@ class AuthVerifyBindingSuite extends munit.FunSuite {
         claims <- SessionCookies.verify(nextCookie, secret, time)
         _ = assertEquals(claims.flatMap(_.binding), Some(binding))
         _ = { revoked = true }
-        result <- new PostingAccountSource(request, env).authenticate("", None, PostingRequest.from(request).copy(cookie = nextCookie), time)
+        result <- new PostingAccountService(new AccountRepository(env), new SessionCredentials(secret, request.url), "v1", _ => ()).authenticate("", None, PostingRequest.from(request).copy(cookie = nextCookie), time)
       } yield assertEquals(result.toOption.flatMap(_.user), None)
     }.transform { result => global.fetch = originalFetch; result }
   }

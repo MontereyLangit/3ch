@@ -34,9 +34,11 @@ class PostingAuthenticationSuite extends munit.FunSuite {
       }
       def capOwner(hash: String): Future[Either[AccountRejection, Option[String]]] = { capReads += 1; Future.successful(capOwnerResult) }
       def describeCap(aid: String, capKey: String, now: Double): Future[Either[AccountRejection, CapAuthentication]] = Future.successful(Left(AccountRejection.CapRevoked))
+      def recordPost(aid: String, post: AccountPost, observation: AccountObservation): Future[AccountDescription] = Future.successful(account)
     }
     val credentials = new PostingCredentials {
       def session(header: String, now: Double): Future[Option[SessionClaims]] = { cookieReads += 1; Future.successful(cookie) }
+      def issue(claims: SessionClaims, now: Double): Future[Option[String]] = Future.successful(Some("issued"))
       def index(kind: String, value: String): Future[Option[String]] = Future.successful(Some("a" * 64))
       def ua(value: String): Future[Option[String]] = Future.successful(Some(PostingAuthenticationSuite.this.ua))
     }
@@ -96,7 +98,7 @@ class PostingAuthenticationSuite extends munit.FunSuite {
     val fake = new Fake
     fake.service.resolve(request("!#" + "a" * 20)).map {
       case value: PostingAuthenticationResult.Accepted =>
-        assertEquals(value.session.flatMap(_.binding), Some(SessionBinding("token1", ua.take(16))))
+        assertEquals(value.poster.session.flatMap(_.binding), Some(SessionBinding("token1", ua.take(16))))
         assertEquals(fake.tokenUses, 1)
         assertEquals(fake.cookieReads, 0)
       case other => fail(other.toString)
@@ -140,8 +142,8 @@ class PostingAuthenticationSuite extends munit.FunSuite {
     fake.cookie = fake.cookie.map(_.copy(expiresAt = account.expiresAt.get.toLong, binding = Some(SessionBinding("token1", ua.take(16)))))
     fake.service.resolve(request()).map {
       case value: PostingAuthenticationResult.Accepted =>
-        assertEquals(value.refreshSession, false)
-        assertEquals(value.session.flatMap(_.binding), Some(SessionBinding("token1", ua.take(16))))
+        assertEquals(value.poster.refreshSession, false)
+        assertEquals(value.poster.session.flatMap(_.binding), Some(SessionBinding("token1", ua.take(16))))
       case other => fail(other.toString)
     }
   }

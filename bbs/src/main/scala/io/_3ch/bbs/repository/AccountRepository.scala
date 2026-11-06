@@ -26,7 +26,7 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
   private def account(aid: String): AccountDoStub = env.ACCOUNT_DO.get(env.ACCOUNT_DO.idFromName(aid))
   private def index(kind: String): AccountIndexDoStub = env.ACCOUNT_INDEX_DO.get(env.ACCOUNT_INDEX_DO.idFromName(kind))
   private def raw(value: js.Promise[?]): Future[js.Any] = value.asInstanceOf[js.Promise[js.Any]].toFuture
-  private def invalid(): Nothing = throw new IllegalStateException("auth:invalid")
+  private def invalid(): Nothing = throw AccountStoreException(AccountRejection.Invalid)
   private def record(value: js.Any): js.Dynamic = {
     if (value == null || js.typeOf(value) != "object" || js.Array.isArray(value)) invalid()
     value.asInstanceOf[js.Dynamic]
@@ -80,7 +80,7 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
   }
   private def checked(code: js.Any): Unit = {
     val value = string(code)
-    if (value.nonEmpty) throw new IllegalStateException(rejection(value).code)
+    if (value.nonEmpty) throw AccountStoreException(rejection(value))
   }
   def describe(aid: String, generation: Int, now: Double, token: Option[TokenProof]): Future[Either[AccountRejection, AccountDescription]] =
     account(aid).describeForPosting(aid, generation, now, token.map(_.tokenId).orUndefined, token.map(_.uaHash).orUndefined).toFuture.map(decode(_, aid))
@@ -108,25 +108,25 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
   def confirm(kind: String, hash: String, aid: String, now: Double): Future[Unit] = raw(index(kind).confirm(hash, aid, now)).map(checked)
   def remove(kind: String, hash: String, aid: String): Future[Unit] = raw(index(kind).remove(hash, aid)).map(checked)
   def create(profile: AccountProfile, now: Double): Future[AccountDescription] = account(profile.aid).create(AccountCodec.encodeProfile(profile), now).toFuture.map(v =>
-    decode(v, profile.aid).fold(reason => throw new IllegalStateException(reason.code), identity))
+    decode(v, profile.aid).fold(reason => throw AccountStoreException(reason), identity))
   def bindDevice(aid: String, device: String, keyIp: String, now: Double): Future[Unit] = raw(account(aid).bindDevice(device, keyIp, now)).map(checked)
   def logout(aid: String, generation: Int, now: Double): Future[Unit] = raw(account(aid).bumpGeneration(now)).map { next =>
-    if (integer(next) <= generation) throw new IllegalStateException("auth:session:invalid")
+    if (integer(next) <= generation) throw AccountStoreException(AccountRejection.Generation)
   }
   def agree(aid: String, version: String, now: Double): Future[Unit] = raw(account(aid).agree(version, now)).map(checked)
   def issueToken(aid: String, tokenId: String, hash: String, now: Double): Future[AccountDescription] = account(aid).issueToken(tokenId, hash, now).toFuture.map(v =>
     decode(v, aid).map { description =>
       if (identifier(text(v, "tokenId")) != tokenId) invalid()
       description
-    }.fold(reason => throw new IllegalStateException(reason.code), identity))
+    }.fold(reason => throw AccountStoreException(reason), identity))
   def revokeToken(aid: String, tokenId: String, now: Double): Future[Unit] = raw(account(aid).revokeToken(tokenId, now)).map(checked)
   def recordPost(aid: String, post: AccountPost, observation: AccountObservation): Future[AccountDescription] =
     account(aid).recordPost(post.t, AccountCodec.encodePost(post), js.Dynamic.literal(deviceHash = observation.deviceHash, keyIpHash = observation.keyIpHash)).toFuture.map(v =>
-      decode(v, aid).fold(reason => throw new IllegalStateException(reason.code), identity))
+      decode(v, aid).fold(reason => throw AccountStoreException(reason), identity))
   def inspect(aid: String): Future[AccountPanel] = account(aid).inspect().toFuture.map { value =>
     val code = text(value, "code")
     checked(code)
-    val description = decode(record(value.selectDynamic("account")), aid).fold(reason => throw new IllegalStateException(reason.code), identity)
+    val description = decode(record(value.selectDynamic("account")), aid).fold(reason => throw AccountStoreException(reason), identity)
     val logs = array(value, "log").map(record)
     val tokens = array(value, "tokens").map { raw =>
       val token = record(raw)
