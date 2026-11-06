@@ -1,7 +1,7 @@
 package io._3ch.bbs.repository
 
 import io._3ch.bbs.application.auth.ports.*
-import io._3ch.bbs.durable.codec.AccountCodec
+import io._3ch.bbs.durable.codec.{AccountCodec, PasswordCredentialCodec}
 import io._3ch.bbs.external.cloudflare.{AccountDoStub, AccountIndexDoStub, WorkerEnv}
 import io._3ch.common.domain.account.*
 import scala.concurrent.Future
@@ -22,7 +22,7 @@ final case class AccountTokenView(id: String, label: String, issuedAt: Double = 
 final case class AccountPanel(account: AccountDescription, tokens: Vector[AccountTokenView], activeCount: Int = 0, deviceCount: Int = 0)
 
 /** アカウント RPC の値をアプリケーションの型に変換する */
-final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountManagementStore {
+final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountManagementStore with AccountSignInStore {
   private def account(aid: String): AccountDoStub = env.ACCOUNT_DO.get(env.ACCOUNT_DO.idFromName(aid))
   private def index(kind: String): AccountIndexDoStub = env.ACCOUNT_INDEX_DO.get(env.ACCOUNT_INDEX_DO.idFromName(kind))
   private def raw(value: js.Promise[?]): Future[js.Any] = value.asInstanceOf[js.Promise[js.Any]].toFuture
@@ -107,8 +107,28 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
     }
   def confirm(kind: String, hash: String, aid: String, now: Double): Future[Unit] = raw(index(kind).confirm(hash, aid, now)).map(checked)
   def remove(kind: String, hash: String, aid: String): Future[Unit] = raw(index(kind).remove(hash, aid)).map(checked)
-  def create(profile: AccountProfile, now: Double): Future[AccountDescription] = account(profile.aid).create(AccountCodec.encodeProfile(profile), now).toFuture.map(v =>
-    decode(v, profile.aid).fold(reason => throw AccountStoreException(reason), identity))
+  def create(profile: AccountProfile, now: Double): Future[AccountDescription] = create(profile, now, None)
+  def create(profile: AccountProfile, now: Double, credential: Option[PasswordCredential]): Future[AccountDescription] =
+    account(profile.aid).create(AccountCodec.encodeProfile(profile), now, credential.map(PasswordCredentialCodec.encode).orUndefined).toFuture.map(v =>
+      decode(v, profile.aid).fold(reason => throw AccountStoreException(reason), identity))
+  def lookup(kind: String, hash: String): Future[Option[String]] = index(kind).lookup(hash).toFuture.map { v =>
+    val code = text(v, "code")
+    if (code == "auth:index:missing") None else { checked(code); Some(aid(text(v, "aid"))) }
+  }
+  def activate(aid: String, now: Double): Future[AccountDescription] = account(aid).activate(now).toFuture.map(v =>
+    decode(v, aid).fold(reason => throw AccountStoreException(reason), identity))
+  private def signIn(v: js.Dynamic, expectedAid: String): SignInResult = text(v, "code") match {
+    case code if code == AccountRejection.LoginFailed.code => SignInResult.Failed(integer(record(v).selectDynamic("delay").asInstanceOf[js.Any], 8))
+    case code if code == AccountRejection.Pending.code =>
+      val uid = text(v, "uid")
+      if (!uid.matches("[a-z0-9_]{3,16}")) invalid()
+      SignInResult.Unfinished(uid)
+    case _ => decode(v, expectedAid).fold(SignInResult.Refused(_), SignInResult.Verified(_))
+  }
+  def verifyPassword(aid: String, password: String, keyIpHash: String, now: Double): Future[SignInResult] =
+    account(aid).verifyPassword(password, keyIpHash, now).toFuture.map(signIn(_, aid))
+  def describeGoogle(aid: String, subHash: String, now: Double): Future[SignInResult] =
+    account(aid).describeGoogle(subHash, now).toFuture.map(signIn(_, aid))
   def bindDevice(aid: String, device: String, keyIp: String, now: Double): Future[Unit] = raw(account(aid).bindDevice(device, keyIp, now)).map(checked)
   def logout(aid: String, generation: Int, now: Double): Future[Unit] = raw(account(aid).bumpGeneration(now)).map { next =>
     if (integer(next) <= generation) throw AccountStoreException(AccountRejection.Generation)

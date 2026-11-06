@@ -11,6 +11,8 @@ enum AuthServiceFailure(val code: String) {
   case Invalid extends AuthServiceFailure("auth:invalid")
   case RateLimited extends AuthServiceFailure("auth:rate")
   case Unavailable extends AuthServiceFailure("auth:unavailable")
+  /** ユーザー ID が使用済み・予約語・予約中 */
+  case Taken extends AuthServiceFailure("auth:id:taken")
 }
 
 /** AuthServiceFailure を Future の失敗として運ぶ */
