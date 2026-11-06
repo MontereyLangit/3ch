@@ -8,6 +8,7 @@ import scala.scalajs.js.JSConverters.*
 
 /** Thread.addRes の引数 posting の変換。RPC ではプレーンオブジェクトのまま渡し、真偽は JavaScript の真偽判定で読む */
 object PostingCodec {
+  /** 投稿の付帯情報を RPC 引数にする */
   def encode(posting: ThreadPosting): js.Dynamic = js.Dynamic.literal(
     bbs = posting.bbs.orUndefined, key = posting.key.orUndefined, title = posting.title.orUndefined, sage = posting.sage,
     maxThreads = posting.maxThreads.orUndefined, create = posting.create, initialSettings = posting.initialSettings.orUndefined,

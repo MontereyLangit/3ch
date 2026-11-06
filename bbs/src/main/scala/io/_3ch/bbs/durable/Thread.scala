@@ -164,7 +164,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
     val boardName = p.bbs.getOrElse("undefined")
     val keyName = p.key.getOrElse("undefined")
     val creationLimit = if p.create then p.creationLimit else None
-    val rate = if kind == ThreadWriteKind.Raw then None else p.rateLimit
+    val rate = if kind == ThreadWriteKind.Raw then None else p.rateLimit.filter(_.enabled)
     val reply = kind == ThreadWriteKind.Reply
     val nowMillis = js.Date.now()
     val now = nowMillis / 1000
@@ -194,11 +194,15 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
       _ <- creationLimit.fold(Future.unit) { limit =>
         board(boardName).reserveThreadCreation(keyName, ThreadCreationCodec.encodeRequest(limit)).toFuture.map { error =>
           if error.nonEmpty then fail(error)
-        }
+        }.recoverWith { case error => cancelCreation().transformWith(_ => Future.failed(error)) }
       }
       boardCode <- rate.fold(Future.successful("")) { r =>
         board(boardName).reservePost(rateKey, PostRateCodec.encodeIdentity(r.identity), PostRateCodec.encodeBoardSettings(r.boardSettings, r.enforce)).toFuture
-          .recoverWith { case error => if r.enforce then cancelCreation().transformWith(_ => Future.failed(error)) else Future.successful("") }
+          .recoverWith { case error =>
+            if (r.enforce) {
+              cancelCreation().flatMap(_ => cancelPost()).transformWith(_ => Future.failed(error))
+            } else Future.successful("")
+          }
       }
       _ <- if rate.exists(_.enforce) && boardCode.nonEmpty then cancelCreation().map(_ => fail(boardCode)) else Future.unit
       copipe = rate.isDefined && reply && PostRateLimit.copipe(dat, datLine)

@@ -79,6 +79,7 @@ class PostRateSettingsSuite extends FunSuite {
     val identity = PostRateIdentity("ip", "shiki", "")
     val defaults = PostRateSettings.from(none, none)
     val checks = levels.map(level => PostRateCheck(level, identity, defaults.board, defaults.thread))
+    assertEquals(checks.map(_.enabled), Seq(false, true, true, true))
     assertEquals(checks.map(_.enforce), Seq(false, false, true, true))
     assertEquals(checks.map(_.boardSettings.fr), Seq(0, 1, 0, 1))
     assertEquals(checks.map(_.boardSettings.copy(fr = 1)), Seq.fill(levels.size)(defaults.board), "fr のほかは変えない")

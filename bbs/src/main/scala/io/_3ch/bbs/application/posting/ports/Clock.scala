@@ -4,6 +4,7 @@ import scala.scalajs.js
 
 /** 現在時刻と dat の日付欄 */
 trait Clock {
+  /** UNIX 時刻をミリ秒で返す */
   def nowMillis(): Double
 
   /** dat の日付欄。日本時間で 2023/11/15(水) 07:13:20 の形 */

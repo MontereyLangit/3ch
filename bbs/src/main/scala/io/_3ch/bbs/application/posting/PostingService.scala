@@ -2,7 +2,7 @@ package io._3ch.bbs.application.posting
 
 import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, PostRateObservation}
 import io._3ch.bbs.domain.posting.{ClientIdentity, FailureClock, FailureSite, GlobalThread, KeyIp, NusiMark, PostFormLimits, PostRouting, PostingContext, PostingError, PostingIdentity, PostingStage, PostingUser, ReplyThread, ThreadOwner, ThreadPosting, ThreadWriteResult}
-import io._3ch.bbs.domain.posting.moderation.{ModerationDecision, ModerationInput, ModerationService, PostRateCheck, PostRateIdentity, PostRateSettings, ThreadCreationLimit, ThreadCreationNetwork, ThreadCreationRequest, ThreadCreationSettings}
+import io._3ch.bbs.domain.posting.moderation.{ModerationDecision, ModerationInput, PostRateCheck, PostRateIdentity, PostRateSettings, ThreadCreationLimit, ThreadCreationNetwork, ThreadCreationRequest, ThreadCreationSettings}
 import io._3ch.bbs.external.web.URL
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
 import io._3ch.common.domain.identity.{DateSalt, ShikibetsuFormat, ShikibetsuMode, ShikibetsuSeeds}
@@ -109,7 +109,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
 
   private def moderate(context: PostingContext, userInfo: UserInfo): Future[PostingContext] = {
     val input = ModerationInput(context.form, userInfo, context.cap.isDefined, context.identity.country, context.number.toDouble, context.settings)
-    ModerationService.check(input, ports.rules.load).map {
+    PostingModeration.check(input, ports.rules).map {
       case ModerationDecision.Pass(form) => context.copy(form = form)
       case ModerationDecision.Deny(denial, form) => reject(PostingError.Moderated(denial), context.copy(form = form))
     }
@@ -154,7 +154,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
     }
   }
 
-  /** スレ立てなら保存するスレ主を返し、返信でスレ主なら名前欄に (主) を付ける。キャップは対象外（docs/トリップ・ID廃止とスレ主表示.md §2.4） */
+  /** スレ立て時のスレ主を返し、返信者がスレ主なら名前欄に (主) を付ける。キャップは対象外 */
   private def markNusi(context: PostingContext, user: Option[PostingUser], boardSettings: BbsSettings): Future[(PostingContext, Option[ThreadOwner])] =
     if (context.cap.isDefined) Future.successful((context, None))
     else for {
@@ -196,7 +196,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
       ports.threads.addRes(board.id, form.key, dat, DatLineFormatter.logLine(spaced.number.toString, userInfo.text), posting).map {
         case ThreadWriteResult.Written(number, observed) =>
           rateLimit.filter(_ => observed.nonEmpty).foreach { check =>
-            ports.rateLog.record(PostRateObservation(form.bbs, form.key, number, observed, check.identity.ip, check.identity.shiki))
+            Try(ports.rateLog.record(PostRateObservation(form.bbs, form.key, number, observed, check.identity.ip, check.identity.shiki))).getOrElse(())
           }
           (spaced.copy(number = number), false)
         case ThreadWriteResult.Swallowed(number) => (spaced.copy(number = number), true)
@@ -246,7 +246,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
   private def digest(context: PostingContext, value: String): Future[String] =
     if (value.isEmpty) Future.successful("") else ports.hasher.sha256Hex(value + ":" + context.identity.salt)
 
-  /** 段の途中の例外を内部エラーにする。時刻は BoardSettings・スレの読込・書込の段だけ受付時刻を出し、ほかは未設定（KB-39） */
+  /** 段の途中の例外を内部エラーにする。板設定・スレの読込・書込は受付時刻を出し、ほかは未設定 */
   private def guarded[A](context: PostingContext, stage: PostingStage, clock: FailureClock)(f: => Future[A]): Future[A] =
     Future.unit.flatMap(_ => f).recover {
       case e if !e.isInstanceOf[Rejected] =>
@@ -262,7 +262,7 @@ object PostingService {
   /** 書き込み先の板と、スレ設定で上書きする前の板設定 */
   private final case class PostingBoard(id: BoardId, settings: BbsSettings)
 
-  /** 内部エラーの文言で、受付時刻を持たない段が出す時刻（KB-39） */
+  /** 内部エラーの文言で、受付時刻を持たない段が出す値 */
   private val UnsetTime = "undefined"
 
   private def reject(error: PostingError, context: PostingContext): Nothing = throw Rejected(error, context)

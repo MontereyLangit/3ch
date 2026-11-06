@@ -4,8 +4,9 @@ import io._3ch.bbs.domain.posting.ClientIdentity
 import io._3ch.bbs.domain.posting.moderation.{ThreadCreationLimit, ThreadCreationRateLimit, ThreadCreationRecord, ThreadCreationRequest, ThreadCreationStatus}
 import scala.scalajs.js
 
-/** スレ立て履歴の保存形式と RPC 引数の変換。保存形式は docs/thread-creation-regulation.md を参照。 */
+/** スレ立て履歴の保存形式と RPC 引数の変換。保存形式は docs/thread-creation-regulation.md を参照 */
 object ThreadCreationCodec {
+  /** 保存したスレ立て履歴を読む */
   def decodeRecord(value: js.Dynamic): ThreadCreationRecord = ThreadCreationRecord(
     key = value.key.asInstanceOf[String],
     timestampSeconds = value.timestampSeconds.asInstanceOf[Double],
@@ -15,12 +16,13 @@ object ThreadCreationCodec {
     expiresAt = value.expiresAt.asInstanceOf[Double],
     status = if value.pending.asInstanceOf[Boolean] then ThreadCreationStatus.Pending else ThreadCreationStatus.Completed)
 
+  /** スレ立て履歴を保存形式にする */
   def encodeRecord(record: ThreadCreationRecord): js.Dynamic = js.Dynamic.literal(
     key = record.key, timestampSeconds = record.timestampSeconds, title = record.title,
     ip = record.identity.ip, userAgent = record.identity.userAgent, networkGroup = record.identity.networkGroup,
     pending = record.status == ThreadCreationStatus.Pending, window = record.window, expiresAt = record.expiresAt)
 
-  /** RPC 引数 `limit` を規制設定と要求へ変換する。 */
+  /** RPC 引数 limit を規制設定と要求へ変換する */
   def decodeRequest(limit: js.Dynamic): ThreadCreationLimit = ThreadCreationLimit(
     ThreadCreationRateLimit.Settings(
       limit.tatesugi.asInstanceOf[Int], limit.tatesugiResetSeconds.asInstanceOf[Double],

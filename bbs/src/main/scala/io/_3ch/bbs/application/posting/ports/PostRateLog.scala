@@ -10,6 +10,7 @@ final case class PostRateObservation(bbs: String, key: String, number: Int, find
 
 /** 試行モードの判定の記録先 */
 trait PostRateLog {
+  /** 判定を記録する。記録先の障害は確定した投稿の成否に影響させない */
   def record(observation: PostRateObservation): Unit
 }
 

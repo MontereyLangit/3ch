@@ -32,7 +32,8 @@ class PostingServiceSuite extends FunSuite {
     user: Option[PostingUser] = None,
     roll: Double = 0.5,
     write: ThreadPosting => Future[ThreadWriteResult] = posting => Future.successful(ThreadWriteResult.Written(if (posting.create) 1 else 2)),
-    indexWritten: Boolean = true
+    indexWritten: Boolean = true,
+    record: PostRateObservation => Unit = _ => ()
   ) {
     val calls: mutable.Buffer[String] = mutable.Buffer.empty
     val postings: mutable.Buffer[(String, String, ThreadPosting)] = mutable.Buffer.empty
@@ -91,7 +92,10 @@ class PostingServiceSuite extends FunSuite {
         def next(): Double = { calls += "random"; roll }
       },
       rateLog = new PostRateLog {
-        def record(observation: PostRateObservation): Unit = observations += observation
+        def record(observation: PostRateObservation): Unit = {
+          observations += observation
+          Fake.this.record(observation)
+        }
       }
     )
 
@@ -427,6 +431,22 @@ class PostingServiceSuite extends FunSuite {
       }
       assert(!fake.calls.exists(_.startsWith("archive")))
       assertEquals(fake.observations.toList, Nil)
+    }
+  }
+
+  test("試行モードの記録先が壊れても確定した投稿を失敗にせず、後続の目次を更新する") {
+    val findings = Seq(PostRateFinding.Rejected(PostRateRejection.Samba24(3)))
+    val fake = Fake(
+      boardSettings = "BBS_FR_LEVEL=log\n",
+      write = _ => Future.successful(ThreadWriteResult.Written(1, findings)),
+      record = _ => throw new IllegalStateException("log unavailable")
+    )
+    fake.post()().map { outcome =>
+      assert(outcome.isInstanceOf[PostingOutcome.Posted], outcome.toString)
+      assertEquals(outcome.context.number, 1)
+      assertEquals(fake.postings.size, 1)
+      assertEquals(fake.observations.size, 1)
+      assertEquals(fake.writes.map(_._1).toList, List("BandList(sample)", "ThreadIndex(sample,1700000000)", "headline"))
     }
   }
 }

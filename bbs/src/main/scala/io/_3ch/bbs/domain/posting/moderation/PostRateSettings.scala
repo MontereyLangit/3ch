@@ -45,6 +45,9 @@ object PostRateLevel {
 
 /** Thread.addRes に渡す連投規制の材料と設定。identity はハッシュ済み */
 final case class PostRateCheck(level: PostRateLevel, identity: PostRateIdentity, board: BoardSettings, thread: ThreadSettings) {
+  /** 判定と履歴の記録をするか */
+  def enabled: Boolean = level != PostRateLevel.Off
+
   /** 判定で拒否するか。偽なら記録だけする */
   def enforce: Boolean = level match {
     case PostRateLevel.Enforce(_) => true

@@ -67,10 +67,15 @@
       <div class="row bad"><div class="lbl"><b>県で分けずAS全体を対象にするASN</b></div><div class="ctl"><input class="input" value="2516, AS0"><span class="err">ASNは1以上で指定してください。</span></div></div>
     </div>
 
-    <div class="group g-rate"><h2>■ 連投規制 <span class="tag later">連投規制の導入後</span></h2>
-      <div class="row"><div class="lbl"><b>動作</b></div><div class="ctl radios"><label><input type="radio" name="rm"> 無効</label><label><input type="radio" name="rm" checked> 記録のみ（試行）</label><label><input type="radio" name="rm"> 有効</label></div></div>
+    <div class="group g-rate"><h2>■ 連投規制</h2>
+      <div class="row"><div class="lbl"><b>動作</b><small>未設定は1。空の値は0と同じ</small></div><div class="ctl radios">
+        <label><input type="radio" name="rm" value="off"> 無効（off）</label><label><input type="radio" name="rm" value="log"> 記録のみ（log）</label>
+        <label><input type="radio" name="rm" value="0"> 有効・広域連投を除く（0）</label><label><input type="radio" name="rm" value="1" checked> 有効・広域連投も規制（1以上）</label>
+        <span class="tag">未設定（既定1）</span><a class="reset" href="#">既定に戻す</a></div></div>
+      <div class="row"><div class="lbl"><b>広域連投の段階</b><small>1以上。現在は数値による強弱の違いはありません</small></div><div class="ctl"><input class="input" type="number" min="1" value="1" aria-label="広域連投の段階"></div></div>
       <div class="row"><div class="lbl"><b>板全体の連続投稿</b><small>直近n件中m件以上で規制（24時間以内）</small></div><div class="ctl"><div class="pair"><input class="input" placeholder="18"><span>件中</span><input class="input" placeholder="10"><span>件</span></div></div></div>
       <div class="row"><div class="lbl"><b>短時間投稿（Samba24）</b></div><div class="ctl"><div class="pair"><input class="input" placeholder="10"><span>秒</span></div></div></div>
+      <div class="row"><div class="lbl"><b>広域連投（FlyRibbon）</b><small>同じ識別子の連投を規制。0秒で無効</small></div><div class="ctl"><div class="pair"><input class="input" type="number" min="0" max="86400" placeholder="1" aria-label="広域連投の規制秒数"><span>秒</span></div></div></div>
       <div class="row"><div class="lbl"><b>スレ内の連続投稿</b></div><div class="ctl"><div class="pair"><input class="input" placeholder="40"><span>件 /</span><input class="input" placeholder="3600"><span>秒</span></div></div></div>
       <div class="row"><div class="lbl"><b>同一とみなす条件</b></div><div class="ctl radios"><label><input type="checkbox" checked> IP</label><label><input type="checkbox" checked> 識別子</label><label><input type="checkbox" checked> アカウント</label></div></div>
     </div>
