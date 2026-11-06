@@ -6,6 +6,7 @@ import io._3ch.bbs.application.posting.ports.{PostingAccount, PostingAccounts}
 import io._3ch.bbs.domain.account.{AuthenticatedPoster, AuthenticationFailure}
 import io._3ch.bbs.domain.posting.{KeyIp, PostingContext, PostingUser}
 import io._3ch.common.domain.account.*
+import io._3ch.common.domain.posting.MailCommands
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
@@ -16,8 +17,8 @@ final class PostingAccountService(accounts: AccountStore, credentials: PostingCr
 
   private val authentication = new PostingAuthentication(accounts, credentials, agreementVersion)
 
-  def authenticate(mail: String, capKey: Option[String], request: PostingRequest, now: Double): Future[Either[AuthenticationFailure, PostingAccount]] =
-    authentication.resolve(PostingAuthenticationRequest(mail, request.cookie, request.userAgent, request.isMonazilla, request.secure, now, capKey)).flatMap {
+  def authenticate(commands: MailCommands, capKey: Option[String], request: PostingRequest, now: Double): Future[Either[AuthenticationFailure, PostingAccount]] =
+    authentication.resolve(PostingAuthenticationRequest(commands.token, request.cookie, request.userAgent, request.isMonazilla, request.secure, now, capKey)).flatMap {
       case Anonymous => Future.successful(Right(PostingAccount(None)))
       case LegacyCap => Future.successful(Right(PostingAccount(None, legacyCap = true)))
       case Rejected(reason) => Future.successful(Left(reason))

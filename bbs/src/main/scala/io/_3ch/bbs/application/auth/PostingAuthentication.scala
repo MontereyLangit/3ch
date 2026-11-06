@@ -16,8 +16,8 @@ enum PostingAuthenticationResult {
   case Rejected(reason: AuthenticationFailure)
 }
 
-/** 投稿認証の材料。capKey は照合済みキャップの既存 KV キー */
-final case class PostingAuthenticationRequest(mail: String, cookieHeader: String, userAgent: String, isMonazilla: Boolean,
+/** 投稿認証の材料。token はメール欄の専ブラキー、capKey は照合済みキャップの既存 KV キー */
+final case class PostingAuthenticationRequest(token: Option[String], cookieHeader: String, userAgent: String, isMonazilla: Boolean,
   secure: Boolean, now: Double, capKey: Option[String] = None)
 
 /** キャップ、明示した専ブラキー、Cookie の順に投稿者を解決する */
@@ -29,7 +29,7 @@ final class PostingAuthentication(accounts: AccountStore, credentials: PostingCr
     Future.unit.flatMap { _ =>
       request.capKey match {
         case Some(key) => cap(request, key)
-        case None => explicitToken(request.mail) match {
+        case None => request.token match {
           case Some(token) => dedicated(request, token)
           case None => session(request)
         }
@@ -102,9 +102,4 @@ final class PostingAuthentication(accounts: AccountStore, credentials: PostingCr
   private def claimsFor(account: AccountDescription, now: Double, device: String, binding: Option[SessionBinding]): SessionClaims =
     SessionClaims(account.aid, account.uid, account.generation.toLong, account.expiresAt.getOrElse(now + 365d * 86400).toLong,
       account.lv, device, binding)
-
-  private def explicitToken(mail: String): Option[String] = {
-    val index = mail.indexOf("!#")
-    Option.when(index >= 0)(mail.substring(index + 2).takeWhile(c => !c.isWhitespace))
-  }
 }

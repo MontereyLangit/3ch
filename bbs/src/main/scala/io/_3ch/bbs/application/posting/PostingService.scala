@@ -7,7 +7,7 @@ import io._3ch.bbs.domain.posting.moderation.{ModerationDecision, ModerationInpu
 import io._3ch.bbs.external.web.URL
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
 import io._3ch.common.domain.identity.{DateSalt, ShikibetsuFormat, ShikibetsuMode, ShikibetsuSeeds}
-import io._3ch.common.domain.posting.{ArchiveIndexText, CapHandle, DatLineFormatter, NameField, PostForm, PostKind, SageRule, UserInfo}
+import io._3ch.common.domain.posting.{ArchiveIndexText, CapHandle, MailCommands, DatLineFormatter, NameField, PostForm, PostKind, SageRule, UserInfo}
 import io._3ch.common.text.JsNumber
 
 import scala.concurrent.Future
@@ -38,7 +38,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
         identified.identity.city, if (authEnabled && account.device.nonEmpty) account.device else identified.identity.deviceInfo, identified.identity.userAgent)
       moderated <- moderate(identified, userInfo)
       sized = PostFormLimits.check(moderated.form, moderated.settings, moderated.number, moderated.cap.exists(_.strong))
-        .fold(reject(_, moderated), form => moderated.copy(form = if (authEnabled) form.copy(mail = form.mail.replaceAll("!#[^\\s]*|#[^\\s]*|!auth", "")) else form))
+        .fold(reject(_, moderated), form => moderated.copy(form = form))
       creationLimit <- threadCreationLimit(sized, request, board.settings)
       named <- makeShikibetsu(sized, user)
       (marked, owner) <- markNusi(named, user, board.settings)
@@ -69,13 +69,13 @@ final class PostingService(ports: PostingPorts, salt: String) {
   /** 認証を有効にした環境だけアカウントで投稿者を決める。無効なら従来どおり users から引く */
   private def authenticate(context: PostingContext, request: PostingRequest): Future[PostingAccount] = ports.accounts match {
     case None => ports.users.current().map(user => PostingAccount(user))
-    case Some(accounts) => accounts.authenticate(context.authMail, context.capKey, request, context.unixtime.toDouble)
+    case Some(accounts) => accounts.authenticate(context.mailCommands, context.capKey, request, context.unixtime.toDouble)
       .map(_.fold(reason => reject(PostingError.Authentication(reason), context), identity))
   }
 
   /** 認証を有効にした環境の書き込み条件。Web 版と !auth はログイン必須、BBS_PHOEBE は Lv を求める。旧キャップは対象外 */
   private def admit(context: PostingContext, account: PostingAccount, request: PostingRequest): Unit = if (authEnabled && !account.legacyCap) {
-    if (account.user.isEmpty && (!request.isMonazilla || context.authMail.contains("!auth"))) reject(PostingError.Authentication(AuthenticationFailure.LoginRequired), context)
+    if (account.user.isEmpty && (!request.isMonazilla || context.mailCommands.auth)) reject(PostingError.Authentication(AuthenticationFailure.LoginRequired), context)
     val required = context.settings.get("BBS_PHOEBE").flatMap(_.toIntOption).getOrElse(0)
     if (account.lv < required) {
       if (account.user.isEmpty) reject(PostingError.Authentication(AuthenticationFailure.LoginRequired), context)
@@ -99,12 +99,17 @@ final class PostingService(ports: PostingPorts, salt: String) {
 
   private def readForm(context: PostingContext, request: PostingRequest): Future[PostingContext] = request.body().map { bytes =>
     PostingFormDecoder.decode(bytes, request.isMonazilla).flatMap(PostRouting.route(_, context.unixtime)) match {
-      case Left((error, form)) => reject(error, context.copy(form = if (authEnabled) form.copy(mail = form.mail.replaceAll("!#[^\\s]*|#[^\\s]*|!auth", "")) else form))
-      case Right(form) => if (authEnabled) context.copy(form = form.copy(mail = form.mail.replaceAll("!#[^\\s]*|#[^\\s]*|!auth", "")), authMail = form.mail) else context.copy(form = form)
+      case Left((error, form)) => reject(error, context.copy(form = if (authEnabled) form.copy(mail = MailCommands.parse(form.mail).plain) else form))
+      case Right(form) =>
+        if (!authEnabled) context.copy(form = form)
+        else {
+          val commands = MailCommands.parse(form.mail)
+          context.copy(form = form.copy(mail = commands.plain), mailCommands = commands)
+        }
     }
   }
 
-  private def processCap(context: PostingContext): Future[PostingContext] = CapHandle.password(if (authEnabled) context.authMail.replaceAll("!#[^\\s]*", "") else context.form.mail) match {
+  private def processCap(context: PostingContext): Future[PostingContext] = (if (authEnabled) context.mailCommands.capPassword else CapHandle.password(context.form.mail)) match {
     case None => Future.successful(context)
     case Some(password) =>
       val hasher = ports.hasher

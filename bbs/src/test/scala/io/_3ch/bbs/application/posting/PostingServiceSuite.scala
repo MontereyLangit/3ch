@@ -129,8 +129,11 @@ class PostingServiceSuite extends FunSuite {
     refreshed: Option[String] = None) extends PostingAccounts {
     var records = 0
     var recordFailures = 0
-    def authenticate(mail: String, capKey: Option[String], request: PostingRequest, now: Double) =
+    val received: mutable.Buffer[(io._3ch.common.domain.posting.MailCommands, Option[String])] = mutable.Buffer.empty
+    def authenticate(commands: io._3ch.common.domain.posting.MailCommands, capKey: Option[String], request: PostingRequest, now: Double) = {
+      received += (commands -> capKey)
       Future.successful(Right(PostingAccount(user, 1, device, sessionCookie = Some("auth=present"))))
+    }
     def posted(context: io._3ch.bbs.domain.posting.PostingContext, request: PostingRequest, account: PostingAccount): Future[Option[String]] = {
       records += 1
       if (failRecord) Future.failed(new IllegalStateException("unavailable")) else Future.successful(refreshed)
@@ -160,6 +163,26 @@ class PostingServiceSuite extends FunSuite {
     val source = new AuthSource()
     val fake = Fake(authSource = Some(source))
     fake.post()(r => r.copy(userAgent = "Monazilla/1.00 Test")).map(outcome => assert(outcome.isInstanceOf[PostingOutcome.Posted]))
+  }
+
+  test("専ブラの !auth は匿名なら認証を求める") {
+    val fake = Fake(authSource = Some(new AuthSource()))
+    fake.post("mail" -> "sage!auth")(r => r.copy(userAgent = "Monazilla/1.00 Test")).map { outcome =>
+      assertEquals(rejected(outcome).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.LoginRequired))
+      assertEquals(outcome.context.form.mail, "sage")
+    }
+  }
+
+  test("認証設定済みのキャップは空白を含むパスワードを従来どおり読み、メール欄からその部分だけを除く") {
+    val source = new AuthSource(Some(PostingUser("account-a", "user_a")))
+    val fake = Fake(caps = Map("pass word" -> "管理人"), authSource = Some(source))
+    fake.post(reply("mail" -> "!#abcdefghij234567abcd sage#!pass word")*)().map { outcome =>
+      assertEquals(outcome.context.cap, Some(CapHandle("管理人", strong = false)))
+      assertEquals(source.received.map(_._2).toList, List(Option("pass word")))
+      assertEquals(source.received.head._1.token, Some("abcdefghij234567abcd"))
+      assertEquals(outcome.context.form.mail, " sage")
+      assertEquals(outcome.context.sage, true)
+    }
   }
 
   test("認証済み投稿は UID と端末を記録し PON と認証 Cookie を併記する") {

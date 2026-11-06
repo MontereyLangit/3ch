@@ -48,7 +48,7 @@ class AuthVerifyBindingSuite extends munit.FunSuite {
         claims <- SessionCookies.verify(nextCookie, secret, time)
         _ = assertEquals(claims.flatMap(_.binding), Some(binding))
         _ = { revoked = true }
-        result <- new PostingAccountService(new AccountRepository(env), new SessionCredentials(secret, request.url), "v1", _ => ()).authenticate("", None, PostingRequest.from(request).copy(cookie = nextCookie), time)
+        result <- new PostingAccountService(new AccountRepository(env), new SessionCredentials(secret, request.url), "v1", _ => ()).authenticate(io._3ch.common.domain.posting.MailCommands.empty, None, PostingRequest.from(request).copy(cookie = nextCookie), time)
       } yield assertEquals(result.toOption.flatMap(_.user), None)
     }.transform { result => global.fetch = originalFetch; result }
   }

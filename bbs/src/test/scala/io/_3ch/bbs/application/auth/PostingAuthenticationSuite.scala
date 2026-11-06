@@ -12,7 +12,7 @@ class PostingAuthenticationSuite extends munit.FunSuite {
   private val ua = "f" * 64
   private val account = AccountDescription(aid, "abcdefgh", AccountKind.Client, 2, Some(now + 31536000), 1, Roles(), now, "v1")
   private def request(mail: String = "", cap: Option[String] = None, monazilla: Boolean = true, secure: Boolean = true): PostingAuthenticationRequest =
-    PostingAuthenticationRequest(mail, "cookie", "Monazilla/1.00 Test", monazilla, secure, now, cap)
+    PostingAuthenticationRequest(io._3ch.common.domain.posting.MailCommands.parse(mail).token, "cookie", "Monazilla/1.00 Test", monazilla, secure, now, cap)
   private final class Fake {
     var cookieReads = 0
     var described = 0
