@@ -74,3 +74,11 @@ dummyは通常の16文字aid規則に合わないため、通常profileを作ら
 
 第3段では並行失敗・窓の境界・別IP・dummyの実計算回数を検証する。
 HTTP公開前には、各保存直後の応答消失、10分境界、全通信停止と再送で、第3節の不変条件を確認する。
+
+## 6. SQLite DOの同期KVとSQLの原子性
+
+2026-11-07（日本時間）、Miniflare 5.20261012.0-beta／workerd 1.20261012.1、compatibility_date 2026-08-04、追加フラグなしのローカルSQLite DOでstorage.kvとtransactionSyncの動作を確認した。独立したテスト用DOをtests/support/storage-probe-worker.mjsに置き、本番Accountの実装・保存領域は使わない。
+
+[SyncKvStorage](https://github.com/cloudflare/workerd/blob/main/src/workerd/api/sync-kv.c++)と[非同期Storage](https://github.com/cloudflare/workerd/blob/main/src/workerd/api/actor-state.c++)は同じV8シリアライザを使う。SQLite DOの同一データベースで、transactionSyncはSAVEPOINTを作り、例外ではROLLBACK TOを行う。実装の参照先は[ActorSqlite](https://github.com/cloudflare/workerd/blob/main/src/workerd/io/actor-sqlite.c++)。
+
+永続化テストでは、非同期putを同期KVから読めること、同期KVとSQLの同時確定、JS例外とSQL制約違反によるprofile・credential・SQL全体の取消を確認する。温めた非同期getのキャッシュも同期書込後に更新され、Date・Uint8Array・null・undefinedは両方向で保持される。これはローカルランタイムの能力検証であり、Scalaの資格情報RPCの原子性や本番環境での動作確認を済ませたことにはしない。

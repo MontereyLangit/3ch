@@ -47,6 +47,8 @@ PBKDF2プロバイダは `70087bd` でpush済み。後続では、凍結など�
 
 資格情報は厳密なcodecで読み書きする。ソルト16バイトとハッシュ32バイトは小文字の16進数で保存し、必須項目・反復数・時刻・失敗計数を検証する。本人向けinspectと認証DTOには資格情報やactivationを含めない。登録を有効にするRPCと、実際のパスワード照合RPCはまだ追加していない。
 
+この保存基盤は `a418e22` でpush済み。次のDO接続に向け、独立したテスト専用SQLite DOで同期KVとSQLの同時確定・同時rollbackを確認した。async getのキャッシュ整合と保存形式の相互読出しも検証している。これは基盤APIの検証であり、Accountの照合処理を実装済みという意味ではない。
+
 ## 設定と検証
 
 [認証の検証設定](auth-integration.md) に従う。`AUTH_SECRET` がないと認証は有効にならない。登録には `AGREEMENT_VERSION`、`TURNSTILE_SITE_KEY`、`TURNSTILE_SECRET_KEY` も必要。秘密鍵は `.dev.vars` または環境のsecretで管理し、この文書やコミットへ書かない。
@@ -66,7 +68,7 @@ npm run v6:typecheck
 | 検証 | この区切りの結果 |
 | --- | --- |
 | Scala単体テスト | sbt test 1,096件成功（commonJVM 140、commonJS 143、codegen 27、bbsClient 2、bbs 784）。既存の投稿goldenは変更なし |
-| workerd・SSR・hydration | npm test 63件成功、skipなし。npmのpretestも成功。実DOの競合・保存、Turnstile応答の差し替え、Cookie・再認証・キー失効・ログアウト、既存投稿、SSR・hydration、ネイティブPBKDF2を検証 |
+| workerd・SSR・hydration | npm test 64件成功、skipなし。npmのpretestも成功。実DOの競合・保存、Turnstile応答の差し替え、Cookie・再認証・キー失効・ログアウト、既存投稿、SSR・hydration、ネイティブPBKDF2、SQLと同期KVの原子性を検証 |
 | ビルド | npm run v6:build成功。Workerの最終出力に5つのDOが公開されることも検証 |
 | dev起動 | npm run devをローカル・ダミーsaltで起動。トップ200、bbs.cgiのHTTP 200とエラーマーカー、管理者パスワード未設定時の503、各応答のAccept-CHを確認 |
 | 型チェック | npm run v6:typecheck成功 |
