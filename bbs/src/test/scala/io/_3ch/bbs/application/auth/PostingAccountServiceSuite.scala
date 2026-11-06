@@ -73,6 +73,18 @@ class PostingAccountServiceSuite extends munit.FunSuite {
       assert(fake.issued.isEmpty)
     }
   }
+  test("投稿で Lv が上がったら期限が同じでも Cookie を発行し直し、期限の無い方式は元の期限を保つ") {
+    val fake = new Fake(account.copy(lv = 2, expiresAt = Some(oldExpiry + 3600)))
+    val session = SessionClaims(aid, "abcdefgh", 1, oldExpiry.toLong, 1)
+    fake.service.posted(context, request, PostingAccount(None, authentication = Some(poster(AccountVia.Web, Some(session))))).flatMap { cookie =>
+      assertEquals(cookie, Some("cookie1"))
+      assertEquals(fake.issued.head.lv, 2)
+      assertEquals(fake.issued.head.expiresAt, (oldExpiry + 3600).toLong)
+      val google = new Fake(account.copy(kind = AccountKind.Google, lv = 10, expiresAt = None))
+      google.service.posted(context, request, PostingAccount(None, authentication = Some(poster(AccountVia.Web, Some(session.copy(lv = 9))))))
+        .map(_ => assertEquals(google.issued.map(c => (c.lv, c.expiresAt)).toList, List((10, oldExpiry.toLong))))
+    }
+  }
   test("セッションを持たないキャップの投稿には Cookie を発行しない") {
     val fake = new Fake(account.copy(expiresAt = Some(now + AccountProfile.clientLifetime)))
     fake.service.posted(context, request, PostingAccount(None, authentication = Some(poster(AccountVia.Cap, None)))).map { cookie =>

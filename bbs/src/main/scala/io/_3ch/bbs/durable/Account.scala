@@ -186,7 +186,10 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
   /** キャップを失効させる。KV と索引の更新は呼び出し元が行う */
   def revokeCap(capId: String, now: Double): js.Promise[String] = update(_.revokeCap(capId, now))
 
-  /** 成功した書き込みの期限更新・計数とログを一括保存する */
+  /** 管理者による Lv の固定値を保存する。未指定で固定を外す */
+  def setLevel(lvOverride: js.UndefOr[Int], now: Double): js.Promise[String] = update(_.setLevelOverride(lvOverride.toOption, now))
+
+  /** 成功した書き込みの期限更新・計数と Lv の昇格、ログを一括保存する */
   def recordPost(now: Double, post: js.Dynamic, observation: js.Dynamic): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
     current(error(AccountRejection.Missing)) { account =>
       val entry = AccountCodec.decodePost(post)
