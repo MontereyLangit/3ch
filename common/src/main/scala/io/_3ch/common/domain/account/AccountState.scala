@@ -70,6 +70,12 @@ object AccountRejectionLog {
 /** 書き込み時に得た端末の情報。ハッシュの生成はアプリケーション層で行う */
 final case class AccountObservation(deviceHash: String = "", keyIpHash: String = "")
 
+/** パスワード照合の結果。失敗にはアカウント全体の失敗数による応答の遅延を付ける */
+enum PasswordAttempt {
+  case Accepted
+  case Failed(delaySeconds: Int)
+}
+
 /** アカウントの状態遷移。現在時刻は呼び出し元から UNIX 秒で受ける */
 final case class AccountState(
   profile: AccountProfile,
@@ -88,7 +94,9 @@ final case class AccountState(
     readiness != null && credential != null && (profile.kind match {
       case AccountKind.Password => credential.forall(value => value != null && value.valid) &&
         (readiness == AccountReadiness.Pending || credential.isDefined)
-      case _ => credential.isEmpty
+      case AccountKind.Google => credential.isEmpty &&
+        (readiness == AccountReadiness.Pending || profile.googleSubHash.exists(DedicatedBrowserTokens.validHash))
+      case AccountKind.Client => credential.isEmpty
     })
 
   def description: AccountDescription = AccountDescription(profile.aid, profile.uid, profile.kind, profile.generation,
@@ -191,6 +199,51 @@ final case class AccountState(
   def revokeToken(tokenId: String, now: Double): Either[AccountRejection, AccountState] =
     usable(now).flatMap(_ => DedicatedBrowserTokens.revoke(tokens, tokenId, now).map(ts => copy(tokens = ts)))
 
+  /** 照合に使う資格情報と、試行前の接続元のロック状態。パスワード方式以外は拒否する */
+  def passwordCheck(keyIpHash: String, now: Double): Either[AccountRejection, (PasswordCredential, LoginThrottleDecision)] = {
+    if (!AccountProfile.validTime(now) || !valid || profile.kind != AccountKind.Password) Left(AccountRejection.Invalid)
+    else credential.toRight(AccountRejection.Invalid).flatMap { value =>
+      value.throttle.check(keyIpHash, now).left.map(_ => AccountRejection.Invalid).map(value -> _)
+    }
+  }
+
+  /** 照合の結果を失敗計数へ反映する。ロック中の接続元は一致しても失敗にする */
+  def afterPasswordAttempt(keyIpHash: String, matched: Boolean, now: Double): Either[AccountRejection, (AccountState, PasswordAttempt)] =
+    passwordCheck(keyIpHash, now).flatMap { case (value, before) =>
+      val updated = if (matched && !before.locked) value.throttle.recordSuccess(keyIpHash, now) else value.throttle.recordFailure(keyIpHash, now)
+      updated.left.map(_ => AccountRejection.Invalid).map { update =>
+        val next = copy(credential = Some(value.copy(throttle = update.state)))
+        if (matched && !before.locked) (next, PasswordAttempt.Accepted) else (next, PasswordAttempt.Failed(update.decision.delaySeconds))
+      }
+    }
+
+  /** ログイン成功時の再計算で、失敗計数を保ったまま現在の方式の資格情報へ置き換える */
+  def rehashed(next: PasswordCredential): Either[AccountRejection, AccountState] = credential match {
+    case Some(value) if profile.kind == AccountKind.Password && next != null && next.valid && !next.needsRehash =>
+      Right(copy(credential = Some(next.copy(throttle = value.throttle))))
+    case _ => Left(AccountRejection.Invalid)
+  }
+
+  /** パスワードを置き換えて世代を進め、全端末のセッションを失効させる。失敗計数は消す */
+  def setPassword(next: PasswordCredential, now: Double): Either[AccountRejection, AccountState] = usable(now).flatMap { _ =>
+    if (profile.kind != AccountKind.Password || next == null || !next.valid || next.updatedAt > now) Left(AccountRejection.Invalid)
+    else bumpGeneration.map(_.copy(credential = Some(next.copy(throttle = LoginThrottle()))))
+  }
+
+  /** 索引の確定後に利用を開始する。済みなら同じ状態を返し、資格情報などが欠けていれば拒否する */
+  def activate(now: Double): Either[AccountRejection, AccountState] = {
+    val next = copy(readiness = AccountReadiness.Ready)
+    if (!AccountProfile.validTime(now) || !valid) Left(AccountRejection.Invalid)
+    else if (readiness == AccountReadiness.Ready) Right(this)
+    else if (!next.valid) Left(AccountRejection.Invalid)
+    else Right(next)
+  }
+
+  /** Google の sub の HMAC が一致する利用可能なアカウントの情報を返す */
+  def describeGoogle(subHash: String, now: Double): Either[AccountRejection, AccountDescription] =
+    if (profile.kind != AccountKind.Google || !profile.googleSubHash.contains(subHash)) Left(AccountRejection.Invalid)
+    else usable(now).map(_ => description)
+
   /** 成功投稿だけで期限・投稿数・端末とキーの直近五件を更新する。失効済み ID は復活させない */
   def recordPost(now: Double, post: AccountPost, observation: AccountObservation): Either[AccountRejection, AccountState] = {
     if (!AccountProfile.validTime(now) || !AccountProfile.validTime(post.t)) Left(AccountRejection.Invalid)
@@ -204,13 +257,15 @@ final case class AccountState(
   }
 }
 object AccountState {
-  /** 同意・時刻・初期状態を確認して作成する。パスワード方式は登録準備中にする */
-  def create(profile: AccountProfile, now: Double): Either[AccountRejection, AccountState] = {
+  /** 同意・時刻・初期状態を確認して作成する。パスワード方式と Google は索引の確定まで登録準備中にする */
+  def create(profile: AccountProfile, now: Double, credential: Option[PasswordCredential] = None): Either[AccountRejection, AccountState] = {
     val initial = profile.copy(expiresAt = if (profile.kind == AccountKind.Client) Some(profile.createdAt + AccountProfile.clientLifetime) else None)
+    val state = AccountState(initial, AccountLevel(if (profile.kind == AccountKind.Google) 10 else if (profile.kind == AccountKind.Password && profile.emailVerifiedAt.isDefined) 3 else 1, now),
+      credential = credential, readiness = if (profile.kind == AccountKind.Client) AccountReadiness.Ready else AccountReadiness.Pending)
     if (!initial.valid || !AccountProfile.validTime(now) || profile.createdAt > now || profile.agreedAt > now ||
-      profile.emailVerifiedAt.exists(_ > now) || profile.status != AccountStatus.Active || profile.generation != 0 || initial.expired(now)) Left(AccountRejection.Invalid)
-    else Right(AccountState(initial, AccountLevel(if (profile.kind == AccountKind.Google) 10 else if (profile.kind == AccountKind.Password && profile.emailVerifiedAt.isDefined) 3 else 1, now),
-      readiness = if (profile.kind == AccountKind.Password) AccountReadiness.Pending else AccountReadiness.Ready))
+      profile.emailVerifiedAt.exists(_ > now) || profile.status != AccountStatus.Active || profile.generation != 0 || initial.expired(now) ||
+      credential == null || credential.exists(c => c == null || c.updatedAt > now) || !state.valid) Left(AccountRejection.Invalid)
+    else Right(state)
   }
 }
 

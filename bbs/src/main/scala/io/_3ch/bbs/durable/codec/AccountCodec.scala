@@ -102,6 +102,15 @@ object AccountCodec {
   def description(v: AccountDescription): js.Dynamic = js.Dynamic.literal(code = "", aid = v.aid, uid = v.uid, kind = v.kind.code, generation = v.generation,
     expiresAt = v.expiresAt.orUndefined, lv = v.lv, roles = encodeRoles(v.roles), agreedAt = v.agreedAt, agreementVersion = v.agreementVersion)
 
+  /** 本人確認後の応答。登録準備中なら確定の再開に使う uid だけを返す */
+  def signIn(value: Either[AccountRejection, AccountDescription], uid: String): js.Dynamic = value match {
+    case Left(AccountRejection.Pending) => js.Dynamic.literal(code = AccountRejection.Pending.code, uid = uid)
+    case other => describe(other)
+  }
+
+  /** ログインの失敗。delay はアカウント全体の失敗数から決めた応答の遅延秒数 */
+  def loginFailure(delay: Int): js.Dynamic = js.Dynamic.literal(code = AccountRejection.LoginFailed.code, delay = delay)
+
   def tokenDescription(value: AccountDescription, tokenId: String): js.Dynamic = {
     val result = description(value)
     result.tokenId = tokenId

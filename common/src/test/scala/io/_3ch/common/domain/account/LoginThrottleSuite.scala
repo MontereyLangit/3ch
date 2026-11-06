@@ -111,4 +111,13 @@ class LoginThrottleSuite extends FunSuite {
     assert(throttle.failures.size <= LoginThrottle.failureLimit)
     assert(throttle.locks.size <= LoginThrottle.lockLimit)
   }
+
+  test("試行前の確認は記録を変えず、ロック中でも照合の前に遅延とロック期限を返す") {
+    val five = (1 to 5).foldLeft(LoginThrottle())((state, i) => failed(state, ipA, now + i).state)
+    assertEquals(five.check(ipA, now + 6), Right(LoginThrottleDecision(None, 1)))
+    assertEquals(five.check(ipB, now + 6), Right(LoginThrottleDecision(None, 1)))
+    val locked = (6 to 10).foldLeft(five)((state, i) => failed(state, ipA, now + i).state)
+    assertEquals(locked.check(ipA, now + 11), Right(LoginThrottleDecision(Some(now + 10 + LoginThrottle.window), 6)))
+    assertEquals(locked.check(ipA, now + 11 + LoginThrottle.window).map(_.locked), Right(false))
+  }
 }

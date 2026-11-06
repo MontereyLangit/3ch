@@ -1,7 +1,8 @@
 package io._3ch.bbs.durable
 
 import io._3ch.bbs.external.cloudflare.{DurableObject, DurableObjectState, WorkerEnv}
-import io._3ch.bbs.durable.codec.AccountCodec
+import io._3ch.bbs.durable.codec.{AccountCodec, PasswordCredentialCodec}
+import io._3ch.bbs.hash.{PasswordHashFailure, PasswordHasher}
 import io._3ch.bbs.durable.support.DurableLock
 import io._3ch.common.domain.account.*
 import scala.concurrent.Future
@@ -58,19 +59,74 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** 新規アカウントを作る。既存のアカウントは上書きしない */
-  def create(profile: js.Dynamic, now: Double): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
+  /** 新規アカウントを作る。既存のアカウントは上書きしない。パスワード方式は資格情報を一緒に保存する */
+  def create(profile: js.Dynamic, now: Double, credential: js.UndefOr[js.Dynamic] = js.undefined): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
     read().flatMap {
       case Some(_) => Future.successful(error(AccountRejection.Exists))
       case None =>
         val decoded = AccountCodec.decodeProfile(profile)
+        val password = credential.toOption.map(PasswordCredentialCodec.decode(_))
         if (state.id.name.toOption.exists(_ != decoded.aid)) Future.successful(error(AccountRejection.Invalid))
-        else AccountState.create(decoded, now) match {
+        else AccountState.create(decoded, now, password) match {
           case Left(rejection) => Future.successful(error(rejection))
           case Right(account) => save(account).map(_ => AccountCodec.description(account.description))
         }
     }
   }.toJSPromise
+
+  /** 索引を確定した登録準備中のアカウントの利用を開始する。開始済みなら現在の情報を返す */
+  def activate(now: Double): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
+    current(error(AccountRejection.Missing)) { account =>
+      account.activate(now).flatMap(next => next.usable(now).map(_ => next)) match {
+        case Left(rejection) => Future.successful(error(rejection))
+        case Right(next) if next == account => Future.successful(AccountCodec.description(next.description))
+        case Right(next) => save(next).map(_ => AccountCodec.description(next.description))
+      }
+    }
+  }.toJSPromise
+
+  /** PBKDF2 で照合し、接続元ごとの失敗計数とロックを同じ直列化の中で保存する。アカウントが無ければ固定の資格情報で同じ計算をして失敗にする */
+  def verifyPassword(password: String, keyIpHash: String, now: Double): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
+    val parsed = Option(password).filter(p => js.typeOf(p) == "string").flatMap(p => Password.parse(p).toOption)
+    read().flatMap { value =>
+      val checked = value.toRight(AccountRejection.Missing).flatMap(_.passwordCheck(keyIpHash, now))
+      val credential = checked.fold(_ => PasswordCredential.placeholder, _._1)
+      parsed.fold(Future.successful[Either[PasswordHashFailure, Boolean]](Right(false)))(PasswordHasher.verify(_, credential)).flatMap {
+        case Left(_) => Future.failed(js.JavaScriptException(new js.Error("password-hash-unavailable")))
+        case Right(matched) => (value, checked) match {
+          case (Some(account), Right(_)) => account.afterPasswordAttempt(keyIpHash, matched, now) match {
+            case Left(rejection) => Future.successful(error(rejection))
+            case Right((next, PasswordAttempt.Failed(delay))) => save(next).map(_ => AccountCodec.loginFailure(delay))
+            case Right((next, PasswordAttempt.Accepted)) => rehash(next, parsed, now).flatMap { saved =>
+              save(saved).map(_ => AccountCodec.signIn(saved.usable(now).map(_ => saved.description), saved.profile.uid))
+            }
+          }
+          case _ => Future.successful(AccountCodec.loginFailure(0))
+        }
+      }
+    }
+  }.toJSPromise
+
+  private def rehash(account: AccountState, password: Option[Password], now: Double): Future[AccountState] =
+    (account.credential, password) match {
+      case (Some(credential), Some(value)) if credential.needsRehash =>
+        PasswordHasher.create(value, now).map(_.toOption.flatMap(next => account.rehashed(next).toOption).getOrElse(account))
+      case _ => Future.successful(account)
+    }
+
+  /** パスワードを置き換えて世代を進める。照合済みかどうかは呼び出し元が確認する */
+  def setPassword(credential: js.Dynamic, now: Double): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
+    current(error(AccountRejection.Missing)) { account =>
+      account.setPassword(PasswordCredentialCodec.decode(credential), now) match {
+        case Left(rejection) => Future.successful(error(rejection))
+        case Right(next) => save(next).map(_ => AccountCodec.description(next.description))
+      }
+    }
+  }.toJSPromise
+
+  /** Google の sub の HMAC が一致すれば、ログインに使うアカウントの情報を返す */
+  def describeGoogle(subHash: String, now: Double): js.Promise[js.Dynamic] =
+    read().map(_.fold(error(AccountRejection.Missing))(account => AccountCodec.signIn(account.describeGoogle(subHash, now), account.profile.uid))).toJSPromise
 
   /** 世代・状態・失効と、専ブラ Cookie のキーと UA を一度で検証する */
   def describeForPosting(aid: String, generation: Int, now: Double, tokenId: js.UndefOr[String] = js.undefined, uaHash: js.UndefOr[String] = js.undefined): js.Promise[js.Dynamic] =

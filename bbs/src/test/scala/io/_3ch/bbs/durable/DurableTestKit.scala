@@ -48,10 +48,11 @@ object DurableTestKit {
     obj.asInstanceOf[DurableObjectStorage]
   }
 
-  private def fakeState(): DurableObjectState = {
+  private def fakeState(name: String = ""): DurableObjectState = {
     val storage = fakeStorage()
     var tail: Future[Unit] = Future.successful(())
     val obj = js.Dynamic.literal(
+      id = js.Dynamic.literal(name = name),
       storage = storage.asInstanceOf[js.Any],
       blockConcurrencyWhile = ((callback: js.Function0[js.Promise[js.Any]]) => {
         val resultFuture: Future[js.Any] = tail.flatMap(_ => callback().toFuture)
@@ -94,6 +95,9 @@ object DurableTestKit {
   final class Env {
     private val threadInstances = mutable.Map.empty[String, Thread]
     private val boardInstances = mutable.Map.empty[String, Board]
+    private val accountInstances = mutable.Map.empty[String, Account]
+    private val indexInstances = mutable.Map.empty[String, AccountIndex]
+    private val rateInstances = mutable.Map.empty[String, AuthRate]
     private val r2 = mutable.Map.empty[String, (String, String)]
     private val capStore = mutable.Map.empty[String, String]
     private var etagCounter = 0
@@ -160,6 +164,9 @@ object DurableTestKit {
       )
       e.updateDynamic("THREAD_DO")(namespace(name => threadInstances.getOrElseUpdate(name, new Thread(fakeState(), e.asInstanceOf[WorkerEnv]))))
       e.updateDynamic("BOARD_DO")(namespace(name => boardInstances.getOrElseUpdate(name, new Board(fakeState(), e.asInstanceOf[js.Any]))))
+      e.updateDynamic("ACCOUNT_DO")(namespace(name => accountInstances.getOrElseUpdate(name, new Account(fakeState(name), e))))
+      e.updateDynamic("ACCOUNT_INDEX_DO")(namespace(name => indexInstances.getOrElseUpdate(name, new AccountIndex(fakeState(name), e))))
+      e.updateDynamic("AUTH_RATE_DO")(namespace(name => rateInstances.getOrElseUpdate(name, new AuthRate(fakeState(name), e))))
       e.asInstanceOf[WorkerEnv]
     }
 
@@ -180,6 +187,15 @@ object DurableTestKit {
 
     /** R2 (`ch3www`) に旧形式スレッドログを仕込む。キーは `bbs/thread/head4/key.cgi` の形。 */
     def putR2(key: String, text: String): Unit = r2.update(key, (text, nextEtag()))
+
+    /** 作成済みの Account DO の名前（aid）。照合のためだけに呼ばれた名前も含む */
+    def accountNames: Set[String] = accountInstances.keySet.toSet
+
+    /** 保存内容を直接確かめるテスト用の Account インスタンス */
+    def accountInstance(name: String): Account = { account(name); accountInstances(name) }
+
+    def account(name: String): AccountDoStub = worker.ACCOUNT_DO.get(worker.ACCOUNT_DO.idFromName(name))
+    def index(name: String): AccountIndexDoStub = worker.ACCOUNT_INDEX_DO.get(worker.ACCOUNT_INDEX_DO.idFromName(name))
 
     def thread(name: String): ThreadDoStub = worker.THREAD_DO.get(worker.THREAD_DO.idFromName(name))
     def board(name: String): BoardDoStub = worker.BOARD_DO.get(worker.BOARD_DO.idFromName(name))

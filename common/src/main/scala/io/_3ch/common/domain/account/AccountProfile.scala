@@ -97,4 +97,5 @@ enum AccountRejection(val code: String) {
   case IndexConflict extends AccountRejection("auth:index:conflict")
   case IndexOwnership extends AccountRejection("auth:index:ownership")
   case IndexPermanent extends AccountRejection("auth:index:permanent")
+  case LoginFailed extends AccountRejection("auth:login:failed")
 }

@@ -23,4 +23,8 @@ final case class PasswordCredential(algo: PasswordAlgorithm, iterations: Int, sa
 
 object PasswordCredential {
   val currentIterations: Int = 100000
+
+  /** 存在しない ID のログインで照合する固定の資格情報。どのパスワードとも一致させない前提の値 */
+  val placeholder: PasswordCredential =
+    PasswordCredential(PasswordAlgorithm.Pbkdf2Sha256, currentIterations, Vector.fill(16)(0x5a.toByte), Vector.fill(32)(0.toByte), 0)
 }
