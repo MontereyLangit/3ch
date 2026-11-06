@@ -958,6 +958,116 @@ test('かんたん登録: 規約同意とTurnstileが揃ってから端末情報
   }
 });
 
+async function withTurnstile(body) {
+  const widget = { renders: 0, options: null, removed: [] };
+  const oldContext = window.HTMLCanvasElement.prototype.getContext;
+  window.HTMLCanvasElement.prototype.getContext = () => null;
+  globalThis.turnstile = {
+    render: (_element, options) => { widget.renders++; widget.options = options; return 'auth-widget'; },
+    remove: id => widget.removed.push(id),
+    reset: () => {},
+  };
+  try {
+    await body(widget);
+  } finally {
+    window.HTMLCanvasElement.prototype.getContext = oldContext;
+    delete globalThis.turnstile;
+  }
+}
+
+async function typeInto(element, value) {
+  await act(async () => {
+    setValue(element, value);
+    element.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+}
+
+test('ID・パスワード: タブを替えてもTurnstileを作り直さず、ログインと登録をそれぞれの入力で送る', async () => {
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url, body: new URLSearchParams(init.body.toString()) });
+    return { ok: true, json: async () => ({ uid: 'taro_2026', lv: 1, returnPath: '/sample/' }) };
+  };
+  await withTurnstile(async widget => {
+    const container = await mount(client.AuthFormJs, { turnstileSiteKey: 'public-key', agreementVersion: 'current-v3', returnPath: '/sample/', embed: true });
+    const radios = container.querySelectorAll('input[type="radio"]');
+    assert.equal(radios.length, 3);
+    assert.equal(radios[2].disabled, true, 'Googleは未設定なら選べない');
+    assert.match(container.textContent, /Googleで続ける（準備中）/);
+    await act(async () => { widget.options.callback('challenge-proof'); });
+    const tabs = [...container.querySelectorAll('[role="tab"]')];
+    assert.deepEqual(tabs.map(tab => tab.textContent), ['新しく登録する', 'ログイン']);
+    await click(tabs[1]);
+    assert.equal(widget.renders, 1);
+    assert.equal(container.querySelector('input[type="checkbox"]'), null, 'ログインには同意欄を出さない');
+    const submit = () => container.querySelector('button[type="submit"]');
+    assert.equal(submit().disabled, true);
+    await typeInto(container.querySelector('input[autocomplete="username"]'), 'Taro_2026');
+    await typeInto(container.querySelector('input[autocomplete="current-password"]'), 'correct horse');
+    assert.equal(submit().disabled, false);
+    await click(submit());
+    await flush();
+    assert.equal(requests[0].url, '/auth/login');
+    assert.equal(requests[0].body.get('id'), 'Taro_2026');
+    assert.equal(requests[0].body.get('password'), 'correct horse');
+    assert.equal(requests[0].body.get('cf-turnstile-response'), 'challenge-proof');
+    assert.equal(requests[0].body.get('agreement'), null);
+    assert.ok(JSON.parse(requests[0].body.get('device')));
+
+    await click(container.querySelector('[role="tab"]'));
+    assert.equal(widget.renders, 1);
+    await click(container.querySelectorAll('input[type="radio"]')[1]);
+    const passwords = container.querySelectorAll('input[autocomplete="new-password"]');
+    assert.equal(passwords.length, 2);
+    await typeInto(container.querySelector('input[autocomplete="username"]'), 'taro_2026');
+    await typeInto(passwords[0], 'correct horse');
+    await typeInto(passwords[1], 'correct horse');
+    assert.equal(submit().disabled, true, '同意するまで登録できない');
+    await click(container.querySelector('input[type="checkbox"]'));
+    assert.equal(submit().textContent, '認証して登録する');
+    await click(submit());
+    await flush();
+    assert.equal(requests[1].url, '/auth/register');
+    assert.deepEqual(['id', 'password', 'password2', 'agreement', 'cf-turnstile-response', 'return'].map(name => requests[1].body.get(name)),
+      ['taro_2026', 'correct horse', 'correct horse', 'current-v3', 'challenge-proof', '/sample/']);
+    assert.equal(requests[1].body.get('email'), null);
+  });
+});
+
+test('Google: 設定があればユーザーIDと同意を付けてフォームで開始し、埋め込みでは別のウィンドウで開く', async () => {
+  const submitted = [];
+  const original = window.HTMLFormElement.prototype.submit;
+  window.HTMLFormElement.prototype.submit = function () {
+    submitted.push({ action: new URL(this.action).pathname, method: this.method, target: this.target,
+      fields: Object.fromEntries([...this.elements].map(element => [element.name, element.value])) });
+  };
+  globalThis.fetch = async () => { throw new Error('Googleの開始はfetchで送らない'); };
+  try {
+    await withTurnstile(async () => {
+      const container = await mount(client.AuthFormJs, { turnstileSiteKey: 'public-key', agreementVersion: 'current-v3', returnPath: '/sample/', embed: true, googleEnabled: true,
+        notice: 'このGoogleアカウントはまだ登録されていません。' });
+      assert.match(container.textContent, /このGoogleアカウントはまだ登録されていません。/);
+      await click(container.querySelectorAll('input[type="radio"]')[2]);
+      assert.equal(container.querySelector('input[autocomplete="new-password"]'), null);
+      const submit = container.querySelector('button[type="submit"]');
+      assert.equal(submit.textContent, 'Googleで登録する');
+      await typeInto(container.querySelector('input[autocomplete="username"]'), 'hanako');
+      await click(container.querySelector('input[type="checkbox"]'));
+      assert.equal(submit.disabled, false, 'GoogleではTurnstileを待たない');
+      await click(submit);
+      assert.deepEqual(submitted[0], { action: '/auth/google/start', method: 'post', target: '_blank',
+        fields: { uid: 'hanako', return: '/sample/', popup: '1', device: submitted[0].fields.device, agreement: 'current-v3' } });
+      assert.equal(document.querySelectorAll('form').length, 1, '送信用のフォームは残さない');
+      await click(container.querySelectorAll('[role="tab"]')[1]);
+      await click([...container.querySelectorAll('button')].find(button => button.textContent === 'Googleでログイン'));
+      assert.equal(submitted[1].fields.uid, '');
+      assert.equal(submitted[1].fields.agreement, undefined);
+    });
+  } finally {
+    window.HTMLFormElement.prototype.submit = original;
+  }
+});
+
 test('専ブラ用キー: 対象IDで失効し使用枠と失効理由を更新する', async () => {
   const requests = [];
   globalThis.fetch = async (url, init) => {

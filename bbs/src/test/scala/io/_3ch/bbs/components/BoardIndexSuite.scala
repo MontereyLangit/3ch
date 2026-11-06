@@ -158,6 +158,18 @@ class BoardIndexSuite extends munit.FunSuite {
     assert(!account.contains("!#"))
     assert(!account.contains("発行したキー（今だけ表示されます）"))
   }
+  test("認証ページは ID・パスワードを選べ、Google はクライアント未設定なら準備中にする") {
+    val off = BoardMarkup(AuthComponent.Component(AuthProps("public-site-key", "/sample/", agreementVersion = "v2")).rawElement)
+    assert(off.contains("ID・パスワード"))
+    assert(off.contains("Googleで続ける（準備中）"))
+    assert(off.contains("新しく登録する"))
+    val on = BoardMarkup(AuthComponent.Component(AuthProps("public-site-key", "/sample/", agreementVersion = "v2", googleEnabled = true,
+      notice = "Googleでのログインを中止しました。")).rawElement)
+    assert(!on.contains("準備中"))
+    assert(on.contains("Googleでのログインを中止しました。"))
+    val login = BoardMarkup(AuthComponent.Component(AuthProps("public-site-key", "/sample/", login = true)).rawElement)
+    assert(login.contains("autoComplete=\"current-password\"") || login.contains("autocomplete=\"current-password\""))
+  }
   test("アカウント画面は専ブラの使用枠・履歴・不一致・期限・失効理由を公開情報から描く") {
     val recent = AccountPostProps(1800000000, "sample", "1800000001", "スレ &lt;script&gt;", 12, "本文 &lt;img&gt;", "回線・東京都")
     val tokens = Seq(
