@@ -1,9 +1,13 @@
 package io._3ch.bbs.handler
 
+import io._3ch.bbs.application.admin.{AdminFailure, AdminService}
 import io._3ch.bbs.external.cloudflare.*
 import io._3ch.bbs.external.web.{Request, Response, TextEncoder}
 import io._3ch.bbs.hash.WebHash
-import io._3ch.bbs.domain.posting.moderation.{ModerationRuleSet, ThreadCreationSettings}
+import io._3ch.bbs.domain.posting.moderation.ThreadCreationSettings
+import io._3ch.bbs.repository.AdminRepository
+import io._3ch.common.admin.{RuleName, ThreadAction}
+import io._3ch.common.text.JsNumber
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -18,18 +22,13 @@ object AdminHandler {
   private def blank(v: js.Any): String = if truth(v) then str(v) else ""
   private def escape(v: js.Any): String = (if v == null || js.isUndefined(v) then "" else str(v)).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
   private def fail(message: String): Nothing = throw js.JavaScriptException(new js.Error(message))
-  private def board(v: js.Any): String = {
-    if !new js.RegExp("^[a-zA-Z0-9_-]{1,80}$").test(blank(v)) then fail("板名が不正です。")
-    str(v)
-  }
-  private def key(v: js.Any): String = {
-    if !new js.RegExp("^\\d{10}$").test(blank(v)) then fail("keyは10桁の数字で指定してください。")
-    str(v)
-  }
+  private def ok[A](result: Either[AdminFailure, A]): A = result.fold(failure => fail(AdminText.failure(failure)), identity)
+  private def board(v: js.Any): String = ok(AdminService.validBoard(blank(v)))
+  private def key(v: js.Any): String = ok(AdminService.validKey(blank(v)))
+  private def service(e: WorkerEnv): AdminService = new AdminService(AdminRepository.files(e), AdminRepository.threads(e))
   private def input(name: String, value: String, label: String): String = s"""<label>$label <input name="$name" value="${escape(value)}" required></label>"""
   private def area(name: String, value: String, label: String): String = s"""<label>$label<textarea name="$name" rows="16">${escape(value)}</textarea></label>"""
   private def form(body: String, action: String, label: String = "保存"): String = s"""<form method="post">$body<button name="action" value="$action">$label</button></form>"""
-  private def text(e: WorkerEnv, file: String, fallback: String = ""): Future[String] = e.ch3www.get(file).toFuture.flatMap(o => if o == null then Future.successful(fallback) else o.text().toFuture)
   private val creationSettingFields = List(
     "BBS_THREAD_TATESUGI" -> "通常規制の件数",
     "BBS_THREAD_TATESUGI_RESET" -> "通常規制の有効期間（秒）",
@@ -37,8 +36,6 @@ object AdminHandler {
     "BBS_THREAD_JUNBAN_RESET" -> "広域規制の有効期間（秒）",
     "BBS_THREAD_JUNBAN_AS_ONLY" -> "県で分けずAS全体を対象にするASN（空白・カンマ区切り）"
   )
-  private def validateCreationSettings(value: String): ThreadCreationSettings.Parsed =
-    ThreadCreationSettings.parseText(value).fold(reason => fail(PostingText.creationSettingsMessage(reason)), identity)
   private def creationForm(settings: String): String = {
     val parsed = ThreadCreationSettings.parseText(settings)
     val values = parsed.toOption.map { p => Map(
@@ -54,10 +51,19 @@ object AdminHandler {
     "<h2>スレ立て規制</h2><p>通常は同一IP・スレタイ、広域は同一UA・AS＋県（海外は海外全体）。件数0でその規制を無効にします。</p>" +
       parsed.left.toOption.map(reason => s"<p>${escape(PostingText.creationSettingsMessage(reason))}</p>").getOrElse("") + form(fields, "saveCreationLimit", "スレ立て規制を保存")
   }
-  private def editable(v: String): String = {
-    val entities = Map("&lt;" -> "<", "&gt;" -> ">", "&quot;" -> "\"", "&apos;" -> "'", "&amp;" -> "&")
-    val replace: js.Function1[String, String] = s => entities(s)
-    v.asInstanceOf[js.Dynamic].replace(new js.RegExp(" ?<br\\s*/?>(?: )?", "gi"), "\n").replace(new js.RegExp("&(?:lt|gt|quot|apos|amp);", "g"), replace).asInstanceOf[String]
+  /** フォームのレス番号。JavaScript の Number で整数として読めなければ 0（Thread DO が拒否する） */
+  private def resNumber(v: js.Any): Int = {
+    val number = JsNumber.parse(blank(v))
+    if number == math.rint(number) && number >= 1 && number <= Int.MaxValue then number.toInt else 0
+  }
+  private def threadAction(data: js.Dynamic): Option[ThreadAction] = str(data.action) match {
+    case "stop" => Some(ThreadAction.Stop)
+    case "resume" => Some(ThreadAction.Resume)
+    case "delete" => Some(ThreadAction.Delete)
+    case "move" => Some(ThreadAction.Move(blank(data.targetBoard), blank(data.targetKey)))
+    case "editRes" => Some(ThreadAction.EditRes(resNumber(data.number), blank(data.name), blank(data.mail), blank(data.message)))
+    case "deleteRes" => Some(ThreadAction.DeleteRes(resNumber(data.number)))
+    case _ => None
   }
 
   def handle(r: Request, e: WorkerEnv): js.Promise[Response] = {
@@ -86,45 +92,21 @@ object AdminHandler {
             r.asInstanceOf[js.Dynamic].text().asInstanceOf[js.Promise[String]].toFuture.flatMap { body =>
               if new TextEncoder().encode(body).length > 262144 then fail("入力が大きすぎます。")
               val data = js.Dynamic.global.Object.fromEntries(js.Dynamic.newInstance(js.Dynamic.global.URLSearchParams)(body))
+              val admin = service(e)
               val save: Future[Unit] = path match {
                 case "/admin/board" =>
                   val bbs = board(url.searchParams.get("bbs"))
                   str(data.action) match {
-                    case "save" =>
-                      val settings = blank(data.settings)
-                      validateCreationSettings(settings)
-                      e.ch3www.put(s"$bbs/head.txt", blank(data.head)).toFuture.flatMap(_ => e.ch3www.put(s"$bbs/SETTING.TXT", settings).toFuture).map(_ => ())
-                    case "saveCreationLimit" =>
-                      val fields = creationSettingFields.map { (name, _) =>
-                        val value = blank(data.selectDynamic(name))
-                        if (value.contains('\r') || value.contains('\n')) fail("スレ立て規制の入力に改行は使用できません。")
-                        s"$name=${value.trim}"
-                      }
-                      val file = s"$bbs/SETTING.TXT"
-                      for {
-                        obj <- e.ch3www.get(file).toFuture
-                        current <- if (obj == null) Future.successful(PostingText.settingTxtDefault.replace("<DIR_NAME>", bbs)) else obj.text().toFuture
-                        names = creationSettingFields.map(_._1).toSet
-                        other = current.split("\\r?\\n", -1).filterNot(line => names.contains(line.takeWhile(_ != '=').trim))
-                        settings = (other.filter(_.nonEmpty).toSeq ++ fields).mkString("\n") + "\n"
-                        _ = validateCreationSettings(settings)
-                        // 読込後に他の管理操作が保存していたら上書きしない（未作成時は条件なし）
-                        options = if (obj == null) js.Dynamic.literal() else js.Dynamic.literal(onlyIf = js.Dynamic.literal(etagMatches = obj.asInstanceOf[js.Dynamic].etag))
-                        result <- e.ch3www.asInstanceOf[js.Dynamic].put(file, settings, options).asInstanceOf[js.Promise[js.Any]].toFuture
-                      } yield {
-                        if (result == null) fail("他の操作で板設定が更新されました。画面を開き直してから保存してください。")
-                      }
+                    case "save" => admin.saveBoardTexts(bbs, blank(data.head), blank(data.settings)).map(ok)
+                    case "saveCreationLimit" => admin.saveCreationLimits(bbs, creationSettingFields.map((name, _) => name -> blank(data.selectDynamic(name)))).map(ok)
                     case _ => fail("操作が不正です。")
                   }
                 case "/admin/access" | "/admin/ngwords" =>
-                  ModerationRuleSet.parse(blank(data.rules)).left.foreach(error => fail(AdminText.ruleError(error)))
-                  e.ch3www.put(if path.endsWith("access") then "deny.cgi" else "ngwords.cgi", blank(data.rules)).toFuture.map(_ => ())
-                case "/admin/menu" => e.ch3www.put("bbsmenu.html", blank(data.html)).toFuture.map(_ => ())
+                  admin.saveRules(if path.endsWith("access") then RuleName.Access else RuleName.Ngwords, blank(data.rules)).map(ok)
+                case "/admin/menu" => admin.saveMenu(blank(data.html))
                 case "/admin/thread" =>
                   val bbs = board(url.searchParams.get("bbs")); val k = key(url.searchParams.get("key"))
-                  if str(data.action) == "move" then { board(data.targetBoard); key(data.targetKey) }
-                  val stub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$k"))
-                  stub.inspect(bbs, k).toFuture.flatMap(_ => stub.moderate(str(data.action), js.Dynamic.global.Object.assign(js.Dynamic.literal(), data, js.Dynamic.literal(bbs = bbs, key = k))).toFuture)
+                  threadAction(data).fold(fail("操作が不正です。"))(action => admin.moderate(bbs, k, action).map(ok))
                 case _ => fail("操作先が不正です。")
               }
               save.map { _ => headers("location") = path + str(url.search); Responses.response(null, 303, headers) }
@@ -143,54 +125,44 @@ object AdminHandler {
   }
 
   private def render(path: String, url: js.Dynamic, e: WorkerEnv): Future[(String, Int)] = {
+    val admin = service(e)
     val html: Future[String] = path match {
       case "/admin" | "/admin/" => Future.successful("<h1>管理画面top</h1><p>板名を指定して管理対象を開いてください。</p><form action=\"/admin/board\">" + input("bbs", "", "板名") + "<button>板管理</button></form><form action=\"/admin/threads\">" + input("bbs", "", "板名") + "<button>スレ管理</button></form>")
       case "/admin/board" =>
         val bbs = board(url.searchParams.get("bbs"))
-        for {
-          head <- text(e, s"$bbs/head.txt")
-          settings <- text(e, s"$bbs/SETTING.TXT", PostingText.settingTxtDefault.replace("<DIR_NAME>", bbs))
-        } yield s"<h1>板管理: ${escape(bbs)}</h1>" + creationForm(settings) + form(area("head", head, "head.txt") + area("settings", settings, "SETTING.TXT"), "save")
+        admin.boardTexts(bbs).map { (head, settings) => s"<h1>板管理: ${escape(bbs)}</h1>" + creationForm(settings) + form(area("head", head, "head.txt") + area("settings", settings, "SETTING.TXT"), "save") }
       case "/admin/threads" =>
         val bbs = board(url.searchParams.get("bbs"))
-        val stub = e.BOARD_DO.get(e.BOARD_DO.idFromName(bbs))
-        for {
-          subject <- stub.getSubject().toFuture
-          removed <- stub.getRemoved().toFuture
-        } yield {
+        admin.threadList(bbs).map { list =>
           val out = new StringBuilder(s"""<h1>スレ管理: ${escape(bbs)}</h1><form action="/admin/thread">${input("bbs", bbs, "板名")}${input("key", "", "key")}<button>開く</button></form><h2>公開中</h2><ul>""")
-          subject.split("\n", -1).filter(_.nonEmpty).foreach { line => out.append(s"""<li><a href="/admin/thread?bbs=$bbs&amp;key=${escape(line.split("\\.", -1)(0))}">${escape(line)}</a></li>""") }
+          list.subject.foreach { thread => out.append(s"""<li><a href="/admin/thread?bbs=$bbs&amp;key=${escape(thread.key)}">${escape(thread.line)}</a></li>""") }
           out.append("</ul><h2>削除・移動済み（ログ保持）</h2><ul>")
-          removed.foreach(k => out.append(s"""<li><a href="/admin/thread?bbs=$bbs&amp;key=$k">$k</a></li>"""))
+          list.removed.foreach(k => out.append(s"""<li><a href="/admin/thread?bbs=$bbs&amp;key=$k">$k</a></li>"""))
           out.append("</ul>").toString
         }
       case "/admin/thread" =>
         val bbs = board(url.searchParams.get("bbs")); val k = key(url.searchParams.get("key"))
-        e.THREAD_DO.get(e.THREAD_DO.idFromName(s"$bbs/$k")).inspect(bbs, k).toFuture.map { data =>
-          val dat = data.dat.getOrElse("")
-          if dat.isEmpty then fail("スレッドがありません。")
-          val stopped = data.stopped.getOrElse(false)
-          val state = if data.hidden.getOrElse(false) then "削除・移動済み" else if stopped then "停止中" else "公開中"
+        admin.thread(bbs, k).map(ok).map { data =>
+          val stopped = data.stopped
+          val state = if data.hidden then "削除・移動済み" else if stopped then "停止中" else "公開中"
           val out = new StringBuilder(s"""<h1>スレ管理: $bbs/$k</h1><p><a href="/admin/threads?bbs=$bbs">一覧へ</a></p><p>状態: $state ${escape(data.movedTo.getOrElse(""))}</p>""")
           out.append(form("", if stopped then "resume" else "stop", if stopped then "スレ停止解除" else "スレ停止"))
           out.append("<details><summary>スレッド削除（本文・投稿者ログは保持）</summary>" + form("", "delete", "公開一覧とdatから削除") + "</details>")
           out.append("<details><summary>スレッド移動（板移動 / key変更）</summary>" + form(input("targetBoard", bbs, "移動先の板") + input("targetKey", k, "移動先key"), "move", "移動する") + "</details><h2>レス一覧・編集・削除</h2>")
-          dat.asInstanceOf[js.Dynamic].trimEnd().asInstanceOf[String].split("\n", -1).zipWithIndex.foreach { (line, i) =>
-            val f = line.split("<>", -1)
-            def field(index: Int) = f.lift(index).getOrElse("")
-            out.append(s"<details><summary>${i + 1}: ${escape(field(0))} ${escape(field(2))}</summary><pre>${escape(field(3))}</pre>")
-            val hidden = s"""<input type="hidden" name="number" value="${i + 1}">"""
-            out.append(form(hidden + input("name", editable(field(0)), "名前") + s"""<label>メール<input name="mail" value="${escape(editable(field(1)))}"></label>""" + area("message", editable(field(3)), "本文（テキスト入力）"), "editRes", "レスを編集"))
+          data.res.foreach { res =>
+            out.append(s"<details><summary>${res.number}: ${escape(res.name)} ${escape(res.date)}</summary><pre>${escape(res.message)}</pre>")
+            val hidden = s"""<input type="hidden" name="number" value="${res.number}">"""
+            out.append(form(hidden + input("name", res.edit.name, "名前") + s"""<label>メール<input name="mail" value="${escape(res.edit.mail)}"></label>""" + area("message", res.edit.message, "本文（テキスト入力）"), "editRes", "レスを編集"))
             out.append(form(hidden, "deleteRes", "レスをあぼーん化") + "</details>")
           }
-          out.append(s"<h2>投稿者ログ（削除後も保持）</h2><pre>${escape(data.log.getOrElse(""))}</pre><h2>datログ</h2><pre>${escape(dat)}</pre>")
+          out.append(s"<h2>投稿者ログ（削除後も保持）</h2><pre>${escape(data.log)}</pre><h2>datログ</h2><pre>${escape(data.dat)}</pre>")
           data.legacyLog.filter(_.nonEmpty).foreach(log => out.append(s"<h2>旧形式ログ</h2><pre>${escape(log)}</pre>"))
           out.toString
         }
       case "/admin/access" | "/admin/ngwords" =>
         val access = path.endsWith("access")
-        text(e, if access then "deny.cgi" else "ngwords.cgi").map(rules => AdminText.rules(access) + form(area("rules", rules, "規制ルール"), "save"))
-      case "/admin/menu" => text(e, "bbsmenu.html").map(html => "<h1>板一覧（bbsmenu.html）編集</h1><p>公開するHTMLを入力してください。保存後はこの内容を使用します。</p>" + form(area("html", html, "bbsmenu.html"), "save"))
+        admin.rules(if access then RuleName.Access else RuleName.Ngwords).map(rules => AdminText.rules(access) + form(area("rules", rules.text, "規制ルール"), "save"))
+      case "/admin/menu" => admin.menu().map(_.text).map(html => "<h1>板一覧（bbsmenu.html）編集</h1><p>公開するHTMLを入力してください。保存後はこの内容を使用します。</p>" + form(area("html", html, "bbsmenu.html"), "save"))
       case _ => return Future.successful(("<h1>ページがありません。</h1>", 404))
     }
     html.map(_ -> 200)

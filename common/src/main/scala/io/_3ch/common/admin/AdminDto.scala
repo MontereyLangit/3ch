@@ -1,5 +1,7 @@
 package io._3ch.common.admin
 
+import io._3ch.common.text.JsText
+
 /** 管理 API のエラーの種類。value は応答の code */
 enum AdminErrorCode(val value: String, val status: Int) {
   case Unauthorized extends AdminErrorCode("admin:unauthorized", 401)
@@ -39,21 +41,23 @@ final case class ThreadSummary(key: String, line: String)
 /** 板のスレ一覧。removed は削除・移動済みの key */
 final case class ThreadList(bbs: String, subject: List[ThreadSummary], removed: List[String])
 
-/** スレの状態 */
-enum ThreadState(val value: String) {
-  case Open extends ThreadState("open")
-  case Stopped extends ThreadState("stopped")
-  case Removed extends ThreadState("removed")
-}
-
 /** 編集用のテキスト */
 final case class ResEditFields(name: String, mail: String, message: String)
 
 /** dat の 1 行。name・mail・date・message は dat の欄のまま */
 final case class ResView(number: Int, name: String, mail: String, date: String, message: String, edit: ResEditFields)
 
-/** スレの詳細 */
-final case class ThreadDetail(bbs: String, key: String, state: ThreadState, movedTo: Option[String], movingTo: Option[String], res: List[ResView],
+object ResView {
+  /** dat の末尾の空白を除いて行に分ける。欠けた欄は空 */
+  def fromDat(dat: String): List[ResView] = JsText.trimEnd(dat).split("\n", -1).toList.zipWithIndex.map { (line, i) =>
+    val f = line.split("<>", -1)
+    def field(index: Int): String = f.lift(index).getOrElse("")
+    ResView(i + 1, field(0), field(1), field(2), field(3), ResEditFields(ResEditText.toText(field(0)), ResEditText.toText(field(1)), ResEditText.toText(field(3))))
+  }
+}
+
+/** スレの詳細。hidden は削除・移動済み、stopped は停止中、movingTo は移動の途中 */
+final case class ThreadDetail(bbs: String, key: String, hidden: Boolean, stopped: Boolean, movedTo: Option[String], movingTo: Option[String], res: List[ResView],
   dat: String, log: String, legacyLog: Option[String], settings: String)
 
 /** スレの管理操作 */

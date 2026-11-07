@@ -1,8 +1,29 @@
 package io._3ch.bbs.handler
 
+import io._3ch.bbs.application.admin.{AdminFailure, AdminFile}
 import io._3ch.bbs.domain.posting.moderation.{ModerationRuleError, ModerationRuleProblem}
 
 object AdminText {
+  /** 管理操作が拒否された理由の文言 */
+  def failure(value: AdminFailure): String = value match {
+    case AdminFailure.InvalidBoard(_) => "板名が不正です。"
+    case AdminFailure.InvalidKey(_) => "keyは10桁の数字で指定してください。"
+    case AdminFailure.CreationLineBreak => "スレ立て規制の入力に改行は使用できません。"
+    case AdminFailure.CreationSettings(reason) => PostingText.creationSettingsMessage(reason)
+    case AdminFailure.Settings(_) => "入力内容を確認してください。"
+    case AdminFailure.Rules(error) => ruleError(error)
+    case AdminFailure.Conflict(file) => conflict(file)
+    case AdminFailure.ThreadMissing => "スレッドがありません。"
+    case AdminFailure.ThreadRefused(message) => message
+  }
+
+  private def conflict(file: AdminFile): String = file match {
+    case AdminFile.Settings => "他の操作で板設定が更新されました。画面を開き直してから保存してください。"
+    case AdminFile.Head => "他の操作でhead.txtが更新されました。画面を開き直してから保存してください。"
+    case AdminFile.Rules => "他の操作で規制ルールが更新されました。画面を開き直してから保存してください。"
+    case AdminFile.Menu => "他の操作で板一覧が更新されました。画面を開き直してから保存してください。"
+  }
+
   /** 規制ルールの書式の誤りを、行番号付きの文言にする */
   def ruleError(error: ModerationRuleError): String = s"${error.line}行目: " + (error.problem match {
     case ModerationRuleProblem.Format => "板<>対象<>NGワード<>動作 の形式で入力してください。"

@@ -25,3 +25,12 @@ class ResEditTextSuite extends munit.FunSuite {
     assertEquals(ResEditText.toText(ResEditText.toField(text)), text)
   }
 }
+
+class ResViewSuite extends munit.FunSuite {
+  test("dat の行を番号付きの欄と編集用テキストに分け、末尾の空白行は除く") {
+    val res = ResView.fromDat("名 &lt;a&gt;<>sage<>日付 ID:x<> 本文 <br> 二 <>題\n欠け<>\n\n")
+    assertEquals(res.map(_.number), List(1, 2))
+    assertEquals(res.head, ResView(1, "名 &lt;a&gt;", "sage", "日付 ID:x", " 本文 <br> 二 ", ResEditFields("名 <a>", "sage", " 本文\n二 ")))
+    assertEquals(res(1), ResView(2, "欠け", "", "", "", ResEditFields("欠け", "", "")))
+  }
+}

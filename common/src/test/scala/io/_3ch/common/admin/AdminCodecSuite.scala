@@ -13,7 +13,7 @@ class AdminCodecSuite extends munit.FunSuite {
     roundTrip(BoardSettingsUpdate(values, "案内", None, Some("e2")), AdminCodec.boardSettingsUpdate, AdminCodec.boardSettingsUpdate)
     roundTrip(BoardSettingsSaved(Some("e3"), None, partial = true), AdminCodec.boardSettingsSaved, AdminCodec.boardSettingsSaved)
     roundTrip(ThreadList("sample", List(ThreadSummary("1800000000", "1800000000.dat<>題 (1)")), List("1700000000")), AdminCodec.threadList, AdminCodec.threadList)
-    roundTrip(ThreadDetail("sample", "1800000000", ThreadState.Stopped, Some("other/1800000001"), None,
+    roundTrip(ThreadDetail("sample", "1800000000", hidden = false, stopped = true, Some("other/1800000001"), None,
       List(ResView(1, "名 &lt;", "", "日付", "本文 <br> 二", ResEditFields("名 <", "", "本文\n二"))), "dat", "log", Some("legacy"), "BBS_HEISA=checked<>"),
       AdminCodec.threadDetail, AdminCodec.threadDetail)
     roundTrip(TextFile("<><><>deny", None), AdminCodec.textFile, AdminCodec.textFile)

@@ -145,7 +145,8 @@ object AdminCodec {
   def threadDetail(value: ThreadDetail): Json = Obj(List(
     "bbs" -> Str(value.bbs),
     "key" -> Str(value.key),
-    "state" -> Str(value.state.value),
+    "hidden" -> Bool(value.hidden),
+    "stopped" -> Bool(value.stopped),
     "movedTo" -> opt(value.movedTo),
     "movingTo" -> opt(value.movingTo),
     "res" -> Arr(value.res.map { r =>
@@ -161,7 +162,8 @@ object AdminCodec {
   def threadDetail(json: Json): Decoded[ThreadDetail] = for {
     bbs <- string(json, "bbs")
     key <- string(json, "key")
-    state <- string(json, "state").flatMap(s => ThreadState.values.find(_.value == s).toRight("state"))
+    hidden <- boolean(json, "hidden")
+    stopped <- boolean(json, "stopped")
     movedTo <- nullable(json, "movedTo")
     movingTo <- nullable(json, "movingTo")
     res <- list(json, "res")(item => (for {
@@ -179,7 +181,7 @@ object AdminCodec {
     log <- string(json, "log")
     legacyLog <- nullable(json, "legacyLog")
     settings <- string(json, "settings")
-  } yield ThreadDetail(bbs, key, state, movedTo, movingTo, res, dat, log, legacyLog, settings)
+  } yield ThreadDetail(bbs, key, hidden, stopped, movedTo, movingTo, res, dat, log, legacyLog, settings)
 
   def threadAction(value: ThreadAction): Json = Obj(List("action" -> Str(value.name)) ++ (value match {
     case ThreadAction.Move(board, key) => List("targetBoard" -> Str(board), "targetKey" -> Str(key))

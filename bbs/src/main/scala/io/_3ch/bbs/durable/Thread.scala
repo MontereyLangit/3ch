@@ -5,6 +5,7 @@ import io._3ch.bbs.durable.codec.{PostRateCodec, PostingCodec, ThreadCreationCod
 import io._3ch.bbs.domain.posting.ThreadPosting
 import io._3ch.bbs.domain.posting.moderation.{PostRateFinding, PostRateLimit, ThreadRecentPosts}
 import io._3ch.bbs.durable.support.DurableLock
+import io._3ch.common.admin.ResEditText
 import io._3ch.common.domain.posting.{DatLineFormatter, ThreadWriteGuard, ThreadWriteKind}
 
 import scala.collection.mutable
@@ -30,10 +31,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
   private def fail(message: String): Nothing = throw js.JavaScriptException(new js.Error(message))
   private def trimEnd(s: String): String = s.asInstanceOf[js.Dynamic].trimEnd().asInstanceOf[String]
   private def trim(s: String): String = s.asInstanceOf[js.Dynamic].trim().asInstanceOf[String]
-  private def escape(value: js.Any): String = {
-    val s = if value == null || js.isUndefined(value) then "" else str(value)
-    s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replaceAll("\r?\n", " <br> ")
-  }
+  private def escape(value: js.Any): String = ResEditText.toField(if value == null || js.isUndefined(value) then "" else str(value))
 
   private def locked[A](f: => Future[A]): Future[A] = DurableLock.serialized(state)(f)
 
