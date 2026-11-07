@@ -92,9 +92,9 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 | `docs/v6s実装メモ.md`                                                                  | Scala.js 実装（`bbs/`）の設計背景。doc コメントから参照される                                                                                                                  |
 | `docs/トリップ・ID廃止とスレ主表示.md`                                                 | 2026-11-02 の仕様変更（トリップ・ID 廃止、`!id`、スレ主表示 ` (主)`）。認証ブランチとの差分を含む                                                                                      |
 | `docs/admin.md`                                                                        | 管理画面の利用手順・規制ルール書式                                                                                                                                                    |
-| `docs/auth-phoebe-rate-limit-design.md`                                                | 認証・PHOEBE（Lv）・連投規制と新UIの設計。段Aは実装済み、段Bは部分実装、E-1（ID・パスワードの登録・ログイン・ロック、Googleログイン）とC（PHOEBE）は実装済み、段Dは管理画面を除いて実装済み（権限・キャップ・回避レベル）。管理画面は改修計画 M0〜M4。現在の範囲は `docs/claude-handoff.md` を参照                                                                                                               |
-| `docs/claude-handoff.md` | 段B・E-1・Cの実装範囲・残件・設定・検証結果と、D→E-2への引き継ぎ |
-| `docs/auth-integration.md` | 認証の有効化、Turnstile、Googleログイン、localhost、追加DOの開発・検証設定 |
+| `docs/auth-phoebe-rate-limit-design.md`                                                | 認証・PHOEBE（Lv）・連投規制と新UIの設計。段Aは実装済み、段Bは部分実装、E-1（ID・パスワードの登録・ログイン・ロック、Googleログイン）とC（PHOEBE）は実装済み、段Dは管理画面を除いて実装済み（権限・キャップ・回避レベル）、E-2（メール認証・パスワードの変更と再設定・方式移行・退会・エッジ防御・乱造検知・Lv上限）は実装済み（メールの提供元は未定）。管理画面は改修計画 M0〜M4。現在の範囲は `docs/claude-handoff.md` を参照                                                                                                               |
+| `docs/claude-handoff.md` | 段B・E-1・C・D・E-2の実装範囲・残件・設定・検証結果と、次の管理画面（M0〜M4）への引き継ぎ |
+| `docs/auth-integration.md` | 認証の有効化、Turnstile、Googleログイン、メールの送信先、エッジ防御・Lv上限の規則、localhost、追加DOの開発・検証設定 |
 | `docs/auth-implementation-review.md` | 認証・PHOEBE 実装のレビュー記録（段A・段B・E-1途中の指摘と対応） |
 | `docs/auth-password-implementation-notes.md` | ID・パスワード方式（E-1）の実装メモ。入力規則・PBKDF2・登録回復方式の候補 |
 | `docs/bbs-cgi-ddd-refactoring-plan.md`                                                 | bbs.cgi 投稿処理の DDD 化リファクタリング計画（段0〜9は完了。段10以降が認証・規制の実装）                                                                                                            |

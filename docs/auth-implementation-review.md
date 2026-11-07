@@ -126,3 +126,35 @@ KotlinJSの [生成済み空白表](https://github.com/JetBrains/kotlin/blob/v2.
 | UI | キャップ欄は専ブラ用キーの欄と同じ部品・配色・文言の調子にした（角丸なし）。モックはキャップ欄が案内の1行だけなので、役割の無い人にはその1行だけを出す。書き込みの1行の表示は専ブラ用キーの欄と共通の `AccountPostView` に切り出した。状態は useState、パスワードはメモリ上だけ |
 | 確認が要る点 | §14-4（名無しの staff の規制免除）は実装したが承認待ち |
 | テスト | common に AccountRolesSuite（6）・AccountCapSuite（5）。bbs に BypassLevelSuite（4）、AccountRolesSuite（5、同時に確保しても admin は一人）、AuthCapSuite（5）、PostingServiceSuite 4 件、ModerationRuleSetSuite・ModerationServiceSuite・PostingModerationSuite・PostRateSettingsSuite・AdminHandlerSuite に追加。board-islands に 3 件、実 workerd に 1 件（キャップの発行 → ★ の書き込み → 失効） |
+
+## 段 E-2（2026-11-07、日本時間）
+
+対象はメール認証、パスワードの変更と再設定、クライアント ID からの方式移行、退会、エッジ防御、乱造検知の「要確認」、Lv 上限ルール。範囲と残件は [引き継ぎ](claude-handoff.md) の「E-2の実装範囲」を参照する。
+
+| 観点 | 実装・確認 |
+| --- | --- |
+| DO はインフラのみ | 状態遷移は common の `AccountState`（`issuePending`・`pendingFor`・`verifyEmail`・`resetPassword`・`convert`・`withdraw`）、メールの正規化と使い捨てドメインは `EmailAddress`・`DisposableDomains`、保留トークンは `PendingToken`、乱造検知は `AbuseReason`・`AbuseReview`。エッジ防御と Lv 上限は正規表現を使うので bbs の domain（`EdgeDefense`・`PhoebeCapRules`）。索引・KV・メールの順序は application の `AccountMail`・`PasswordChange`・`AccountUpgrade`・`AccountWithdrawal` |
+| 種別 | `PendingKind`・`AccountConversion`・`OAuthPurpose`・`EdgeMode`・`EdgeFinding`・`AbuseReason` を enum にした。拒否は `AccountRejection.PendingInvalid`・`KindForbidden`、`AuthServiceFailure.EmailTaken`・`MailFailed`、`AuthenticationFailure.Datacenter`。文言は handler |
+| 既存の振る舞い | 認証を有効にしていない環境の投稿は、エッジ防御・Lv 上限のファイルを読まず以前と同じ。edge-rules.json・phoebe.cgi が無い環境も同じ。既存の投稿スナップショット・PostingSuite・golden は変更なし。Board・Thread・Account の既存キーの形式は変えていない（Account に `pending:email`・`pending:reset` を足し、AuthRate の名前 `review` に一覧を置いた） |
+| 変えたもの | Google 認可の Cookie の書式を版 2 にし、目的と aid を足した（往復中の旧書式は callback で oauth_state になる。寿命は10分）。RPC の `AccountDescription` に `createdAt` を足した。AuthenticationKeys に `linkSecret` を足した |
+| 設計からの差分 | 下の表 |
+| テスト | common に EmailAddressSuite（6）・AbuseReviewSuite（2）、AccountStateSuite に5件（メール認証・保留トークン・再設定・移行・退会）、PasswordSuite・OAuthStateSuite に各1件。bbs に AccountMailHandlerSuite（7）・AccountUpgradeSuite（3）・AccountWithdrawSuite（3）・AuthEdgeSuite（2）・EdgeDefenseSuite（5）・PhoebeCapRulesSuite（2）、PostingServiceSuite に2件。実 workerd に1件（差し替えた送信先で登録→メール認証→Lv3、再設定、退会、移行） |
+
+設計からの差分と判断:
+
+| 項目 | 実装 |
+| --- | --- |
+| メールの送信 | 提供元が未定なので、送信先は `MAIL_SENDER`（`send({to, subject, text})` を持つ service binding）だけを読む。提供元を選んだら `MailSenders.from` に `MAIL_API_KEY` を読む実装を一つ足す。どちらも無ければメール関連の画面は準備中、API は 503 |
+| email 索引の確定 | 登録時ではなくメールの確認時に予約・確定する（他人のアドレスを先に押さえられないようにする）。登録・変更の時点では確認済みの所有者がいれば拒否するだけ |
+| 確認リンク | `GET /auth/email/verify/?token=` は画面だけを返し、トークンの消費はボタンからの `POST`（メールの先読みで消費されないようにする）。トークンは `aid.乱数` で、保存値は SHA-256 ではなく AUTH_SECRET の HMAC |
+| gmail の照合 | googlemail.com も gmail.com として照合する |
+| 再設定の申請 | 入力はユーザー ID（メールアドレスは受け付けない）。Turnstile を求め、接続元ごとと送り先のアカウントごとに一日三回 |
+| 移行の入口 | アカウント設定から `/auth/?upgrade=1` を開き、登録と同じフォームで送る（`/auth/account?upgrade=1` は使わない）。Google への移行は認可の Cookie に aid を持たせ、callback で同じアカウントのセッションに限る |
+| 退会 | `POST /auth/account`（`action=delete`）。かんたん登録は確認の印だけで退会できる（再認証の手段が無いため）。役割は外さない（deleted なので使えない） |
+| RTT | 国内で RTT が閾値を超える verify・register は乱造検知と登録数の閾値を半分にするだけで、Turnstile の再実行はしていない |
+| エッジ防御の免除 | 投稿のデータセンター判定は「Lv2 以下」ではなく、免除（Lv3 以上かつ作成から7日以上）に当たらない投稿すべてに当てる。TLS の矛盾表は ClientHello の長さの範囲だけ |
+| 「要確認」の記録先 | AccountDirectory が未実装なので、名前が `review` の AuthRate に置いた。管理画面（M3）で読む RPC は `flagged`。AccountDirectory を作ったら移す |
+| Lv 上限の表示 | 上限は投稿時の判定（BBS_PHOEBE・回避レベル・識別子の D・エッジ防御の免除）にだけ使い、Cookie とアカウント設定の Lv は上限前の値 |
+| コミットの単位 | メールの認証と、パスワードの変更・再設定は同じコミットにした（索引・トークン・画面を共有するため） |
+
+セルフレビュー（AGENTS.md 3.5）で直したもの: 登録フォームが送信先の無い環境でもメール欄を送っていた（board-islands で検出）、メールの送信回数のテストが並行実行で順序に依存していた、退会テストの意味の無い比較。

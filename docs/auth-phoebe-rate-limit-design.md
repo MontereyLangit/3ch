@@ -4,7 +4,7 @@
 （リポジトリ外の `ninja_auth_system.md` 系。要点は §3.7 に転記）、および新 UI（`develop` に統合済みの板トップ。PR #37。
 `docs/ui/板top_書き込み欄と投稿後更新の方針.md`・`docs/islands-ssr.md`・`docs/handler-rendering.md`）をもとに、
 v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の挙動（§3.8）を設計する。
-**状態: 段Aは実装済み、段Bは部分実装、段E-1・段Cは実装済み、段Dは管理画面を除いて実装済み（2026-11-07）。** E-1はID・パスワードの登録・ログイン・ロックとGoogleでのログイン・登録まで。Googleのクライアント登録と本番での接続確認は未実施。段CはUA解析表のデータ（§5.2）と識別子の既定値の切替（§14-1）を残す。段Dは管理画面（[改修計画](admin-spa-auth-plan.md) M0〜M4）を残し、§14-4 は承認待ち。E-2は未実装。残件、設定、検証結果は [引き継ぎ](claude-handoff.md) を参照する。実装は§12の順で行い、本書を実装結果に合わせて訂正する。
+**状態: 段Aは実装済み、段Bは部分実装、段E-1・段Cは実装済み、段Dは管理画面を除いて実装済み（2026-11-07）。** E-1はID・パスワードの登録・ログイン・ロックとGoogleでのログイン・登録まで。Googleのクライアント登録と本番での接続確認は未実施。段CはUA解析表のデータ（§5.2）と識別子の既定値の切替（§14-1）を残す。段Dは管理画面（[改修計画](admin-spa-auth-plan.md) M0〜M4）を残し、§14-4 は承認待ち。E-2（メール認証・パスワードの変更と再設定・方式移行・退会・エッジ防御・乱造検知の「要確認」・Lv 上限ルール）は実装済み（2026-11-07）。メールの提供元は未定で、送信先が無い間はメール関連の機能を「準備中」にしている。残件、設定、検証結果は [引き継ぎ](claude-handoff.md) を参照する。実装は§12の順で行い、本書を実装結果に合わせて訂正する。
 2026-11-02 に Opus 5 によるセルフレビューを行い、採用した指摘を反映した（[auth-phoebe-review.md](auth-phoebe-review.md)）。
 2026-11-05、トリップと日付欄の ID の廃止・`!id`・スレ主表示（[トリップ・ID廃止とスレ主表示](トリップ・ID廃止とスレ主表示.md)。`develop` で実装済み）に合わせて改めた。
 
@@ -146,6 +146,8 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 
 免除: 認証済で**実効 Lv 3 以上かつアカウント作成から 7 日以上**。R2 が読めないときは規則なしとして通す（fail-open。認証系の計数は §3.7 と違い投稿経路に乗るため）。
 
+実装（E-2）: `edge-rules.json` は `{"mode", "datacenterAsns", "rttMs", "tls": [{"ua", "min", "max"}]}`。`tls` は UA が `ua`（正規表現）に一致するブラウザの `tlsClientHelloLength` の範囲で、外れたら矛盾とする。判定は `EdgeDefense`（bbs の domain）。投稿のデータセンター判定は「Lv 2 以下」に限らず、免除に当たらない投稿すべてに当てる。RTT の条件では乱造検知と登録数の閾値を半分にするだけで、Turnstile の再実行はしていない。
+
 ### 3.7 端末フィンガープリント（裁定メモの要点）
 
 材料・粒度・突合規則は裁定済みのため変えない。本書では v6 で実装する形に絞って書く。
@@ -155,7 +157,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 - **粒度判定**はハードウェア由来のシグナル（Apple GPU ＋タッチ ＝ iOS 実機）を先に見て、それが iOS を示さないときに限り「ヒントが届いた＝準個体」とする。`iOS` / `iPadOS` を名乗るヒントは準個体にしない。
 - **突合（`reason=declaration_mismatch`）**: R4・R5（`Sec-CH-UA-Platform` × `navigator.platform`）、R6・R7（`Sec-CH-UA-Platform` / `Sec-CH-UA-Mobile` × UA 文字列。申告 UA が空なら受信 `User-Agent` で代替）、受信 `User-Agent` × `navigator.userAgent` の trim 後完全一致。材料が空なら、その材料を使う規則だけ飛ばす（fail-open）。発火規則は Workers Logs に `console.warn` で残し、応答には出さない。
 - **論理破綻検知（`reason=fingerprint`）**: 実在しない組合せ（macOS × RTX、iPhone の画面値 × 旧 iOS 等）。iOS は既知プロファイル表（R2 `ios-profiles.json`、毎年 9 月更新）と照合する。
-- **乱造検知**: `keyIp` ごとの計数 DO `AuthRate`（§9.1。KV は原子的な加算がなく結果整合のため使わない）で verify 回数と相異なる端末ハッシュ数を数え、閾値（既定: 1 時間に 10 回、24 時間に 5 ハッシュ）超で拒否し、`deny.cgi` へ自動追記はせず管理画面の「要確認」一覧に載せる。計数 DO が応答しないときは認証系の要求を拒否する（fail-closed。投稿経路には乗らない）。
+- **乱造検知**（E-2 で「要確認」の記録を実装。AccountDirectory を作るまでは名前が `review` の AuthRate に、同じ接続元と理由を 24 時間でまとめて最大 500 件。register の一日の上限超えも載せる）: `keyIp` ごとの計数 DO `AuthRate`（§9.1。KV は原子的な加算がなく結果整合のため使わない）で verify 回数と相異なる端末ハッシュ数を数え、閾値（既定: 1 時間に 10 回、24 時間に 5 ハッシュ）超で拒否し、`deny.cgi` へ自動追記はせず管理画面の「要確認」一覧に載せる。計数 DO が応答しないときは認証系の要求を拒否する（fail-closed。投稿経路には乗らない）。
 - **`Accept-CH` は全応答に付ける**（裁定 2026-08-15。dat・subject.txt・SETTING.TXT・bbs.cgi 応答・bbsmenu・`/admin` を含む）。ブラウザが予約を保存するのはトップレベルの文書応答だけなので、効くのは板 top・read.cgi・`/auth/` などの HTML 応答で、他への付与は害も効果もない。Hono のミドルウェアで付け、`Responses.plain` の 304 経路などハンドラ側の分岐に依存しない。`Critical-CH` は付けない。
 - **`/auth/` の注意事項**は Turnstile・実行ボタンの手前に置く: 推奨環境（Safari・Chrome・Edge・Firefox 最新版）、認証できないことがある例（専ブラ内蔵ブラウザ・一部アプリ内ブラウザ・PC 版サイト表示・UA 変更拡張。いずれも断定しない）。`declaration_mismatch` のエラー文言も同じ導線を示す。
 - **用途**: 名前欄識別子の 15 桁（§5）、投稿ログの `Device:`、`deny.cgi` による端末軸の規制、連投規制の照合キー（識別子経由）。優先順位は「規制のオプトアウト阻止 ＞ 巻き込み削減」。
@@ -249,7 +251,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 5. `Account.create(profile, credential)` → `bindDevice` → 索引を `confirm`。失敗したら 3・4 の索引を `remove` して戻す。`pending` のまま 10 分過ぎた索引は次の `register` 時に掃除する（確定済みは消さない）。
 6. メールがあれば認証メール送信（下記）。`Set-Cookie`。初期 Lv は 1（メール認証完了で 3）。
 
-**実装（E-1）**: 入力規則と確認の一致は Turnstile より前に確かめる（Turnstile のトークンを無駄にしない）。メール欄は E-2 まで画面に出さず、受け取らない。
+**実装（E-1）**: 入力規則と確認の一致は Turnstile より前に確かめる（Turnstile のトークンを無駄にしない）。メール欄は E-2 で追加した（送信先が無い間は「準備中」で受け取らない）。
 確定は「`create`（資格情報付き・登録準備中）→ `login` の `confirm` → `uid` の `confirm` → `Account.activate` → `bindDevice`」の順。
 `uid` の `confirm` が拒否されたら両方の索引を `remove` し、応答だけが失われたら `uid` の `lookup` で所有者を確かめてから続ける（結果不明のまま取り消さない）。
 `activate` の前に止まったアカウントは、次のログインで正しいパスワードを確かめた後に `uid` の確定と `activate` を再開する。10 分の予約期限は変えない。
@@ -290,6 +292,15 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 **退会**（`POST /auth/account?action=delete`。パスワード再入力または Google の再認証が必要）
 
 `status=deleted`、`login` / `email` / `google` / `token` の索引を削除、キャップを失効、`gen` を進める。`uid` の索引は残す（名前欄の `(@ユーザーID)` の再利用防止）。投稿・ログは消さない。
+
+**実装（E-2）**:
+- メールの送信は `MailSender` ポート。送信先は service binding `MAIL_SENDER` だけを読み、提供元の実装（`MAIL_API_KEY`）は未選定。送信先が無い間はメール関連の画面を「準備中」、API を 503 にする。
+- メールアドレスは `EmailAddress`（googlemail.com も gmail.com として照合）。`email` 索引は登録時ではなく確認時に予約・確定する（他人のアドレスの先取りを防ぐ）。登録・変更の時点では確認済みの所有者がいれば拒否する。
+- トークンは `aid.乱数（32 バイト）` で、保存値は AUTH_SECRET の HMAC。確認リンクの GET は画面だけで、消費はボタンからの POST（メールの先読みで消費されないようにする）。送信は一アカウント一日三回。
+- 再設定の申請はユーザー ID と Turnstile。接続元ごとと送り先のアカウントごとに一日三回。消費時に Cookie は発行せず、ログインし直してもらう。
+- パスワードの変更は現在のパスワードを `verifyPassword` で照合し（失敗計数に含める）、役割のあるアカウントは16文字以上。
+- 移行の入口はアカウント設定から開く `/auth/?upgrade=1`（登録と同じフォームに `upgrade=1`）。索引はログイン用・uid の順に確定してから `Account.convert` する。Google への移行は認可の Cookie に目的と aid を持たせ、callback で同じアカウントのセッションに限る。
+- 退会の再認証は、ID/Password がパスワードの再入力、Google が認可のやり直し（同じ `sub` に限る）、クライアント ID は確認の印だけ。キャップは KV から消せたときだけ cap 索引からも外す。
 
 ### 3.10 Google OAuth 方式
 
@@ -369,6 +380,8 @@ PHOEBE.md の「L0〜L1 → 23h、L1〜L2 → 23×(Lv+1)h」は未ログイン�
 - **自動降格はしない**。規制対象となった投稿の扱いは管理者の手動操作（凍結・Lv 固定）に任せる。
 
 実装（段 C）: 固定は `AccountState.setLevelOverride` と `Account.setLevel(lvOverride?, now)`（0〜10、未指定で解除）。固定中も `lvPosts` は数える。操作画面は段 D、上限ルール `phoebe.cgi` は §12 のとおり E-2。
+
+実装（E-2）: 上限ルールは `PhoebeCapRules`（2 列。空行と `#` の行は飛ばす。上限は 0〜10）。認証を有効にした環境のログイン中の投稿だけが対象で、旧キャップは対象外。当てはまる行の上限のうち最も低いものを実効 Lv にし、BBS_PHOEBE・回避レベル・識別子の D・エッジ防御の免除に使う。Cookie とアカウント設定の Lv は上限前の値。ファイルが無い・読めない・壊れているときは上限なしで通す。管理画面の編集は M3。
 
 ### 4.4 `BBS_PHOEBE` ゲート
 
@@ -835,7 +848,7 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | C | PHOEBE: Lv 昇格・`BBS_PHOEBE`・`!バルサン` / `!SETTING:BBS_PHOEBE:n`・識別子 `phoebe` 書式・連投規制への `aid` 追加。**実装済み（2026-11-07）**。UA 解析表のデータは利用者の用意待ち、識別子の既定値は `checked` のまま（§14-1）。`aid` は段 B で連携済み | `PhoebeSuite`（T(lv)/N(lv) 境界・上限・固定）、`IdentifierSuite`（軸ごとの値・欠損 `000`・`D` の `*`）、`PhoebeCommandSuite`、`UserAgentTableSuite`・`UserAgentTableRepositorySuite`（表の書式。v3 表の golden は表が無いため未作成）、`PostingServiceSuite`・`ThreadSuite`・`AccountInfrastructureSuite` |
 | D | 権限・回避レベル・管理画面の認証機能画面（§6・§7・§11、改修計画 段 M3）、スレ立て規制の `BBS_THREAD_PASS` 化。**管理画面を除いて実装済み（2026-11-07）**。管理画面は改修計画 M0〜M4 | `BypassLevelSuite`、`ModerationRuleSetSuite`・`ModerationServiceSuite`・`PostingModerationSuite`（5 列目）、`AccountRolesSuite`（common・bbs）、`AccountCapSuite`、`AuthCapSuite`、`PostingServiceSuite`、`AdminHandlerSuite`、board-islands、実 workerd |
 | E-1 | ID/Password の登録・ログイン・ロック、Google ログイン（§3.9・§3.10 の基本部分）。管理画面のアカウント認証（改修計画 段 M2）の前提なので段 B の直後に行う。**実装済み（2026-11-07）**。方式移行・パスワード変更と再設定の HTTP・メール欄は E-2 | `PasswordSuite`・`LoginThrottleSuite`・`PasswordLoginSuite`・`GoogleIdTokenSuite`・`OAuthStateSuite`、`AccountPasswordSuite`（直列化・ロック・dummy）、`AccountRegistrationSuite`（確定順・応答喪失・再開）、`AuthHandlerSuite`・`GoogleHandlerSuite`・`GoogleIdTokensSuite`、board-islands、実 workerd |
-| E-2 | メール認証・パスワード再設定・方式移行・退会・エッジ防御・乱造検知・Lv 上限ルール | `AccountSuite`（移行）、`EdgeDefenseSuite`、実 workerd |
+| E-2 | メール認証・パスワード再設定・方式移行・退会・エッジ防御・乱造検知・Lv 上限ルール。**実装済み（2026-11-07）**。メールの提供元の選定と、要確認・規則の管理画面（M3）は残す | `EmailAddressSuite`・`AbuseReviewSuite`・`AccountStateSuite`（メール認証・再設定・移行・退会）、`AccountMailHandlerSuite`・`AccountUpgradeSuite`・`AccountWithdrawSuite`・`AuthEdgeSuite`・`EdgeDefenseSuite`・`PhoebeCapRulesSuite`・`PostingServiceSuite`、実 workerd（差し替えた送信先で登録→メール認証→Lv3、再設定、退会、移行） |
 
 段 C の識別子既定値の切替は、不変条件 3.4 に触れるため `docs/既知不具合台帳.md` に影響を書き、承認後に独立コミットで行う。
 
@@ -854,8 +867,8 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | 9 | `BBS_SAMBA24` の既定値（既存の SETTING.TXT にはキーが無く、KB-12 により既定値がそのまま効く） | `10` 秒 |
 | 10 | 吸い込まれた投稿を連投履歴に数えるか | 数える |
 | 11 | エッジ防御の免除（認証済 Lv3 以上）と RTT 閾値 | 免除あり、400ms |
-| 12 | メール送信手段（外部 API の選定）と Google OAuth のクライアント登録 | 未定。段 E まで不要 |
-| 13 | 乱造検知の閾値と、検知時に自動 BAN せず「要確認」に載せること | 1 時間 10 回・24 時間 5 ハッシュ、自動 BAN なし |
+| 12 | メール送信手段（外部 API の選定）と Google OAuth のクライアント登録 | 未定。E-2 は送信ポートと service binding `MAIL_SENDER` までで、提供元を選ぶまでメール関連の機能は「準備中」 |
+| 13 | 乱造検知の閾値と、検知時に自動 BAN せず「要確認」に載せること | 1 時間 10 回・24 時間 5 ハッシュ、自動 BAN なし。E-2 で実装（記録先は当面 AuthRate の `review`） |
 | 14 | 権限者向け画面の置き場所と管理画面の認証 | `/admin/*` に統合し、Basic 認証をアカウント認証に置き換える（2026-11-02 利用者指示。改修計画 §10 に関連事項） |
 | 15 | 識別子の文字集合（現行の Base64 文字のまま `+` `/` を含む） | 現行どおり |
 | 16 | 新 UI で未ログインでも投稿欄を描画し、送信時にモーダルで認証する（欄自体を隠す案との比較） | 描画する。下書きを書いてから認証できる方が離脱が少ない |
