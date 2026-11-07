@@ -4,6 +4,9 @@ export { Thread, Board, Account, AccountIndex, AuthRate } from '../../dist/index
 
 const namespaces = new Set(['THREAD_DO', 'BOARD_DO', 'ACCOUNT_DO', 'ACCOUNT_INDEX_DO', 'AUTH_RATE_DO']);
 const externalCalls = [];
+// /__test/mail/ 以下の要求にだけ、送ったメールを記録する送信先を渡す（メールの提供元は呼ばない）。
+const outbox = [];
+const mailSender = { async send(message) { outbox.push({ to: message.to, subject: message.subject, text: message.text }); } };
 
 // 外部サービスの応答だけを固定する。本番コードにテスト用の認証経路は作らない。
 globalThis.fetch = async (input, init) => {
@@ -52,6 +55,11 @@ export default {
       }
     }
     if (url.pathname === '/__test/external-calls') return Response.json(externalCalls);
+    if (url.pathname === '/__test/outbox') return Response.json(outbox);
+    if (url.pathname.startsWith('/__test/mail/')) {
+      url.pathname = url.pathname.replace('/__test/mail', '');
+      return application.fetch(new Request(url, request), { ...env, MAIL_SENDER: mailSender }, context);
+    }
     if (url.pathname.startsWith('/__test/no-secret/')) {
       url.pathname = url.pathname.replace('/__test/no-secret', '');
       return application.fetch(new Request(url, request), { ...env, AUTH_SECRET: '' }, context);

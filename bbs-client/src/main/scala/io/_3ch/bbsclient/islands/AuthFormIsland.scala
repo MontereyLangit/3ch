@@ -145,7 +145,8 @@ object AuthFormIsland {
           else choice match {
             case AuthMethod.Client => post("/auth/verify", Seq("agreement" -> AuthClient.text(raw, "agreementVersion")))
             case AuthMethod.Password => post("/auth/register", Seq("agreement" -> AuthClient.text(raw, "agreementVersion"), "id" -> userId.value,
-              "password" -> password.value, "password2" -> confirmation.value, "email" -> email.value.trim) ++ (if upgrade then Seq("upgrade" -> "1") else Nil))
+              "password" -> password.value, "password2" -> confirmation.value) ++
+              (if mail && email.value.trim.nonEmpty then Seq("email" -> email.value.trim) else Nil) ++ (if upgrade then Seq("upgrade" -> "1") else Nil))
             case AuthMethod.Google => startGoogle(raw, userId.value, agreed = true)
           }
         }
