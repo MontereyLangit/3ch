@@ -1,7 +1,7 @@
 # 管理画面 改修計画（アカウント認証・新 UI・scalajs-react SPA）
 
 2026-11-02。認証・登録機能（[認証・PHOEBE・連投規制 設計](auth-phoebe-rate-limit-design.md)、以下「設計書」）の実装に合わせて、
-`/admin/*` を次の 3 点で作り直す計画。**状態: 段 M0（API 化）は完了（2026-11-07）。M1 は利用者の承認待ち（§10-9）。** M0 の実装範囲と計画との差分は [レビュー記録](admin-spa-auth-review.md) の「段 M0 の実装記録」。
+`/admin/*` を次の 3 点で作り直す計画。**状態: 段 M0（API 化）は完了（2026-11-07）。M1 の前提だった Origin 検証の復活と CSP の変更は承認済み（2026-11-07 利用者。§10-9）。** M0 の実装範囲と計画との差分は [レビュー記録](admin-spa-auth-review.md) の「段 M0 の実装記録」。
 
 1. **認証**: HTTP Basic 認証をやめ、原案の管理者アカウント（ID/Password 方式または Google 連携）によるログインにする。
 2. **UI**: 利用者提示のモック（旧 delightly の板設定画面 `kanri.html` と `a.css`）の構成を採り、見た目は現行の板トップに揃える（2026-11-05 利用者指示）。モックは `docs/ui/admin-*.html`。
@@ -18,7 +18,7 @@
 | 公開側 | dat・subject.txt・bbs.cgi・`3chiko.html`・Shift_JIS 応答は変えない |
 | 保存先 | R2 の `{bbs}/SETTING.TXT`・`{bbs}/head.txt`・`deny.cgi`・`ngwords.cgi`・`bbsmenu.html`、Thread / Board DO の既存 RPC をそのまま使う。形式は変えない。新規は設計書 §9 の DO と本書の監査ログだけ |
 | 管理操作の意味 | 現行のスレ停止・再開・削除・移動・レス編集・レス削除・規制ルール検証・スレ立て規制フォームの ETag 条件付き保存は、挙動を変えずに API 化する（`docs/admin.md` の記述が引き続き正） |
-| 防御 | AGENTS.md 3.6（Basic 認証＋Origin 検証＋no-store＋CSP）は、Basic 認証を「再認証付きの管理者セッション」に置き換える。**Origin 検証は復活させる**（Cookie 認証では必須。現行は 2026-10-05 の利用者確認で意図的に外しており、外した理由は記録に無い）。no-store と CSP は維持し、CSP は SPA 用に改める（§5.4）。**Origin 検証の復活と CSP の変更（`script-src 'self'`）は段 M1 で行うので、M1 の前に利用者の承認を得る**（§10-9）。3.6 の文言更新は段 M2 で行う |
+| 防御 | AGENTS.md 3.6（Basic 認証＋Origin 検証＋no-store＋CSP）は、Basic 認証を「再認証付きの管理者セッション」に置き換える。**Origin 検証は復活させる**（Cookie 認証では必須。現行は 2026-10-05 の利用者確認で意図的に外しており、外した理由は記録に無い）。no-store と CSP は維持し、CSP は SPA 用に改める（§5.4）。Origin 検証の復活と CSP の変更（`script-src 'self'`）は段 M1 で行う（**承認済み（2026-11-07 利用者）**。§10-9）。3.6 の文言更新は段 M2 で行う |
 | 起点 | 現在の `develop`（板トップ統合後。`AdminHandler` にはスレ立て規制フォームがある）。DDD 化計画（`docs/bbs-cgi-ddd-refactoring-plan.md`）の段 0b と並行してよい |
 
 ## 1. 現状
@@ -209,7 +209,7 @@ HTML の `style` 属性は CSP（`style-src 'self'`）で弾かれ、`bgcolor` �
 
 **保存の手順**: 読込時に `SETTING.TXT` と `head.txt` の両方の ETag を返し、保存では両方を ETag 条件付きで書く。先に `SETTING.TXT`、次に `head.txt` の順で書き、`SETTING.TXT` が競合したら何も書かずに 409 を返す。`head.txt` だけが競合したら部分成功（`SETTING.TXT` は保存済み）として返し、元に戻す処理はしない（間に保存された他人の `head.txt` を消さないため）。未作成のファイルは「存在しない場合だけ作る」条件（R2 の `etagDoesNotMatch: "*"`）で書く。ローカルの wrangler（workerd）で効くことを段 M0 で確かめた。本番の R2 では未確認。
 検証はサーバ側（`bbs` の `domain/admin/BoardSettingsCheck`）で行い、スレ立て規制は `ThreadCreationSettings`、ほかは項目の種類（数値・候補・チェック）と `BBS_FR_LEVEL`・`BBS_PHOEBE` の値の範囲を見る。`common` の `BoardSettingsForm` は項目の定義と `SETTING.TXT` との相互変換だけを持ち、検証を持たない（`ThreadCreationSettings` は `bbs` の型に依存するため）。`KEY=VALUE` の値に改行を入れさせない。
-現行の直接保存（`head.txt` と `SETTING.TXT` を無条件で書く）から条件付き保存への変更は、挙動の変更として段 M0 の独立コミットにした。HTML の画面はフォームに読込時の ETag を持たせ、ETag の項目が無い送信（従来の画面・手書きの要求）は条件なしで保存する。保存の順も SETTING.TXT、head.txt に揃えた。
+現行の直接保存（`head.txt` と `SETTING.TXT` を無条件で書く）から条件付き保存への変更は、挙動の変更として段 M0 の独立コミットにした。HTML の画面はフォームに読込時の ETag を持たせ、ETag の項目が無い送信（従来の画面・手書きの要求）は条件なしで保存する（この扱いは**承認済み（2026-11-07 利用者）**）。保存の順も SETTING.TXT、head.txt に揃えた。
 
 **保存時の行順**（M0 で決めた規則）: 保存時に読んだ SETTING.TXT（無ければ既定の内容）を下敷きにし、フォームの項目はキーの最初の行の位置に、「その他」の行は元の「その他」の行の位置に順に入れる。余った行と元に無い項目は末尾に足し、重複した項目の行と空行は書かない。変更しなければ元の内容と同じになる。
 
@@ -315,7 +315,7 @@ bbs/src/main/scala/io/_3ch/bbs/
 | 段 | 内容 | 前提 | 完了条件 |
 | --- | --- | --- | --- |
 | M0（完了） | **API 化**: `AdminService`・`AdminApi`・`AdminDto` / `AdminCodec`・`BoardSettingsForm`・`ResEditText` を作り、`/admin/api/*` を Basic 認証のまま追加する。既存の HTML 画面はそのまま残し、内部で `AdminService` を共用する。板設定・`head.txt`・`bbsmenu.html`・規制ルールの ETag 条件付き保存への変更は独立コミット | — | 既存の `AdminHandlerSuite`・統合テストが、条件付き保存の変更分を除いて通る。`AdminApiSuite` で全 API の正常系・検証エラー・ETag 競合・CR/LF 拒否・入力上限・未設定と明示値の往復を確認 |
-| M1 | **SPA 化**: `adminClient`・`admin-web`・`vite.admin.config.ts`、配信（`run_worker_first`・`AdminAssets`）、モックの見た目。全画面が現行と同じ操作をできたら、旧 HTML の描画（`AdminText` の画面部分）を削除する。認証は Basic 認証のまま、API に §3.5 の Origin 等の検査を加える。**着手前に Origin 検証の復活と CSP の変更について利用者の承認を得る**（§10-9） | M0、利用者の承認 | 現行の全操作を SPA から実行できることを実 workerd で確認（§8）。CSP 違反が出ない。`dist/admin/` が `/admin` 以外から取れない。`AdminHandlerSuite` の「Origin・Fetch Metadata によらず受け付ける」と `tests/admin.integration.test.js` の同趣旨の確認を、他オリジンからの変更を拒否する期待値に書き換える |
+| M1 | **SPA 化**: `adminClient`・`admin-web`・`vite.admin.config.ts`、配信（`run_worker_first`・`AdminAssets`）、モックの見た目。全画面が現行と同じ操作をできたら、旧 HTML の描画（`AdminText` の画面部分）を削除する。認証は Basic 認証のまま、API に §3.5 の Origin 等の検査を加える。Origin 検証の復活と CSP の変更は承認済み（2026-11-07 利用者。§10-9） | M0、利用者の承認（済み） | 現行の全操作を SPA から実行できることを実 workerd で確認（§8）。CSP 違反が出ない。`dist/admin/` が `/admin` 以外から取れない。`AdminHandlerSuite` の「Origin・Fetch Metadata によらず受け付ける」と `tests/admin.integration.test.js` の同趣旨の確認を、他オリジンからの変更を拒否する期待値に書き換える |
 | M2 | **アカウント認証へ切替**: 管理者セッション・再認証・役割検査・bootstrap・監査ログ・**最小限の役割付与 API と画面**（`PUT /admin/api/accounts/:uid/roles`。Basic 認証で作業していた人に役割を配れるようにするため）。Basic 認証・`ADMIN_PASSWORD`・`ADMIN_USER` を削除。AGENTS.md 1.6・3.6、`docs/admin.md`（ログイン・bootstrap・役割・開発時の手順）を更新 | 設計書の段 B（`Account` / `AccountIndex` DO・セッション）と、段 E-1（ID/Password ログインと Google ログイン） | 役割ごとの許可・拒否の表を全 API について `AdminAuthSuite` で確認。Basic 認証の資格情報では入れない。bootstrap の条件（0 件・非常用期限・同時実行で 1 人だけ）、`adminGen` による失効、パスワード規則の検査時点、Google 再認証の `aid` 照合を確認。`auth_time` の実機確認の結果を本書に反映 |
 | M3 | **認証機能の管理画面**: ユーザー一覧・ユーザー詳細（`AccountDirectory` を含む）・キャップ・PHOEBE / エッジ防御・連投規制とスレ立て規制の各項目（§4.3 の「設計書 段 A / C / D 以降」） | 設計書の各段 | 各画面の API テスト。§4.3 の表示条件が各段の完了と一致する |
 | M4 | **任意**: 管理者の TOTP、エラーログ閲覧（§10-3・§10-6） | — | — |
@@ -349,11 +349,11 @@ M0 と M1 は認証基盤を待たずに進められる。M2 は設計書の認�
 | 2 | 権限者用の別画面（`/mod`）を作らず `/admin` に統合すること。役割は全板共通（板ごとの管理者は作らない） | 統合する。全板共通。板ごとの委任が要るなら `roles` に板の範囲を持たせる拡張を別途検討 |
 | 3 | 管理者の二要素認証 | M2 では入れない（役割ありの ID/Password は 16 文字以上を必須）。M4 で TOTP を検討。§10-10 の結果によっては Google の管理者に先に必要 |
 | 4 | JSON の読み書き | **M0 で決定**: ライブラリは足さず、`common` に依存の無い小さな JSON の値と読み書き（`Json`）と手書きの codec（`AdminCodec`）を置いた。JVM / JS で同じコードが動き、両方でテストする。依存の追加（Maven の取得・バンドルの増加・Scala.js 版の追従）を避けるため |
-| 5 | `deny.cgi`・`ngwords.cgi` の保存を ETag 条件付きにすること（現行は無条件。複数の管理者が同時に編集すると後勝ちで消える） | M0 で板設定・`head.txt`・`bbsmenu.html` と合わせて条件付きにした（独立コミット）。HTML の画面で ETag の項目が無い送信は条件なし |
+| 5 | `deny.cgi`・`ngwords.cgi` の保存を ETag 条件付きにすること（現行は無条件。複数の管理者が同時に編集すると後勝ちで消える） | M0 で板設定・`head.txt`・`bbsmenu.html` と合わせて条件付きにした（独立コミット）。HTML の画面で ETag の項目が無い送信は条件なし（**決定（2026-11-07 利用者）**: その扱いでよい） |
 | 6 | モックの「直近のエラーログを閲覧」 | M2 までは作らない。Workers Logs の検索をボタンから開く案と、投稿エラーを DO に記録する案を M4 で比較 |
 | 7 | 初回の管理者を `ADMIN_BOOTSTRAP_TOKEN` で作り、`ADMIN_PASSWORD` を廃止すること。非常用経路を `ADMIN_BREAK_GLASS` の再デプロイに限ること | そのとおり |
 | 8 | 管理者セッションの無操作 30 分・最長 8 時間、再認証の猶予 10 分 | 仮置き |
-| 9 | **M1 の前に承認が要る**: Origin 検証の復活と CSP の変更（`script-src 'self'`）。2026-10-05 に Origin 検証を外した理由（記録に無い）が、Cookie 認証化後も当てはまるか | 当てはまらないと判断し、M1 から Origin 検証を入れる |
+| 9 | Origin 検証の復活と CSP の変更（`script-src 'self'`）。2026-10-05 に Origin 検証を外した理由（記録に無い）が、Cookie 認証化後も当てはまるか | **決定（2026-11-07 利用者）**: 当てはまらないと判断し、M1 から Origin 検証を入れ、CSP を `script-src 'self'` にする |
 | 10 | Google の `max_age=0` に対して `auth_time` が返らない場合の扱い | Google の管理者は TOTP の登録を必須にする |
 | 11 | 管理画面を別ホスト（`admin.` サブドメイン）に置いて、公開ページの XSS から切り離すか | 当面は同一ホスト。リスクとして記載（§3.5） |
 | 12 | モックからの変更（上部バー、960px 未満の 1 列化、モックに無い画面の共通レイアウト） | §4.2 のとおり |
