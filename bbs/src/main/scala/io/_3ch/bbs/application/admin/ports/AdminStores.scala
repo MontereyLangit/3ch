@@ -6,7 +6,6 @@ import scala.concurrent.Future
 
 /** R2 へ書くときの条件 */
 enum WriteCondition {
-  case Always
   /** ETag が一致するときだけ */
   case Matches(etag: String)
   /** ファイルが無いときだけ */

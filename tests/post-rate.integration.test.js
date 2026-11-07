@@ -27,13 +27,17 @@ test('Wrangler: BBS_FR_LEVEL の無い板は規制モードで、Samba24 が返�
     headers: {'user-agent': 'IntegrationBrowser/1.0', referer: 'http://127.0.0.1:8787/', 'CF-Connecting-IP': '192.0.2.10'},
     body: new URLSearchParams({bbs: 'rentou', key, MESSAGE: message, FROM: '', mail: '', subject, time: '1', submit: '書き込む'})
   });
-  const saved = await fetch(origin + '/admin/board?bbs=rentou', {
-    method: 'POST',
-    headers: {authorization, origin},
-    body: new URLSearchParams({action: 'save', head: '', settings: 'BBS_TITLE=rentou\nBBS_SAMBA24=60'}),
-    redirect: 'manual'
+  const view = await (await fetch(origin + '/admin/api/boards/rentou/settings/', {headers: {authorization}})).json();
+  const saved = await fetch(origin + '/admin/api/boards/rentou/settings', {
+    method: 'PUT',
+    headers: {authorization, origin, 'x-ch3s-admin': '1', 'content-type': 'application/json'},
+    body: JSON.stringify({
+      fields: {...view.fields, BBS_TITLE: {value: 'rentou', explicit: true}, BBS_SAMBA24: {value: '60', explicit: true}},
+      extra: view.extra, head: '', settingsEtag: view.settingsEtag, headEtag: view.headEtag
+    })
   });
-  assert.equal(saved.status, 303);
+  assert.equal(saved.status, 200);
+  assert.doesNotMatch(new TextDecoder('shift_jis').decode(await (await fetch(origin + '/rentou/SETTING.TXT')).arrayBuffer()), /BBS_FR_LEVEL/);
 
   const created = await post('', 'first message', 'rate title');
   assert.match(await created.text(), /書きこみました/);

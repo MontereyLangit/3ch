@@ -28,12 +28,27 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   assert.match(await rootResponse.text(), /<!doctype html>/i);
   const authorization = 'Basic ' + Buffer.from('admin:local-integration-password').toString('base64');
   const get = path => fetch(origin + path, {headers: {authorization}});
-  const save = (path, data, extra = {}) => fetch(origin + path, {
-    method: 'POST',
-    headers: {authorization, origin, ...extra},
-    body: new URLSearchParams(data),
-    redirect: 'manual'
+  // 管理画面（SPA）からの変更と同じヘッダ。headers で Origin などを上書きできる
+  const api = (path, method = 'GET', body, headers = {}) => fetch(origin + '/admin/api' + path, {
+    method,
+    headers: {
+      authorization,
+      ...(body === undefined ? {} : {'content-type': 'application/json', origin, 'x-ch3s-admin': '1'}),
+      ...headers
+    },
+    body: body === undefined ? undefined : JSON.stringify(body)
   });
+  const json = async (path) => (await api(path)).json();
+  // 板設定の画面と同じく、読み込んだ値に fields を重ねて保存する
+  const saveSettings = async (bbs, fields, head) => {
+    const view = await json(`/boards/${bbs}/settings/`);
+    const explicit = Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, {value, explicit: true}]));
+    return api(`/boards/${bbs}/settings`, 'PUT', {
+      fields: {...view.fields, ...explicit}, extra: view.extra, head: head ?? view.head, settingsEtag: view.settingsEtag, headEtag: view.headEtag
+    });
+  };
+  const saveFile = async (path, text) => api(path, 'PUT', {text, etag: (await json(path + '/')).etag});
+  const action = (bbs, key, body) => api(`/boards/${bbs}/threads/${key}/actions`, 'POST', body);
   const postResponse = (bbs, key = '', message = 'hello', subject = '') => fetch(origin + '/test/bbs.cgi', {
     method: 'POST',
     headers: {
@@ -65,21 +80,57 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   for (const path of ['/auth.js', '/missing.dat', '/missing.txt', '/test/bbs.cgi']) {
     assert.notEqual((await fetch(origin + path, {redirect: 'manual'})).status, 301);
   }
-  assert.equal((await fetch(origin + '/admin/')).status, 401);
-  assert.equal((await get('/admin/')).status, 200);
-  assert.equal((await save('/admin/menu', {html: 'cross-origin menu'}, {origin: 'https://other.example'})).status, 303);
-  assert.equal(await publicText('/bbsmenu.html'), 'cross-origin menu');
-  assert.equal((await get('/admin/board?bbs=../private')).status, 400);
-  for (const bbs of ['sandbox', 'destination']) assert.equal((await save(`/admin/board?bbs=${bbs}`, {
-    action: 'save',
-    head: '<b>rules</b>',
+  // 管理画面の SPA: 起動ページと資産は Basic 認証の後にだけ返す（run_worker_first）
+  for (const path of ['/admin/', '/admin/index.html', '/admin/boards/sandbox/', '/admin/api/boards/']) {
+    assert.equal((await fetch(origin + path)).status, 401, path);
+  }
+  const shell = await get('/admin/');
+  assert.equal(shell.status, 200);
+  assert.equal(shell.headers.get('cache-control'), 'no-store');
+  assert.equal(shell.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(shell.headers.get('referrer-policy'), 'no-referrer');
+  const csp = shell.headers.get('content-security-policy');
+  assert.match(csp, /default-src 'none'; script-src 'self'; style-src 'self';/);
+  assert.match(csp, /frame-ancestors 'none'/);
+  const shellHtml = await shell.text();
+  assert.match(shellHtml, /<div id="admin-root"><\/div>/);
+  assert.doesNotMatch(shellHtml, /<script(?![^>]*\ssrc=)[^>]*>|<style|\sstyle=/, 'CSP に触れるインラインのスクリプト・スタイルを持たない');
+  const scripts = [...shellHtml.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m => m[1]);
+  const styles = [...shellHtml.matchAll(/<link[^>]+href="([^"]+\.css)"/g)].map(m => m[1]);
+  assert.equal(scripts.length, 1);
+  assert.equal(styles.length, 1);
+  for (const asset of [...scripts, ...styles]) {
+    assert.match(asset, /^\/admin\/assets\//);
+    assert.equal((await fetch(origin + asset)).status, 401, `${asset} は認証なしで取れない`);
+    const response = await get(asset);
+    assert.equal(response.status, 200, asset);
+    assert.equal(response.headers.get('cache-control'), 'private, max-age=31536000, immutable');
+    assert.match(response.headers.get('content-type'), asset.endsWith('.js') ? /javascript/ : /text\/css/);
+  }
+  assert.equal(await (await get('/admin/boards/sandbox/threads/1800000000/')).text(), shellHtml, '画面の URL はどれも同じ起動ページ');
+  // dist/admin/ は /admin 以外の書き方では取れない
+  for (const path of ['/%61dmin/index.html', '/ADMIN/index.html', '//admin/index.html', '/static/../admin/index.html', '/admin%2Findex.html',
+    '/%2Fadmin/index.html', '/admin/./index.html', '/.%2Fadmin/index.html', scripts[0].replace('/admin/', '/%61dmin/')]) {
+    const response = await fetch(origin + path, {redirect: 'manual'});
+    const body = await response.text();
+    assert.ok(!body.includes('admin-root') && !(response.status === 200 && path.endsWith('.js')), `${path} -> ${response.status}`);
+  }
+  // 他オリジン・独自ヘッダの無い変更は受け付けない
+  const crossOrigin = await api('/menu', 'PUT', {text: 'cross-origin menu', etag: null}, {origin: 'https://other.example'});
+  assert.equal(crossOrigin.status, 403);
+  assert.equal((await crossOrigin.json()).code, 'admin:origin');
+  assert.equal((await api('/menu', 'PUT', {text: 'no marker', etag: null}, {'x-ch3s-admin': ''})).status, 403);
+  assert.equal((await fetch(origin + '/bbsmenu.html')).status, 404, '拒否した変更は保存しない');
+  assert.equal((await api('/boards/..%2Fprivate/settings/')).status, 400);
+  for (const bbs of ['sandbox', 'destination']) {
     // 同じ IP から続けて投稿するので連投規制を外す
-    settings: `BBS_TITLE=${bbs}\nBBS_NONAME_NAME=名無し\nBBS_FR_LEVEL=off`
-  })).status, 303);
+    const saved = await saveSettings(bbs, {BBS_TITLE: bbs, BBS_NONAME_NAME: '名無し', BBS_FR_LEVEL: 'off'}, '<b>rules</b>');
+    assert.equal(saved.status, 200, bbs);
+  }
   assert.match(await publicText('/sandbox/head.txt'), /<b>rules<\/b>/);
   assert.match(await publicText('/sandbox/SETTING.TXT'), /BBS_TITLE=sandbox/);
   const legacyMenu = '<HTML><BODY><!-- menu -->板一覧 &amp; custom menu</BODY></HTML>';
-  assert.equal((await save('/admin/menu/', {html: legacyMenu})).status, 303);
+  assert.equal((await saveFile('/menu', legacyMenu)).status, 200);
   const menuResponse = await fetch(origin + '/bbsmenu.html');
   assert.equal(menuResponse.headers.get('content-type'), 'text/html;charset=Shift_JIS');
   assert.equal(new TextDecoder('shift_jis').decode(await menuResponse.arrayBuffer()), legacyMenu);
@@ -102,8 +153,8 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   const stylesheetResponse = await fetch(origin + stylesheet[1]);
   assert.equal(stylesheetResponse.status, 200);
   assert.match(stylesheetResponse.headers.get('content-type'), /text\/css/);
-  assert.equal((await save('/admin/access', {rules: '[<><><>deny'})).status, 400);
-  assert.equal((await save('/admin/access', {rules: '^sandbox$<><><>deny'})).status, 303);
+  assert.equal((await saveFile('/rules/access', '[<><><>deny')).status, 400);
+  assert.equal((await saveFile('/rules/access', '^sandbox$<><><>deny')).status, 200);
   const rejectedPost = await postResponse('sandbox', '', 'hello', 'blocked');
   assert.equal(rejectedPost.status, 200);
   assert.equal(rejectedPost.headers.get('content-type'), 'text/html;charset=UTF-8');
@@ -127,10 +178,10 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   assert.match(monazillaHtml, /<!-- 2ch_X:error -->/);
   assert.match(monazillaHtml, /アクセス規制/);
   assert.equal(await publicText('/sandbox/subject.txt'), '');
-  await save('/admin/access', {rules: ''});
-  await save('/admin/ngwords', {rules: '<><>forbidden<>deny'});
+  assert.equal((await saveFile('/rules/access', '')).status, 200);
+  assert.equal((await saveFile('/rules/ngwords', '<><>forbidden<>deny')).status, 200);
   assert.match(await post('sandbox', '', 'hello', 'forbidden title'), /NGワード/);
-  await save('/admin/ngwords', {rules: ''});
+  assert.equal((await saveFile('/rules/ngwords', '')).status, 200);
   assert.match(await post('sandbox', '', 'original message', 'thread title'), /書きこみました/);
   const subject = await publicText('/sandbox/subject.txt');
   const key = subject.match(/^(\d{10})\.dat/)[1];
@@ -144,16 +195,17 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   const feedResponse = await fetch(origin + '/sandbox/?type=feed');
   assert.equal(feedResponse.status, 200);
   assert.match(await feedResponse.text(), /Coming Soon…/);
-  const path = `/admin/thread?bbs=sandbox&key=${key}`;
   const creationSettings = {
-    action: 'saveCreationLimit', BBS_THREAD_TATESUGI: '3', BBS_THREAD_TATESUGI_RESET: '180000',
+    BBS_THREAD_TATESUGI: '3', BBS_THREAD_TATESUGI_RESET: '180000',
     BBS_THREAD_JUNBAN: '1', BBS_THREAD_JUNBAN_RESET: '180000', BBS_THREAD_JUNBAN_AS_ONLY: 'AS2516, 4713',
   };
-  assert.match(await (await get('/admin/board?bbs=sandbox')).text(), /saveCreationLimit/);
-  assert.equal((await save('/admin/board?bbs=sandbox', creationSettings)).status, 303);
-  assert.equal((await save('/admin/board?bbs=sandbox', { ...creationSettings, BBS_THREAD_JUNBAN_AS_ONLY: 'invalid' })).status, 400);
+  assert.equal((await saveSettings('sandbox', creationSettings)).status, 200);
+  const invalidCreation = await saveSettings('sandbox', { ...creationSettings, BBS_THREAD_JUNBAN_AS_ONLY: 'invalid' });
+  assert.equal(invalidCreation.status, 400);
+  assert.ok((await invalidCreation.json()).fields['fields.BBS_THREAD_JUNBAN_AS_ONLY']);
   const savedCreationSettings = await publicText('/sandbox/SETTING.TXT');
-  assert.equal((await save('/admin/board?bbs=sandbox', { ...creationSettings, BBS_THREAD_JUNBAN_AS_ONLY: '2516\nBBS_TITLE=injected' })).status, 400);
+  assert.match(savedCreationSettings, /BBS_THREAD_JUNBAN_AS_ONLY=AS2516, 4713/);
+  assert.equal((await saveSettings('sandbox', { ...creationSettings, BBS_THREAD_JUNBAN_AS_ONLY: '2516\nBBS_TITLE=injected' })).status, 400);
   assert.equal(await publicText('/sandbox/SETTING.TXT'), savedCreationSettings);
   assert.match(await publicText('/sandbox/SETTING.TXT'), /BBS_TITLE=sandbox/);
   await new Promise(resolve => setTimeout(resolve, 1100));
@@ -166,18 +218,18 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   assert.doesNotMatch(rateLimitedHtml, /運用情報板|ログファイルに書けませんでした/);
   assert.equal(await publicText('/sandbox/subject.txt'), subject);
   assert.match(await post('sandbox', key, 'second message'), /書きこみました/);
-  assert.equal((await save(path, {action: 'stop'})).status, 303);
+  assert.equal((await action('sandbox', key, {action: 'stop'})).status, 200);
   assert.match(await post('sandbox', key), /停止/);
   assert.match(await publicText('/sandbox/subject.txt'), /\(2\)/);
-  await save(path, {action: 'resume'});
+  assert.equal((await action('sandbox', key, {action: 'resume'})).status, 200);
   assert.match(await post('sandbox', key, 'third message'), /書きこみました/);
-  assert.equal((await save(path, {
+  assert.equal((await action('sandbox', key, {
     action: 'editRes',
-    number: '2',
+    number: 2,
     name: '<script>',
     mail: '',
     message: 'edited message'
-  })).status, 303);
+  })).status, 200);
   assert.match(await publicText(`/sandbox/dat/${key}.dat`), /&lt;script&gt;.*edited message/);
   const editedResponse = await fetch(origin + `/sandbox/dat/${key}.dat`, {
     headers: {
@@ -186,46 +238,35 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
     }
   });
   assert.equal(editedResponse.status, 200, '編集後は古い差分キャッシュを使わず全文を返す');
-  assert.equal((await save(path, {action: 'deleteRes', number: '1'})).status, 303);
+  assert.equal((await action('sandbox', key, {action: 'deleteRes', number: 1})).status, 200);
   assert.match(await publicText(`/sandbox/dat/${key}.dat`), /^あぼーん<>あぼーん<>あぼーん<>あぼーん<>thread title/);
-  assert.equal((await save(path, {action: 'deleteRes', number: '999'})).status, 400);
-  assert.equal((await save(path, {action: 'move', targetBoard: 'destination', targetKey: '1800000001'})).status, 303);
+  assert.equal((await action('sandbox', key, {action: 'deleteRes', number: 999})).status, 409);
+  assert.equal((await action('sandbox', key, {action: 'move', targetBoard: 'destination', targetKey: '1800000001'})).status, 200);
   assert.equal((await fetch(origin + `/sandbox/dat/${key}.dat`)).status, 404);
   assert.equal(await publicText('/sandbox/subject.txt'), '');
   assert.match(await publicText('/destination/subject.txt'), /1800000001.dat<>thread title.* \(3\)/);
   const archive = await (await fetch(origin + `/sandbox/kako/${key.slice(0, 4)}/subject.txt`, {headers: {'if-modified-since': new Date(Date.now() + 86400000).toUTCString()}})).text();
   assert.doesNotMatch(archive, new RegExp(key));
-  const moved = '/admin/thread?bbs=destination&key=1800000001';
-  assert.match(await (await get(path)).text(), /IP:/);
-  assert.equal((await save(moved, {action: 'move', targetBoard: 'sandbox', targetKey: key})).status, 400);
+  assert.match((await json(`/boards/sandbox/threads/${key}/`)).log, /IP:/);
+  const refusedMove = await action('destination', '1800000001', {action: 'move', targetBoard: 'sandbox', targetKey: key});
+  assert.equal(refusedMove.status, 409);
+  assert.equal((await refusedMove.json()).code, 'admin:thread-state');
   assert.match(await post('destination', '1800000001', 'after move'), /書きこみました/);
   const concurrent = await Promise.all([postResponse('destination', '1800000001', 'concurrent A'), postResponse('destination', '1800000001', 'concurrent B')]);
   assert.deepEqual(concurrent.map(response => Number(response.headers.get('x-resnum'))).sort(), [5, 6]);
-  assert.equal((await save(moved, {action: 'delete'})).status, 303);
+  assert.equal((await action('destination', '1800000001', {action: 'delete'})).status, 200);
   assert.equal((await fetch(origin + '/destination/dat/1800000001.dat')).status, 404);
   assert.equal(await publicText('/destination/subject.txt'), '');
-  assert.match(await (await get(moved)).text(), /edited message/);
-  assert.match(await (await get(moved)).text(), /IP:/);
-  assert.match(await (await get('/admin/threads?bbs=destination')).text(), /1800000001/);
+  const movedDetail = await json('/boards/destination/threads/1800000001/');
+  assert.equal(movedDetail.hidden, true);
+  assert.match(movedDetail.dat, /edited message/);
+  assert.match(movedDetail.log, /IP:/);
+  assert.ok((await json('/boards/destination/threads/')).removed.includes('1800000001'));
   assert.doesNotMatch(await post('destination', '1800000001'), /<title>書きこみました/);
-  await save('/admin/board?bbs=closedboard', {action: 'save', settings: 'BBS_HEISA=checked', head: ''});
+  assert.equal((await saveSettings('closedboard', {BBS_HEISA: 'checked'}, '')).status, 200);
   assert.match(await post('closedboard', '', 'message', 'closed board'), /停止/);
 
   // 管理 API（Basic 認証のまま）
-  // 管理画面からの変更と同じヘッダ。headers で Origin などを上書きできる
-  const api = (path, method = 'GET', body, headers = {}) => fetch(origin + '/admin/api' + path, {
-    method,
-    headers: {
-      authorization,
-      ...(body === undefined ? {} : {'content-type': 'application/json', origin, 'x-ch3s-admin': '1'}),
-      ...headers
-    },
-    body: body === undefined ? undefined : JSON.stringify(body)
-  });
-  const crossOrigin = await api('/menu', 'PUT', {text: 'cross-origin api menu', etag: null}, {origin: 'https://other.example'});
-  assert.equal(crossOrigin.status, 403);
-  assert.equal((await crossOrigin.json()).code, 'admin:origin');
-  assert.equal((await api('/menu', 'PUT', {text: 'no marker', etag: null}, {'x-ch3s-admin': ''})).status, 403);
   const unauthorized = await fetch(origin + '/admin/api/boards');
   assert.equal(unauthorized.status, 401);
   assert.equal((await unauthorized.json()).code, 'admin:unauthorized');

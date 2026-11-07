@@ -72,7 +72,7 @@ object BoardIndexComponent {
           ),
           IslandComponents.ThreadListJs(list.asInstanceOf[js.Object]),
           <.div(^.className := "board-admin p-3 text-right",
-            <.a(^.className := "text-[#06f] hover:underline", ^.href := s"/admin/board?bbs=${URIUtils.encodeURIComponent(props.bbs.value)}", "管理画面へ"))
+            <.a(^.className := "text-[#06f] hover:underline", ^.href := s"/admin/boards/${URIUtils.encodeURIComponent(props.bbs.value)}/", "管理画面へ"))
         ),
         RightSidebarComponent.Component(RightSidebarProps(props.bbs.value, props.headText, props.settings))
       ),

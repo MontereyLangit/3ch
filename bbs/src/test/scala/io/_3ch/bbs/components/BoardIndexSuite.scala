@@ -111,14 +111,14 @@ class BoardIndexSuite extends munit.FunSuite {
     assert(!reply.contains("data-command-helper"))
   }
 
-  test("板名（BoardId は英数字のみ）は URL のパス要素とクエリ値にそのまま出る") {
+  test("板名（BoardId は英数字のみ）は URL のパス要素にそのまま出る") {
     for (bbs <- List("news4test", "A1b2C3d4E5f6G7h8")) {
       val html = render(props.copy(bbs = BoardId.create(bbs).toOption.get, `type` = "subback"))
       val encoded = js.URIUtils.encodeURIComponent(bbs)
       assert(html.contains(s"href=\"/$encoded/SETTING.TXT\""))
       assert(html.contains(s"href=\"/$encoded/kako/\""))
       assert(html.contains(s"href=\"/test/read.cgi/$encoded/1800000001/\""))
-      assert(html.contains(s"href=\"/admin/board?bbs=$encoded\""))
+      assert(html.contains(s"href=\"/admin/boards/$encoded/\""))
       assert(!html.contains("href=\"//evil.example"))
       assert(!html.contains("bbs=a&amp;b/"))
     }

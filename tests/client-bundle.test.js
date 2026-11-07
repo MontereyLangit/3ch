@@ -22,3 +22,17 @@ test('KB-27: ブラウザ向け JS にサーバ処理を含めない', {
   }
   assert.ok(islandsBundled, 'ブラウザ向け JS に bbs-client の island が含まれていません');
 });
+
+const adminDir = fileURLToPath(new URL('../dist/admin/assets/', import.meta.url));
+
+test('管理画面の JS にサーバ処理を含めない', {
+  skip: existsSync(adminDir) ? false : 'dist/admin/ がありません（npm run v6:build を先に実行）',
+}, () => {
+  const scripts = readdirSync(adminDir).filter(file => file.endsWith('.js'));
+  assert.ok(scripts.length > 0);
+  for (const file of scripts) {
+    const source = readFileSync(path.join(adminDir, file), 'utf8');
+    assert.doesNotMatch(source, /io\._3ch\.bbs\.|cloudflare:workers|ADMIN_PASSWORD|DurableObject/, `${file} にサーバ専用の処理が含まれています`);
+    assert.match(source, /x-ch3s-admin/, `${file} に管理画面の API の呼び出しが含まれていません`);
+  }
+});

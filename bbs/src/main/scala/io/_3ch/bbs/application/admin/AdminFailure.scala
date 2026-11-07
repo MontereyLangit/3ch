@@ -14,8 +14,6 @@ enum AdminFailure {
   case InvalidBoard(field: String)
   /** key が 10 桁の数字でない */
   case InvalidKey(field: String)
-  /** スレ立て規制フォームの入力に改行がある */
-  case CreationLineBreak
   case CreationSettings(reason: ThreadCreationSettingError)
   case Settings(problems: Map[String, SettingProblem])
   case Rules(error: ModerationRuleError)

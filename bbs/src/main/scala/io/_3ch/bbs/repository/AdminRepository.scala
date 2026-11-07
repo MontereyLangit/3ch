@@ -25,7 +25,6 @@ object AdminRepository {
     def write(path: String, text: String, condition: WriteCondition): Future[WriteResult] = {
       val bucket = e.ch3www.asInstanceOf[js.Dynamic]
       val result = condition match {
-        case WriteCondition.Always => bucket.put(path, text)
         case WriteCondition.Matches(etag) => bucket.put(path, text, js.Dynamic.literal(onlyIf = js.Dynamic.literal(etagMatches = etag)))
         case WriteCondition.Absent => bucket.put(path, text, js.Dynamic.literal(onlyIf = js.Dynamic.literal(etagDoesNotMatch = "*")))
       }

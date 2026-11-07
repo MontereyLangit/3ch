@@ -40,13 +40,14 @@
   ],
   // Static Assets。dist/ には Vite の publicDir(public/)から 3chiko.html がコピーされ、
   // PublicRoutes.view3chiko が env.ASSETS.fetch で参照する。
-  // Workerが全パスを処理するため run_worker_first は不要(デフォルトのパス一致配信と衝突しない)。
   // html_handling: "none" にしないと、env.ASSETS.fetch("/3chiko.html") 自体が既定の
   // 「.html を落として/3chikoへ307」正規化を受けてしまい本文を取得できない。
+  // dist/admin/（管理画面の SPA）は資産として直接返さず、必ず Worker の認証を通す（AdminAssets）。
   "assets": {
     "directory": "dist",
     "binding": "ASSETS",
     "html_handling": "none",
+    "run_worker_first": ["/admin", "/admin/*"],
   },
   // TODO: sqlite based backendに修正
   "migrations": [

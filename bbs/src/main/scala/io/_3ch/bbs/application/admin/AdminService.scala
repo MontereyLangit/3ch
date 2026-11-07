@@ -10,14 +10,14 @@ import io._3ch.common.domain.BbsSettings
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
-/** 板設定・スレ操作・規制ルール・板一覧の管理操作。HTML の画面と API が共用する */
+/** 板設定・スレ操作・規制ルール・板一覧の管理操作（管理 API が使う） */
 final class AdminService(files: AdminFiles, threads: AdminThreads) {
   import AdminService.*
 
   private def text(path: String, fallback: => String = ""): Future[String] = files.read(path).map(_.fold(fallback)(_.text))
 
   /** 板の head.txt と SETTING.TXT。無ければ空と既定の内容で、ETag は None */
-  def boardTexts(bbs: String): Future[(TextFile, TextFile)] = for {
+  private def boardTexts(bbs: String): Future[(TextFile, TextFile)] = for {
     head <- files.read(headPath(bbs))
     settings <- files.read(settingsPath(bbs))
   } yield (head.getOrElse(TextFile("", None)), settings.getOrElse(TextFile(defaultSettings(bbs), None)))
@@ -26,7 +26,7 @@ final class AdminService(files: AdminFiles, threads: AdminThreads) {
     * SETTING.TXT、head.txt の順に条件付きで保存する。スレ立て規制の設定が不正か SETTING.TXT が競合したら何も書かない。
     * head.txt だけが競合したら SETTING.TXT は保存したまま partial を返す
     */
-  def saveBoardTexts(bbs: String, head: String, settings: String, settingsCondition: WriteCondition, headCondition: WriteCondition)
+  private def saveBoardTexts(bbs: String, head: String, settings: String, settingsCondition: WriteCondition, headCondition: WriteCondition)
     : Future[Either[AdminFailure, BoardSettingsSaved]] =
     ThreadCreationSettings.parseText(settings) match {
       case Left(reason) => Future.successful(Left(AdminFailure.CreationSettings(reason)))
@@ -36,25 +36,6 @@ final class AdminService(files: AdminFiles, threads: AdminThreads) {
           case WriteResult.Written(headEtag) => Right(BoardSettingsSaved(settingsEtag, headEtag, partial = false))
           case WriteResult.Conflict => Right(BoardSettingsSaved(settingsEtag, None, partial = true))
         }
-      }
-    }
-
-  /** スレ立て規制の項目だけを置き換える。values は (キー, 値) の列で、読込後に他の操作で保存・作成されていれば書かない */
-  def saveCreationLimits(bbs: String, values: List[(String, String)]): Future[Either[AdminFailure, Unit]] =
-    if (values.exists((_, v) => v.contains('\r') || v.contains('\n'))) Future.successful(Left(AdminFailure.CreationLineBreak))
-    else files.read(settingsPath(bbs)).flatMap { stored =>
-      val current = stored.fold(defaultSettings(bbs))(_.text)
-      val names = values.map(_._1).toSet
-      val other = current.split("\\r?\\n", -1).filterNot(line => names.contains(line.takeWhile(_ != '=').trim))
-      val settings = (other.filter(_.nonEmpty).toSeq ++ values.map((k, v) => s"$k=${v.trim}")).mkString("\n") + "\n"
-      ThreadCreationSettings.parseText(settings) match {
-        case Left(reason) => Future.successful(Left(AdminFailure.CreationSettings(reason)))
-        case Right(_) =>
-          val condition = AdminService.condition(stored.map(_.etag.getOrElse("")))
-          files.write(settingsPath(bbs), settings, condition).map {
-            case WriteResult.Written(_) => Right(())
-            case WriteResult.Conflict => Left(AdminFailure.Conflict(AdminFile.Settings))
-          }
       }
     }
 

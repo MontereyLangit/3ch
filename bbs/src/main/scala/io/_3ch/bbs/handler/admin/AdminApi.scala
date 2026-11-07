@@ -125,7 +125,6 @@ object AdminApi {
     val message = AdminText.failure(failure)
     failure match {
       case AdminFailure.InvalidBoard(_) | AdminFailure.InvalidKey(_) => AdminError(AdminErrorCode.Invalid, message, Map(failureField(failure)))
-      case AdminFailure.CreationLineBreak => AdminError(AdminErrorCode.Invalid, message)
       case AdminFailure.CreationSettings(_) => AdminError(AdminErrorCode.Invalid, message)
       case AdminFailure.Settings(problems) => AdminError(AdminErrorCode.Invalid, message, problems.map((field, problem) => field -> AdminText.settingProblem(problem)))
       case AdminFailure.Rules(_) => AdminError(AdminErrorCode.Invalid, message, Map("text" -> message))
