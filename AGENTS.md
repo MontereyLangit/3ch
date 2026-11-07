@@ -62,9 +62,10 @@ bbs/
   src/main/scala/io/_3ch/bbs/
     Main.scala         Worker エントリ（JSExportTopLevel）
     handler/           PublicRoutes（dat, subject.txt, SETTING.TXT, bbsmenu 等）, Posting（投稿パイプライン）,
-                       AdminHandler（/admin/*）, Responses。auth/ は /auth/* の画面と API、セッション Cookie、認証設定の読み取り
+                       AdminHandler（/admin/*）, Responses。admin/ は /admin/api の JSON API。auth/ は /auth/* の画面と API、セッション Cookie、認証設定の読み取り
     application/       アプリケーションサービス。posting/PostingService が投稿の段の並びを持ち、ports/ に外部の読み書きの口を置く。
                        auth/ はクライアント認証・専ブラキー発行・投稿の認証と記録（ports/ にアカウント・Cookie の口）
+                       admin/ は管理画面の板設定・スレ操作・規制ルール・板一覧（HTML の画面と API が共用）
     domain/            ドメインモデル・ドメインサービス（js.RegExp を使う規則と投稿処理の型。正規表現を使わない規則は common/）
     repository/        ports の実装。DO スタブ / R2 / KV を包み、js.Dynamic をここで止める
     durable/           Board DO, Thread DO, Account / AccountIndex / AuthRate DO
@@ -99,8 +100,8 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 | `docs/auth-password-implementation-notes.md` | ID・パスワード方式（E-1）の実装メモ。入力規則・PBKDF2・登録回復方式の候補 |
 | `docs/bbs-cgi-ddd-refactoring-plan.md`                                                 | bbs.cgi 投稿処理の DDD 化リファクタリング計画（段0〜9は完了。段10以降が認証・規制の実装）                                                                                                            |
 | `docs/auth-phoebe-review.md`                                                           | 上記 2 文書の Opus 5 セルフレビュー記録（2026-11-02）                                                                                                                                |
-| `docs/admin-spa-auth-plan.md`                                                          | 管理画面の改修計画（アカウント認証化・新 UI・scalajs-react SPA。2026-11-02、未着手）                                                                                                            |
-| `docs/admin-spa-auth-review.md`                                                        | 管理画面改修計画の Opus 5 セルフレビュー記録（2026-11-02）                                                                                                                               |
+| `docs/admin-spa-auth-plan.md`                                                          | 管理画面の改修計画（アカウント認証化・新 UI・scalajs-react SPA。2026-11-02。段 M0（`/admin/api` の JSON API・ETag 条件付き保存）は完了、M1 は承認待ち）                                    |
+| `docs/admin-spa-auth-review.md`                                                        | 管理画面改修計画のセルフレビュー記録（2026-11-02）と段ごとの実装記録                                                                                                                     |
 | `docs/durable-object-stubs.md`                                                         | DO の RPC スタブ（`*DoStub`）のコンパイル時生成の仕様・対応範囲・運用手順                                                                                                            |
 | `docs/thread-creation-regulation.md` / `docs/global-thread.md`                         | 投稿機能の追加仕様（スレ立て規制、全板共通スレ 924 / 900）                                                                                                                            |
 | `docs/post-rate-limit.md`                                                              | 連投規制（ごんたくれ・Samba24・広域 FlyRibbon・スレ連投・コピペ吸い込み、段階 `BBS_FR_LEVEL`。既定は規制＋FlyRibbon）の仕様と保存形式                                                                       |

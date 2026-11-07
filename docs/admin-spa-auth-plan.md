@@ -1,7 +1,7 @@
 # 管理画面 改修計画（アカウント認証・新 UI・scalajs-react SPA）
 
 2026-11-02。認証・登録機能（[認証・PHOEBE・連投規制 設計](auth-phoebe-rate-limit-design.md)、以下「設計書」）の実装に合わせて、
-`/admin/*` を次の 3 点で作り直す計画。**状態: 計画（未着手）。**
+`/admin/*` を次の 3 点で作り直す計画。**状態: 段 M0（API 化）は完了（2026-11-07）。M1 は利用者の承認待ち（§10-9）。** M0 の実装範囲と計画との差分は [レビュー記録](admin-spa-auth-review.md) の「段 M0 の実装記録」。
 
 1. **認証**: HTTP Basic 認証をやめ、原案の管理者アカウント（ID/Password 方式または Google 連携）によるログインにする。
 2. **UI**: 利用者提示のモック（旧 delightly の板設定画面 `kanri.html` と `a.css`）の構成を採り、見た目は現行の板トップに揃える（2026-11-05 利用者指示）。モックは `docs/ui/admin-*.html`。
@@ -207,9 +207,11 @@ HTML の `style` 属性は CSP（`style-src 'self'`）で弾かれ、`bgcolor` �
 
 **読み方の基準**: `SETTING.TXT` の解析は `develop` で統一された `BbsSettings`（`create` / `parse`）だけを使う（最初の `=` で分割、キー・値を trim、重複は後勝ち）。行順を保ち、`=` の無い行（コメントなど）は「その他」欄にそのまま残す。フォームの項目と同じキーを「その他」欄に書いたら保存を拒否する（`admin:invalid`）。
 
-**保存の手順**: 読込時に `SETTING.TXT` と `head.txt` の両方の ETag を返し、保存では両方を ETag 条件付きで書く。先に `SETTING.TXT`、次に `head.txt` の順で書き、`SETTING.TXT` が競合したら何も書かずに 409 を返す。`head.txt` だけが競合したら部分成功（`SETTING.TXT` は保存済み）として返し、元に戻す処理はしない（間に保存された他人の `head.txt` を消さないため）。未作成のファイルは「存在しない場合だけ作る」条件で書く（R2 の `etagDoesNotMatch: "*"` が使えるかは段 M0 で確かめる。使えなければ KB-25 と同じく条件なし）。
-検証はサーバ側（`bbs`）で行い、スレ立て規制は `ThreadCreationSettings`、設計書の各設定はその検証関数を使う。`common` の `BoardSettingsForm` は項目の定義と `SETTING.TXT` との相互変換だけを持ち、検証を持たない（`ThreadCreationSettings` は `bbs` の型に依存するため）。`KEY=VALUE` の値に改行を入れさせない。
-現行の直接保存（`head.txt` と `SETTING.TXT` を無条件で書く）から条件付き保存への変更は、挙動の変更として段 M0 の独立コミットにする。
+**保存の手順**: 読込時に `SETTING.TXT` と `head.txt` の両方の ETag を返し、保存では両方を ETag 条件付きで書く。先に `SETTING.TXT`、次に `head.txt` の順で書き、`SETTING.TXT` が競合したら何も書かずに 409 を返す。`head.txt` だけが競合したら部分成功（`SETTING.TXT` は保存済み）として返し、元に戻す処理はしない（間に保存された他人の `head.txt` を消さないため）。未作成のファイルは「存在しない場合だけ作る」条件（R2 の `etagDoesNotMatch: "*"`）で書く。ローカルの wrangler（workerd）で効くことを段 M0 で確かめた。本番の R2 では未確認。
+検証はサーバ側（`bbs` の `domain/admin/BoardSettingsCheck`）で行い、スレ立て規制は `ThreadCreationSettings`、ほかは項目の種類（数値・候補・チェック）と `BBS_FR_LEVEL`・`BBS_PHOEBE` の値の範囲を見る。`common` の `BoardSettingsForm` は項目の定義と `SETTING.TXT` との相互変換だけを持ち、検証を持たない（`ThreadCreationSettings` は `bbs` の型に依存するため）。`KEY=VALUE` の値に改行を入れさせない。
+現行の直接保存（`head.txt` と `SETTING.TXT` を無条件で書く）から条件付き保存への変更は、挙動の変更として段 M0 の独立コミットにした。HTML の画面はフォームに読込時の ETag を持たせ、ETag の項目が無い送信（従来の画面・手書きの要求）は条件なしで保存する。保存の順も SETTING.TXT、head.txt に揃えた。
+
+**保存時の行順**（M0 で決めた規則）: 保存時に読んだ SETTING.TXT（無ければ既定の内容）を下敷きにし、フォームの項目はキーの最初の行の位置に、「その他」の行は元の「その他」の行の位置に順に入れる。余った行と元に無い項目は末尾に足し、重複した項目の行と空行は書かない。変更しなければ元の内容と同じになる。
 
 ## 5. SPA の構成
 
@@ -217,10 +219,11 @@ HTML の `style` 属性は CSP（`style-src 'self'`）で弾かれ、`bgcolor` �
 
 ```
 common/src/main/scala/io/_3ch/common/admin/
+  Json.scala              依存ライブラリを使わない JSON の値・読み書き（§10-4）
   AdminDto.scala          API の要求・応答の型（板設定、スレ、ルール、アカウント、監査など）
-  AdminCodec.scala        JSON の読み書き（§10-4）
+  AdminCodec.scala        DTO と JSON の相互変換
   AdminRole.scala         役割と画面・操作の対応表（§4.1）。サーバとクライアントで共有
-  BoardSettingsForm.scala 板設定の項目定義（キー・入力種別・範囲・帯の色・表示条件・既定値）と SETTING.TXT との相互変換（検証はサーバ側）
+  BoardSettingsForm.scala 板設定の項目定義（キー・ラベル・入力種別・既定値。帯の色・表示条件は M1）と SETTING.TXT との相互変換（検証はサーバ側）
   ResEditText.scala       dat のフィールドと編集用テキストの相互変換（現行 AdminHandler.editable の移設）
 admin-client/src/main/scala/io/_3ch/admin/
   Main.scala              createRoot で起動
@@ -236,9 +239,11 @@ admin-web/
 vite.admin.config.ts      管理画面専用ビルド（HonoX なし。Tailwind は板トップと同じ設定）
 bbs/src/main/scala/io/_3ch/bbs/
   handler/admin/AdminAuth.scala     管理者セッション・再認証・役割検査・Origin 検査
-  handler/admin/AdminApi.scala      JSON の入出力とルーティング
+  handler/admin/AdminApi.scala      JSON の入出力とルーティング（M0。認証は AdminHandler の Basic 認証を通った後）
   handler/admin/AdminAssets.scala   起動ページと資産の配信
-  application/admin/AdminService.scala  板設定・スレ操作・ルール・メニュー・アカウント操作（リポジトリ経由）
+  application/admin/AdminService.scala  板設定・スレ操作・ルール・メニュー・アカウント操作（ports/AdminStores の口経由。実装は repository/AdminRepository）
+  domain/admin/BoardSettingsCheck.scala・BoardLinks.scala  板設定の検証、bbsmenu.html のリンク先の板名（M0）
+  durable/codec/ThreadModerationCodec.scala  Thread.moderate の引数と inspect の結果の変換（M0）
   durable/AdminAudit.scala、domain/admin/AuditLog.scala   監査ログ
 ```
 
@@ -278,14 +283,14 @@ bbs/src/main/scala/io/_3ch/bbs/
 | `POST /admin/api/elevate` | 通常セッション | `{password}` を検証して管理者セッションを発行。Google は §3.1 |
 | `POST /admin/api/logout` | — | 管理者 Cookie を消す |
 | `POST /admin/api/bootstrap` | 通常セッション | `{token}`。§3.4 |
-| `GET /admin/api/boards` | いずれか | 板名の一覧。R2 を `delimiter: "/"` で列挙した接頭辞（1,000 件ごとのページを辿る）と、`bbsmenu.html` のリンク先の和集合。`SETTING.TXT` の有無は確かめない（無い板も既定値で動いているため）。画面では板名の手入力も残す。R2 の facade に `list` を足す |
-| `GET /admin/api/boards/:bbs/settings` | `admin` | `{fields, extra, head, settingsEtag, headEtag, rules: {access, ngwords}}`。`fields` は項目ごとに `{value, explicit}`。`rules` はこの板に一致する行（サーバで `Moderation.parseRules` の JS RegExp を使って判定） |
-| `PUT /admin/api/boards/:bbs/settings` | `admin` | `{fields, extra, head, settingsEtag, headEtag}`。競合は 409 `{code:"admin:conflict"}`、`head.txt` だけの競合は 200 `{partial: true}`（§4.3） |
-| `GET /admin/api/boards/:bbs/threads` | `delete` | 公開中（subject）と削除/移動済み |
-| `GET /admin/api/boards/:bbs/threads/:key` | `delete` | `inspect` の結果を構造化（dat の各行の表示用フィールドと編集用テキスト（`ResEditText`）、投稿者ログ、旧形式ログ、スレ設定、停止・削除・移動の状態）。投稿者ログの閲覧を監査ログに残す |
-| `POST /admin/api/boards/:bbs/threads/:key/actions` | `delete` | `{action: "stop"|"resume"|"delete"|"move"|"editRes"|"deleteRes", ...}`。現行どおり `inspect` を先に呼んで旧データを取り込んでから `Thread.moderate` に渡す |
-| `GET`・`PUT /admin/api/rules/:name` | `regulate` | `name` は `access` / `ngwords`。`PUT` は `Moderation.parseRules` で検証し、ETag 条件付きで保存（現行は無条件。§10-5） |
-| `GET`・`PUT /admin/api/menu` | `admin` | `bbsmenu.html`。ETag 条件付きで保存 |
+| `GET /admin/api/boards` | いずれか | **M0 実装済み**。`{boards: [...]}`。R2 を `delimiter: "/"` で列挙した接頭辞（ページを辿る）と、`bbsmenu.html` のリンク先（`/板名/` の形）の和集合を、板名の規則（英数字・`_`・`-` の 1〜80 文字）で絞って並べる。`SETTING.TXT` の有無は確かめない（無い板も既定値で動いているため）。画面では板名の手入力も残す。R2 の facade に `list` を足した |
+| `GET /admin/api/boards/:bbs/settings` | `admin` | **M0 実装済み**。`{bbs, fields, extra, head, settingsEtag, headEtag, rules: {access, ngwords}}`。`fields` は項目ごとに `{value, explicit}`（未設定は既定値と `explicit: false`）、`extra` は「その他」の行の配列。ETag はファイルが無ければ `null`（`SETTING.TXT` が無い板は既定の内容を明示値として返す）。`rules` はこの板に一致する行（`ModerationRuleSet.linesFor`。JS RegExp で判定） |
+| `PUT /admin/api/boards/:bbs/settings` | `admin` | **M0 実装済み**。`{fields, extra, head, settingsEtag, headEtag}`（ETag のキーは必須で、読込時に無ければ `null`。`fields` に無い項目は未設定）。応答は `{settingsEtag, headEtag, partial}`。競合は 409 `admin:conflict`、`head.txt` だけの競合は 200 `{partial: true}`（§4.3）。検証の誤りは 400 `admin:invalid` の `fields` に `fields.キー`・`extra` ごとの理由 |
+| `GET /admin/api/boards/:bbs/threads` | `delete` | **M0 実装済み**。`{bbs, subject: [{key, line}], removed: [key]}` |
+| `GET /admin/api/boards/:bbs/threads/:key` | `delete` | **M0 実装済み**。`{bbs, key, hidden, stopped, movedTo, movingTo, res, dat, log, legacyLog, settings}`。`res` は行ごとの `{number, name, mail, date, message, edit: {name, mail, message}}`（`edit` は `ResEditText` の編集用テキスト）。dat が無ければ 404。投稿者ログの閲覧の監査ログは M2 |
+| `POST /admin/api/boards/:bbs/threads/:key/actions` | `delete` | **M0 実装済み**。`{action: "stop"|"resume"|"delete"|"move"|"editRes"|"deleteRes", ...}`（`move` は `targetBoard`・`targetKey`、`editRes` は `number`・`name`・`mail`・`message`、`deleteRes` は `number`）。応答は `{ok: true}`。現行どおり `inspect` を先に呼んで旧データを取り込んでから `Thread.moderate` に渡す。レス番号 1 未満・名前とメールの改行・本文の単独の CR・移動先の書式は 400、DO の拒否は 409 `admin:thread-state` |
+| `GET`・`PUT /admin/api/rules/:name` | `regulate` | **M0 実装済み**。`name` は `access` / `ngwords`。本文は `{text, etag}`。`PUT` は `ModerationRuleSet.parse` で検証（誤りは `fields.text` に行番号付き）し、ETag 条件付きで保存。応答は `{etag}` |
+| `GET`・`PUT /admin/api/menu` | `admin` | **M0 実装済み**。`bbsmenu.html`。本文は `{text, etag}`、ETag 条件付きで保存 |
 | `PUT /admin/api/accounts/:uid/roles` | `admin` | 役割の付与・剥奪（段 M2 から。自分の `admin` は外せない。最後の 1 人の `admin` も外せない） |
 | `GET /admin/api/audit?before=` | `admin` | 監査ログのページ |
 | `GET /admin/api/accounts?sort=&kind=&status=&role=&q=&cursor=` | `admin`・`regulate` | ユーザー一覧（`AccountDirectory.list`）。`sort` は `recent`（既定）/ `created` / `lv` / `posts24h`。`q` は種類を判定して `AccountIndex` か `AccountDirectory.search` で引く |
@@ -296,7 +301,8 @@ bbs/src/main/scala/io/_3ch/bbs/
 
 ### 6.2 共通規則
 
-- 要求・応答は UTF-8 の JSON。変更系は §3.5 の条件を満たさなければ 403 `{code:"admin:origin"}`。
+- 要求・応答は UTF-8 の JSON。変更系は §3.5 の条件を満たさなければ 403 `{code:"admin:origin"}`（M1 から。M0 は `Content-Type: application/json` だけを求め、満たさなければ 415）。
+- M0（Basic 認証）の間は、資格情報が無ければ 401 `admin:unauthorized`（`WWW-Authenticate` 付き）、`ADMIN_PASSWORD` が無ければ 503 `admin:unavailable` を JSON で返す。M2 で `admin:reauth` に置き換える。
 - エラーは `{code, message, fields?}`。`code` は `admin:reauth`（401。管理者セッションが無い・期限切れ）・`admin:reauth-failed`（401。再認証の失敗）・`admin:forbidden`（403）・`admin:origin`（403。Origin 不一致）・`admin:content-type`（415）・`admin:method`（405）・`admin:bootstrap-closed`（403）・`admin:rate-limited`（429）・`admin:invalid`（400、`fields` に項目ごとの理由）・`admin:conflict`（409）・`admin:thread-state`（409。スレの停止・移動中など DO が拒否した操作）・`admin:too-large`（413）・`admin:not-found`（404）・`admin:internal`（500）。`message` は日本語の利用者向け文言で、サーバの `AdminText` が組み立てる。
 - `Thread.moderate` は理由を日本語の例外文言で返すので、当面は `admin:thread-state` の `message` にその文言をそのまま入れる。DO をコードで返す形に変えるのは別の独立コミットにする（AGENTS.md 3.5 の方針への移行）。
 - 役割の検査は `AdminRole.allows(roles, operation)` だけで行い、各 API で個別に書かない。
@@ -308,7 +314,7 @@ bbs/src/main/scala/io/_3ch/bbs/
 
 | 段 | 内容 | 前提 | 完了条件 |
 | --- | --- | --- | --- |
-| M0 | **API 化**: `AdminService`・`AdminApi`・`AdminDto` / `AdminCodec`・`BoardSettingsForm`・`ResEditText` を作り、`/admin/api/*` を Basic 認証のまま追加する。既存の HTML 画面はそのまま残し、内部で `AdminService` を共用する。板設定・`head.txt`・`bbsmenu.html`・規制ルールの ETag 条件付き保存への変更は独立コミット | — | 既存の `AdminHandlerSuite`・統合テストが、条件付き保存の変更分を除いて通る。`AdminApiSuite` で全 API の正常系・検証エラー・ETag 競合・CR/LF 拒否・入力上限・未設定と明示値の往復を確認 |
+| M0（完了） | **API 化**: `AdminService`・`AdminApi`・`AdminDto` / `AdminCodec`・`BoardSettingsForm`・`ResEditText` を作り、`/admin/api/*` を Basic 認証のまま追加する。既存の HTML 画面はそのまま残し、内部で `AdminService` を共用する。板設定・`head.txt`・`bbsmenu.html`・規制ルールの ETag 条件付き保存への変更は独立コミット | — | 既存の `AdminHandlerSuite`・統合テストが、条件付き保存の変更分を除いて通る。`AdminApiSuite` で全 API の正常系・検証エラー・ETag 競合・CR/LF 拒否・入力上限・未設定と明示値の往復を確認 |
 | M1 | **SPA 化**: `adminClient`・`admin-web`・`vite.admin.config.ts`、配信（`run_worker_first`・`AdminAssets`）、モックの見た目。全画面が現行と同じ操作をできたら、旧 HTML の描画（`AdminText` の画面部分）を削除する。認証は Basic 認証のまま、API に §3.5 の Origin 等の検査を加える。**着手前に Origin 検証の復活と CSP の変更について利用者の承認を得る**（§10-9） | M0、利用者の承認 | 現行の全操作を SPA から実行できることを実 workerd で確認（§8）。CSP 違反が出ない。`dist/admin/` が `/admin` 以外から取れない。`AdminHandlerSuite` の「Origin・Fetch Metadata によらず受け付ける」と `tests/admin.integration.test.js` の同趣旨の確認を、他オリジンからの変更を拒否する期待値に書き換える |
 | M2 | **アカウント認証へ切替**: 管理者セッション・再認証・役割検査・bootstrap・監査ログ・**最小限の役割付与 API と画面**（`PUT /admin/api/accounts/:uid/roles`。Basic 認証で作業していた人に役割を配れるようにするため）。Basic 認証・`ADMIN_PASSWORD`・`ADMIN_USER` を削除。AGENTS.md 1.6・3.6、`docs/admin.md`（ログイン・bootstrap・役割・開発時の手順）を更新 | 設計書の段 B（`Account` / `AccountIndex` DO・セッション）と、段 E-1（ID/Password ログインと Google ログイン） | 役割ごとの許可・拒否の表を全 API について `AdminAuthSuite` で確認。Basic 認証の資格情報では入れない。bootstrap の条件（0 件・非常用期限・同時実行で 1 人だけ）、`adminGen` による失効、パスワード規則の検査時点、Google 再認証の `aid` 照合を確認。`auth_time` の実機確認の結果を本書に反映 |
 | M3 | **認証機能の管理画面**: ユーザー一覧・ユーザー詳細（`AccountDirectory` を含む）・キャップ・PHOEBE / エッジ防御・連投規制とスレ立て規制の各項目（§4.3 の「設計書 段 A / C / D 以降」） | 設計書の各段 | 各画面の API テスト。§4.3 の表示条件が各段の完了と一致する |
@@ -342,8 +348,8 @@ M0 と M1 は認証基盤を待たずに進められる。M2 は設計書の認�
 | 1 | モックの項目のうち v6 に対応しないもの（色・画像・過去ログ化・UNICODE 等）を表示しないこと | 表示しない。必要なら新機能として別途設計 |
 | 2 | 権限者用の別画面（`/mod`）を作らず `/admin` に統合すること。役割は全板共通（板ごとの管理者は作らない） | 統合する。全板共通。板ごとの委任が要るなら `roles` に板の範囲を持たせる拡張を別途検討 |
 | 3 | 管理者の二要素認証 | M2 では入れない（役割ありの ID/Password は 16 文字以上を必須）。M4 で TOTP を検討。§10-10 の結果によっては Google の管理者に先に必要 |
-| 4 | JSON の読み書き | `common` に置く DTO を JVM / JS 両方で使うため、クロスビルドできる JSON ライブラリ（uPickle 等）を 1 つ追加する。追加を避けるなら手書きの codec（JS 側は `js.JSON`、JVM 側はテスト専用） |
-| 5 | `deny.cgi`・`ngwords.cgi` の保存を ETag 条件付きにすること（現行は無条件。複数の管理者が同時に編集すると後勝ちで消える） | 条件付きにする（挙動の変更なので M1 で独立コミット） |
+| 4 | JSON の読み書き | **M0 で決定**: ライブラリは足さず、`common` に依存の無い小さな JSON の値と読み書き（`Json`）と手書きの codec（`AdminCodec`）を置いた。JVM / JS で同じコードが動き、両方でテストする。依存の追加（Maven の取得・バンドルの増加・Scala.js 版の追従）を避けるため |
+| 5 | `deny.cgi`・`ngwords.cgi` の保存を ETag 条件付きにすること（現行は無条件。複数の管理者が同時に編集すると後勝ちで消える） | M0 で板設定・`head.txt`・`bbsmenu.html` と合わせて条件付きにした（独立コミット）。HTML の画面で ETag の項目が無い送信は条件なし |
 | 6 | モックの「直近のエラーログを閲覧」 | M2 までは作らない。Workers Logs の検索をボタンから開く案と、投稿エラーを DO に記録する案を M4 で比較 |
 | 7 | 初回の管理者を `ADMIN_BOOTSTRAP_TOKEN` で作り、`ADMIN_PASSWORD` を廃止すること。非常用経路を `ADMIN_BREAK_GLASS` の再デプロイに限ること | そのとおり |
 | 8 | 管理者セッションの無操作 30 分・最長 8 時間、再認証の猶予 10 分 | 仮置き |

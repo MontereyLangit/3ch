@@ -20,7 +20,7 @@
 
 AS・地域・UA・日別識別子の観測集計（Account.seen）、AccountDirectoryへの反映、管理者用RPC・役割の管理も未実装。専ブラの表示名は製品名・版・既知のOSを抽出する限定的な実装で、識別子のUA解析表（段C）とは別のもの。接続元の表示は現在取得できるAS番号と地域・国を使い、AS名の取得は後続で揃える。iOSの既知プロファイル表はR2から読む口だけを用意しており、本番の表データを作成したわけではない。
 
-次は **管理画面（改修計画 M0〜M4）**。E-1・C・E-2 と、D のうち管理画面以外は完了した（下記「E-1の実装範囲」「Cの実装範囲」「Dの実装範囲」「E-2の実装範囲」）。段Bの残件と境界も引き続き確認する。
+次は **管理画面の段 M1（SPA 化）**。M0（`/admin/api` の JSON API と ETag 条件付き保存）は完了した（下記「管理画面 M0 の実装範囲」）。M1 は Origin 検証の復活と CSP の変更（`script-src 'self'`）を含むので、**着手前に利用者の承認が要る**（[改修計画](admin-spa-auth-plan.md) §0・§10-9）。E-1・C・E-2 と、D のうち管理画面以外は完了した（下記「E-1の実装範囲」「Cの実装範囲」「Dの実装範囲」「E-2の実装範囲」）。段Bの残件と境界も引き続き確認する。
 
 | 段 | 次に実装する内容 |
 | --- | --- |
@@ -98,6 +98,16 @@ UA解析表はR2の `ua-profiles.json`（`{"os": [{"match", "flags"?, "label"}�
 
 E-2に含めなかったもの: メールの提供元、要確認・規則の管理画面（M3）、AccountDirectory、RTT 条件での Turnstile の再実行、移行・退会の監査ログ（管理画面の段）。
 
+## 管理画面 M0 の実装範囲
+
+[改修計画](admin-spa-auth-plan.md) §7 の M0。計画との差分は [レビュー記録](admin-spa-auth-review.md) の「段 M0 の実装記録」にまとめた。
+
+- common の `admin/`: `Json`（依存なしの JSON）、`AdminDto`・`AdminCodec`、`BoardSettingsForm`（SETTING.TXT とフォーム値の往復。未設定と明示値を区別し、触っていない未設定項目は書かない。その他の行と行順を保つ）、`ResEditText`（dat の欄と編集用テキスト。KB-40 は直していない）。
+- bbs: `AdminService`（HTML の画面と API が共用）、ports `AdminStores` と `AdminRepository`、`ThreadModerationCodec`、`BoardSettingsCheck`・`BoardLinks`、`handler/admin/AdminApi`。R2 の facade に `list` を足した。
+- `/admin/api/*` は Basic 認証のまま。変更系は `Content-Type: application/json` と 256KB 以下の本文に限る。Origin 検証と CSP は変えていない（M1）。
+- 挙動の変更（独立コミット）: 板設定・`head.txt`・規制ルール・`bbsmenu.html` の保存を読込時の ETag で条件付きにした。HTML の画面は ETag を hidden で持ち、ETag の項目が無い送信は従来どおり条件なしで保存する。未作成のファイルは `etagDoesNotMatch: "*"` で「無いときだけ作る」（ローカルの workerd で確認。本番の R2 は未確認）。
+- M0 に含めなかったもの: `AdminRole`・管理者セッション・監査ログ（M2）、SPA と配信（M1）、`GET /admin/api/me` などの認証系 API、アカウント・キャップ・PHOEBE の API（M3）。
+
 ## 設定と検証
 
 [認証の検証設定](auth-integration.md) に従う。`AUTH_SECRET` がないと認証は有効にならない。登録には `AGREEMENT_VERSION`、`TURNSTILE_SITE_KEY`、`TURNSTILE_SECRET_KEY` も必要。Googleログインには `GOOGLE_CLIENT_ID` と `GOOGLE_CLIENT_SECRET` を足す。秘密鍵は `.dev.vars` または環境のsecretで管理し、この文書やコミットへ書かない。
@@ -116,8 +126,8 @@ npm run v6:typecheck
 
 | 検証 | この区切りの結果 |
 | --- | --- |
-| Scala単体テスト | E-2の区切りで sbt test 1,345件成功（commonJVM 209、commonJS 212、codegen 27、bbsClient 2、bbs 895）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功。段Dの区切りで sbt test 1,291件成功（commonJVM 194、commonJS 197、codegen 27、bbsClient 2、bbs 871）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功。段Cの区切りで sbt test 1,246件成功（commonJVM 183、commonJS 186、codegen 27、bbsClient 2、bbs 848）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功。E-1の区切りは1,181件 |
-| workerd・SSR・hydration | E-2の区切りで npm test 76件成功、skipなし（実workerdに、差し替えた送信先で登録→メール認証→Lv3、再設定、退会、かんたん登録からの移行を1件）。段Dの区切りで npm test 75件成功、skipなし（board-islandsにキャップ欄3件、実workerdにキャップの発行→★の書き込み→失効を1件）。段Cの区切りで npm test 71件成功、skipなし（E-1の70件にLv不足の表示と再送しないことのboard-islandsを1件追加）。E-1の区切りでは実workerdで登録→ログアウト→ログイン→投稿、未登録・不一致の同じ応答、十回の失敗による接続元のロックと応答の遅延、別の接続元からのログイン、認証画面の方式の表示を検証した |
+| Scala単体テスト | 管理画面 M0 の区切りで sbt test 1,419件成功（commonJVM 236、commonJS 239、codegen 27、bbsClient 2、bbs 915）。`-no-indent` のTest/compileも成功。E-2の区切りで sbt test 1,345件成功（commonJVM 209、commonJS 212、codegen 27、bbsClient 2、bbs 895）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功。段Dの区切りで sbt test 1,291件成功（commonJVM 194、commonJS 197、codegen 27、bbsClient 2、bbs 871）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功。段Cの区切りで sbt test 1,246件成功（commonJVM 183、commonJS 186、codegen 27、bbsClient 2、bbs 848）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功。E-1の区切りは1,181件 |
+| workerd・SSR・hydration | 管理画面 M0 の区切りで npm test 76件成功、skipなし（実workerdの管理画面の統合テストに、管理 API の板設定・競合・検証・規制ルール・板一覧・スレ操作を追加）。E-2の区切りで npm test 76件成功、skipなし（実workerdに、差し替えた送信先で登録→メール認証→Lv3、再設定、退会、かんたん登録からの移行を1件）。段Dの区切りで npm test 75件成功、skipなし（board-islandsにキャップ欄3件、実workerdにキャップの発行→★の書き込み→失効を1件）。段Cの区切りで npm test 71件成功、skipなし（E-1の70件にLv不足の表示と再送しないことのboard-islandsを1件追加）。E-1の区切りでは実workerdで登録→ログアウト→ログイン→投稿、未登録・不一致の同じ応答、十回の失敗による接続元のロックと応答の遅延、別の接続元からのログイン、認証画面の方式の表示を検証した |
 | ビルド | npm run v6:build成功 |
 | 型チェック | npm run v6:typecheck成功 |
 | コミット | E-1はRPC・登録とログイン・HTTP・画面・Google・文書の順に、CはLvの純粋関数・昇格の保存・BBS_PHOEBE・コマンド・識別子の純粋関数・識別子とUA解析表・文書の順に小さく分けてコミットした（pushはオーケストレーターが行う） |

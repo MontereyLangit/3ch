@@ -45,3 +45,59 @@
 Google の `max_age` / `auth_time` の挙動、scalajs-react `extra` 4.0.0 の配布と React 19 でのテストユーティリティ、
 R2 の `etagDoesNotMatch: "*"`、`@hono/vite-build` が `dist/` を空にするか、2026-10-05 に Origin 検証を外した理由。
 いずれも計画書の該当段で確かめる。
+
+## 段 M0 の実装記録
+
+2026-11-07。計画書 §7 の M0（API 化）。コミットは common の型と変換、`AdminService` への移設（挙動を変えない）、ETag 条件付き保存（挙動の変更）、
+`/admin/api` の追加、実 workerd の統合テストの順。
+
+### 実装したもの
+
+- common `admin/`: `Json`、`AdminDto`・`AdminCodec`（全 DTO の往復）、`BoardSettingsForm`、`ResEditText`（と dat の行を分ける `ResView.fromDat`）。
+- bbs: `application/admin/AdminService`・`AdminFailure`・`ports/AdminStores`、`repository/AdminRepository`、`durable/codec/ThreadModerationCodec`、
+  `domain/admin/BoardSettingsCheck`・`BoardLinks`、`ModerationRuleSet.linesFor`、`handler/admin/AdminApi`、R2 の `list` の facade。
+- HTML の画面（`AdminHandler`）は `AdminService` を使うように書き換えた。画面の HTML と文言は、条件付き保存の hidden 項目と競合の文言を除いて変えていない。
+- テスト: `AdminApiSuite`（13 件）、`BoardSettingsFormSuite`・`ResEditTextSuite`・`ResViewSuite`・`JsonSuite`・`AdminCodecSuite`（JVM / JS）、
+  `ResEditTextJsSuite`（移設前の JS の正規表現と同じ結果になること）、`BoardLinksSuite`、`AdminHandlerSuite` に条件付き保存の 4 件。
+  `tests/admin.integration.test.js` に API の主要操作を追加。既存の `AdminHandlerSuite` と統合テストの期待値は変えずに通った。
+
+### 計画との差分
+
+| 項目 | 計画 | 実装と理由 |
+| --- | --- | --- |
+| JSON（§10-4） | ライブラリを 1 つ足すか手書き | 手書き。common に依存の無い `Json` を置き、JVM / JS で同じコードをテストする。依存の追加を避けた |
+| 規制ルールの条件付き保存（§10-5） | M1 で独立コミット | 指示により M0 の独立コミットで、板設定・`head.txt`・`bbsmenu.html` と合わせて行った |
+| HTML の画面の条件付き保存 | 記述なし | フォームに読込時の ETag を hidden で持たせる。ETag の項目が無い送信（従来の画面・統合テストの手書きの要求）は条件なしで保存する。既存テストの期待値を変えずに済み、手書きの要求で保存できなくなる事故を避けるため |
+| スレ立て規制フォーム | 現行どおり | 未作成の SETTING.TXT は「無いときだけ作る」に変えた（条件付き保存のコミットに含む）。R2 にその条件が無いという前提（KB-25 の記述）が `etagDoesNotMatch: "*"` で解消したため |
+| `etagDoesNotMatch: "*"` | M0 で確かめる | ローカルの wrangler（workerd）で、無いときは書け、有るときは null になることを確かめた。本番の R2 では未確認 |
+| 板設定の保存順 | SETTING.TXT → head.txt | そのとおり。HTML の画面の保存も同じ順に変えた（従来は head.txt → SETTING.TXT） |
+| スレの状態の表し方 | 「停止・削除・移動の状態」 | `hidden`・`stopped`・`movedTo`・`movingTo` をそのまま返す。削除済みでも停止フラグは独立に残る（画面の停止・再開ボタンがこれを見る）ため、1 つの状態にまとめなかった |
+| 規制ルール・板一覧の本文 | 未定 | どちらも `{text, etag}` |
+| エラーコード | §6.2 の一覧 | Basic 認証の間だけ `admin:unauthorized`（401）と `admin:unavailable`（503）を足した。M2 で `admin:reauth` に置き換える |
+| 変更系の検査（§3.5） | M1 で Origin・Content-Type・独自ヘッダ | Origin と独自ヘッダは M1 のまま。Content-Type: application/json だけは新しい API に M0 から求める（フォーム送信から JSON の API を叩けないようにするため。既存の画面には影響しない） |
+| スレ操作の対象が無い | 未定 | `inspect` の後の `Thread.moderate` が「スレッドがありません。」で拒否するので 409 `admin:thread-state`。詳細の GET は 404 |
+| `BoardSettingsForm` の項目定義 | 範囲・帯の色・表示条件を含む | キー・ラベル・入力の種類・既定値まで。帯の色と表示条件は画面を作る M1 で足す。値の範囲はサーバの `BoardSettingsCheck` |
+| `AdminRole` | §5.1 に記載 | M2（役割の検査）で作る。M0 は Basic 認証で全操作を許す |
+| 投稿者ログの閲覧の監査ログ | §6.1 | M2（監査ログ）から |
+
+### 振る舞いの確認
+
+- `AdminService` への移設は HTML の応答を変えない。ただし、知らない `action` をスレ操作に送った場合は Thread DO を呼ばずに同じ文言「操作が不正です。」を返す
+  （従来は `inspect` の後で DO が同じ文言で拒否していた。スレが無いときの文言だけが「スレッドがありません。」から変わる）。
+- HTML のレス番号は JavaScript の Number で整数として読めなければ 0 にして DO に渡し、DO が従来と同じ順と文言で拒否する。
+- `Thread.escape` は `ResEditText.toField` を呼ぶようにした（同じ変換）。
+- 板設定の API の検証は、数値の項目に 0 以上の整数か空、候補のある項目に候補の値、チェックに checked か空、`BBS_FR_LEVEL` に off・log・整数・空、
+  `BBS_PHOEBE` に 0〜10 か空を求める。既存の SETTING.TXT に候補外の値（古い値など）があると、その項目を直すまで API では保存できない（HTML の直接編集は従来どおり）。
+
+### セルフレビュー（AGENTS.md 3.5）
+
+- DDD: R2・DO の操作は repository に、`js.Dynamic` はコーデックとリポジトリで止めた。板設定の検証は `domain/admin`、相互変換は common。DO は `escape` の差し替えだけ。
+- コメント内の `/admin/api/*` が入れ子のコメントになってコンパイルが止まった（`/*` を含む Scaladoc の罠）。表記を「/admin/api 以下」に改めた。
+- 可変状態は JSON の読み取り器の位置だけ（`Json.Parser`）。種別はすべて enum（`AdminErrorCode`・`ThreadAction`・`RuleName`・`WriteCondition`・`AdminFailure`・`SettingProblem`）。
+
+### 未解決・利用者の確認が要る点
+
+- 本番の R2 で `etagDoesNotMatch: "*"` が効くか（効かなければ未作成時は条件なしと同じになる。データは壊れない）。
+- HTML の画面で ETag の項目が無い送信を条件なしで保存する扱いでよいか。
+- M1（SPA 化）の前に、Origin 検証の復活と CSP の変更の承認（§10-9）。
+- KB-40 は未修正（指示により現状維持）。
