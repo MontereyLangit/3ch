@@ -1,7 +1,7 @@
 # 管理画面 改修計画（アカウント認証・新 UI・scalajs-react SPA）
 
 2026-11-02。認証・登録機能（[認証・PHOEBE・連投規制 設計](auth-phoebe-rate-limit-design.md)、以下「設計書」）の実装に合わせて、
-`/admin/*` を次の 3 点で作り直す計画。**状態: 段 M0（API 化）は完了（2026-11-07）。M1 の前提だった Origin 検証の復活と CSP の変更は承認済み（2026-11-07 利用者。§10-9）。** M0 の実装範囲と計画との差分は [レビュー記録](admin-spa-auth-review.md) の「段 M0 の実装記録」。
+`/admin/*` を次の 3 点で作り直す計画。**状態: 段 M0（API 化）と M1（SPA 化）は完了（2026-11-07）。次は M2（アカウント認証への切替）。** M1 の前提だった Origin 検証の復活と CSP の変更は承認済み（2026-11-07 利用者。§10-9）。各段の実装範囲と計画との差分は [レビュー記録](admin-spa-auth-review.md) の「段 M0 の実装記録」「段 M1 の実装記録」。
 
 1. **認証**: HTTP Basic 認証をやめ、原案の管理者アカウント（ID/Password 方式または Google 連携）によるログインにする。
 2. **UI**: 利用者提示のモック（旧 delightly の板設定画面 `kanri.html` と `a.css`）の構成を採り、見た目は現行の板トップに揃える（2026-11-05 利用者指示）。モックは `docs/ui/admin-*.html`。
@@ -226,21 +226,25 @@ common/src/main/scala/io/_3ch/common/admin/
   BoardSettingsForm.scala 板設定の項目定義（キー・ラベル・入力種別・既定値。帯の色・表示条件は M1）と SETTING.TXT との相互変換（検証はサーバ側）
   ResEditText.scala       dat のフィールドと編集用テキストの相互変換（現行 AdminHandler.editable の移設）
 admin-client/src/main/scala/io/_3ch/admin/
-  Main.scala              createRoot で起動
-  AdminApp.scala          ルータとレイアウト
-  AdminRoutes.scala       scalajs-react extra の Router 定義（URL ↔ ページ）
-  api/AdminApiClient.scala fetch ラッパ（X-Ch3s-Admin、JSON、401 で再認証画面へ）
-  pages/                  Top, BoardSettings, Threads, Thread, Rules, Menu, Accounts, Account, Caps, Phoebe, Audit, Bootstrap, Elevate
-  components/             Layout, Band, FieldRow, HelpBox, SaveBar, ErrorBanner, ConfirmDialog
+  Main.scala              createRoot で起動（#admin-root。テスト用に mountAdmin を公開）
+  AdminApp.scala          URL と画面の切り替え、未保存の確認、レイアウト
+  AdminPage.scala         画面と URL の対応（M1 で extra の Router の代わりに自前で書いた。§5.1 の注）
+  AdminState.scala        LoadState・SaveState と、読み込みの Hook（Loaded.useLoad）
+  Nav.scala               現在の画面・移動・未保存の印
+  api/AdminApiClient.scala fetch ラッパ（JSON、変更に X-Ch3s-Admin。M2 で 401 を再認証画面へ）
+  model/                  BoardSettingsDraft（板設定の編集中の値）、BoardSettingsLayout（項目の並び・帯の色・選択肢）
+  pages/                  M1: Top, BoardSettings, Threads, Thread, TextFile（Rules・Menu が使う）, Rules, Menu。M2 以降: Accounts, Account, Caps, Phoebe, Audit, Bootstrap, Elevate
+  components/             Layout, Link, StatusBanner, Confirm, Styles
 admin-web/
   index.html              マウント先と CSS・JS の参照だけ
   main.js                 import "./admin.css"; import "scalajs:main.js";
-  admin.css               Tailwind の読み込み（app/style.css と同じ @source）と管理画面固有の少数の指定
+  admin.css               Tailwind の読み込み（@source は admin-client だけ）と body の指定
 vite.admin.config.ts      管理画面専用ビルド（HonoX なし。Tailwind は板トップと同じ設定）
 bbs/src/main/scala/io/_3ch/bbs/
   handler/admin/AdminAuth.scala     管理者セッション・再認証・役割検査・Origin 検査
   handler/admin/AdminApi.scala      JSON の入出力とルーティング（M0。認証は AdminHandler の Basic 認証を通った後）
-  handler/admin/AdminAssets.scala   起動ページと資産の配信
+  handler/admin/AdminAssets.scala   起動ページと資産の配信（M1）
+  handler/admin/AdminOrigin.scala   変更系の Origin・X-Ch3s-Admin の検査（M1）
   application/admin/AdminService.scala  板設定・スレ操作・ルール・メニュー・アカウント操作（ports/AdminStores の口経由。実装は repository/AdminRepository）
   domain/admin/BoardSettingsCheck.scala・BoardLinks.scala  板設定の検証、bbsmenu.html のリンク先の板名（M0）
   durable/codec/ThreadModerationCodec.scala  Thread.moderate の引数と inspect の結果の変換（M0）
@@ -248,19 +252,19 @@ bbs/src/main/scala/io/_3ch/bbs/
 ```
 
 - `adminClient` は `commonJS` にだけ依存し、`bbs` には依存しない（サーバ実装をブラウザ用バンドルに混ぜない。KB-27 の教訓）。
-- 依存: scalajs-react `core` と `extra`（Router）`4.0.0`（`bbs` と同じ版）。`extra` 4.0.0 の配布と React 19 での動作は、段 M1 の最初に小さな試作で確かめる（未確認）。
+- 依存: scalajs-react `core` `4.0.0`（`bbs` と同じ版）。**M1 で変更**: `extra` 4.0.0 はミラーから取得できたが、Router は内部でクラスコンポーネントを使い、画面離脱を止める機能も無い（§4.2）ので使わなかった。画面と URL の対応（`AdminPage`）、`history.pushState` と `popstate`、離脱の確認は `AdminApp` に自前で書いた。
 - 状態は画面ごとの `useState` 系と、`LoadState`（`Loading` / `Ready` / `Failed`）と `SaveState`（`Idle` / `Saving` / `Saved` / `Conflict` / `Invalid(errors)`）の enum で持つ。全体で共有するのはログイン中の利用者（`me`）だけ。
 - 外部の React 部品ライブラリは使わない（facade が要るため）。
 
 ### 5.2 ビルド
 
-- `npm run v6:build` に `vite build --config vite.admin.config.ts` を足し、`dist/admin/`（`index.html`・`assets/*.js`・`assets/*.css`）へ出す。設定は `root: "admin-web"`、`base: "/admin/"`（無いと資産を `/assets/*` で参照して 404 になる）、`publicDir: false`（無いと `public/3chiko.html` が複製される）、`build.outDir: "../dist/admin"`、`emptyOutDir: true`（`dist/admin/` だけを空にする）。
-- 実行順は client → workers → admin。workers ビルド（`@hono/vite-build`）が `dist/` を空にするかは未確認なので、admin を最後にして、`dist/admin/index.html` の存在をビルド後に検査する。`vite.config.ts` にある Scala.js プロジェクトの直列化ラッパーを流用する。
+- `npm run v6:build` に `vite build --config vite.admin.config.ts`（`npm run v6:build:admin`。M1 で実装）を足し、`dist/admin/`（`index.html`・`assets/*.js`・`assets/*.css`）へ出す。設定は `root: "admin-web"`、`base: "/admin/"`（無いと資産を `/assets/*` で参照して 404 になる）、`publicDir: false`（無いと `public/3chiko.html` が複製される）、`build.outDir: "../dist/admin"`、`emptyOutDir: true`（`dist/admin/` だけを空にする）。
+- 実行順は client → workers → admin。workers ビルド（`@hono/vite-build`）が `dist/` を空にするかは未確認なので、admin を最後にして、`dist/admin/index.html` の存在をビルド後に検査する。admin は別の vite の実行なので、`vite.config.ts` の直列化ラッパーは要らなかった（npm の実行順で直列になる）。
 - sbt は `adminClient/fastLinkJS`・`fullLinkJS` を既存ビルドと直列に実行する（`docs/client-build-review.md` の方針どおり sbt を同時起動しない）。
 
 ### 5.3 配信
 
-- `wrangler.jsonc` の `assets` に `run_worker_first: ["/admin", "/admin/*"]` を足し、`/admin` 配下は必ず Worker を通す（Static Assets が先に返すと認証を飛ばせるため）。
+- `wrangler.jsonc` の `assets` に `run_worker_first: ["/admin", "/admin/*"]` を足し、`/admin` 配下は必ず Worker を通す（Static Assets が先に返すと認証を飛ばせるため）。M1 でローカルの workerd に、`/%61dmin/…`・`//admin/…`・`/admin%2F…` などの書き方を試した。Static Assets は `/admin/…` へ 307 で正規化し、そこで Worker の認証にかかる（`tests/admin.integration.test.js`）。
 - `AdminAssets` は §3.1 の条件（通常セッション＋役割あり。`/admin/bootstrap` と資産は通常セッションだけ）を満たすときだけ `env.ASSETS.fetch` で `dist/admin/` の起動ページ・資産を返す。画面 URL（`/admin/boards/test` 等）はすべて `new Request(new URL("/admin/index.html", request.url), request)` で起動ページを取得して返し（`html_handling: "none"` のまま。`3chiko.html` と同じ取得方法）、ルーティングはクライアントで行う。
 - `/admin/api/*` は JSON だけを返し、起動ページへフォールバックしない。存在しない API は 404 の JSON。
 - KB-28（`dist` の Worker バンドルが資産として取れる）の修正とは独立だが、`dist/admin/` を Worker 経由に限ることで同じ問題を管理画面に持ち込まない。
@@ -301,7 +305,7 @@ bbs/src/main/scala/io/_3ch/bbs/
 
 ### 6.2 共通規則
 
-- 要求・応答は UTF-8 の JSON。変更系は §3.5 の条件を満たさなければ 403 `{code:"admin:origin"}`（M1 から。M0 は `Content-Type: application/json` だけを求め、満たさなければ 415）。
+- 要求・応答は UTF-8 の JSON。変更系は §3.5 の条件を満たさなければ 403 `{code:"admin:origin"}`（M1 から。M0 は `Content-Type: application/json` だけを求め、満たさなければ 415）。M1 の実装では、Origin と `X-Ch3s-Admin: 1` を先に見て 403、それを満たして `Content-Type` が違えば従来どおり 415 を返す。
 - M0（Basic 認証）の間は、資格情報が無ければ 401 `admin:unauthorized`（`WWW-Authenticate` 付き）、`ADMIN_PASSWORD` が無ければ 503 `admin:unavailable` を JSON で返す。M2 で `admin:reauth` に置き換える。
 - エラーは `{code, message, fields?}`。`code` は `admin:reauth`（401。管理者セッションが無い・期限切れ）・`admin:reauth-failed`（401。再認証の失敗）・`admin:forbidden`（403）・`admin:origin`（403。Origin 不一致）・`admin:content-type`（415）・`admin:method`（405）・`admin:bootstrap-closed`（403）・`admin:rate-limited`（429）・`admin:invalid`（400、`fields` に項目ごとの理由）・`admin:conflict`（409）・`admin:thread-state`（409。スレの停止・移動中など DO が拒否した操作）・`admin:too-large`（413）・`admin:not-found`（404）・`admin:internal`（500）。`message` は日本語の利用者向け文言で、サーバの `AdminText` が組み立てる。
 - `Thread.moderate` は理由を日本語の例外文言で返すので、当面は `admin:thread-state` の `message` にその文言をそのまま入れる。DO をコードで返す形に変えるのは別の独立コミットにする（AGENTS.md 3.5 の方針への移行）。
@@ -315,7 +319,7 @@ bbs/src/main/scala/io/_3ch/bbs/
 | 段 | 内容 | 前提 | 完了条件 |
 | --- | --- | --- | --- |
 | M0（完了） | **API 化**: `AdminService`・`AdminApi`・`AdminDto` / `AdminCodec`・`BoardSettingsForm`・`ResEditText` を作り、`/admin/api/*` を Basic 認証のまま追加する。既存の HTML 画面はそのまま残し、内部で `AdminService` を共用する。板設定・`head.txt`・`bbsmenu.html`・規制ルールの ETag 条件付き保存への変更は独立コミット | — | 既存の `AdminHandlerSuite`・統合テストが、条件付き保存の変更分を除いて通る。`AdminApiSuite` で全 API の正常系・検証エラー・ETag 競合・CR/LF 拒否・入力上限・未設定と明示値の往復を確認 |
-| M1 | **SPA 化**: `adminClient`・`admin-web`・`vite.admin.config.ts`、配信（`run_worker_first`・`AdminAssets`）、モックの見た目。全画面が現行と同じ操作をできたら、旧 HTML の描画（`AdminText` の画面部分）を削除する。認証は Basic 認証のまま、API に §3.5 の Origin 等の検査を加える。Origin 検証の復活と CSP の変更は承認済み（2026-11-07 利用者。§10-9） | M0、利用者の承認（済み） | 現行の全操作を SPA から実行できることを実 workerd で確認（§8）。CSP 違反が出ない。`dist/admin/` が `/admin` 以外から取れない。`AdminHandlerSuite` の「Origin・Fetch Metadata によらず受け付ける」と `tests/admin.integration.test.js` の同趣旨の確認を、他オリジンからの変更を拒否する期待値に書き換える |
+| M1（完了） | **SPA 化**: `adminClient`・`admin-web`・`vite.admin.config.ts`、配信（`run_worker_first`・`AdminAssets`）、モックの見た目。全画面が現行と同じ操作をできたら、旧 HTML の描画（`AdminText` の画面部分）を削除する。認証は Basic 認証のまま、API に §3.5 の Origin 等の検査を加える。Origin 検証の復活と CSP の変更は承認済み（2026-11-07 利用者。§10-9） | M0、利用者の承認（済み） | 現行の全操作を SPA から実行できることを実 workerd で確認（§8）。CSP 違反が出ない。`dist/admin/` が `/admin` 以外から取れない。`AdminHandlerSuite` の「Origin・Fetch Metadata によらず受け付ける」と `tests/admin.integration.test.js` の同趣旨の確認を、他オリジンからの変更を拒否する期待値に書き換える |
 | M2 | **アカウント認証へ切替**: 管理者セッション・再認証・役割検査・bootstrap・監査ログ・**最小限の役割付与 API と画面**（`PUT /admin/api/accounts/:uid/roles`。Basic 認証で作業していた人に役割を配れるようにするため）。Basic 認証・`ADMIN_PASSWORD`・`ADMIN_USER` を削除。AGENTS.md 1.6・3.6、`docs/admin.md`（ログイン・bootstrap・役割・開発時の手順）を更新 | 設計書の段 B（`Account` / `AccountIndex` DO・セッション）と、段 E-1（ID/Password ログインと Google ログイン） | 役割ごとの許可・拒否の表を全 API について `AdminAuthSuite` で確認。Basic 認証の資格情報では入れない。bootstrap の条件（0 件・非常用期限・同時実行で 1 人だけ）、`adminGen` による失効、パスワード規則の検査時点、Google 再認証の `aid` 照合を確認。`auth_time` の実機確認の結果を本書に反映 |
 | M3 | **認証機能の管理画面**: ユーザー一覧・ユーザー詳細（`AccountDirectory` を含む）・キャップ・PHOEBE / エッジ防御・連投規制とスレ立て規制の各項目（§4.3 の「設計書 段 A / C / D 以降」） | 設計書の各段 | 各画面の API テスト。§4.3 の表示条件が各段の完了と一致する |
 | M4 | **任意**: 管理者の TOTP、エラーログ閲覧（§10-3・§10-6） | — | — |
@@ -328,6 +332,7 @@ M0 と M1 は認証基盤を待たずに進められる。M2 は設計書の認�
 - **サーバ（Scala.js）**: `AdminApiSuite`・`AdminAuthSuite`（`HandlerTestKit` で R2・DO・時刻を差し替え）。管理者 Cookie の署名・期限・無操作失効・`gen` と `adminGen` の進行での失効、鍵の更新、Origin / Content-Type / 独自ヘッダの各欠落での拒否、bootstrap の同時実行。
 - **API の統合（必須）**: `tests/admin.integration.test.js` を API 版に書き換え、node:test ＋実 workerd で全 API の主要操作を通す。必須の判定はここで行う。
 - **クライアント**: 段 M1 の最初に、Scala.js のテストを jsdom で動かす構成（`scalajs-env-jsdom-nodejs` の追加）と、React 19 での scalajs-react のテストユーティリティ（`react-dom/test-utils` は `act` 以外が廃止）が使えるかを試作で確かめる。使えなければ、`bbs-client` と同じく node:test ＋ jsdom の JS テストからリンク済みの `adminClient` を読み込んで検証する。
+  **M1 の結果**: `scalajs-env-jsdom-nodejs` は取得できるが、jsdom の環境は ES モジュールを読めず（スクリプトだけ）、React を `@JSImport` する `adminClient` を載せられないので採らなかった。画面は `tests/admin-spa.test.js`（node:test ＋ jsdom、API は差し替え）で、純粋な部分（URL、板設定の編集、項目の並び、応答の読み取り）は `adminClient` の munit で確かめる。
 - **画面の通し（任意）**: Playwright（Chromium）で、ログイン → 再認証 → 板設定保存 → スレ停止 → ルール保存 → ログアウトを実 workerd 上で通す。npm の依存に無いので任意のテストとして分け、CI の必須にはしない。
 
 ## 9. 設計書・既存文書への反映

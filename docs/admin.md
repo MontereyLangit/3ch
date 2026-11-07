@@ -4,19 +4,39 @@
 ユーザー名は `admin`（`ADMIN_USER` で変更可能）、パスワードは `ADMIN_PASSWORD` です。
 パスワード未設定時は管理画面を公開せず 503 を返します。
 
+管理画面は scalajs-react の SPA です（2026-11-07 から。[改修計画](admin-spa-auth-plan.md) 段 M1）。`/admin/` 以下のどの URL も同じ起動ページを返し、画面の切り替えはブラウザーで行います。
+起動ページと資産（`dist/admin/`）は Basic 認証の後にだけ返します。画面は `/admin/api/` の JSON API で読み書きします。
+
 ローカル起動:
 
 1. `npm ci`
 2. `.dev.vars` に `ADMIN_PASSWORD="任意の長いパスワード"` を設定（Git 管理対象外）。
-3. `npm run dev`
+3. `npm run dev`（`npm run v6:build` で `dist/admin/` も作ります）
 4. `http://127.0.0.1:8787/admin/` を開く。
 
 本番のパスワードは `npx wrangler secret put ADMIN_PASSWORD --config wrangler.jsonc` で設定します。
 設定は `wrangler.jsonc` です（旧 `wrangler.toml` は削除済み）。
 
+## 画面
+
+左のメニューで板を選ぶと、その板の「板設定」と「スレ一覧・スレ管理」を開けます。一覧に無い板もトップで板名を入力して開けます。
+
+| 画面 | URL | 内容 |
+| --- | --- | --- |
+| トップ | `/admin/` | 板の一覧（R2 の板と `bbsmenu.html` のリンク先）と板名の入力 |
+| 板設定 | `/admin/boards/板名/` | `SETTING.TXT` の項目、その他の設定（直接編集）、`head.txt`、この板に当てはまる規制ルールの行 |
+| スレ一覧 | `/admin/boards/板名/threads/` | 公開中のスレ、削除・移動済みのスレ、key の直接指定 |
+| スレ管理 | `/admin/boards/板名/threads/key/` | 書き込みの停止・解除、削除、移動、レスの編集・あぼーん、投稿者ログ・dat・旧形式ログ |
+| 規制ルール | `/admin/rules/access/`・`/admin/rules/ngwords/` | `deny.cgi`・`ngwords.cgi` |
+| 板一覧 | `/admin/menu/` | `bbsmenu.html` |
+
+板設定の項目は「未設定（既定値で動く）」と「設定済み」を区別します。値を入れた項目だけを `SETTING.TXT` に書き、「既定に戻す」でキーを消します。
+フォームに無いキーと `=` の無い行は「その他の設定」に 1 行ずつ出て、そのまま保存されます。フォームの項目と同じキーはそこに書けません。
+「適用」は画面の上下にあり、どちらも同じ保存です。保存していない変更があるときは、別の画面へ移る前とページを閉じる前に確認します。
+
 ## 操作
 
-- 板管理: 板名を指定し、R2 の `head.txt` と `SETTING.TXT` を UTF-8 で保存します。公開時は既存の Shift_JIS 変換を使用します。
+- 板管理: R2 の `head.txt` と `SETTING.TXT` を UTF-8 で保存します。公開時は既存の Shift_JIS 変換を使用します。
 - スレ管理: 公開スレ一覧、削除・移動済み一覧、key 直接指定から選択できます。
 - スレ削除: 本文・投稿者ログ・旧形式ログを保持し、公開 dat と一覧から除外します。key は再使用しません。
 - スレ移動: 板と10桁のkeyを指定します。本文・投稿者ログ・スレ設定・停止状態を引き継ぎます。使用済みkeyへの上書きは拒否します。元のデータも管理者向けに保持します。
@@ -26,18 +46,20 @@
 - レス編集: 名前・メール・本文をテキストとして編集します。HTML はエスケープします。投稿日時・投稿者ログは変更しません。
 - ログ閲覧: 管理画面内で dat と投稿者情報、存在する場合は旧形式ログを確認できます。
 - 板一覧編集: R2 の `bbsmenu.html` に HTML を保存します。未保存の場合は従来の自動生成を使用します。
-- 同時編集: 板管理（`head.txt`・`SETTING.TXT`）・規制ルール・板一覧は、画面を開いた時点の内容から他の操作で更新されていれば保存しません（ETag による条件付き保存）。画面を開き直してから保存してください。
-  板管理は `SETTING.TXT`、`head.txt` の順に保存し、`head.txt` だけが更新されていた場合は `SETTING.TXT` だけを保存して知らせます。
+- 削除・移動・あぼーんは、実行前に確認します。
+- 同時編集: 板管理（`head.txt`・`SETTING.TXT`）・規制ルール・板一覧は、画面を開いた時点の内容から他の操作で更新されていれば保存しません（ETag による条件付き保存）。「開き直す」で読み直してから保存してください。
+  板管理は `SETTING.TXT`、`head.txt` の順に保存し、`head.txt` だけが更新されていた場合は `SETTING.TXT` だけを保存して知らせます（`head.txt` の編集は画面に残ります）。
 
 ## API
 
-`/admin/api/` 以下に、画面と同じ操作の JSON API があります（管理画面の作り直し用。認証は画面と同じ Basic 認証）。
+`/admin/api/` 以下の JSON API を画面が使います（認証は画面と同じ Basic 認証）。
 板の一覧、板設定（`SETTING.TXT` の項目と「その他」の行・`head.txt`）、スレ一覧・スレ詳細・スレ操作、規制ルール、板一覧の読み書きができます。
-変更は `Content-Type: application/json` で送り、読込時の ETag を添えます。一覧と書式は [管理画面 改修計画](admin-spa-auth-plan.md) §6 を参照してください。
+変更（`GET` 以外）は、`Origin` が同じオリジンで、ヘッダ `X-Ch3s-Admin: 1` と `Content-Type: application/json` を付けたときだけ受け付けます（満たさなければ 403 `admin:origin`、Content-Type だけが違えば 415）。読込時の ETag を添えます。
+一覧と書式は [管理画面 改修計画](admin-spa-auth-plan.md) §6 を参照してください。
 
 ## 規制ルール
 
-板管理の「スレ立て規制」で通常・広域の件数窓と有効期間、県で分けずAS全体を対象にするASNを設定できます。
+板設定の「スレ立て規制」で通常・広域の件数窓と有効期間、県で分けずAS全体を対象にするASNを設定できます。
 通常は同一IP・タイトル、広域は同一UA・AS＋県（海外は海外全体）を判定します。
 件数0でその規制を無効にします。詳細と旧設定形式の扱いは [bbs.cgi スレ立て規制](thread-creation-regulation.md) を参照してください。
 
@@ -59,9 +81,9 @@ NGワードは名前・メール・本文・タイトルに適用し、数値文
 識別子システムは従来通り無効のため、UIDではなくIP・AS番号等を利用してください。
 
 連投規制とスレ立て規制の免除は SETTING.TXT の `BBS_RENTOU_PASS`・`BBS_THREAD_PASS` に同じ回避レベルで書きます（既定はどちらも `privileged`。知らない値も `privileged`）。
-`BBS_THREAD_PASS` はスレ設定へ書き写しません。専用フォームはまだ無いので SETTING.TXT を直接編集してください。
+`BBS_THREAD_PASS` はスレ設定へ書き写しません。どちらも板設定の画面の「連投規制」「スレ立て規制」で選べます。
 
 ## テスト
 
-`npm test` で改修範囲の単体テストと統合テストを実行します。
+`npm test` で改修範囲の単体テストと統合テストを実行します。管理画面の SPA は `tests/admin-spa.test.js`（jsdom）で、API と配信は `tests/admin.integration.test.js`（実 workerd）で確かめます。
 統合テストは Wrangler を実際に起動し、一時的なローカル R2 / Durable Objects に対して HTTP リクエストで確認します。本番ストレージは使用しません。

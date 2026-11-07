@@ -47,7 +47,7 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 
 - **ランタイム**: Cloudflare Workers (ES Modules, `compatibility_date: 2026-10-02`。`nodejs_compat` は既定で有効)
 - **言語 / フレームワーク**: Scala 3 / Scala.js（`bbs/` = Worker・DO・ハンドラ、`common/` = 純粋ロジック）+ scalajs-react + HonoX + Vite。`codegen` は `bbs.Main` の `@route` と `bbsclient.Main` の `@islands` から配線を生成。既存 fetch の `app/routes/index.ts` は手書き
-  - 管理画面はscalajs-reactのSPA。利用者向け画面はHonoX SSR (Islands)
+  - 管理画面はscalajs-reactのSPA（`admin-client/`、`vite.admin.config.ts` で `dist/admin/` に出す）。利用者向け画面はHonoX SSR (Islands)
 - **状態管理**: Durable Objects — `Board`（板: スレ一覧 / 削除済み一覧）, `Thread`（スレ: dat / log / settings / hidden / stopped / movedTo）
 - **オブジェクトストレージ**: R2 `ch3www`（`SETTING.TXT`, `head.txt`, `bbsmenu.html`, `headline.txt`, `deny.cgi`, `ngwords.cgi`, 過去ログ `.cgi`）
 - **KV**: `CAP`（キャップ: パスワードハッシュ → 表示名）, `TEST`
@@ -62,10 +62,10 @@ bbs/
   src/main/scala/io/_3ch/bbs/
     Main.scala         Worker エントリ（JSExportTopLevel）
     handler/           PublicRoutes（dat, subject.txt, SETTING.TXT, bbsmenu 等）, Posting（投稿パイプライン）,
-                       AdminHandler（/admin/*）, Responses。admin/ は /admin/api の JSON API。auth/ は /auth/* の画面と API、セッション Cookie、認証設定の読み取り
+                       AdminHandler（/admin/*）, Responses。admin/ は /admin/api の JSON API と管理画面の起動ページ・資産の配信。auth/ は /auth/* の画面と API、セッション Cookie、認証設定の読み取り
     application/       アプリケーションサービス。posting/PostingService が投稿の段の並びを持ち、ports/ に外部の読み書きの口を置く。
                        auth/ はクライアント認証・専ブラキー発行・投稿の認証と記録（ports/ にアカウント・Cookie の口）
-                       admin/ は管理画面の板設定・スレ操作・規制ルール・板一覧（HTML の画面と API が共用）
+                       admin/ は管理画面の板設定・スレ操作・規制ルール・板一覧（/admin/api が使う）
     domain/            ドメインモデル・ドメインサービス（js.RegExp を使う規則と投稿処理の型。正規表現を使わない規則は common/）
     repository/        ports の実装。DO スタブ / R2 / KV を包み、js.Dynamic をここで止める
     durable/           Board DO, Thread DO, Account / AccountIndex / AuthRate DO
@@ -74,11 +74,12 @@ bbs/
   src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
   test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ
 bbs-client/            クライアント側（hydration）Scala
+admin-client/          管理画面の SPA（scalajs-react。commonJS だけに依存し、bbs には依存しない）。admin-web/ は起動ページ・CSS・JS の入口（vite.admin.config.ts）
 codegen/               Main の @route / @islands から app/routes/・app/islands/・bbs の IslandComponents を、DO から TS 型と Scala RPC スタブを生成
 app/                   HonoX（server.ts がエントリ。routes/index.ts と _renderer.tsx は手書き）
 public/
   3chiko.html          3chiko.html本体。Vite の publicDir として dist/ へコピーされ Workers Static Assets で配信
-tests/                 実workerdを使う統合テスト（要 dist/）用ディレクトリ。admin・rpc・post-rate・auth（認証の HTTP と DO）・storage-atomicity（SQLite DO の同期 KV と SQL の原子性）の *.integration.test.js（実 workerd。support/ はテスト専用 Worker）。
+tests/                 実workerdを使う統合テスト（要 dist/）用ディレクトリ。admin・rpc・post-rate・auth（認証の HTTP と DO）・storage-atomicity（SQLite DO の同期 KV と SQL の原子性）の *.integration.test.js（実 workerd。support/ はテスト専用 Worker）。admin-spa.test.js は管理画面の SPA を jsdom で動かす。
                        golden/ は言語中立の入出力表（Scala 側が読む。端末ハッシュ・Client Hints・空白処理の照合表を含む）
 docs/                  仕様書・設計メモ（後述）
 wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
@@ -100,7 +101,7 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 | `docs/auth-password-implementation-notes.md` | ID・パスワード方式（E-1）の実装メモ。入力規則・PBKDF2・登録回復方式の候補 |
 | `docs/bbs-cgi-ddd-refactoring-plan.md`                                                 | bbs.cgi 投稿処理の DDD 化リファクタリング計画（段0〜9は完了。段10以降が認証・規制の実装）                                                                                                            |
 | `docs/auth-phoebe-review.md`                                                           | 上記 2 文書の Opus 5 セルフレビュー記録（2026-11-02）                                                                                                                                |
-| `docs/admin-spa-auth-plan.md`                                                          | 管理画面の改修計画（アカウント認証化・新 UI・scalajs-react SPA。2026-11-02。段 M0（`/admin/api` の JSON API・ETag 条件付き保存）は完了、M1 は承認済み）                                    |
+| `docs/admin-spa-auth-plan.md`                                                          | 管理画面の改修計画（アカウント認証化・新 UI・scalajs-react SPA。2026-11-02。段 M0（`/admin/api` の JSON API・ETag 条件付き保存）と M1（SPA 化）は完了、次は M2）                                    |
 | `docs/admin-spa-auth-review.md`                                                        | 管理画面改修計画のセルフレビュー記録（2026-11-02）と段ごとの実装記録                                                                                                                     |
 | `docs/durable-object-stubs.md`                                                         | DO の RPC スタブ（`*DoStub`）のコンパイル時生成の仕様・対応範囲・運用手順                                                                                                            |
 | `docs/thread-creation-regulation.md` / `docs/global-thread.md`                         | 投稿機能の追加仕様（スレ立て規制、全板共通スレ 924 / 900）                                                                                                                            |
@@ -110,10 +111,10 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 
 ```bash
 npm ci                 # 依存導入
-npm run v6:build       # sbt codegen/run → vite build（client / workers）→ dist/
+npm run v6:build       # sbt codegen/run → vite build（client / workers / admin）→ dist/（管理画面は dist/admin/）
 npm run dev            # v6:build 後に wrangler dev --config wrangler.jsonc → http://127.0.0.1:8787
-sbt test               # 単体テスト/現仕様固定テスト（munit。golden 照合を含む）
-npm test               # Scala テスト用リンク → workerd 統合・Islands SSR/hydration 検証（要 dist/）
+sbt test               # 単体テスト/現仕様固定テスト（munit。golden 照合を含む。adminClient を含む）
+npm test               # Scala テスト用リンク → workerd 統合・Islands SSR/hydration・管理画面 SPA（jsdom）の検証（要 dist/）
 npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc --minify
 ```
 

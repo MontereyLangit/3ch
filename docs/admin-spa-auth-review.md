@@ -105,3 +105,58 @@ R2 の `etagDoesNotMatch: "*"`、`@hono/vite-build` が `dist/` を空にする�
 ## 利用者の決定（2026-11-07）
 
 - 利用者: Origin 検証の復活と CSP の `script-src 'self'` への変更（計画書 §10-9）、M0 の ETag の項目が無い HTML の送信を条件なしで保存する扱い（§10-5）を承認。計画書と設計書の該当箇所を決定に改めた。
+
+## 段 M1 の実装記録
+
+2026-11-07。計画書 §7 の M1（SPA 化）。コミットはビルドの配線と画面の土台、板設定の画面、スレ・規制ルール・板一覧の画面と jsdom のテスト、
+API の Origin 検査、配信と旧画面の削除、文書の順。
+
+### 実装したもの
+
+- `admin-client`（sbt の `adminClient`。`commonJS` だけに依存）: `AdminApp`（URL と画面の切り替え、未保存の確認）、`AdminPage`、`AdminApiClient`、
+  `LoadState`・`SaveState`・`Loaded.useLoad`、`BoardSettingsDraft`・`BoardSettingsLayout`、画面はトップ・板設定・スレ一覧・スレ管理・規制ルール（アクセス・NGワード）・板一覧。
+  すべて関数コンポーネント（`ScalaFnComponent`）で、コンポーネントは `final val`。見た目は板トップと同じ Tailwind のクラスで、値はモック（`docs/ui/auth-admin.css`）から写した。角丸なし。
+- `admin-web/`（`index.html`・`main.js`・`admin.css`）と `vite.admin.config.ts`。`npm run v6:build` の最後に `v6:build:admin` を足し、`dist/admin/index.html` の有無を検査する。
+- 配信: `wrangler.jsonc` の `run_worker_first: ["/admin", "/admin/*"]`、`AdminAssets`（Basic 認証の後に、画面の URL は起動ページ、`/admin/assets/` はそのファイル）。
+  起動ページは `no-store`・`nosniff`・`no-referrer` と CSP `script-src 'self'`（§5.4 のとおり）、資産は `private, max-age=31536000, immutable`。
+- API の変更系に Origin と `X-Ch3s-Admin: 1` の検査（`AdminOrigin`。満たさなければ 403 `admin:origin`）。
+- 旧 HTML の画面（`AdminHandler` の描画と POST、`AdminText` の画面部分）を削除。使われなくなった `AdminService.saveCreationLimits`・`AdminFailure.CreationLineBreak`・
+  `WriteCondition.Always` を消し、`boardTexts`・`saveBoardTexts` を非公開にした。板トップの「管理画面へ」のリンクを `/admin/boards/板名/` に替えた。
+- テスト: `adminClient` の munit（`AdminPageSuite`・`BoardSettingsDraftSuite`・`BoardSettingsLayoutSuite`・`AdminApiClientSuite`、12 件）、`tests/admin-spa.test.js`（node:test ＋ jsdom、10 件）、
+  `AdminHandlerSuite` を配信と Origin の 4 件に書き換え、`AdminApiSuite` は管理画面と同じヘッダで送るようにして規制ルールの誤りの文言を足した。
+  `tests/admin.integration.test.js` と `tests/post-rate.integration.test.js` を API に書き換え、起動ページ・資産・CSP・認証・他オリジンの拒否・`/admin` 以外の書き方を足した。
+  `tests/client-bundle.test.js` に管理画面の JS にサーバ処理が入らないことを足した。
+
+### 計画との差分
+
+| 項目 | 計画 | 実装と理由 |
+| --- | --- | --- |
+| Router | scalajs-react `extra` の Router | `extra` 4.0.0 はミラーから取得できたが、Router は内部でクラスコンポーネントを使い、離脱を止める機能も無い。画面は 6 種類だけなので、`AdminPage`（URL ↔ 画面）と `pushState`・`popstate` を自前で書いた |
+| Scala.js のテストを jsdom で | 試作で確かめる | `scalajs-env-jsdom-nodejs` 1.1.0 の jar を確かめると入力はスクリプト（`Input.Script`）だけで、ES モジュールで React を読む `adminClient` は載らない。node:test ＋ jsdom の JS テストにした |
+| `admin.css` の `@source` | `app/style.css` と同じ | `admin-client` のソースだけ（公開側のクラスを管理画面の CSS に入れないため） |
+| Content-Type の誤り | §6.2「§3.5 を満たさなければ 403」 | Origin と独自ヘッダを先に見て 403。満たした要求の Content-Type の誤りは M0 と同じ 415 のまま |
+| 板設定の項目 | 帯の色・表示条件を `BoardSettingsForm` に足す | 画面の並び・帯の色・選択肢の表示は `adminClient` の `BoardSettingsLayout` に置いた（サーバは使わないため）。設計書の段 A・C・D は完了しているので、表示条件は設けず全項目を出す（`BBS_RENTOU_PASS`・`BBS_THREAD_PASS` を含む。旧画面では SETTING.TXT の直接編集で変えられたので、出さないと操作が減る） |
+| 旧画面の URL | 記述なし | `/admin/board?bbs=` などの旧 URL は SPA の「ページがありません」になる。板トップのリンクは新しい URL に替えた |
+| 「直近のエラーログ」「キャップ」「アカウント」 | §4.1 | M1 では作らない（M2〜M4） |
+| 上部バーの利用者名・役割・ログアウト | §4.2 | Basic 認証の間は出さない（M2） |
+
+### 振る舞いの確認
+
+- 実 workerd で、`/admin/`・`/admin/index.html`・`/admin/assets/*`・画面の URL が認証なしでは 401、認証ありで起動ページと資産を返すこと、起動ページにインラインのスクリプト・スタイルが無いこと、
+  `/%61dmin/index.html`・`//admin/index.html`・`/admin%2Findex.html`・`/%2Fadmin/index.html` は Static Assets が `/admin/…` へ 307 で正規化し、`/ADMIN/…`・`/.%2Fadmin/…` は 404 になること（どれも起動ページを返さない）を確かめた。
+- 他オリジン・Origin なし・`Origin: null`・`X-Ch3s-Admin` なしの変更は 403 で、保存されない。GET は Origin を問わない。
+- 公開側（dat・subject.txt・bbs.cgi・Shift_JIS）の応答は変えていない。板トップの「管理画面へ」のリンク先だけが変わる。
+- CSP の違反は、ブラウザーを使った確認はしていない（Playwright は任意で入れていない）。起動ページにインラインのスクリプト・スタイルが無いこと、画面に `style` 属性が無いこと（jsdom）、
+  資産が `/admin/assets/` から読まれることで代えた。
+
+### セルフレビュー（AGENTS.md 3.5）
+
+- `Callback.when(条件)` の条件が描画のたびに評価され、確認のダイアログが描画中に出ていた（jsdom のテストで検出）。`Confirm`（`CallbackTo` で条件を遅らせる）にまとめた。
+- TS / JS は `admin-web/main.js` の import と Vite の設定だけで、画面の処理と API の呼び出しはすべて Scala。可変の状態は Hooks（`useState`・`useRef`）だけ。
+- 文言は既存画面に合わせ、全角と英数字の間に空白を入れていない。
+
+### 未解決・利用者の確認が要る点
+
+- ブラウザーでの CSP 違反の確認（Playwright を入れるか、手で開いて開発者ツールで見るか）。
+- 管理画面の JS は 1 本で約 680KB（gzip 約 190KB）。分割は M2 以降で必要なら検討する。
+- 旧 URL（`/admin/board?bbs=` など）のブックマークは「ページがありません」になる。転送が要るか。
