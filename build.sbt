@@ -128,6 +128,18 @@ lazy val bbsClient = project
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) }
   )
 
+// --- admin-client: Scala.js — 管理画面の SPA（docs/admin-spa-auth-plan.md §5）。サーバ実装を混ぜないため bbs には依存しない ---
+lazy val adminClient = project
+  .in(file("admin-client"))
+  .enablePlugins(ScalaJSPlugin)
+  .dependsOn(commonJS)
+  .settings(commonSettings)
+  .settings(
+    scalaJSUseMainModuleInitializer := true,
+    libraryDependencies += "com.github.japgolly.scalajs-react" %%% "core" % "4.0.0",
+    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) }
+  )
+
 // --- codegen: JVM — Main のアノテーションから配線、DO の Scala 宣言から TS 型と Scala RPC スタブを生成 ---
 lazy val codegen = project
   .in(file("codegen"))
@@ -141,7 +153,7 @@ lazy val codegen = project
 
 lazy val root = project
   .in(file("."))
-  .aggregate(commonJVM, commonJS, bbs, bbsClient, codegen)
+  .aggregate(commonJVM, commonJS, bbs, bbsClient, adminClient, codegen)
   .settings(
     name := "3ch",
     publish / skip := true

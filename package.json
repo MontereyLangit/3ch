@@ -9,7 +9,8 @@
     "v6:generate": "sbt codegen/run",
     "v6:build:client": "vite build --mode client",
     "v6:build:server": "vite build --mode workers",
-    "v6:build": "npm run v6:generate && npm run v6:build:client && npm run v6:build:server",
+    "v6:build:admin": "vite build --config vite.admin.config.ts && node -e \"require('node:fs').accessSync('dist/admin/index.html')\"",
+    "v6:build": "npm run v6:generate && npm run v6:build:client && npm run v6:build:server && npm run v6:build:admin",
     "v6:typecheck": "tsc --noEmit"
   },
   "devDependencies": {
