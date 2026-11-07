@@ -2,7 +2,7 @@ package io._3ch.bbs.application.admin
 
 import io._3ch.bbs.application.admin.ports.{AdminFiles, AdminThreads, WriteCondition, WriteResult}
 import io._3ch.bbs.domain.posting.moderation.{ModerationRuleSet, ThreadCreationSettings}
-import io._3ch.common.admin.{ResView, RuleName, TextFile, ThreadAction, ThreadDetail, ThreadList, ThreadSummary}
+import io._3ch.common.admin.{BoardSettingsSaved, ResView, RuleName, Saved, TextFile, ThreadAction, ThreadDetail, ThreadList, ThreadSummary}
 import io._3ch.common.domain.BbsSettings
 
 import scala.concurrent.Future
@@ -14,23 +14,30 @@ final class AdminService(files: AdminFiles, threads: AdminThreads) {
 
   private def text(path: String, fallback: => String = ""): Future[String] = files.read(path).map(_.fold(fallback)(_.text))
 
-  /** 板の head.txt と SETTING.TXT。SETTING.TXT が無ければ既定の内容 */
-  def boardTexts(bbs: String): Future[(String, String)] = for {
-    head <- text(headPath(bbs))
-    settings <- text(settingsPath(bbs), defaultSettings(bbs))
-  } yield (head, settings)
+  /** 板の head.txt と SETTING.TXT。無ければ空と既定の内容で、ETag は None */
+  def boardTexts(bbs: String): Future[(TextFile, TextFile)] = for {
+    head <- files.read(headPath(bbs))
+    settings <- files.read(settingsPath(bbs))
+  } yield (head.getOrElse(TextFile("", None)), settings.getOrElse(TextFile(defaultSettings(bbs), None)))
 
-  /** head.txt と SETTING.TXT をそのまま保存する。スレ立て規制の設定が不正なら何も書かない */
-  def saveBoardTexts(bbs: String, head: String, settings: String): Future[Either[AdminFailure, Unit]] =
+  /**
+    * SETTING.TXT、head.txt の順に条件付きで保存する。スレ立て規制の設定が不正か SETTING.TXT が競合したら何も書かない。
+    * head.txt だけが競合したら SETTING.TXT は保存したまま partial を返す
+    */
+  def saveBoardTexts(bbs: String, head: String, settings: String, settingsCondition: WriteCondition, headCondition: WriteCondition)
+    : Future[Either[AdminFailure, BoardSettingsSaved]] =
     ThreadCreationSettings.parseText(settings) match {
       case Left(reason) => Future.successful(Left(AdminFailure.CreationSettings(reason)))
-      case Right(_) => for {
-        _ <- files.write(headPath(bbs), head, WriteCondition.Always)
-        _ <- files.write(settingsPath(bbs), settings, WriteCondition.Always)
-      } yield Right(())
+      case Right(_) => files.write(settingsPath(bbs), settings, settingsCondition).flatMap {
+        case WriteResult.Conflict => Future.successful(Left(AdminFailure.Conflict(AdminFile.Settings)))
+        case WriteResult.Written(settingsEtag) => files.write(headPath(bbs), head, headCondition).map {
+          case WriteResult.Written(headEtag) => Right(BoardSettingsSaved(settingsEtag, headEtag, partial = false))
+          case WriteResult.Conflict => Right(BoardSettingsSaved(settingsEtag, None, partial = true))
+        }
+      }
     }
 
-  /** スレ立て規制の項目だけを置き換える。values は (キー, 値) の列で、読込後に他の操作で保存されていれば書かない */
+  /** スレ立て規制の項目だけを置き換える。values は (キー, 値) の列で、読込後に他の操作で保存・作成されていれば書かない */
   def saveCreationLimits(bbs: String, values: List[(String, String)]): Future[Either[AdminFailure, Unit]] =
     if (values.exists((_, v) => v.contains('\r') || v.contains('\n'))) Future.successful(Left(AdminFailure.CreationLineBreak))
     else files.read(settingsPath(bbs)).flatMap { stored =>
@@ -41,7 +48,7 @@ final class AdminService(files: AdminFiles, threads: AdminThreads) {
       ThreadCreationSettings.parseText(settings) match {
         case Left(reason) => Future.successful(Left(AdminFailure.CreationSettings(reason)))
         case Right(_) =>
-          val condition = stored.fold(WriteCondition.Always)(file => WriteCondition.Matches(file.etag.getOrElse("")))
+          val condition = AdminService.condition(stored.map(_.etag.getOrElse("")))
           files.write(settingsPath(bbs), settings, condition).map {
             case WriteResult.Written(_) => Right(())
             case WriteResult.Conflict => Left(AdminFailure.Conflict(AdminFile.Settings))
@@ -77,16 +84,21 @@ final class AdminService(files: AdminFiles, threads: AdminThreads) {
   /** 規制ルールのファイル */
   def rules(name: RuleName): Future[TextFile] = files.read(name.file).map(_.getOrElse(TextFile("", None)))
 
-  /** 規制ルールを検証して保存する */
-  def saveRules(name: RuleName, rules: String): Future[Either[AdminFailure, Unit]] = ModerationRuleSet.parse(rules) match {
+  /** 規制ルールを検証して条件付きで保存する */
+  def saveRules(name: RuleName, rules: String, condition: WriteCondition): Future[Either[AdminFailure, Saved]] = ModerationRuleSet.parse(rules) match {
     case Left(error) => Future.successful(Left(AdminFailure.Rules(error)))
-    case Right(_) => files.write(name.file, rules, WriteCondition.Always).map(_ => Right(()))
+    case Right(_) => saved(files.write(name.file, rules, condition), AdminFile.Rules)
   }
 
   /** bbsmenu.html */
   def menu(): Future[TextFile] = files.read(MenuPath).map(_.getOrElse(TextFile("", None)))
 
-  def saveMenu(html: String): Future[Unit] = files.write(MenuPath, html, WriteCondition.Always).map(_ => ())
+  def saveMenu(html: String, condition: WriteCondition): Future[Either[AdminFailure, Saved]] = saved(files.write(MenuPath, html, condition), AdminFile.Menu)
+
+  private def saved(result: Future[WriteResult], file: AdminFile): Future[Either[AdminFailure, Saved]] = result.map {
+    case WriteResult.Written(etag) => Right(Saved(etag))
+    case WriteResult.Conflict => Left(AdminFailure.Conflict(file))
+  }
 }
 
 object AdminService {
@@ -95,6 +107,9 @@ object AdminService {
   def settingsPath(bbs: String): String = s"$bbs/SETTING.TXT"
   def headPath(bbs: String): String = s"$bbs/head.txt"
   def defaultSettings(bbs: String): String = BbsSettings.defaultText.replace("<DIR_NAME>", bbs)
+
+  /** 読込時の ETag による条件。None なら読込時にファイルが無かったので、無いときだけ作る */
+  def condition(etag: Option[String]): WriteCondition = etag.fold(WriteCondition.Absent)(WriteCondition.Matches(_))
 
   /** 管理対象の板名。英数字・_・- の 1〜80 文字 */
   def validBoard(value: String, field: String = "bbs"): Either[AdminFailure, String] =

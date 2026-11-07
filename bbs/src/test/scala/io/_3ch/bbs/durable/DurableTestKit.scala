@@ -118,14 +118,14 @@ object DurableTestKit {
 
     private def str(v: js.Any): String = js.Dynamic.global.String(v).asInstanceOf[String]
 
-    /** 実R2 の `put(onlyIf)` と同じく etagMatches / etagDoesNotMatch だけを評価し、未知のプロパティ（doesNotExist 等）は無視する。条件不成立は null を返す。 */
+    /** 実R2 の `put(onlyIf)` と同じく etagMatches / etagDoesNotMatch（`*` は任意の ETag）だけを評価し、未知のプロパティ（doesNotExist 等）は無視する。条件不成立は null を返す。 */
     private def r2Put(key: String, value: js.Any, opts: js.UndefOr[js.Dynamic]): js.Any = {
       val rec = r2.get(key)
       val onlyIf: js.Dynamic = opts.toOption.filter(o => !js.isUndefined(o.onlyIf)).map(_.onlyIf).getOrElse(js.Dynamic.literal())
       val matches: js.Any = onlyIf.etagMatches.asInstanceOf[js.Any]
       val doesNotMatch: js.Any = onlyIf.etagDoesNotMatch.asInstanceOf[js.Any]
-      val failMatch = !js.isUndefined(matches) && (rec.isEmpty || rec.get._2 != str(matches))
-      val failNotMatch = !js.isUndefined(doesNotMatch) && rec.exists(_._2 == str(doesNotMatch))
+      val failMatch = !js.isUndefined(matches) && (rec.isEmpty || (str(matches) != "*" && rec.get._2 != str(matches)))
+      val failNotMatch = !js.isUndefined(doesNotMatch) && rec.exists(r => str(doesNotMatch) == "*" || r._2 == str(doesNotMatch))
       if failMatch || failNotMatch then null.asInstanceOf[js.Any]
       else {
         val etag = nextEtag()

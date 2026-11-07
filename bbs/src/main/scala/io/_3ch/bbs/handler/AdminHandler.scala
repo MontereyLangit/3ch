@@ -1,6 +1,7 @@
 package io._3ch.bbs.handler
 
-import io._3ch.bbs.application.admin.{AdminFailure, AdminService}
+import io._3ch.bbs.application.admin.{AdminFailure, AdminFile, AdminService}
+import io._3ch.bbs.application.admin.ports.WriteCondition
 import io._3ch.bbs.external.cloudflare.*
 import io._3ch.bbs.external.web.{Request, Response, TextEncoder}
 import io._3ch.bbs.hash.WebHash
@@ -29,6 +30,11 @@ object AdminHandler {
   private def input(name: String, value: String, label: String): String = s"""<label>$label <input name="$name" value="${escape(value)}" required></label>"""
   private def area(name: String, value: String, label: String): String = s"""<label>$label<textarea name="$name" rows="16">${escape(value)}</textarea></label>"""
   private def form(body: String, action: String, label: String = "保存"): String = s"""<form method="post">$body<button name="action" value="$action">$label</button></form>"""
+  /** 読込時の ETag。ファイルが無ければ空 */
+  private def etagInput(name: String, etag: Option[String]): String = s"""<input type="hidden" name="$name" value="${escape(etag.getOrElse(""))}">"""
+  /** フォームの ETag による条件。項目が無い（従来の画面からの送信）なら条件なし、空ならファイルが無いときだけ */
+  private def condition(data: js.Dynamic, name: String): WriteCondition =
+    if js.isUndefined(data.selectDynamic(name)) then WriteCondition.Always else AdminService.condition(Option(blank(data.selectDynamic(name))).filter(_.nonEmpty))
   private val creationSettingFields = List(
     "BBS_THREAD_TATESUGI" -> "通常規制の件数",
     "BBS_THREAD_TATESUGI_RESET" -> "通常規制の有効期間（秒）",
@@ -97,13 +103,16 @@ object AdminHandler {
                 case "/admin/board" =>
                   val bbs = board(url.searchParams.get("bbs"))
                   str(data.action) match {
-                    case "save" => admin.saveBoardTexts(bbs, blank(data.head), blank(data.settings)).map(ok)
+                    case "save" =>
+                      admin.saveBoardTexts(bbs, blank(data.head), blank(data.settings), condition(data, "settingsEtag"), condition(data, "headEtag")).map(ok).map { saved =>
+                        if saved.partial then fail(AdminText.failure(AdminFailure.Conflict(AdminFile.Head)))
+                      }
                     case "saveCreationLimit" => admin.saveCreationLimits(bbs, creationSettingFields.map((name, _) => name -> blank(data.selectDynamic(name)))).map(ok)
                     case _ => fail("操作が不正です。")
                   }
                 case "/admin/access" | "/admin/ngwords" =>
-                  admin.saveRules(if path.endsWith("access") then RuleName.Access else RuleName.Ngwords, blank(data.rules)).map(ok)
-                case "/admin/menu" => admin.saveMenu(blank(data.html))
+                  admin.saveRules(if path.endsWith("access") then RuleName.Access else RuleName.Ngwords, blank(data.rules), condition(data, "etag")).map(ok).map(_ => ())
+                case "/admin/menu" => admin.saveMenu(blank(data.html), condition(data, "etag")).map(ok).map(_ => ())
                 case "/admin/thread" =>
                   val bbs = board(url.searchParams.get("bbs")); val k = key(url.searchParams.get("key"))
                   threadAction(data).fold(fail("操作が不正です。"))(action => admin.moderate(bbs, k, action).map(ok))
@@ -130,7 +139,10 @@ object AdminHandler {
       case "/admin" | "/admin/" => Future.successful("<h1>管理画面top</h1><p>板名を指定して管理対象を開いてください。</p><form action=\"/admin/board\">" + input("bbs", "", "板名") + "<button>板管理</button></form><form action=\"/admin/threads\">" + input("bbs", "", "板名") + "<button>スレ管理</button></form>")
       case "/admin/board" =>
         val bbs = board(url.searchParams.get("bbs"))
-        admin.boardTexts(bbs).map { (head, settings) => s"<h1>板管理: ${escape(bbs)}</h1>" + creationForm(settings) + form(area("head", head, "head.txt") + area("settings", settings, "SETTING.TXT"), "save") }
+        admin.boardTexts(bbs).map { (head, settings) =>
+          val etags = etagInput("settingsEtag", settings.etag) + etagInput("headEtag", head.etag)
+          s"<h1>板管理: ${escape(bbs)}</h1>" + creationForm(settings.text) + form(etags + area("head", head.text, "head.txt") + area("settings", settings.text, "SETTING.TXT"), "save")
+        }
       case "/admin/threads" =>
         val bbs = board(url.searchParams.get("bbs"))
         admin.threadList(bbs).map { list =>
@@ -161,8 +173,8 @@ object AdminHandler {
         }
       case "/admin/access" | "/admin/ngwords" =>
         val access = path.endsWith("access")
-        admin.rules(if access then RuleName.Access else RuleName.Ngwords).map(rules => AdminText.rules(access) + form(area("rules", rules.text, "規制ルール"), "save"))
-      case "/admin/menu" => admin.menu().map(_.text).map(html => "<h1>板一覧（bbsmenu.html）編集</h1><p>公開するHTMLを入力してください。保存後はこの内容を使用します。</p>" + form(area("html", html, "bbsmenu.html"), "save"))
+        admin.rules(if access then RuleName.Access else RuleName.Ngwords).map(rules => AdminText.rules(access) + form(etagInput("etag", rules.etag) + area("rules", rules.text, "規制ルール"), "save"))
+      case "/admin/menu" => admin.menu().map(menu => "<h1>板一覧（bbsmenu.html）編集</h1><p>公開するHTMLを入力してください。保存後はこの内容を使用します。</p>" + form(etagInput("etag", menu.etag) + area("html", menu.text, "bbsmenu.html"), "save"))
       case _ => return Future.successful(("<h1>ページがありません。</h1>", 404))
     }
     html.map(_ -> 200)

@@ -19,7 +19,7 @@ object AdminText {
 
   private def conflict(file: AdminFile): String = file match {
     case AdminFile.Settings => "他の操作で板設定が更新されました。画面を開き直してから保存してください。"
-    case AdminFile.Head => "他の操作でhead.txtが更新されました。画面を開き直してから保存してください。"
+    case AdminFile.Head => "SETTING.TXTは保存しましたが、head.txtは他の操作で更新されていたため保存していません。画面を開き直してください。"
     case AdminFile.Rules => "他の操作で規制ルールが更新されました。画面を開き直してから保存してください。"
     case AdminFile.Menu => "他の操作で板一覧が更新されました。画面を開き直してから保存してください。"
   }
