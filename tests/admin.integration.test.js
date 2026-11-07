@@ -210,4 +210,72 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   assert.doesNotMatch(await post('destination', '1800000001'), /<title>書きこみました/);
   await save('/admin/board?bbs=closedboard', {action: 'save', settings: 'BBS_HEISA=checked', head: ''});
   assert.match(await post('closedboard', '', 'message', 'closed board'), /停止/);
+
+  // 管理 API（Basic 認証のまま）
+  const api = (path, method = 'GET', body) => fetch(origin + '/admin/api' + path, {
+    method,
+    headers: {authorization, ...(body === undefined ? {} : {'content-type': 'application/json'})},
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  const unauthorized = await fetch(origin + '/admin/api/boards');
+  assert.equal(unauthorized.status, 401);
+  assert.equal((await unauthorized.json()).code, 'admin:unauthorized');
+  const boards = await (await api('/boards')).json();
+  for (const bbs of ['sandbox', 'destination', 'closedboard']) assert.ok(boards.boards.includes(bbs), bbs);
+  const apiBoard = await (await api('/boards/apiboard/settings')).json();
+  assert.equal(apiBoard.settingsEtag, null);
+  assert.equal(apiBoard.fields.BBS_TITLE.value, 'apiboard＠3ch掲示板');
+  const settingsBody = (view, fields, head) => ({
+    fields: {...view.fields, ...fields}, extra: view.extra, head, settingsEtag: view.settingsEtag, headEtag: view.headEtag
+  });
+  const created = await api('/boards/apiboard/settings', 'PUT', settingsBody(apiBoard, {
+    BBS_TITLE: {value: 'API板', explicit: true}, BBS_FR_LEVEL: {value: 'off', explicit: true}
+  }, '<i>api</i>'));
+  assert.equal(created.status, 200);
+  assert.equal((await created.json()).partial, false);
+  assert.match(await publicText('/apiboard/SETTING.TXT'), /BBS_TITLE=API板/);
+  assert.match(await publicText('/apiboard/head.txt'), /<i>api<\/i>/);
+  const stale = await api('/boards/apiboard/settings', 'PUT', settingsBody(apiBoard, {}, ''));
+  assert.equal(stale.status, 409, '読込時に無かった SETTING.TXT が作られていれば競合');
+  assert.equal((await stale.json()).code, 'admin:conflict');
+  const invalid = await api('/boards/apiboard/settings', 'PUT', settingsBody(await (await api('/boards/apiboard/settings')).json(), {
+    BBS_TITLE: {value: 'x\nBBS_HEISA=checked', explicit: true}
+  }, ''));
+  assert.equal(invalid.status, 400);
+  assert.ok((await invalid.json()).fields['fields.BBS_TITLE']);
+  assert.doesNotMatch(await publicText('/apiboard/SETTING.TXT'), /BBS_HEISA=checked/);
+  const rules = await (await api('/rules/ngwords')).json();
+  assert.equal((await api('/rules/ngwords', 'PUT', {text: '[<><><>deny', etag: rules.etag})).status, 400);
+  const savedRules = await api('/rules/ngwords', 'PUT', {text: '<><>api-forbidden<>deny', etag: rules.etag});
+  assert.equal(savedRules.status, 200);
+  assert.match(await post('apiboard', '', 'hello', 'api-forbidden'), /NGワード/);
+  assert.equal((await api('/rules/ngwords', 'PUT', {text: '', etag: rules.etag})).status, 409);
+  assert.equal((await api('/rules/ngwords', 'PUT', {text: '', etag: (await savedRules.json()).etag})).status, 200);
+  const menu = await (await api('/menu')).json();
+  assert.equal(menu.text, legacyMenu);
+  assert.equal((await api('/menu', 'PUT', {text: 'api menu', etag: menu.etag})).status, 200);
+  assert.equal(await publicText('/bbsmenu.html'), 'api menu');
+  const apiPost = await postResponse('apiboard', '', 'api first', 'api thread');
+  assert.match(await apiPost.text(), /書きこみました/);
+  const apiThreads = await (await api('/boards/apiboard/threads')).json();
+  assert.equal(apiThreads.subject.length, 1);
+  const apiKey = apiThreads.subject[0].key;
+  const actions = `/boards/apiboard/threads/${apiKey}/actions`;
+  assert.equal((await api(actions, 'POST', {action: 'stop'})).status, 200);
+  assert.match(await post('apiboard', apiKey, 'while stopped'), /停止/);
+  assert.equal((await api(actions, 'POST', {action: 'resume'})).status, 200);
+  assert.equal((await api(actions, 'POST', {action: 'editRes', number: 1, name: '<b>', mail: '', message: 'api edited'})).status, 200);
+  const detail = await (await api(`/boards/apiboard/threads/${apiKey}`)).json();
+  assert.equal(detail.res[0].name, '&lt;b&gt;');
+  assert.equal(detail.res[0].edit.name, '<b>');
+  assert.match(detail.log, /IP:/);
+  const refused = await api(actions, 'POST', {action: 'deleteRes', number: 999});
+  assert.equal(refused.status, 409);
+  assert.equal((await refused.json()).code, 'admin:thread-state');
+  assert.equal((await api(actions, 'POST', {action: 'delete'})).status, 200);
+  assert.equal((await fetch(origin + `/apiboard/dat/${apiKey}.dat`)).status, 404);
+  const formPost = await fetch(origin + '/admin/api' + actions, {
+    method: 'POST', headers: {authorization, 'content-type': 'application/x-www-form-urlencoded'}, body: 'action=stop'
+  });
+  assert.equal(formPost.status, 415);
 });
