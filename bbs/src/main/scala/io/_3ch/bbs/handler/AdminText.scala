@@ -40,6 +40,7 @@ object AdminText {
   val apiField = "形式が不正です。"
   val apiResNumber = "レス番号は1以上の整数で指定してください。"
   val apiInternal = "処理できませんでした。"
+  val apiOrigin = "管理画面以外からの変更は受け付けません。"
 
   private def conflict(file: AdminFile): String = file match {
     case AdminFile.Settings => "他の操作で板設定が更新されました。画面を開き直してから保存してください。"

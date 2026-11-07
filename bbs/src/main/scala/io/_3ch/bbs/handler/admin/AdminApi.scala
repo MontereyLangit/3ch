@@ -34,7 +34,11 @@ object AdminApi {
   def handle(r: Request, e: WorkerEnv, path: String): Future[Response] = {
     val service = new AdminService(AdminRepository.files(e), AdminRepository.threads(e))
     val segments = path.stripPrefix("/admin/api").split("/", -1).toList.filter(_.nonEmpty)
-    Future.unit.flatMap(_ => route(r, service, segments)).recover {
+    val origin = AdminOrigin.allows(r.method, r.url, Option(r.headers.get("origin")), Option(r.headers.get(AdminOrigin.Marker)))
+    Future.unit.flatMap { _ =>
+      if (!origin) reject(AdminErrorCode.Origin, AdminText.apiOrigin)
+      route(r, service, segments)
+    }.recover {
       case Rejected(value) => error(value)
       case ex =>
         js.Dynamic.global.console.error("admin api", ex.toString)

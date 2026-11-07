@@ -212,11 +212,20 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   assert.match(await post('closedboard', '', 'message', 'closed board'), /停止/);
 
   // 管理 API（Basic 認証のまま）
-  const api = (path, method = 'GET', body) => fetch(origin + '/admin/api' + path, {
+  // 管理画面からの変更と同じヘッダ。headers で Origin などを上書きできる
+  const api = (path, method = 'GET', body, headers = {}) => fetch(origin + '/admin/api' + path, {
     method,
-    headers: {authorization, ...(body === undefined ? {} : {'content-type': 'application/json'})},
+    headers: {
+      authorization,
+      ...(body === undefined ? {} : {'content-type': 'application/json', origin, 'x-ch3s-admin': '1'}),
+      ...headers
+    },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
+  const crossOrigin = await api('/menu', 'PUT', {text: 'cross-origin api menu', etag: null}, {origin: 'https://other.example'});
+  assert.equal(crossOrigin.status, 403);
+  assert.equal((await crossOrigin.json()).code, 'admin:origin');
+  assert.equal((await api('/menu', 'PUT', {text: 'no marker', etag: null}, {'x-ch3s-admin': ''})).status, 403);
   const unauthorized = await fetch(origin + '/admin/api/boards');
   assert.equal(unauthorized.status, 401);
   assert.equal((await unauthorized.json()).code, 'admin:unauthorized');
@@ -277,5 +286,9 @@ test('Wrangler: 管理画面と公開投稿の統合検証', {
   const formPost = await fetch(origin + '/admin/api' + actions, {
     method: 'POST', headers: {authorization, 'content-type': 'application/x-www-form-urlencoded'}, body: 'action=stop'
   });
-  assert.equal(formPost.status, 415);
+  assert.equal(formPost.status, 403, 'フォーム送信は Origin と独自ヘッダを満たせない');
+  const sameOriginForm = await fetch(origin + '/admin/api' + actions, {
+    method: 'POST', headers: {authorization, origin, 'x-ch3s-admin': '1', 'content-type': 'application/x-www-form-urlencoded'}, body: 'action=stop'
+  });
+  assert.equal(sameOriginForm.status, 415);
 });

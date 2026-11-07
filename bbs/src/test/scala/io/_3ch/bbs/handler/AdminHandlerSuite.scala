@@ -7,7 +7,7 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
-/** 管理画面の認証と、Origin / Fetch Metadata によらず認証済み変更を受け付ける仕様を検証する。 */
+/** 管理画面の認証、HTML の画面の保存、管理 API の Origin の検査を検証する。 */
 class AdminHandlerSuite extends FunSuite {
   import HandlerTestKit.*
 
@@ -342,5 +342,51 @@ class AdminHandlerSuite extends FunSuite {
       _ = assertEquals(header(post, "location"), Some("/admin/menu?x=1"))
       _ = assertEquals(kit.r2Text("bbsmenu.html"), Some("slash"))
     } yield ()
+  }
+
+  test("管理 API の変更は同じオリジンの管理画面からだけ受け付ける") {
+    val kit = io._3ch.bbs.durable.DurableTestKit.newEnv()
+    val env = kit.worker.asInstanceOf[js.Dynamic]
+    env.ADMIN_PASSWORD = "test"
+    val authorization = basic("admin:test")
+    def put(headers: (String, String)*): Future[(Int, String)] =
+      admin(request("https://example.test/admin/api/menu", Seq("authorization" -> authorization, "content-type" -> "application/json") ++ headers, method = "PUT",
+        body = """{"text":"menu","etag":null}"""), env).flatMap(res => text(res).map(status(res) -> _))
+    for {
+      noOrigin <- put("x-ch3s-admin" -> "1")
+      _ = assertEquals(noOrigin._1, 403)
+      _ = assert(noOrigin._2.contains("\"admin:origin\""), noOrigin._2)
+      crossOrigin <- put("origin" -> "https://other.test", "x-ch3s-admin" -> "1")
+      _ = assertEquals(crossOrigin._1, 403)
+      otherScheme <- put("origin" -> "http://example.test", "x-ch3s-admin" -> "1")
+      _ = assertEquals(otherScheme._1, 403)
+      nullOrigin <- put("origin" -> "null", "sec-fetch-site" -> "same-origin", "x-ch3s-admin" -> "1")
+      _ = assertEquals(nullOrigin._1, 403)
+      fetchMetadata <- put("sec-fetch-site" -> "same-origin", "x-ch3s-admin" -> "1")
+      _ = assertEquals(fetchMetadata._1, 403)
+      noMarker <- put("origin" -> "https://example.test")
+      _ = assertEquals(noMarker._1, 403)
+      wrongMarker <- put("origin" -> "https://example.test", "x-ch3s-admin" -> "0")
+      _ = assertEquals(wrongMarker._1, 403)
+      _ = assertEquals(kit.r2Text("bbsmenu.html"), None)
+      read <- admin(request("https://example.test/admin/api/menu", Seq("authorization" -> authorization)), env)
+      _ = assertEquals(status(read), 200, "読み取りは Origin を問わない")
+      saved <- put("origin" -> "https://example.test", "x-ch3s-admin" -> "1")
+    } yield {
+      assertEquals(saved._1, 200)
+      assertEquals(kit.r2Text("bbsmenu.html"), Some("menu"))
+    }
+  }
+
+  test("Origin の検査は GET・HEAD 以外のすべてのメソッドにかかる") {
+    import io._3ch.bbs.handler.admin.AdminOrigin.allows
+    val url = "https://example.test/admin/api/menu"
+    assert(allows("GET", url, None, None))
+    assert(allows("HEAD", url, Some("https://other.test"), None))
+    for (method <- List("POST", "PUT", "DELETE", "PATCH")) {
+      assert(!allows(method, url, None, Some("1")), method)
+      assert(!allows(method, url, Some("https://example.test:8443"), Some("1")), method)
+      assert(allows(method, url, Some("https://example.test"), Some("1")), method)
+    }
   }
 }

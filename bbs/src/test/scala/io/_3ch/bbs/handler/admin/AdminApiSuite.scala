@@ -15,6 +15,8 @@ import scala.scalajs.js
 class AdminApiSuite extends FunSuite {
   private val base = "https://example.test/admin/api"
   private val auth = "authorization" -> ("Basic " + js.Dynamic.global.Buffer.from("admin:test").applyDynamic("toString")("base64").asInstanceOf[String])
+  /** 管理画面からの変更に付くヘッダ */
+  private val fromAdmin = Seq("origin" -> "https://example.test", "x-ch3s-admin" -> "1")
 
   private final case class Reply(status: Int, json: Json, headers: js.Dynamic) {
     def field(path: String*): Json = path.foldLeft(json)((value, name) => value.get(name).getOrElse(Json.Null))
@@ -28,7 +30,7 @@ class AdminApiSuite extends FunSuite {
   }
 
   private def call(env: DurableTestKit.Env, method: String, path: String, body: js.UndefOr[String] = js.undefined,
-    headers: Seq[(String, String)] = Seq(auth, "content-type" -> "application/json")): Future[Reply] = {
+    headers: Seq[(String, String)] = Seq(auth, "content-type" -> "application/json") ++ fromAdmin): Future[Reply] = {
     val req = request(base + path, headers, method = method, body = body.map(b => b: js.Any))
     fut[js.Dynamic](AdminHandler.handle(req, env.worker)).flatMap { res =>
       text(res).map(t => Reply(status(res), Json.parse(t).fold(e => fail(s"$t: $e"), identity), res.headers.asInstanceOf[js.Dynamic]))
@@ -214,9 +216,9 @@ class AdminApiSuite extends FunSuite {
       unknownField <- send(env, "PUT", "/boards/sample/settings", obj("fields" -> obj("BBS_UNKNOWN" -> obj("value" -> str(""), "explicit" -> Json.Bool(true))),
         "extra" -> Json.Arr(Nil), "head" -> str(""), "settingsEtag" -> Json.Null, "headEtag" -> Json.Null))
       _ = assertEquals(unknownField.field("fields", "fields.BBS_UNKNOWN"), str("形式が不正です。"))
-      noType <- call(env, "PUT", "/menu", """{"text":"","etag":null}""", headers = Seq(auth))
+      noType <- call(env, "PUT", "/menu", """{"text":"","etag":null}""", headers = Seq(auth) ++ fromAdmin)
       _ = assertEquals((noType.status, noType.code), (415, str("admin:content-type")))
-      formType <- call(env, "PUT", "/menu", """{"text":"","etag":null}""", headers = Seq(auth, "content-type" -> "application/x-www-form-urlencoded"))
+      formType <- call(env, "PUT", "/menu", """{"text":"","etag":null}""", headers = Seq(auth, "content-type" -> "application/x-www-form-urlencoded") ++ fromAdmin)
       _ = assertEquals(formType.status, 415)
       tooLarge <- send(env, "PUT", "/menu", obj("text" -> str(big), "etag" -> Json.Null))
       _ = assertEquals((tooLarge.status, tooLarge.code), (413, str("admin:too-large")))
@@ -240,6 +242,10 @@ class AdminApiSuite extends FunSuite {
       bad <- send(env, "PUT", "/rules/access", obj("text" -> str("# ok\nbad"), "etag" -> str("d1")))
       _ = assertEquals(bad.status, 400)
       _ = assertEquals(bad.field("fields", "text"), str("2行目: 板<>対象<>NGワード<>動作 の形式で入力してください。"))
+      others <- Future.sequence(List("<><><>unknown", "<><>[<>deny", "<><><>deny\n<><><>deny<>everyone").map(text =>
+        send(env, "PUT", "/rules/access", obj("text" -> str(text), "etag" -> str("d1")))))
+      _ = assertEquals(others.map(_.field("fields", "text")), List(str("1行目: 動作が不正です。"), str("1行目: 正規表現が不正です。"),
+        str("2行目: 回避レベルは admin・staff・privileged・l10・login のいずれかにしてください。")))
       stale <- send(env, "PUT", "/rules/access", obj("text" -> str(""), "etag" -> str("old")))
       _ = assertEquals((stale.status, stale.code), (409, str("admin:conflict")))
       saved <- send(env, "PUT", "/rules/access", obj("text" -> str("^sample$<><><>deny<>staff"), "etag" -> str("d1")))

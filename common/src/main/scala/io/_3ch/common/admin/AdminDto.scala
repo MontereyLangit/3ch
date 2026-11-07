@@ -6,6 +6,7 @@ import io._3ch.common.text.JsText
 enum AdminErrorCode(val value: String, val status: Int) {
   case Unauthorized extends AdminErrorCode("admin:unauthorized", 401)
   case Unavailable extends AdminErrorCode("admin:unavailable", 503)
+  case Origin extends AdminErrorCode("admin:origin", 403)
   case ContentType extends AdminErrorCode("admin:content-type", 415)
   case Method extends AdminErrorCode("admin:method", 405)
   case Invalid extends AdminErrorCode("admin:invalid", 400)
