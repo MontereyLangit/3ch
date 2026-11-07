@@ -1,8 +1,8 @@
 package io._3ch.common.domain.account
 
-/** 認証後に HTTP 層へ返す情報。資格情報とキーのハッシュは含めない */
+/** 認証後に HTTP 層へ返す情報。資格情報とキーのハッシュは含めない。createdAt はエッジ防御の免除に使う作成時刻 */
 final case class AccountDescription(aid: String, uid: String, kind: AccountKind, generation: Int, expiresAt: Option[Double],
-  lv: Int, roles: Roles, agreedAt: Double, agreementVersion: String)
+  lv: Int, roles: Roles, agreedAt: Double, agreementVersion: String, createdAt: Double = 0)
 
 /** アカウントに結び付いた端末の初回・最終観測 */
 final case class AccountDevice(hash: String, firstSeen: Double, lastSeen: Double, keyIpHash: String) {
@@ -111,7 +111,7 @@ final case class AccountState(
     })
 
   def description: AccountDescription = AccountDescription(profile.aid, profile.uid, profile.kind, profile.generation,
-    profile.expiresAt, level.effective, roles, profile.agreedAt, profile.agreementVersion)
+    profile.expiresAt, level.effective, roles, profile.agreedAt, profile.agreementVersion, profile.createdAt)
 
   /** 不正な状態・登録準備中・凍結・停止・退会とクライアント ID の期限切れを拒否する */
   def usable(now: Double): Either[AccountRejection, Unit] = {

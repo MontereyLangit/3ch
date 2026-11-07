@@ -70,7 +70,9 @@ object GoogleHandler {
         else {
           val uid: Future[Either[LoginIdRejection, Option[LoginId]]] =
             if (login) Future.successful(Right(None)) else AuthHandler.available(env, requested).map(_.map(Some(_)))
-          owner(request, new AccountRepository(env), config, purpose, time).flatMap(account => uid.map(account -> _)).flatMap {
+          val repository = new AccountRepository(env)
+          AuthHandler.edge(request, env, repository, config, "google/start", time).flatMap(_ => owner(request, repository, config, purpose, time))
+            .flatMap(account => uid.map(account -> _)).flatMap {
             case (_, Left(LoginIdRejection.Invalid)) => Future.successful(back("uid", returnPath, login, purpose = purpose))
             case (_, Left(LoginIdRejection.Reserved)) => Future.successful(back("uid_taken", returnPath, login, purpose = purpose))
             case (account, Right(id)) => AuthHandler.device(request, env, form.getOrElse("device", "")).flatMap { evidence =>
@@ -90,6 +92,7 @@ object GoogleHandler {
             }
           }.recover {
             case Refused(AuthApiError.Device(_)) => back("device", returnPath, login, purpose = purpose)
+            case Refused(AuthApiError.Datacenter) => back("edge", returnPath, login, purpose = purpose)
             case Refused(error) if error.signedOut => back("session", returnPath, login, purpose = purpose)
             case Refused(AuthApiError.Refused(_)) => back("account", returnPath, login, purpose = purpose)
             case NonFatal(_) => back("unavailable", returnPath, login, purpose = purpose)

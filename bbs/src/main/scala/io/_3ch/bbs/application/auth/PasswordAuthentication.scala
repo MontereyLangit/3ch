@@ -21,10 +21,10 @@ final class PasswordAuthentication(accounts: AccountManagementStore & AccountSig
   private def counted(keyIp: String, kind: String, now: Double)(allowed: AuthRateCounts => Boolean): Future[Unit] =
     accounts.rate(keyIp, kind, now).map(counts => if (!allowed(counts)) throw AuthServiceException(AuthServiceFailure.RateLimited))
 
-  /** 接続元ごとに一日五件まで。ユーザー ID とログイン ID は同じ値で登録する */
-  def register(loginId: LoginId, password: Password, deviceHash: String, keyIp: String, now: Double): Future[AccountDescription] =
+  /** 接続元ごとに一日五件まで（strict なら半分）。ユーザー ID とログイン ID は同じ値で登録する */
+  def register(loginId: LoginId, password: Password, deviceHash: String, keyIp: String, now: Double, strict: Boolean = false): Future[AccountDescription] =
     for {
-      _ <- counted(keyIp, "register", now)(AbuseThresholds.registration)
+      _ <- counted(keyIp, "register", now)(AbuseThresholds.registration(_, strict))
       credential <- hashing.create(password, now).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
       loginHash <- keys.index("login", loginId.value).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
       aid = keys.aid()

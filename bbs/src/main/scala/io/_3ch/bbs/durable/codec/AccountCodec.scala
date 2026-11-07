@@ -109,7 +109,7 @@ object AccountCodec {
 
   def describe(value: Either[AccountRejection, AccountDescription]): js.Dynamic = value.fold(error => js.Dynamic.literal(code = error.code), description)
   def description(v: AccountDescription): js.Dynamic = js.Dynamic.literal(code = "", aid = v.aid, uid = v.uid, kind = v.kind.code, generation = v.generation,
-    expiresAt = v.expiresAt.orUndefined, lv = v.lv, roles = encodeRoles(v.roles), agreedAt = v.agreedAt, agreementVersion = v.agreementVersion)
+    expiresAt = v.expiresAt.orUndefined, lv = v.lv, roles = encodeRoles(v.roles), agreedAt = v.agreedAt, agreementVersion = v.agreementVersion, createdAt = v.createdAt)
 
   /** 本人確認後の応答。登録準備中なら確定の再開に使う uid だけを返す */
   def signIn(value: Either[AccountRejection, AccountDescription], uid: String): js.Dynamic = value match {

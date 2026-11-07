@@ -80,7 +80,7 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
         (kind == AccountKind.Client && (!uid.matches("[a-z0-9]{8}") || expires.isEmpty)) ||
         (kind != AccountKind.Client && expires.isDefined)) invalid()
       Right(AccountDescription(accountAid, uid, kind, integer(v.selectDynamic("generation").asInstanceOf[js.Any]), expires,
-        integer(v.selectDynamic("lv").asInstanceOf[js.Any], 10), roles, time(v, "agreedAt"), version))
+        integer(v.selectDynamic("lv").asInstanceOf[js.Any], 10), roles, time(v, "agreedAt"), version, optionalTime(v, "createdAt").getOrElse(0d)))
     }
   }
   private def checked(code: js.Any): Unit = {

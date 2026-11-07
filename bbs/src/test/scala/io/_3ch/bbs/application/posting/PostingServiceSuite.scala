@@ -1,9 +1,10 @@
 package io._3ch.bbs.application.posting
 
-import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingAccount, PostingAccounts, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore, UserAgentTableStore}
+import io._3ch.bbs.application.posting.ports.{EdgeRuleStore, ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingAccount, PostingAccounts, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore, UserAgentTableStore}
 import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureClock, FailureSite, ModerationDenial, PostingError, PostingStage, PostingUser, ThreadOwner, ThreadPosting, ThreadWriteResult, UserAgentRule, UserAgentTable}
 import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, PostRateFinding, PostRateIdentity, PostRateLevel, PostRateRejection, ThreadCreationRejection, ThreadCreationRateLimit}
 import io._3ch.bbs.handler.PostingText
+import io._3ch.bbs.domain.account.{EdgeDecision, EdgeMode, EdgeRules, EdgeSignal}
 import io._3ch.bbs.external.web.TextEncoder
 import io._3ch.common.domain.{BbsSettings, BoardId}
 import io._3ch.common.domain.account.{AccountRole, Roles}
@@ -36,7 +37,8 @@ class PostingServiceSuite extends FunSuite {
     write: ThreadPosting => Future[ThreadWriteResult] = posting => Future.successful(ThreadWriteResult.Written(if (posting.create) 1 else 2)),
     indexWritten: Boolean = true,
     record: PostRateObservation => Unit = _ => (),
-    agents: UserAgentTableStore = UserAgentTableStore.empty
+    agents: UserAgentTableStore = UserAgentTableStore.empty,
+    edge: EdgeRuleStore = EdgeRuleStore.empty
   ) {
     val calls: mutable.Buffer[String] = mutable.Buffer.empty
     val postings: mutable.Buffer[(String, String, ThreadPosting)] = mutable.Buffer.empty
@@ -84,6 +86,7 @@ class PostingServiceSuite extends FunSuite {
       },
       accounts = authSource,
       agents = agents,
+      edge = edge,
       hasher = new Hasher {
         def md5(value: String): String = { md5Inputs += value; s"m($value)" }
         def sha1Base64(value: String): Future[String] = Future.successful(s"s1($value)")
@@ -129,14 +132,14 @@ class PostingServiceSuite extends FunSuite {
   private val pon = s"PON=s1(s2(m(192.0.2.1)$salt)); Max-Age=63072000; path=/; Secure; HttpOnly"
 
   private final class AuthSource(user: Option[PostingUser] = None, failRecord: Boolean = false, device: String = "p012345678901234567",
-    refreshed: Option[String] = None, lv: Int = 1, staff: Boolean = false, roles: Set[AccountRole] = Set.empty) extends PostingAccounts {
+    refreshed: Option[String] = None, lv: Int = 1, staff: Boolean = false, roles: Set[AccountRole] = Set.empty, createdAt: Double = 0) extends PostingAccounts {
     var records = 0
     var recordFailures = 0
     val received: mutable.Buffer[(io._3ch.common.domain.posting.MailCommands, Option[String])] = mutable.Buffer.empty
     def authenticate(commands: io._3ch.common.domain.posting.MailCommands, capKey: Option[String], request: PostingRequest, now: Double) = {
       received += (commands -> capKey)
       Future.successful(Right(PostingAccount(user, if (user.isEmpty) 0 else lv, device, sessionCookie = Some("auth=present"),
-        roles = Roles(if (staff) roles + AccountRole.Delete else roles))))
+        roles = Roles(if (staff) roles + AccountRole.Delete else roles), createdAt = createdAt)))
     }
     def posted(context: io._3ch.bbs.domain.posting.PostingContext, request: PostingRequest, account: PostingAccount): Future[Option[String]] = {
       records += 1
@@ -589,6 +592,27 @@ class PostingServiceSuite extends FunSuite {
     } yield {
       assert(!open.isInstanceOf[PostingOutcome.Rejected])
       assertEquals(rejected(closed).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.LoginRequired))
+    }
+  }
+
+  private def edgeRules(mode: EdgeMode): EdgeRuleStore = new EdgeRuleStore {
+    def load(): Future[EdgeRules] = Future.successful(EdgeRules(mode, Set("2516")))
+    def report(endpoint: String, signal: EdgeSignal, decision: EdgeDecision): Unit = ()
+  }
+
+  test("エッジ防御はデータセンターの AS からの投稿を拒否し、試行モードと Lv3 以上で作成から7日以上の認証済みは通す") {
+    val old = Now / 1000 - 8 * 86400
+    for {
+      denied <- Fake(authSource = Some(new AuthSource(member, lv = 2, createdAt = old)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
+      fresh <- Fake(authSource = Some(new AuthSource(member, lv = 10, createdAt = Now / 1000 - 86400)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
+      logged <- Fake(authSource = Some(new AuthSource(member, lv = 1)), edge = edgeRules(EdgeMode.Log)).post(reply()*)()
+      trusted <- Fake(authSource = Some(new AuthSource(member, lv = 3, createdAt = old)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
+      other <- Fake(authSource = Some(new AuthSource(member, lv = 1)), edge = edgeRules(EdgeMode.On)).post(reply()*)(_.copy(asn = Some("17676")))
+      disabled <- Fake(edge = edgeRules(EdgeMode.On)).post(reply()*)()
+    } yield {
+      assertEquals(rejected(denied).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.Datacenter))
+      assertEquals(rejected(fresh).error.code, "auth:edge:datacenter")
+      Seq(logged, trusted, other, disabled).foreach(outcome => assert(!outcome.isInstanceOf[PostingOutcome.Rejected], outcome.toString))
     }
   }
 

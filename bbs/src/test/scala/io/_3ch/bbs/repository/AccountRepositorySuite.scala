@@ -128,7 +128,7 @@ class AccountRepositorySuite extends FunSuite {
     val warning = AccountPost(now + 2, AccountVia.Token, Some("token1"), result = AccountRejection.TokenUaMismatch.code, uaLabel = "別の専ブラ")
     fixture.panelReply = AccountCodec.inspect(state, Vector.empty, Vector(warning), now + 3)
     fixture.repository.inspect(aid).map { panel =>
-      assertEquals(panel.account, account)
+      assertEquals(panel.account, account.copy(createdAt = now))
       assertEquals(panel.activeCount, 1)
       assertEquals(panel.tokens.head.label, "専ブラ")
       assertEquals(panel.tokens.head.recentPosts.head.network, "回線")

@@ -25,8 +25,10 @@ object AuthRateHistory {
 
 /** 認証の乱造検知の閾値。計数に失敗した場合は呼び出し元が認証を拒否する */
 object AbuseThresholds {
-  def verify(counts: AuthRateCounts): Boolean = counts.hour <= 10 && counts.distinctDevices24h <= 5
-  def registration(counts: AuthRateCounts): Boolean = counts.day <= 5
+  /** strict は国内の遠い接続元（エッジ防御の RTT 判定）で、閾値を半分にする */
+  def verify(counts: AuthRateCounts, strict: Boolean = false): Boolean =
+    counts.hour <= (if (strict) 5 else 10) && counts.distinctDevices24h <= (if (strict) 2 else 5)
+  def registration(counts: AuthRateCounts, strict: Boolean = false): Boolean = counts.day <= (if (strict) 2 else 5)
   def login(counts: AuthRateCounts): Boolean = counts.hour <= 30
   def reset(counts: AuthRateCounts): Boolean = counts.day <= 3
   /** 専ブラ用キーの発行は一アカウント一日十回まで */

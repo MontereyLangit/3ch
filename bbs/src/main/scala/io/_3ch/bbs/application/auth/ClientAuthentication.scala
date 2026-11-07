@@ -24,8 +24,8 @@ final case class AuthServiceException(failure: AuthServiceFailure) extends Runti
 
 /** 投稿同意・Turnstile・端末申告を確認した後の計数とアカウント登録 */
 final class ClientAuthentication(accounts: AccountManagementStore, keys: AuthenticationKeys, agreementVersion: String) {
-  /** 既存の本人なら端末と同意だけを更新し、未登録なら UID を予約して作成する */
-  def verify(deviceHash: String, keyIp: String, now: Double, existing: Option[AccountDescription] = None): Future[AccountDescription] =
+  /** 既存の本人なら端末と同意だけを更新し、未登録なら UID を予約して作成する。strict なら乱造検知の閾値を半分にする */
+  def verify(deviceHash: String, keyIp: String, now: Double, existing: Option[AccountDescription] = None, strict: Boolean = false): Future[AccountDescription] =
     Future.unit.flatMap { _ =>
       if (!AccountProfile.validTime(now) || !DedicatedBrowserTokens.validHash(keyIp) || agreementVersion.isEmpty ||
         (deviceHash.nonEmpty && !deviceHash.matches("[pgu](?:[0-9a-f]{18}|[0-9a-f]{16})"))) {
@@ -36,7 +36,7 @@ final class ClientAuthentication(accounts: AccountManagementStore, keys: Authent
       for {
         _ <- counted
         counts <- accounts.rate(keyIp, "verify", now)
-        _ = if (!AbuseThresholds.verify(counts)) throw AuthServiceException(AuthServiceFailure.RateLimited)
+        _ = if (!AbuseThresholds.verify(counts, strict)) throw AuthServiceException(AuthServiceFailure.RateLimited)
         account <- existing match {
           case None => createClient(deviceHash, keyIp, now, 8)
           case Some(account) => for {

@@ -9,7 +9,8 @@ import io._3ch.bbs.external.hono.{HonoContextFacade, RenderProps}
 import io._3ch.bbs.external.web.{Request, Response, TextDecoder, URL}
 import io._3ch.bbs.handler.{PublicText, Responses}
 import io._3ch.bbs.hash.{AuthHmac, PasswordHasher, WebHasher}
-import io._3ch.bbs.repository.{AccountRepository, CapRepository, MailSenders}
+import io._3ch.bbs.repository.{AccountRepository, CapRepository, EdgeRuleRepository, MailSenders}
+import io._3ch.bbs.domain.account.{EdgeDefense, EdgeFinding, EdgeRules}
 import io._3ch.common.domain.account.*
 import io._3ch.common.domain.device.{ClientHints, DeviceHashRef, DeviceRejection, IosDeviceProfile}
 import io._3ch.bbs.domain.posting.KeyIp
@@ -47,6 +48,8 @@ enum AuthApiError {
   case MailUnavailable
   /** メールのリンクが無効か期限切れ */
   case LinkInvalid
+  /** エッジ防御でデータセンターからの接続と判定した */
+  case Datacenter
 
   def code: String = this match {
     case NotFound => "auth:not-found"
@@ -71,6 +74,7 @@ enum AuthApiError {
     case Email(EmailRejection.Disposable) => "auth:email:disposable"
     case MailUnavailable => "auth:mail:unavailable"
     case LinkInvalid => AccountRejection.PendingInvalid.code
+    case Datacenter => "auth:edge:datacenter"
   }
 
   def status: Int = this match {
@@ -83,7 +87,7 @@ enum AuthApiError {
     case Service(AuthServiceFailure.Invalid) => 400
     case Service(_) | Unavailable | MailUnavailable => 503
     case LoginFailed => 401
-    case Refused(_) | Cap(_) => 403
+    case Refused(_) | Cap(_) | Datacenter => 403
     case Invalid | CapName(_) | Email(_) | LinkInvalid | AgreementRequired | Turnstile | Device(_) | LoginId(_) | Password(_) | Confirmation => 400
   }
 
@@ -138,6 +142,7 @@ object AuthHandler {
     case AuthApiError.Service(AuthServiceFailure.MailFailed) => "確認メールを送れませんでした。しばらく待ってから送り直してください。"
     case AuthApiError.MailUnavailable => "メールによる認証は準備中です。"
     case AuthApiError.LinkInvalid => "リンクが無効か、期限が切れています。"
+    case AuthApiError.Datacenter => "この接続元からは認証できません。自宅やモバイルの回線でお試しください。"
     case AuthApiError.Cap(AccountRejection.RolesForbidden | AccountRejection.Forbidden) =>
       "キャップを発行できません。削除・規制などの権限を持つアカウントが、自分用に1個まで発行できます。"
     case AuthApiError.Cap(AccountRejection.CapRevoked) => "このキャップはすでに無効です。"
@@ -213,6 +218,7 @@ object AuthHandler {
     case "unavailable" => Some(message(AuthApiError.Unavailable))
     case "google_linked" => Some("このGoogleアカウントは既に別のアカウントに連携されています。")
     case "session" => Some("ログインし直してから、もう一度お試しください。")
+    case "edge" => Some(message(AuthApiError.Datacenter))
     case "google_mismatch" => Some("ログイン中のアカウントと違うGoogleアカウントです。退会していません。")
     case _ => None
   }
@@ -385,6 +391,27 @@ object AuthHandler {
     }
   }
 
+  /**
+    * エッジ防御。ログイン中で Lv3 以上・作成から7日以上なら免除する。試行モードでは記録だけで通す。
+    * 拒否はデータセンターなら Datacenter、TLS の矛盾なら端末申告の突合と同じ declaration_mismatch。乱造検知を厳しくするかを返す
+    */
+  private[auth] def edge(request: Request, env: WorkerEnv, repository: AccountRepository, config: AuthSettings, endpoint: String, time: Double): Future[Boolean] = {
+    val signal = EdgeRuleRepository.signal(request)
+    EdgeRuleRepository.load(env).flatMap { rules =>
+      val exempted = if (rules == EdgeRules.empty || !header(request, "Cookie").contains(CookieCodec.Name)) Future.successful(false)
+        else current(request, config.secret, repository, time).map { case (_, account) => EdgeDefense.exempt(account.lv, account.createdAt, time) }.recover { case NonFatal(_) => false }
+      exempted.map { exempt =>
+        val decision = EdgeDefense.check(rules, signal, browser = true, exempt)
+        EdgeRuleRepository.report(endpoint, signal, decision)
+        decision.rejection.foreach {
+          case EdgeFinding.Datacenter => throw Refused(AuthApiError.Datacenter)
+          case EdgeFinding.DeclarationMismatch => throw Refused(AuthApiError.Device(DeviceRejection.DeclarationMismatch))
+        }
+        decision.strict
+      }
+    }
+  }
+
   /** keyIp を求めてから Turnstile と端末申告を確認する */
   private[auth] def human(request: Request, env: WorkerEnv, form: Map[String, String], config: AuthSettings): Future[(String, DeviceEvidence)] = for {
     key <- keyIp(request, config.secret)
@@ -404,11 +431,12 @@ object AuthHandler {
   private def verify(request: Request, env: WorkerEnv, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] = {
     if (!form.get("agreement").contains(config.agreementVersion)) Future.failed(Refused(AuthApiError.AgreementRequired))
     else for {
+      strict <- edge(request, env, repository, config, "verify", time)
       (key, evidence) <- human(request, env, form, config)
       existing <- current(request, config.secret, repository, time).map(value => Some(value)).recover {
         case Refused(error) if error.signedOut => None
       }
-      created <- new ClientAuthentication(repository, keys(config.secret), config.agreementVersion).verify(evidence.deviceHash, key, time, existing.map(_._2))
+      created <- new ClientAuthentication(repository, keys(config.secret), config.agreementVersion).verify(evidence.deviceHash, key, time, existing.map(_._2), strict)
       cookie <- signed(created, evidence.deviceHash, request, config.secret, time, existing.flatMap(_._1.binding))
     } yield json(js.Dynamic.literal(uid = created.uid, lv = created.lv, returnPath = safeReturn(form.getOrElse("return", "/"), request.url)), cookie = Some(cookie))
   }
@@ -447,6 +475,7 @@ object AuthHandler {
             if (account.kind != AccountKind.Client) throw Refused(AuthApiError.Refused(AccountRejection.KindForbidden))
             Some(account)
           }
+        strict <- edge(request, env, repository, config, "register", time)
         (key, evidence) <- human(request, env, form, config)
         id <- available(env, raw).map(_.fold({
           case LoginIdRejection.Reserved => throw Refused(AuthApiError.Service(AuthServiceFailure.Taken))
@@ -454,7 +483,7 @@ object AuthHandler {
         }, identity))
         _ <- email.fold(Future.unit)(AccountMailHandler.check(env, repository, config, upgrading.fold("")(_.aid), _))
         account <- upgrading match {
-          case None => new PasswordAuthentication(repository, keys(config.secret), hashing, config.agreementVersion).register(id, password, evidence.deviceHash, key, time)
+          case None => new PasswordAuthentication(repository, keys(config.secret), hashing, config.agreementVersion).register(id, password, evidence.deviceHash, key, time, strict)
           case Some(client) => new AccountUpgrade(repository, keys(config.secret)).toPassword(client, id, password, hashing, evidence.deviceHash, key, time).map {
             case UpgradeOutcome.Converted(converted) => converted
             case _ => throw Refused(AuthApiError.Service(AuthServiceFailure.Taken))
@@ -468,6 +497,7 @@ object AuthHandler {
 
   /** 失敗は理由を区別せず同じ文言・状態にし、アカウント全体の失敗数に応じて応答を遅らせる */
   private def login(request: Request, env: WorkerEnv, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] = for {
+    _ <- edge(request, env, repository, config, "login", time)
     (key, evidence) <- human(request, env, form, config)
     id = LoginId.parse(form.getOrElse("id", "")).toOption
     outcome <- new PasswordAuthentication(repository, keys(config.secret), hashing, config.agreementVersion).login(id, form.getOrElse("password", ""), evidence.deviceHash, key, time)

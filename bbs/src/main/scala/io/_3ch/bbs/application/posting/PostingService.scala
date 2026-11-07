@@ -1,7 +1,7 @@
 package io._3ch.bbs.application.posting
 
 import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, PostRateObservation, PostingAccount}
-import io._3ch.bbs.domain.account.AuthenticationFailure
+import io._3ch.bbs.domain.account.{AuthenticationFailure, EdgeDefense, EdgeSignal}
 import io._3ch.bbs.domain.posting.{ClientIdentity, FailureClock, FailureSite, GlobalThread, KeyIp, NusiMark, PostFormLimits, PostRouting, PostingContext, PostingError, PostingIdentity, PostingStage, PostingUser, ReplyThread, ThreadOwner, ThreadPosting, ThreadWriteResult}
 import io._3ch.bbs.domain.posting.moderation.{BypassPoster, ModerationDecision, ModerationInput, PostRateCheck, PostRateIdentity, PostRateSettings, ThreadCreationLimit, ThreadCreationNetwork, ThreadCreationRequest, ThreadCreationSettings}
 import io._3ch.bbs.external.web.URL
@@ -36,6 +36,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
       user = account.user
       bypass = BypassPoster(account.roles, identified.cap.isDefined, user.isDefined, account.lv)
       _ = admit(identified, account, request)
+      _ <- edge(identified, account, request)
       userInfo = UserInfo(if (authEnabled) user.fold("")(_.displayId) else "", identified.identity.host, identified.identity.asn, identified.identity.country, identified.identity.region,
         identified.identity.city, if (authEnabled && account.device.nonEmpty) account.device else identified.identity.deviceInfo, identified.identity.userAgent)
       moderated <- moderate(identified, userInfo, bypass)
@@ -85,6 +86,17 @@ final class PostingService(ports: PostingPorts, salt: String) {
       else reject(PostingError.AuthenticationLevel(required), context)
     }
   }
+
+  /** 認証を有効にした環境のエッジ防御。データセンターの AS からの投稿を、Lv3 以上で作成から7日以上の認証済み以外について判定する。旧キャップは対象外 */
+  private def edge(context: PostingContext, account: PostingAccount, request: PostingRequest): Future[Unit] =
+    if (!authEnabled || account.legacyCap) Future.unit
+    else ports.edge.load().map { rules =>
+      val signal = EdgeSignal(request.asn.getOrElse(""), request.country.getOrElse(""), None, None, request.userAgent)
+      val exempted = account.user.isDefined && EdgeDefense.exempt(account.lv, account.createdAt, context.unixtime.toDouble)
+      val decision = EdgeDefense.check(rules, signal, browser = false, exempted)
+      Try(ports.edge.report("bbs.cgi", signal, decision))
+      if (decision.reject) reject(PostingError.Authentication(AuthenticationFailure.Datacenter), context)
+    }
 
   /** 成功した投稿をアカウントに記録する。記録の失敗は投稿の成否に含めず、発行し直した Cookie だけを差し替える */
   private def record(context: PostingContext, request: PostingRequest, account: PostingAccount): Future[PostingContext] = ports.accounts match {

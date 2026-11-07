@@ -9,7 +9,7 @@ import scala.concurrent.Future
 
 /** 投稿者の認証結果。legacyCap は所有者のない旧キャップ、sessionCookie は応答に付ける Set-Cookie の値、roles はアカウントの役割 */
 final case class PostingAccount(user: Option[PostingUser], lv: Int = 0, device: String = "", legacyCap: Boolean = false,
-  sessionCookie: Option[String] = None, authentication: Option[AuthenticatedPoster] = None, roles: Roles = Roles()) {
+  sessionCookie: Option[String] = None, authentication: Option[AuthenticatedPoster] = None, roles: Roles = Roles(), createdAt: Double = 0) {
   /** BBS_PHOEBE を免除し、スレの必要 Lv を下げられる投稿者 */
   def staff: Boolean = roles.staff
 }
