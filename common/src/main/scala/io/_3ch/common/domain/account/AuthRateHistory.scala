@@ -38,3 +38,47 @@ object AbuseThresholds {
   /** キャップの発行・再発行は一アカウント一日十回まで */
   def capIssue(counts: AuthRateCounts): Boolean = counts.day <= 10
 }
+
+/** 乱造検知で閾値を超えた理由 */
+enum AbuseReason(val code: String) {
+  /** 一時間の認証回数 */
+  case VerifyBurst extends AbuseReason("verify")
+  /** 24時間に相異なる端末ハッシュ */
+  case DeviceSpread extends AbuseReason("devices")
+  /** 一日の登録数 */
+  case RegisterBurst extends AbuseReason("register")
+}
+
+object AbuseReason {
+  def parse(code: String): Option[AbuseReason] = AbuseReason.values.find(_.code == code)
+
+  /** 認証の計数が閾値を超えた理由。超えていなければ空 */
+  def ofVerify(counts: AuthRateCounts, strict: Boolean): Vector[AbuseReason] =
+    Vector(Option.when(counts.hour > (if (strict) 5 else 10))(VerifyBurst), Option.when(counts.distinctDevices24h > (if (strict) 2 else 5))(DeviceSpread)).flatten
+}
+
+/** 「要確認」の一件。keyIpHash は接続元の HMAC、firstSeen・lastSeen はその理由で最初と最後に超えた時刻、count は超えた回数 */
+final case class AbuseFlag(keyIpHash: String, reason: AbuseReason, firstSeen: Double, lastSeen: Double, count: Int, hour: Int, day: Int, devices: Int) {
+  def valid: Boolean = DedicatedBrowserTokens.validHash(keyIpHash) && AccountProfile.validTime(firstSeen) && AccountProfile.validTime(lastSeen) &&
+    lastSeen >= firstSeen && count >= 1
+}
+
+/** 乱造検知の「要確認」一覧。自動で規制せず、管理画面で確かめるために残す。同じ接続元と理由は 24 時間以内なら一件にまとめる */
+final case class AbuseReview(flags: Vector[AbuseFlag] = Vector.empty) {
+  def flag(keyIpHash: String, reason: AbuseReason, counts: AuthRateCounts, now: Double): Either[AccountRejection, AbuseReview] =
+    if (!DedicatedBrowserTokens.validHash(keyIpHash) || !AccountProfile.validTime(now)) Left(AccountRejection.Invalid)
+    else {
+      val (same, others) = flags.partition(f => f.keyIpHash == keyIpHash && f.reason == reason && f.lastSeen > now - 86400)
+      val entry = same.headOption.fold(AbuseFlag(keyIpHash, reason, now, now, 1, counts.hour, counts.day, counts.distinctDevices24h)) { f =>
+        f.copy(lastSeen = math.max(f.lastSeen, now), count = f.count + 1, hour = counts.hour, day = counts.day, devices = counts.distinctDevices24h)
+      }
+      Right(AbuseReview((entry +: others).sortBy(f => -f.lastSeen).take(AbuseReview.limit)))
+    }
+}
+
+object AbuseReview {
+  /** 残す件数。古いものから捨てる */
+  val limit: Int = 500
+  /** 一覧を持つ AuthRate の名前。接続元の名前（64 桁の 16 進数）とは重ならない */
+  val name: String = "review"
+}

@@ -30,4 +30,28 @@ class AuthEdgeSuite extends munit.FunSuite {
       } yield assertEquals(logged.status, 200)
     }
   }
+
+  test("乱造検知は閾値を超えた認証を拒否し、自動では規制せず「要確認」に接続元と理由を残す") {
+    val t = new AuthSignInTestKit()
+    val now = math.floor(js.Date.now() / 1000)
+    t.run {
+      for {
+        key <- t.keyIp("192.0.2.77")
+        rate = t.kit.worker.AUTH_RATE_DO.get(t.kit.worker.AUTH_RATE_DO.idFromName(key))
+        _ <- Future.traverse((1 to 10).toVector)(_ => rate.hit("verify", now).toFuture)
+        limited <- t.send(t.post("/auth/verify", verify, ip = "192.0.2.77"))
+        again <- t.send(t.post("/auth/verify", verify, ip = "192.0.2.77"))
+        review <- t.kit.worker.AUTH_RATE_DO.get(t.kit.worker.AUTH_RATE_DO.idFromName("review")).flagged().toFuture
+        _ <- Future.traverse((1 to 5).toVector)(_ => rate.hit("register", now).toFuture)
+        register <- t.send(t.post("/auth/register", Seq("id" -> "taro_2026", "password" -> "correct horse", "password2" -> "correct horse") ++ verify, ip = "192.0.2.77"))
+        afterRegister <- t.kit.worker.AUTH_RATE_DO.get(t.kit.worker.AUTH_RATE_DO.idFromName("review")).flagged().toFuture
+      } yield {
+        assertEquals((limited.status, again.status, register.status), (429, 429, 429))
+        assertEquals(review.toVector.map(f => (f.keyIpHash.asInstanceOf[String], f.reason.asInstanceOf[String], f.count.asInstanceOf[Int])), Vector((key, "verify", 2)))
+        assertEquals(afterRegister.toVector.map(_.reason.asInstanceOf[String]).sorted, Vector("register", "verify"))
+        assertEquals(t.kit.accountNames, Set.empty[String])
+      }
+    }
+  }
 }
+

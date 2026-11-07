@@ -1,6 +1,6 @@
 package io._3ch.bbs.application.auth
 
-import io._3ch.bbs.application.auth.ports.{AccountManagementStore, AuthenticationKeys}
+import io._3ch.bbs.application.auth.ports.{AbuseReviewLog, AccountManagementStore, AuthenticationKeys}
 import io._3ch.common.domain.account.*
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -23,7 +23,7 @@ enum AuthServiceFailure(val code: String) {
 final case class AuthServiceException(failure: AuthServiceFailure) extends RuntimeException(failure.code)
 
 /** 投稿同意・Turnstile・端末申告を確認した後の計数とアカウント登録 */
-final class ClientAuthentication(accounts: AccountManagementStore, keys: AuthenticationKeys, agreementVersion: String) {
+final class ClientAuthentication(accounts: AccountManagementStore, keys: AuthenticationKeys, agreementVersion: String, review: AbuseReviewLog = AbuseReviewLog.none) {
   /** 既存の本人なら端末と同意だけを更新し、未登録なら UID を予約して作成する。strict なら乱造検知の閾値を半分にする */
   def verify(deviceHash: String, keyIp: String, now: Double, existing: Option[AccountDescription] = None, strict: Boolean = false): Future[AccountDescription] =
     Future.unit.flatMap { _ =>
@@ -36,7 +36,7 @@ final class ClientAuthentication(accounts: AccountManagementStore, keys: Authent
       for {
         _ <- counted
         counts <- accounts.rate(keyIp, "verify", now)
-        _ = if (!AbuseThresholds.verify(counts, strict)) throw AuthServiceException(AuthServiceFailure.RateLimited)
+        _ <- flagged(keyIp, AbuseReason.ofVerify(counts, strict), counts, now)
         account <- existing match {
           case None => createClient(deviceHash, keyIp, now, 8)
           case Some(account) => for {
@@ -46,6 +46,12 @@ final class ClientAuthentication(accounts: AccountManagementStore, keys: Authent
         }
       } yield account
     }
+
+  /** 閾値を超えていれば「要確認」に載せてから拒否する。自動では規制しない */
+  private def flagged(keyIp: String, reasons: Vector[AbuseReason], counts: AuthRateCounts, now: Double): Future[Unit] =
+    if (reasons.isEmpty) Future.unit
+    else Future.traverse(reasons)(review.flag(keyIp, _, counts, now).recover { case NonFatal(_) => () })
+      .flatMap(_ => Future.failed(AuthServiceException(AuthServiceFailure.RateLimited)))
 
   private def createClient(deviceHash: String, keyIp: String, now: Double, attempts: Int): Future[AccountDescription] = {
     if (attempts <= 0) Future.failed(AuthServiceException(AuthServiceFailure.Unavailable))

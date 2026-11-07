@@ -1,6 +1,6 @@
 package io._3ch.bbs.application.auth
 
-import io._3ch.bbs.application.auth.ports.{AccountManagementStore, AccountSignInStore, AuthenticationKeys, PasswordHashing, SignInResult}
+import io._3ch.bbs.application.auth.ports.{AbuseReviewLog, AccountManagementStore, AccountSignInStore, AuthenticationKeys, PasswordHashing, SignInResult}
 import io._3ch.common.domain.account.*
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -15,7 +15,7 @@ enum LoginOutcome {
 
 /** ID/Password の登録とログイン。Turnstile と端末の確認は呼び出し元で済ませる */
 final class PasswordAuthentication(accounts: AccountManagementStore & AccountSignInStore, keys: AuthenticationKeys, hashing: PasswordHashing,
-  agreementVersion: String) {
+  agreementVersion: String, review: AbuseReviewLog = AbuseReviewLog.none) {
   private val registration = new AccountRegistration(accounts, keys)
 
   private def counted(keyIp: String, kind: String, now: Double)(allowed: AuthRateCounts => Boolean): Future[Unit] =
@@ -24,7 +24,10 @@ final class PasswordAuthentication(accounts: AccountManagementStore & AccountSig
   /** 接続元ごとに一日五件まで（strict なら半分）。ユーザー ID とログイン ID は同じ値で登録する */
   def register(loginId: LoginId, password: Password, deviceHash: String, keyIp: String, now: Double, strict: Boolean = false): Future[AccountDescription] =
     for {
-      _ <- counted(keyIp, "register", now)(AbuseThresholds.registration(_, strict))
+      counts <- accounts.rate(keyIp, "register", now)
+      _ <- if (AbuseThresholds.registration(counts, strict)) Future.unit
+        else review.flag(keyIp, AbuseReason.RegisterBurst, counts, now).recover { case NonFatal(_) => () }
+          .flatMap(_ => Future.failed(AuthServiceException(AuthServiceFailure.RateLimited)))
       credential <- hashing.create(password, now).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
       loginHash <- keys.index("login", loginId.value).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
       aid = keys.aid()

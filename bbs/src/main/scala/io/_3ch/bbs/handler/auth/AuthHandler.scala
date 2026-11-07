@@ -9,7 +9,7 @@ import io._3ch.bbs.external.hono.{HonoContextFacade, RenderProps}
 import io._3ch.bbs.external.web.{Request, Response, TextDecoder, URL}
 import io._3ch.bbs.handler.{PublicText, Responses}
 import io._3ch.bbs.hash.{AuthHmac, PasswordHasher, WebHasher}
-import io._3ch.bbs.repository.{AccountRepository, CapRepository, EdgeRuleRepository, MailSenders}
+import io._3ch.bbs.repository.{AbuseReviewRepository, AccountRepository, CapRepository, EdgeRuleRepository, MailSenders}
 import io._3ch.bbs.domain.account.{EdgeDefense, EdgeFinding, EdgeRules}
 import io._3ch.common.domain.account.*
 import io._3ch.common.domain.device.{ClientHints, DeviceHashRef, DeviceRejection, IosDeviceProfile}
@@ -436,7 +436,7 @@ object AuthHandler {
       existing <- current(request, config.secret, repository, time).map(value => Some(value)).recover {
         case Refused(error) if error.signedOut => None
       }
-      created <- new ClientAuthentication(repository, keys(config.secret), config.agreementVersion).verify(evidence.deviceHash, key, time, existing.map(_._2), strict)
+      created <- new ClientAuthentication(repository, keys(config.secret), config.agreementVersion, new AbuseReviewRepository(env)).verify(evidence.deviceHash, key, time, existing.map(_._2), strict)
       cookie <- signed(created, evidence.deviceHash, request, config.secret, time, existing.flatMap(_._1.binding))
     } yield json(js.Dynamic.literal(uid = created.uid, lv = created.lv, returnPath = safeReturn(form.getOrElse("return", "/"), request.url)), cookie = Some(cookie))
   }
@@ -483,7 +483,7 @@ object AuthHandler {
         }, identity))
         _ <- email.fold(Future.unit)(AccountMailHandler.check(env, repository, config, upgrading.fold("")(_.aid), _))
         account <- upgrading match {
-          case None => new PasswordAuthentication(repository, keys(config.secret), hashing, config.agreementVersion).register(id, password, evidence.deviceHash, key, time, strict)
+          case None => new PasswordAuthentication(repository, keys(config.secret), hashing, config.agreementVersion, new AbuseReviewRepository(env)).register(id, password, evidence.deviceHash, key, time, strict)
           case Some(client) => new AccountUpgrade(repository, keys(config.secret)).toPassword(client, id, password, hashing, evidence.deviceHash, key, time).map {
             case UpgradeOutcome.Converted(converted) => converted
             case _ => throw Refused(AuthApiError.Service(AuthServiceFailure.Taken))
