@@ -2,7 +2,7 @@ package io._3ch.admin
 
 import io._3ch.admin.api.AdminApiClient
 import io._3ch.admin.components.{Layout, Link, Styles}
-import io._3ch.admin.pages.{BoardSettingsPage, TopPage}
+import io._3ch.admin.pages.{BoardSettingsPage, MenuPage, RulesPage, ThreadPage, ThreadsPage, TopPage}
 import io._3ch.common.admin.AdminCodec
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
@@ -53,7 +53,11 @@ object AdminApp {
       val content: VdomNode = page.value match {
         case AdminPage.Top => TopPage.Component(TopPage.Props(nav, boards.state))
         case AdminPage.Board(bbs) => BoardSettingsPage.Component(BoardSettingsPage.Props(nav, bbs))
-        case _ => <.div(<.h1(^.className := Styles.h1, "ページがありません"),
+        case AdminPage.Threads(bbs) => ThreadsPage.Component(ThreadsPage.Props(nav, bbs))
+        case AdminPage.Thread(bbs, key) => ThreadPage.Component(ThreadPage.Props(nav, bbs, key))
+        case AdminPage.Rules(name) => RulesPage(nav, name)
+        case AdminPage.Menu => MenuPage(nav)
+        case AdminPage.NotFound(_) => <.div(<.h1(^.className := Styles.h1, "ページがありません"),
           <.p(Link(nav, AdminPage.Top, Styles.link, "管理画面のトップへ")))
       }
       Layout(nav, boards.state, <.div(^.key := page.value.path, content))
