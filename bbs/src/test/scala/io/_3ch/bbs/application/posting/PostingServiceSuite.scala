@@ -1,8 +1,8 @@
 package io._3ch.bbs.application.posting
 
-import io._3ch.bbs.application.posting.ports.{EdgeRuleStore, ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingAccount, PostingAccounts, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore, UserAgentTableStore}
+import io._3ch.bbs.application.posting.ports.{EdgeRuleStore, PhoebeRuleStore, ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingAccount, PostingAccounts, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore, UserAgentTableStore}
 import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureClock, FailureSite, ModerationDenial, PostingError, PostingStage, PostingUser, ThreadOwner, ThreadPosting, ThreadWriteResult, UserAgentRule, UserAgentTable}
-import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, PostRateFinding, PostRateIdentity, PostRateLevel, PostRateRejection, ThreadCreationRejection, ThreadCreationRateLimit}
+import io._3ch.bbs.domain.posting.moderation.{PhoebeCapRules, ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, PostRateFinding, PostRateIdentity, PostRateLevel, PostRateRejection, ThreadCreationRejection, ThreadCreationRateLimit}
 import io._3ch.bbs.handler.PostingText
 import io._3ch.bbs.domain.account.{EdgeDecision, EdgeMode, EdgeRules, EdgeSignal}
 import io._3ch.bbs.external.web.TextEncoder
@@ -38,7 +38,8 @@ class PostingServiceSuite extends FunSuite {
     indexWritten: Boolean = true,
     record: PostRateObservation => Unit = _ => (),
     agents: UserAgentTableStore = UserAgentTableStore.empty,
-    edge: EdgeRuleStore = EdgeRuleStore.empty
+    edge: EdgeRuleStore = EdgeRuleStore.empty,
+    phoebe: String = ""
   ) {
     val calls: mutable.Buffer[String] = mutable.Buffer.empty
     val postings: mutable.Buffer[(String, String, ThreadPosting)] = mutable.Buffer.empty
@@ -87,6 +88,7 @@ class PostingServiceSuite extends FunSuite {
       accounts = authSource,
       agents = agents,
       edge = edge,
+      phoebe = () => Future.successful(PhoebeCapRules.parse(phoebe).toOption.get),
       hasher = new Hasher {
         def md5(value: String): String = { md5Inputs += value; s"m($value)" }
         def sha1Base64(value: String): Future[String] = Future.successful(s"s1($value)")
@@ -613,6 +615,21 @@ class PostingServiceSuite extends FunSuite {
       assertEquals(rejected(denied).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.Datacenter))
       assertEquals(rejected(fresh).error.code, "auth:edge:datacenter")
       Seq(logged, trusted, other, disabled).foreach(outcome => assert(!outcome.isInstanceOf[PostingOutcome.Rejected], outcome.toString))
+    }
+  }
+
+  test("phoebe.cgi の上限ルールは当てはまる投稿の実効 Lv を抑え、BBS_PHOEBE と識別子の D に使う") {
+    for {
+      capped <- Fake(boardSettings = "BBS_PHOEBE=3\n", phoebe = "# 上限\nAS2516-<>2\n", authSource = Some(new AuthSource(member, lv = 5))).post(reply()*)()
+      other <- Fake(boardSettings = "BBS_PHOEBE=3\n", phoebe = "AS9999-<>2\n", authSource = Some(new AuthSource(member, lv = 5))).post(reply()*)()
+      lowest = Fake(boardSettings = "BBS_ID_SHIKIBETSU=phoebe\n", phoebe = "UID:user_a <>7\n<>4\n", authSource = Some(new AuthSource(member, lv = 10)))
+      _ <- lowest.post(reply()*)()
+      disabled <- Fake(boardSettings = "BBS_PHOEBE=3\n", phoebe = "<>0\n").post(reply()*)()
+    } yield {
+      assertEquals(rejected(capped).error, PostingError.AuthenticationLevel(3))
+      assert(!other.isInstanceOf[PostingOutcome.Rejected])
+      assert(lowest.postings.head._1.contains("4)"), lowest.postings.head._1)
+      assert(!disabled.isInstanceOf[PostingOutcome.Rejected])
     }
   }
 

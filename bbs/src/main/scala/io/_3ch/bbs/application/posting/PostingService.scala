@@ -31,14 +31,15 @@ final class PostingService(ports: PostingPorts, salt: String) {
       (board, boardRead) <- boardSettings(capped)
       threadRead <- threadSettings(boardRead, board)
       identifiedRaw <- identify(threadRead)
-      account <- authenticate(identifiedRaw, request)
-      identified = identifiedRaw.copy(sessionCookie = account.sessionCookie)
-      user = account.user
+      authenticated <- authenticate(identifiedRaw, request)
+      identified = identifiedRaw.copy(sessionCookie = authenticated.sessionCookie)
+      user = authenticated.user
+      userInfo = UserInfo(if (authEnabled) user.fold("")(_.displayId) else "", identified.identity.host, identified.identity.asn, identified.identity.country, identified.identity.region,
+        identified.identity.city, if (authEnabled && authenticated.device.nonEmpty) authenticated.device else identified.identity.deviceInfo, identified.identity.userAgent)
+      account <- capLevel(authenticated, userInfo)
       bypass = BypassPoster(account.roles, identified.cap.isDefined, user.isDefined, account.lv)
       _ = admit(identified, account, request)
       _ <- edge(identified, account, request)
-      userInfo = UserInfo(if (authEnabled) user.fold("")(_.displayId) else "", identified.identity.host, identified.identity.asn, identified.identity.country, identified.identity.region,
-        identified.identity.city, if (authEnabled && account.device.nonEmpty) account.device else identified.identity.deviceInfo, identified.identity.userAgent)
       moderated <- moderate(identified, userInfo, bypass)
       sized = PostFormLimits.check(moderated.form, moderated.settings, moderated.number, moderated.cap.exists(_.strong))
         .fold(reject(_, moderated), form => moderated.copy(form = form))
@@ -86,6 +87,11 @@ final class PostingService(ports: PostingPorts, salt: String) {
       else reject(PostingError.AuthenticationLevel(required), context)
     }
   }
+
+  /** 認証を有効にした環境で、phoebe.cgi の上限ルールに当てはまる投稿の実効 Lv を抑える。アカウントの Lv は変えず、旧キャップは対象外 */
+  private def capLevel(account: PostingAccount, userInfo: UserInfo): Future[PostingAccount] =
+    if (!authEnabled || account.user.isEmpty || account.legacyCap) Future.successful(account)
+    else ports.phoebe.load().map(rules => account.copy(lv = rules.cap(account.lv, userInfo.text)))
 
   /** 認証を有効にした環境のエッジ防御。データセンターの AS からの投稿を、Lv3 以上で作成から7日以上の認証済み以外について判定する。旧キャップは対象外 */
   private def edge(context: PostingContext, account: PostingAccount, request: PostingRequest): Future[Unit] =
