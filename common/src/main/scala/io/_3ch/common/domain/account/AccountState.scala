@@ -76,6 +76,9 @@ enum AccountConversion {
   case ToGoogle(subHash: String, email: Option[String])
 }
 
+/** 退会で外す索引と KV。loginId と email は索引の HMAC を計算する前の値、googleSubHash は google 索引のキー、caps は失効させたキャップ */
+final case class Withdrawal(loginId: Option[String], email: Option[String], googleSubHash: Option[String], caps: Vector[AccountCap])
+
 /** パスワード照合の結果。失敗にはアカウント全体の失敗数による応答の遅延を付ける */
 enum PasswordAttempt {
   case Accepted
@@ -348,6 +351,22 @@ final case class AccountState(
           case AccountConversion.ToGoogle(subHash, _) => DedicatedBrowserTokens.validHash(subHash)
         }
         if (!valid || !moved.valid) Left(AccountRejection.Invalid) else moved.bumpGeneration
+      }
+    }
+
+  /**
+    * 退会する。状態を deleted にして世代を進め、キャップと専ブラキーを失効させ、保留トークンを捨てる。
+    * 書き込み記録と uid はそのまま残す。generation は退会を始めたセッションの世代
+    */
+  def withdraw(generation: Int, now: Double): Either[AccountRejection, (AccountState, Withdrawal)] =
+    usable(now).flatMap { _ =>
+      if (generation != profile.generation) Left(AccountRejection.Generation)
+      else bumpGeneration.map { bumped =>
+        val revoked = caps.filter(_.active).map(_.copy(revokedAt = Some(now)))
+        val next = bumped.copy(profile = bumped.profile.copy(status = AccountStatus.Deleted),
+          caps = caps.map(cap => revoked.find(_.capId == cap.capId).getOrElse(cap)),
+          tokens = tokens.map(token => if (token.revokedAt.isEmpty) token.revoke(now, TokenRevokeReason.Revoked) else token), pending = Map.empty)
+        (next, Withdrawal(profile.loginId, profile.email, profile.googleSubHash, revoked))
       }
     }
 

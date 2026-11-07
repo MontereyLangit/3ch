@@ -5,6 +5,7 @@ import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.web.{Request, Response, URL}
 import io._3ch.bbs.handler.Responses
 import io._3ch.bbs.hash.{AuthHmac, JwtRs256}
+import io._3ch.bbs.application.auth.ports.SignInResult
 import io._3ch.bbs.repository.AccountRepository
 import io._3ch.common.domain.account.*
 import scala.concurrent.Future
@@ -148,7 +149,17 @@ object GoogleHandler {
                           case UpgradeOutcome.LinkedElsewhere => fail("google_linked")
                         }
                     }
-                    case OAuthPurpose.Delete => fail("unavailable")
+                    case OAuthPurpose.Delete => sessionOwner(request, repository, config, state, time).flatMap {
+                      case None => fail("session")
+                      case Some(account) => AuthHandler.keys(config.secret).index("google", value.sub).flatMap {
+                        case None => fail("unavailable")
+                        case Some(subHash) => repository.describeGoogle(account.aid, subHash, time).flatMap {
+                          case SignInResult.Verified(_) => AuthHandler.withdrawal(env, repository, config).withdraw(account, time)
+                            .map(_ => redirect("/", cleared ++ SessionCookies.clear(request.url)))
+                          case _ => fail("google_mismatch")
+                        }
+                      }
+                    }
                   }
                 }
               }

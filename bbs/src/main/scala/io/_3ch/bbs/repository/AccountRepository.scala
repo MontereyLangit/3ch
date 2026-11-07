@@ -27,7 +27,7 @@ final case class AccountPanel(account: AccountDescription, tokens: Vector[Accoun
 
 /** アカウント RPC の値をアプリケーションの型に変換する */
 final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountManagementStore with AccountSignInStore with AccountRoleStore with AccountCapStore
-  with AccountEmailStore with AccountConversionStore {
+  with AccountEmailStore with AccountConversionStore with AccountWithdrawalStore {
   private def account(aid: String): AccountDoStub = env.ACCOUNT_DO.get(env.ACCOUNT_DO.idFromName(aid))
   private def index(kind: String): AccountIndexDoStub = env.ACCOUNT_INDEX_DO.get(env.ACCOUNT_INDEX_DO.idFromName(kind))
   private def raw(value: js.Promise[?]): Future[js.Any] = value.asInstanceOf[js.Promise[js.Any]].toFuture
@@ -159,6 +159,10 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
       case AccountConversion.ToGoogle(subHash, email) => stub.convert(AccountKind.Google.code, uid, generation, now, js.undefined, subHash, email.orUndefined)
     }
     result.toFuture.map(described(aid))
+  }
+  def withdraw(aid: String, generation: Int, now: Double): Future[WithdrawnAccount] = account(aid).withdraw(generation, now).toFuture.map { v =>
+    checked(text(v, "code"))
+    WithdrawnAccount(optionalText(v, "loginId"), optionalText(v, "email"), optionalText(v, "googleSubHash"), array(v, "caps").map(string))
   }
   def setPassword(aid: String, credential: PasswordCredential, now: Double): Future[AccountDescription] =
     account(aid).setPassword(PasswordCredentialCodec.encode(credential), now).toFuture.map(described(aid))

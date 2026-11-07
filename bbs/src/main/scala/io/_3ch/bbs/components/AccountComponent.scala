@@ -20,7 +20,8 @@ final case class AccountCapProps(id: String, name: String, strong: Boolean, issu
 /** アカウント設定画面の表示情報。device はこの端末の Cookie にある端末ハッシュの粒度、roles はキャップの発行欄の出し分けに使う */
 final case class AccountProps(uid: String, lv: Int, tokens: Seq[AccountTokenProps] = Nil, activeCount: Int = 0, nowSeconds: Double = js.Date.now() / 1000,
   kind: AccountKind = AccountKind.Client, expiresAt: Option[Double] = None, device: Option[DeviceGranularity] = None, deviceCount: Int = 0,
-  caps: Seq[AccountCapProps] = Nil, roles: Roles = Roles(), email: Option[String] = None, pendingEmail: Option[String] = None, mailEnabled: Boolean = false)
+  caps: Seq[AccountCapProps] = Nil, roles: Roles = Roles(), email: Option[String] = None, pendingEmail: Option[String] = None, mailEnabled: Boolean = false,
+  notice: String = "", google: Boolean = false)
 
 /** アカウントの表示情報と専ブラ用キー・ログアウトの操作画面 */
 object AccountComponent {
@@ -55,6 +56,7 @@ object AccountComponent {
     <.div(^.className := "min-h-screen bg-[#fafafa] text-sm text-[#333]",
       HeaderComponent.AuthComponent(HeaderProps(true, Some(SessionView(props.uid, props.lv)), "/auth/account")),
       <.main(^.className := "mx-auto max-w-3xl p-4", <.h1(^.className := "mb-3 text-lg font-bold", "アカウント設定"),
+        if props.notice.nonEmpty then <.p(^.role := "alert", ^.className := "mb-3 text-[#f00]", props.notice) else EmptyVdom,
         <.section(^.className := "border border-[#d6dce3] bg-white p-4", <.h2(^.className := "mb-2 font-bold", "■ アカウント"),
           <.dl(^.className := "grid grid-cols-[7em_minmax(0,1fr)] gap-x-3 gap-y-2",
             <.dt(^.className := term, "ユーザーID"), <.dd(<.b(s"@${props.uid}"), <.small(^.className := "ml-2 text-[#697785]", "名前欄に!idと書くと表示されます")),
@@ -73,7 +75,7 @@ object AccountComponent {
         IslandComponents.AccountMenuJs(js.Dynamic.literal(tokens = js.Array(props.tokens.map(tokenProps)*), activeCount = props.activeCount, nowSeconds = props.nowSeconds)),
         IslandComponents.AccountCapJs(js.Dynamic.literal(caps = js.Array(props.caps.map(capProps)*), admin = props.roles.admin,
           canIssue = props.roles.values.nonEmpty)),
-        IslandComponents.AccountLogoutJs(js.Dynamic.literal(simple = props.kind == AccountKind.Client))),
+        IslandComponents.AccountLogoutJs(js.Dynamic.literal(simple = props.kind == AccountKind.Client, kind = props.kind.code, google = props.google))),
       FooterComponent.Component())
   }
 }

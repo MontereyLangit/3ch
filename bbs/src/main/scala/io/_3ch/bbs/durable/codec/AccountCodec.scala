@@ -121,6 +121,10 @@ object AccountCodec {
   def pending(state: AccountState, kind: PendingKind): js.Dynamic =
     js.Dynamic.literal(code = "", email = (if (kind == PendingKind.Reset) state.profile.email else None).orUndefined)
 
+  /** 退会で外す索引の値と、失効させたキャップの KV の照合値 */
+  def withdrawal(value: Withdrawal): js.Dynamic = js.Dynamic.literal(code = "", loginId = value.loginId.orUndefined, email = value.email.orUndefined,
+    googleSubHash = value.googleSubHash.orUndefined, caps = value.caps.map(_.hash).toJSArray)
+
   /** ログインの失敗。delay はアカウント全体の失敗数から決めた応答の遅延秒数 */
   def loginFailure(delay: Int): js.Dynamic = js.Dynamic.literal(code = AccountRejection.LoginFailed.code, delay = delay)
 

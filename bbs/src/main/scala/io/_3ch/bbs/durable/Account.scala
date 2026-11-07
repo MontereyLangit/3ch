@@ -186,6 +186,16 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
+  /** 退会する。外す索引の値と、失効させたキャップの照合値を返す。専ブラキーは token 索引から外す */
+  def withdraw(generation: Int, now: Double): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
+    current(error(AccountRejection.Missing)) { account =>
+      account.withdraw(generation, now) match {
+        case Left(rejection) => Future.successful(error(rejection))
+        case Right((next, withdrawal)) => save(next).flatMap(_ => release(account, next)).map(_ => AccountCodec.withdrawal(withdrawal))
+      }
+    }
+  }.toJSPromise
+
   /** Google の sub の HMAC が一致すれば、ログインに使うアカウントの情報を返す */
   def describeGoogle(subHash: String, now: Double): js.Promise[js.Dynamic] =
     read().map(_.fold(error(AccountRejection.Missing))(account => AccountCodec.signIn(account.describeGoogle(subHash, now), account.profile.uid))).toJSPromise

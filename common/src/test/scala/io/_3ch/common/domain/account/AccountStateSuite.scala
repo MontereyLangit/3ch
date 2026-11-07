@@ -188,4 +188,16 @@ class AccountStateSuite extends FunSuite {
     assertEquals(client.convert(AccountConversion.ToPassword(credential), "x", 0, now), Left(AccountRejection.Invalid))
     assertEquals(client.convert(AccountConversion.ToGoogle("short", None), "taro_2026", 0, now), Left(AccountRejection.Invalid))
   }
+
+  test("退会は deleted にして世代を進め、キャップとキーを失効させて外す値を返す") {
+    val cap = AccountCap("cap1", "管理人", "kvkey", strong = false, profile.aid, now)
+    val state = passwordAccount.copy(profile = passwordAccount.profile.copy(email = Some("t@example.com")), caps = Vector(cap), roles = Roles(Set(AccountRole.Cap)))
+    val (deleted, withdrawal) = state.withdraw(0, now + 1).toOption.get
+    assertEquals((deleted.profile.status, deleted.profile.generation), (AccountStatus.Deleted, 1))
+    assertEquals(deleted.caps.map(_.revokedAt), Vector(Some(now + 1)))
+    assertEquals(withdrawal, Withdrawal(Some("user1234"), Some("t@example.com"), None, Vector(cap.copy(revokedAt = Some(now + 1)))))
+    assertEquals(deleted.usable(now + 1), Left(AccountRejection.Deleted))
+    assertEquals(deleted.withdraw(1, now + 2), Left(AccountRejection.Deleted))
+    assertEquals(state.withdraw(1, now), Left(AccountRejection.Generation))
+  }
 }

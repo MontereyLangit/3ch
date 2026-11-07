@@ -1,7 +1,7 @@
 package io._3ch.bbs.handler.auth
 
-import io._3ch.bbs.application.auth.{AccountUpgrade, UpgradeOutcome, AuthServiceException, AuthServiceFailure, AuthSettings, CapIssuing, CapNameException, ClientAuthentication, DeviceEvidence, LoginOutcome, PasswordAuthentication, TokenIssuing}
-import io._3ch.bbs.application.auth.ports.{AccountStoreException, AuthenticationKeys, PasswordHashing, TokenProof}
+import io._3ch.bbs.application.auth.{AccountUpgrade, AccountWithdrawal, UpgradeOutcome, AuthServiceException, AuthServiceFailure, AuthSettings, CapIssuing, CapNameException, ClientAuthentication, DeviceEvidence, LoginOutcome, PasswordAuthentication, TokenIssuing}
+import io._3ch.bbs.application.auth.ports.{AccountStoreException, AuthenticationKeys, PasswordHashing, SignInResult, TokenProof}
 import io._3ch.bbs.application.posting.CapKey
 import io._3ch.bbs.components.{AccountCapProps, AccountComponent, AccountProps, AccountTokenProps, AccountPostProps, AccountTokenWarningProps, AuthComponent, AuthProps, AuthTokenComponent, AuthTokenProps}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
@@ -213,6 +213,7 @@ object AuthHandler {
     case "unavailable" => Some(message(AuthApiError.Unavailable))
     case "google_linked" => Some("このGoogleアカウントは既に別のアカウントに連携されています。")
     case "session" => Some("ログインし直してから、もう一度お試しください。")
+    case "google_mismatch" => Some("ログイン中のアカウントと違うGoogleアカウントです。退会していません。")
     case _ => None
   }
 
@@ -266,7 +267,8 @@ object AuthHandler {
           cap.recentPosts.map(post => AccountPostProps(post.t, post.bbs, post.key, post.title, post.resNum, post.excerpt, post.network))))
         c.renderPromise(AccountComponent.Component(AccountProps(account.uid, account.lv, tokens, panel.activeCount,
           kind = account.kind, expiresAt = account.expiresAt, device = device, deviceCount = panel.deviceCount, caps = caps, roles = account.roles,
-          email = panel.email, pendingEmail = panel.pendingEmail, mailEnabled = MailSenders.from(c.env).isDefined)).rawElement, props).toFuture
+          email = panel.email, pendingEmail = panel.pendingEmail, mailEnabled = MailSenders.from(c.env).isDefined,
+          notice = notice(c.req.query("error").getOrElse("")).getOrElse(""), google = AuthEnv.google(c.env).isDefined)).rawElement, props).toFuture
       }
     }
   }
@@ -306,6 +308,7 @@ object AuthHandler {
               if (account.agreementVersion != config.agreementVersion) throw Refused(AuthApiError.AgreementRequired)
               cap(path, form, env, repository, account, config.secret, time)
             }
+            case "/auth/account" => withdraw(request, env, repository, form, config, time)
             case "/auth/email" => AccountMailHandler.email(request, env, repository, form, config, time)
             case "/auth/email/verify" => AccountMailHandler.verify(request, env, repository, form, config, time)
             case "/auth/password" => AccountMailHandler.password(request, repository, form, config, time)
@@ -322,6 +325,31 @@ object AuthHandler {
       }
     }.recover { case error => failure(error) }.toJSPromise
   }
+
+  /**
+    * 退会する。ID・パスワードはパスワードの再入力、かんたん登録は確認の印を求める。Google は認可をやり直す（GoogleHandler）。
+    * 成功したらこの端末の Cookie を消す
+    */
+  private def withdraw(request: Request, env: WorkerEnv, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] =
+    if (!form.get("action").contains("delete")) Future.failed(Refused(AuthApiError.Invalid))
+    else current(request, config.secret, repository, time).flatMap { case (_, account) =>
+      val confirmed: Future[Unit] = account.kind match {
+        case AccountKind.Client => if (form.get("confirm").contains("1")) Future.unit else Future.failed(Refused(AuthApiError.Invalid))
+        case AccountKind.Password => keyIp(request, config.secret).flatMap(repository.verifyPassword(account.aid, form.getOrElse("password", ""), _, time)).flatMap {
+          case SignInResult.Verified(_) => Future.unit
+          case SignInResult.Failed(delay) => pause(delay).flatMap(_ => Future.failed(Refused(AuthApiError.LoginFailed)))
+          case SignInResult.Refused(reason) => Future.failed(Refused(AuthApiError.Refused(reason)))
+          case SignInResult.Unfinished(_) => Future.failed(Refused(AuthApiError.Refused(AccountRejection.Pending)))
+        }
+        case AccountKind.Google => Future.failed(Refused(AuthApiError.Refused(AccountRejection.KindForbidden)))
+      }
+      confirmed.flatMap(_ => withdrawal(env, repository, config).withdraw(account, time))
+        .map(_ => json(js.Dynamic.literal(ok = true), cookie = SessionCookies.clear(request.url)))
+        .recoverWith { case AccountStoreException(reason) => Future.failed(Refused(AuthApiError.Refused(reason))) }
+    }
+
+  private[auth] def withdrawal(env: WorkerEnv, repository: AccountRepository, config: AuthSettings): AccountWithdrawal =
+    new AccountWithdrawal(repository, CapRepository.directory(env), keys(config.secret))
 
   /** 世代を進めて全端末をログアウトさせる。セッションの検証や保存に失敗しても、この端末の Cookie は消す */
   private def logout(request: Request, config: AuthSettings, repository: AccountRepository, time: Double): Future[Response] = {
