@@ -1,6 +1,7 @@
 package io._3ch.bbs.handler
 
 import io._3ch.bbs.application.admin.{AdminFailure, AdminFile}
+import io._3ch.bbs.domain.admin.SettingProblem
 import io._3ch.bbs.domain.posting.moderation.{ModerationRuleError, ModerationRuleProblem}
 
 object AdminText {
@@ -10,12 +11,35 @@ object AdminText {
     case AdminFailure.InvalidKey(_) => "keyは10桁の数字で指定してください。"
     case AdminFailure.CreationLineBreak => "スレ立て規制の入力に改行は使用できません。"
     case AdminFailure.CreationSettings(reason) => PostingText.creationSettingsMessage(reason)
-    case AdminFailure.Settings(_) => "入力内容を確認してください。"
+    case AdminFailure.Settings(_) => apiInvalid
     case AdminFailure.Rules(error) => ruleError(error)
     case AdminFailure.Conflict(file) => conflict(file)
     case AdminFailure.ThreadMissing => "スレッドがありません。"
     case AdminFailure.ThreadRefused(message) => message
   }
+
+  /** 管理 API の項目ごとの理由 */
+  def settingProblem(problem: SettingProblem): String = problem match {
+    case SettingProblem.LineBreak => "改行は使用できません。"
+    case SettingProblem.Number => "0以上の整数で指定してください。"
+    case SettingProblem.Choice => "選択肢にない値です。"
+    case SettingProblem.Level => "off・log・0以上の整数・空欄のいずれかにしてください。"
+    case SettingProblem.Phoebe => "0〜10の整数で指定してください。"
+    case SettingProblem.Duplicate(keys) => s"フォームの項目と同じキーは書けません（${keys.mkString("・")}）。"
+    case SettingProblem.Creation(reason) => PostingText.creationSettingsMessage(reason)
+  }
+
+  val apiInvalid = "入力内容を確認してください。"
+  val apiUnauthorized = "管理者認証が必要です。"
+  val apiUnavailable = "管理者パスワードが未設定です。"
+  val apiNotFound = "APIがありません。"
+  val apiMethod = "このメソッドは使えません。"
+  val apiContentType = "Content-Type は application/json にしてください。"
+  val apiTooLarge = "入力が大きすぎます。"
+  val apiMalformed = "JSONとして読めません。"
+  val apiField = "形式が不正です。"
+  val apiResNumber = "レス番号は1以上の整数で指定してください。"
+  val apiInternal = "処理できませんでした。"
 
   private def conflict(file: AdminFile): String = file match {
     case AdminFile.Settings => "他の操作で板設定が更新されました。画面を開き直してから保存してください。"

@@ -33,6 +33,18 @@ object AdminRepository {
         if (written == null) WriteResult.Conflict else WriteResult.Written(if (js.isUndefined(written)) None else etagOf(written))
       }
     }
+
+    def topPrefixes(): Future[List[String]] = {
+      def page(cursor: Option[String], acc: List[String]): Future[List[String]] = {
+        val options = js.Dynamic.literal(delimiter = "/")
+        cursor.foreach(c => options.cursor = c)
+        e.ch3www.list(options).toFuture.flatMap { result =>
+          val prefixes = acc ++ result.delimitedPrefixes.toList.map(_.stripSuffix("/"))
+          if (result.truncated && result.cursor.isDefined) page(result.cursor.toOption, prefixes) else Future.successful(prefixes)
+        }
+      }
+      page(None, Nil)
+    }
   }
 
   def threads(e: WorkerEnv): AdminThreads = new AdminThreads {

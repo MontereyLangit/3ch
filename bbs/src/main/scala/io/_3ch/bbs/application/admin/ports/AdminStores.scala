@@ -25,6 +25,9 @@ trait AdminFiles {
   def read(path: String): Future[Option[TextFile]]
 
   def write(path: String, text: String, condition: WriteCondition): Future[WriteResult]
+
+  /** 最上位の「/」区切りの接頭辞（末尾の / を除く）。全ページを辿る */
+  def topPrefixes(): Future[List[String]]
 }
 
 /** Thread DO の inspect の結果。無い項目は空か偽 */

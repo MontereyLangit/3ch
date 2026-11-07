@@ -1,8 +1,10 @@
 package io._3ch.bbs.application.admin
 
 import io._3ch.bbs.application.admin.ports.{AdminFiles, AdminThreads, WriteCondition, WriteResult}
+import io._3ch.bbs.domain.admin.{BoardLinks, BoardSettingsCheck}
 import io._3ch.bbs.domain.posting.moderation.{ModerationRuleSet, ThreadCreationSettings}
-import io._3ch.common.admin.{BoardSettingsSaved, ResView, RuleName, Saved, TextFile, ThreadAction, ThreadDetail, ThreadList, ThreadSummary}
+import io._3ch.common.admin.{BoardList, BoardRules, BoardSettingsForm, BoardSettingsSaved, BoardSettingsUpdate, BoardSettingsView, ResView, RuleName, Saved,
+  TextFile, ThreadAction, ThreadDetail, ThreadList, ThreadSummary}
 import io._3ch.common.domain.BbsSettings
 
 import scala.concurrent.Future
@@ -53,6 +55,32 @@ final class AdminService(files: AdminFiles, threads: AdminThreads) {
             case WriteResult.Written(_) => Right(())
             case WriteResult.Conflict => Left(AdminFailure.Conflict(AdminFile.Settings))
           }
+      }
+    }
+
+  /** 板名の一覧。R2 の最上位の接頭辞と bbsmenu.html のリンク先の和集合 */
+  def boards(): Future[BoardList] = for {
+    prefixes <- files.topPrefixes()
+    menu <- text(MenuPath)
+  } yield BoardList((prefixes ++ BoardLinks.fromMenu(menu)).filter(validBoard(_).isRight).distinct.sorted)
+
+  /** 板設定画面の内容。SETTING.TXT が無ければ既定の内容を明示値として読む */
+  def boardSettings(bbs: String): Future[BoardSettingsView] = for {
+    (head, settings) <- boardTexts(bbs)
+    access <- text(RuleName.Access.file)
+    ngwords <- text(RuleName.Ngwords.file)
+  } yield BoardSettingsView(bbs, BoardSettingsForm.read(settings.text), head.text, settings.etag, head.etag,
+    BoardRules(ModerationRuleSet.linesFor(access, bbs), ModerationRuleSet.linesFor(ngwords, bbs)))
+
+  /** 板設定画面の値を検証し、読込時の SETTING.TXT の行順を保って保存する */
+  def saveBoardSettings(bbs: String, update: BoardSettingsUpdate): Future[Either[AdminFailure, BoardSettingsSaved]] =
+    files.read(settingsPath(bbs)).flatMap { stored =>
+      if (stored.flatMap(_.etag) != update.settingsEtag) Future.successful(Left(AdminFailure.Conflict(AdminFile.Settings)))
+      else {
+        val rendered = BoardSettingsForm.render(stored.fold(defaultSettings(bbs))(_.text), update.values)
+        val problems = BoardSettingsCheck.check(update.values, rendered)
+        if (problems.nonEmpty) Future.successful(Left(AdminFailure.Settings(problems)))
+        else saveBoardTexts(bbs, update.head, rendered, condition(update.settingsEtag), condition(update.headEtag))
       }
     }
 

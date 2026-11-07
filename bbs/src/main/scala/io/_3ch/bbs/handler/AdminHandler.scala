@@ -7,7 +7,8 @@ import io._3ch.bbs.external.web.{Request, Response, TextEncoder}
 import io._3ch.bbs.hash.WebHash
 import io._3ch.bbs.domain.posting.moderation.ThreadCreationSettings
 import io._3ch.bbs.repository.AdminRepository
-import io._3ch.common.admin.{RuleName, ThreadAction}
+import io._3ch.bbs.handler.admin.AdminApi
+import io._3ch.common.admin.{AdminError, AdminErrorCode, RuleName, ThreadAction}
 import io._3ch.common.text.JsNumber
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -75,7 +76,10 @@ object AdminHandler {
   def handle(r: Request, e: WorkerEnv): js.Promise[Response] = {
     val env = e.asInstanceOf[js.Dynamic]
     val headers = js.Dictionary("content-type" -> "text/html; charset=utf-8", "cache-control" -> "no-store", "x-content-type-options" -> "nosniff", "referrer-policy" -> "no-referrer", "content-security-policy" -> "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
-    if !truth(env.ADMIN_PASSWORD) then return js.Promise.resolve(Responses.response("管理者パスワードが未設定です。", 503, headers))
+    val requestPath = str(js.Dynamic.newInstance(js.Dynamic.global.URL)(r.url).pathname)
+    val api = requestPath == "/admin/api" || requestPath.startsWith("/admin/api/")
+    if !truth(env.ADMIN_PASSWORD) then return js.Promise.resolve(
+      if api then AdminApi.error(AdminError(AdminErrorCode.Unavailable, AdminText.apiUnavailable)) else Responses.response("管理者パスワードが未設定です。", 503, headers))
     val username = if truth(env.ADMIN_USER) then str(env.ADMIN_USER) else "admin"
     val credentialBytes = new TextEncoder().encode(s"$username:${str(env.ADMIN_PASSWORD)}")
     val credentials = (0 until credentialBytes.length).map(i => credentialBytes(i).toChar).mkString
@@ -84,9 +88,13 @@ object AdminHandler {
     val b = WebHash.hash("SHA-256", Option(r.headers.get("authorization")).getOrElse("")).toFuture
     a.zip(b).flatMap { (left, right) =>
       if left != right then {
-        headers("www-authenticate") = "Basic realm=\"3ch admin\", charset=\"UTF-8\""
-        Future.successful(Responses.response("管理者認証が必要です。", 401, headers))
-      } else if r.method != "GET" && r.method != "POST" then Future.successful(Responses.response("Method not allowed", 405, headers))
+        val challenge = "Basic realm=\"3ch admin\", charset=\"UTF-8\""
+        headers("www-authenticate") = challenge
+        Future.successful(
+          if api then AdminApi.error(AdminError(AdminErrorCode.Unauthorized, AdminText.apiUnauthorized), Seq("www-authenticate" -> challenge))
+          else Responses.response("管理者認証が必要です。", 401, headers))
+      } else if api then AdminApi.handle(r, e, requestPath)
+      else if r.method != "GET" && r.method != "POST" then Future.successful(Responses.response("Method not allowed", 405, headers))
       else {
         val url = js.Dynamic.newInstance(js.Dynamic.global.URL)(r.url)
         val path = str(url.pathname).stripSuffix("/")

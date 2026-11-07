@@ -21,6 +21,9 @@ final class ModerationRule private (board: js.RegExp, target: js.RegExp, word: j
   /** 板名と投稿者情報が一致し、照合する文字列のどれかが NG ワードに一致するか */
   def matches(bbs: String, userInfo: String, contents: Seq[String]): Boolean =
     board.test(bbs) && target.test(userInfo) && contents.exists(word.test)
+
+  /** 板名が板の正規表現に一致するか */
+  def appliesTo(bbs: String): Boolean = board.test(bbs)
 }
 
 object ModerationRule {
@@ -63,4 +66,8 @@ object ModerationRuleSet {
     }.partitionMap(identity)
     errors.headOption.toLeft(ModerationRuleSet(rules))
   }
+
+  /** 板の正規表現が bbs に一致する行。読めない行は含めない */
+  def linesFor(text: String, bbs: String): List[String] =
+    text.split("\r?\n", -1).toList.filter(line => !Skipped.test(line) && ModerationRule.parse(line).exists(_.appliesTo(bbs)))
 }

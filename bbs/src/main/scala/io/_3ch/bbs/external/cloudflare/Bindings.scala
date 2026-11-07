@@ -87,10 +87,20 @@ trait R2ObjectBody extends js.Object {
   def arrayBuffer(): js.Promise[js.typedarray.ArrayBuffer] = js.native
 }
 
+/** R2 の list の結果。delimiter を付けたときの共通の接頭辞と続きの位置 */
+@js.native
+trait R2Objects extends js.Object {
+  val delimitedPrefixes: js.Array[String] = js.native
+  val truncated: Boolean = js.native
+  val cursor: js.UndefOr[String] = js.native
+}
+
 @js.native
 trait R2Bucket extends js.Object {
   def get(key: String): js.Promise[R2ObjectBody] = js.native
   def put(key: String, value: js.Any): js.Promise[js.Any] = js.native
+  /** options は prefix・delimiter・cursor・limit など */
+  def list(options: js.Object): js.Promise[R2Objects] = js.native
 }
 
 /**

@@ -134,6 +134,18 @@ object DurableTestKit {
       }
     }
 
+    /** 実R2 の list のうち delimiter「/」の接頭辞と、limit 件ごとのページ（cursor は次の接頭辞の位置）だけを再現する */
+    private def r2List(opts: js.Dynamic): js.Any = {
+      val prefixes = r2.keys.toList.filter(_.contains('/')).map(key => key.take(key.indexOf('/') + 1)).distinct.sorted
+      val limit = if (js.isUndefined(opts.limit)) 1000 else opts.limit.asInstanceOf[Int]
+      val from = if (js.isUndefined(opts.cursor)) 0 else opts.cursor.asInstanceOf[String].toInt
+      val page = prefixes.slice(from, from + limit)
+      val truncated = from + limit < prefixes.length
+      val result = js.Dynamic.literal(objects = js.Array[js.Any](), delimitedPrefixes = js.Array(page*), truncated = truncated)
+      if (truncated) result.cursor = (from + limit).toString
+      result
+    }
+
     val worker: WorkerEnv = {
       val e = js.Dynamic.literal(
         ch3www = js.Dynamic.literal(
@@ -147,7 +159,8 @@ object DurableTestKit {
             }
             )
           ): js.Function1[String, js.Promise[js.Any]],
-          put = ((key: String, value: js.Any, opts: js.UndefOr[js.Dynamic]) => js.Promise.resolve[js.Any](r2Put(key, value, opts))): js.Function3[String, js.Any, js.UndefOr[js.Dynamic], js.Promise[js.Any]]
+          put = ((key: String, value: js.Any, opts: js.UndefOr[js.Dynamic]) => js.Promise.resolve[js.Any](r2Put(key, value, opts))): js.Function3[String, js.Any, js.UndefOr[js.Dynamic], js.Promise[js.Any]],
+          list = ((opts: js.Dynamic) => js.Promise.resolve[js.Any](r2List(opts))): js.Function1[js.Dynamic, js.Promise[js.Any]]
         ),
         CAP = js.Dynamic.literal(
           get = ((key: String) => js.Promise.resolve[js.Any](capStore.get(key) match {
