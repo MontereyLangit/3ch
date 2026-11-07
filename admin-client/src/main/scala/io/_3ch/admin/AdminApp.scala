@@ -2,7 +2,7 @@ package io._3ch.admin
 
 import io._3ch.admin.api.AdminApiClient
 import io._3ch.admin.components.{Layout, Link, Styles}
-import io._3ch.admin.pages.TopPage
+import io._3ch.admin.pages.{BoardSettingsPage, TopPage}
 import io._3ch.common.admin.AdminCodec
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
@@ -52,6 +52,7 @@ object AdminApp {
       val nav = Nav(page.value, go, dirty.setState)
       val content: VdomNode = page.value match {
         case AdminPage.Top => TopPage.Component(TopPage.Props(nav, boards.state))
+        case AdminPage.Board(bbs) => BoardSettingsPage.Component(BoardSettingsPage.Props(nav, bbs))
         case _ => <.div(<.h1(^.className := Styles.h1, "ページがありません"),
           <.p(Link(nav, AdminPage.Top, Styles.link, "管理画面のトップへ")))
       }
