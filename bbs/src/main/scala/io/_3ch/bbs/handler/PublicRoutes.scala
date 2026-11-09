@@ -3,6 +3,8 @@ package io._3ch.bbs.handler
 import io._3ch.bbs.external.cloudflare.*
 import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.domain.posting.GlobalThread
+import io._3ch.bbs.repository.BoardRepository
+import io._3ch.common.domain.BoardId
 import io._3ch.common.routes.RouteTable
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -117,15 +119,13 @@ object PublicRoutes {
                 }
               }
             case "subject" => guard(s"/$bbs/subject.txt") {
-              // 全板共通スレ(板924の一覧)を 924 → 900 の順で先頭に置き、板固有のスレを続ける。
-              def rows(text: String): Seq[String] = text.split("\n", -1).map(trim).filter(_.nonEmpty).toSeq
-              val ownF = board(e, bbs).getSubject().toFuture
-              val globalF = if bbs == GlobalThread.board then ownF else board(e, GlobalThread.board).getSubject().toFuture
-              ownF.zip(globalF).map { (own, global) =>
-                val merged = GlobalThread.mergeSubject(rows(global), if bbs == GlobalThread.board then Nil else rows(own))
-                val body = merged.map(_ + "\n").mkString
-                Responses.plain(if oldDomain then DomainMigration.subject(body) else body, "plain", "Shift_JIS", since = h("if-modified-since"), extra = js.Dictionary("max-age" -> "5", "s-maxage" -> "1"))
-              }
+              BoardId.create(bbs).fold(
+                _ => Future.successful(notFound(path)),
+                boardId => BoardRepository.getMergedSubjects(boardId, e).map { subjects =>
+                  val body = if subjects.value.isEmpty then "" else subjects.toString
+                  Responses.plain(if oldDomain then DomainMigration.subject(body) else body, "plain", "Shift_JIS", since = h("if-modified-since"), extra = js.Dictionary("max-age" -> "5", "s-maxage" -> "1"))
+                }
+              )
             }
             case "archive" | "archives" =>
               val single = kind == "archive"
