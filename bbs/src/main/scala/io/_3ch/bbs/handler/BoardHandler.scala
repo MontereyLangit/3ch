@@ -36,7 +36,7 @@ object BoardHandler {
     val bbs = board.value
     val boardSettingsF = BoardRepository.getBoardSettings(board, c.env)
     val headTextF = BoardRepository.getHeadText(board, c.env)
-    val subjectsF = BoardRepository.getSubjects(board, c.env)
+    val subjectsF = BoardRepository.getMergedSubjects(board, c.env)
 
     (for {
       boardSettings <- boardSettingsF

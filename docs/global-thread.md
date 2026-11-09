@@ -49,6 +49,8 @@ v5 以来「スレキーが 924 / 900 始まりの投稿は板 `924` へ送る�
 `{bbs}` の一覧に 924 / 900 始まりの行があっても重複を避けるため除く。板 `924` 自身の `subject.txt` も 1・2 の順に並べ替える。
 結合は配信時に行うため Board DO の保存形式は変えない。各板の行数は `BBS_MAX_MENU_THREAD` に共通スレの数を加えたものになる。
 
+板 top（`/{bbs}/`）も同じ結合結果（`BoardRepository.getMergedSubjects`）を一覧に使い、「全板共通スレ」欄に載せる。
+
 `GET /{bbs}/dat/{key}.dat` は、キーが 924 / 900 始まりなら `{bbs}` によらず Thread DO `924/<key>` を読む。
 `/test/read.cgi/{bbs}/{key}/` は 3chiko.html が `/{bbs}/dat/{key}.dat` を読むので変更不要。
 書き込みは従来どおり `readForm` の振り分けで板 924 へ送る。
