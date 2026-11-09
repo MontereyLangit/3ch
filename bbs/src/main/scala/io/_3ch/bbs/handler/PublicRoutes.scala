@@ -110,7 +110,9 @@ object PublicRoutes {
                     val dateMatch = new js.RegExp("(\\d{4}/\\d{2}/\\d{2}\\([日月火水木金土]\\) \\d{2}:\\d{2}:\\d{2})").exec(last)
                     if dateMatch != null && modified == null then modified = new js.Date(dateMatch(1).get)
                     val edited = truth(data.edited)
-                    Responses.plain(if oldDomain then DomainMigration.annotateDat(dat, bbs, key) else dat, "plain", "Shift_JIS", if edited || oldDomain then "" else h("range"), if modified == null then new js.Date() else modified, if edited || oldDomain then "" else h("if-modified-since"), js.Dictionary("cache-control" -> "no-store", "s-maxage" -> "1", "Accept-Ranges" -> (if oldDomain then "none" else "bytes")))
+                    // Last-Modified は秒精度なので、If-Modified-Since との比較も秒に切り捨てた値で行う。
+                    val lastModified = if modified == null then new js.Date() else new js.Date(js.Math.floor(modified.getTime() / 1000) * 1000)
+                    Responses.plain(if oldDomain then DomainMigration.annotateDat(dat, bbs, key) else dat, "plain", "Shift_JIS", if edited || oldDomain then "" else h("range"), lastModified, if edited || oldDomain then "" else h("if-modified-since"), js.Dictionary("cache-control" -> "no-store", "s-maxage" -> "1", "Accept-Ranges" -> (if oldDomain then "none" else "bytes")))
                   }
                 }
               }

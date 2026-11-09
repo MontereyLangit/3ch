@@ -1,6 +1,7 @@
 package io._3ch.bbs.repository
 
 import io._3ch.bbs.external.cloudflare.{BoardDoStub, WorkerEnv}
+import io._3ch.bbs.domain.posting.GlobalThread
 import io._3ch.bbs.handler.PostingText
 import io._3ch.common.domain.{BbsSettings, BbsSubjects, BoardId}
 
@@ -25,6 +26,25 @@ object BoardRepository {
        .toFuture
        .map(t => BbsSubjects.create(t))
    }
+
+  /**
+    * 全板共通スレ(板924)を先頭に結合した、板のスレッド一覧を返す(docs/global-thread.md)
+    *
+    * @param board 板ID
+    * @param e WorkerEnv
+    */
+  def getMergedSubjects(board: BoardId, e: WorkerEnv): Future[BbsSubjects] = {
+    val ownF = getSubjects(board, e)
+    val globalF = BoardId.create(GlobalThread.board).fold(
+      message => Future.failed(new IllegalStateException(message)),
+      globalBoard => if board.value == GlobalThread.board then ownF else getSubjects(globalBoard, e)
+    )
+    ownF.zip(globalF).map { (own, global) =>
+      def rows(subjects: BbsSubjects): Seq[String] = subjects.toString.split("\n", -1).map(_.trim).filter(_.nonEmpty).toSeq
+      val merged = GlobalThread.mergeSubject(rows(global), if board.value == GlobalThread.board then Nil else rows(own))
+      BbsSubjects.create(merged.map(_ + "\n").mkString)
+    }
+  }
 
   /**
     * R2から該当板のSETTING.TXTを取得する

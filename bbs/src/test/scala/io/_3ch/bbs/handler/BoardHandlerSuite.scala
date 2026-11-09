@@ -105,4 +105,35 @@ class BoardHandlerSuite extends munit.FunSuite {
     env.putR2("abc/SETTING.TXT", "BBS_TITLE=<DIR_NAME>の板\n")
     render(env, "/abc/").map(html => assert(html.contains("<title>abcの板</title>"), html))
   }
+
+  private def updateThread(env: DurableTestKit.Env, bbs: String, key: String, title: String, resNum: Int) =
+    env.board(bbs).updateThread(js.Dynamic.literal(key = key, title = title, resNum = resNum), false, 700).toFuture
+
+  test("getMergedSubjects: 全板共通スレを 924 -> 900 -> 板固有 の順で先頭に載せ、板924自身は並べ替えだけ行う") {
+    val env = DurableTestKit.newEnv()
+    for {
+      _ <- updateThread(env, "924", "9000000001", "open", 2)
+      _ <- updateThread(env, "924", "9240000002", "cap-only", 5)
+      _ <- updateThread(env, "news", "1800000010", "own", 3)
+      news <- BoardRepository.getMergedSubjects(board("news"), env.worker)
+      empty <- BoardRepository.getMergedSubjects(board("empty"), env.worker)
+      global <- BoardRepository.getMergedSubjects(board("924"), env.worker)
+    } yield {
+      assertEquals(news.toString, "9240000002.dat<>cap-only (5)\n9000000001.dat<>open (2)\n1800000010.dat<>own (3)\n")
+      assertEquals(empty.toString, "9240000002.dat<>cap-only (5)\n9000000001.dat<>open (2)\n")
+      assertEquals(global.toString, "9240000002.dat<>cap-only (5)\n9000000001.dat<>open (2)\n")
+    }
+  }
+
+  test("板top: 他の板でも全板共通スレがSSRのsubjectTextに入る") {
+    val env = DurableTestKit.newEnv()
+    for {
+      _ <- updateThread(env, "924", "9240000002", "cap-only", 5)
+      _ <- updateThread(env, "news", "1800000010", "own", 3)
+      html <- render(env, "/news/")
+    } yield {
+      assert(html.contains("9240000002.dat&lt;&gt;cap-only (5)"), html)
+      assert(html.contains("1800000010.dat&lt;&gt;own (3)"), html)
+    }
+  }
 }
