@@ -51,8 +51,9 @@ val generateDurableObjectStubs = taskKey[Seq[File]]("DO の公開メソッドか
 lazy val generateDurableObjectStubsTask: Def.Initialize[Task[Seq[File]]] = Def.taskDyn {
   val durableDir = (Compile / scalaSource).value / "io" / "_3ch" / "bbs" / "durable"
   val output = (Compile / durableObjectStubsFile).value
-  // パスに空白が含まれても 1 引数として渡るよう引用符で囲む（spaceDelimited は引用符を解釈する）
-  val arguments = s""" io._3ch.codegen.GenerateDurableObjectStubsMain "${durableDir.getAbsolutePath}" "${output.getAbsolutePath}""""
+  // spaceDelimitedが解釈する引用符とWindowsパスのバックスラッシュをエスケープする
+  def quotedPath(path: File): String = "\"" + path.getAbsolutePath.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+  val arguments = s" io._3ch.codegen.GenerateDurableObjectStubsMain ${quotedPath(durableDir)} ${quotedPath(output)}"
   Def.task {
     (codegen / Compile / runMain).toTask(arguments).value
     Seq((Compile / durableObjectStubsFile).value)
