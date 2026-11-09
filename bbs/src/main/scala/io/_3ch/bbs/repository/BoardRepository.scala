@@ -15,7 +15,7 @@ object BoardRepository {
     *
     * @param board 板ID
     * @param e WorkerEnv
-    * @return subject.txt
+    * @return スレ一覧
     */
   def getSubjects(board: BoardId, e: WorkerEnv): Future[BbsSubjects] = {
      val stub = e.BOARD_DO
@@ -28,10 +28,11 @@ object BoardRepository {
    }
 
   /**
-    * 全板共通スレ(板924)を先頭に結合した、板のスレッド一覧を返す(docs/global-thread.md)
+    * 板のDurable Objectから全板共通スレ(924板)と該当板のスレ一覧を取得し結合して返す
     *
     * @param board 板ID
     * @param e WorkerEnv
+    * @return スレ一覧
     */
   def getMergedSubjects(board: BoardId, e: WorkerEnv): Future[BbsSubjects] = {
     val ownF = getSubjects(board, e)
