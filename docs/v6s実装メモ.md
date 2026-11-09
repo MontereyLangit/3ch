@@ -112,7 +112,7 @@ step 3 方針から外れる。
 本家 2ch と異なる 3ch 独自のトリップ値を生む既知の挙動なので、元の JS と同じく無条件に `TextEncoder` へ
 委譲して保持する（「正しい」変換に直してはいけない。[移植方針_step3_ScalaJS.md](移植方針_step3_ScalaJS.md) R-02）。
 
-### 3.3 MD5 / crypt(3) は npm ライブラリに委譲する（`hash/Md5.scala`, `hash/UnixCrypt.scala`）
+### 3.3 MD5 / crypt(3) は npm ライブラリに委譲した後、いずれも廃止した（`hash/Md5.scala`, `hash/UnixCrypt.scala`）
 
 2026-11-01 に、`common/` にあった自作の MD5（`Md5.scala`）と Unix crypt(3) DES（`UnixCrypt.scala`）を
 npm ライブラリへの薄い facade に置き換えた。自作実装は v5 の JS をビット演算まで 1:1 で写したもので、
@@ -126,7 +126,11 @@ npm ライブラリへの薄い facade に置き換えた。自作実装は v5 �
   （`hash/UnixCrypt.scala`・`hash/Hex.scala`・golden `crypt.json` / `crypt-bytes.json` も削除。[トリップ・ID廃止とスレ主表示.md](トリップ・ID廃止とスレ主表示.md)）。
 - 置き場所は `common/` ではなく `bbs/`: npm モジュールは Scala.js からしか呼べず、cross project の JVM 側では
   リンクできない。`bbs/` の他の `@JSImport` facade（`react-dom/server` 等）と同じ扱い。
-- 検証: `tests/golden/md5.json` の全ケースが一致することを `bbs/src/test/.../hash/Md5Suite` で固定している（`common` から移した）。
+- **2026-11-09 に MD5 を廃止した**（`hash/Md5.scala`・`hash/NobleHashes.scala`・`Md5Suite`・golden `md5.json`・npm `@noble/hashes` を削除）。
+  Web Crypto は MD5 に対応しないため、`PostingHandler` の `md5(x)` は SHA-256 の16進（`WebHash.hash("SHA-256", x)`）に置き換えた。
+  npm 依存を減らすのが理由。キャップは運用上 `#!xxx` 形式（ハッシュなし直指定）しか使っておらず、
+  ハッシュ値（KV `CAP` のキー・PON Cookie・識別子・スレ主 owner・スレ立て規制のハッシュ）が変わっても影響が小さいと判断した。
+  式は `docs/現行システム仕様書.md` §6.2 / §6.4 を参照（旧式は `v5-final` タグ）。
 
 同日、残っていた `common/` の補助実装も置き換えた。
 

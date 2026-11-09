@@ -370,12 +370,12 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 | 部分 | 内容 | 算出 |
 | --- | --- | --- |
 | `JP` | 国コード（`cf.country`。欠損は現行どおり `unknown`） | そのまま |
-| `AA` | 県 | 現行 `kenHash` と同じ: `sha1Base64(md5(ken + group + date + salt)).take(2)` |
+| `AA` | 県 | 現行 `kenHash` と同じ: `sha1Base64(sha256(ken + group + date + saltHash)).take(2)` |
 | `CC` | ASN | 現行 `asnHash` と同じ |
-| `EEE`〜`XXX` | 端末情報 5 軸 × 3 桁 | 軸ごとに `sha1Base64(md5(axisValue + "|" + axisName + group + date + salt)).take(3)`。欠損軸は `000` |
+| `EEE`〜`XXX` | 端末情報 5 軸 × 3 桁 | 軸ごとに `sha1Base64(sha256(axisValue + "|" + axisName + group + date + saltHash)).take(3)`。欠損軸は `000` |
 | `D` | Lv | 未ログイン `0`、1〜9 はその数字、10 以上 `*` |
 
-`group`・`date`・`salt` は現行 `makeId` と同じ（`BBS_ID_GROUP`・`BBS_ID_RESET`・`md5Salt`）。全部分が日替わりで変わる点は現行と同じ。
+`group`・`date`・`salt` は現行 `makeId` と同じ（`BBS_ID_GROUP`・`BBS_ID_RESET`・`saltHash`）。全部分が日替わりで変わる点は現行と同じ。
 文字集合も現行の 2 桁ハッシュと同じ Base64 文字（`+` `/` を含む）。市区町村ハッシュと 16 桁 UA ハッシュは廃止する。
 
 ### 5.2 5 軸の値
@@ -421,7 +421,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 ### 6.2 キャップ
 
 - 発行は権限を 1 つ以上持つアカウントが自分宛に 1 個まで。`admin` は無制限で他アカウント宛にも発行できる。
-- 保存: `Account.caps[]`＝`{capId, name, hash, strong, issuedBy, issuedAt, revokedAt}`。`hash` は現行の照合値 `SHA-1(SHA-256(MD5(pass)+salt))` 先頭 27 文字をそのまま使う。
+- 保存: `Account.caps[]`＝`{capId, name, hash, strong, issuedBy, issuedAt, revokedAt}`。`hash` は現行の照合値 `SHA-1(SHA-256(pass+saltHash))` 先頭 27 文字をそのまま使う。
 - 互換: KV `CAP`（hash → 表示名）は現行どおり読み書きし、所有者は `AccountIndex("cap")`（hash → `aid`）で引く。所有者のない既存エントリは「旧キャップ」として動き続ける（ログ無し・Lv 無し）。管理画面から既存キャップをアカウントに紐づけられる。
 - 強キャップ（表示名末尾 `★`、サイズ検証スキップ）は `admin` だけが発行できる。
 - 利用ログ: `Account.log`（§9.1 の書き込み記録）に `via: "cap"` と `capId` 付きで残る。所有者と `admin` が閲覧でき、失効（`revokedAt`）と再発行（新 hash）ができる。失効時は KV `CAP` からも削除する。
@@ -527,7 +527,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 - **照合キー**: 板設定 `BBS_RENTOU_KEYS`（§8.8）で選ぶ。候補は `ip`（IPv6 は URL 正規化、スレ立て規制と同じ）、`id`（`ID:` の値。`ID:???` と空は照合しない）、`shiki`（識別子。`D` を除いた `JP.AA CC-EEEFFFGGGZZZXXX`。`★` は照合しない）、`aid`（認証済のアカウント。移行しても変わらない）。選んだキーのいずれか 1 つでも一致すれば「同一」。
   既定は原案どおり `ip,id,shiki,aid`。**ただし `id` と `shiki` は同じキャリア・同じ地域・同じ機種の別人で一致しうる**（現行の `checked` 識別子は県・市・AS・UA のハッシュ、ID は CGNAT で共有される IPv4 や IPv6 /64 の種から作る。新書式でも iOS は機種クラス粒度）。Samba24 のような秒単位の板全体規制では巻き添えが起きるため、§13-24 で既定を決め、試行モード（下記）で実測してから有効にする。
 - **試行モード**: 板設定 `BBS_RENTOU_MODE`＝`off` / `log` / `on`。`log` は判定と履歴の記録だけ行い、拒否せず Workers Logs に出す。**初回デプロイのコード既定値は `log`** とし、1 週間の観測後に既定値を `on` に変える（§12 段 A を A-1 / A-2 に分ける）。
-- **保存値**: 全てソルト付き SHA-256（`hash(value + ":" + md5Salt)`。スレ立て規制と同じ `digest`）。空値は空のまま保存し照合しない。
+- **保存値**: 全てソルト付き SHA-256（`hash(value + ":" + saltHash)`。スレ立て規制と同じ `digest`）。空値は空のまま保存し照合しない。
 - **予約中の扱い**: 有効な予約（§8.7）は確定済みと同じく件数に 1 件として数える（スレ立て規制の「別枠で 1 件ずつ」と違い、ごんたくれの件数窓にも入れる）。
 - **判定主体**: 板単位（§8.2・8.3）は Board DO、スレ単位（§8.4・8.5）は Thread DO。純粋判定は `domain/posting/moderation/PostRateLimit.scala`。
 - **設定の出どころ**: 板単位の規制は**板設定だけ**で判定する（スレ設定の書き写しを見ない）。スレ単位の規制と `BBS_PHOEBE` は「明示的なスレ設定 → 板設定」の順。スレ立て時の設定書き写しから本書の新キーを除く（§8.8）。

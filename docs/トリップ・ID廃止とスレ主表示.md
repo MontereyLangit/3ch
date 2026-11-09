@@ -20,7 +20,7 @@
 - `◆→◇`・`★→☆`・`＃→#` の置換は残す（過去ログのトリップ・キャップの偽装防止と、全角 `＃` のキーも捨てるため）。
 - トリップキー長の上限エラー（1023 バイト）は廃止。
 - 依存の削減: npm `unix-crypt-td-js`、`bbs/hash/UnixCrypt.scala`・`Hex.scala`、golden `crypt.json`・`crypt-bytes.json` を削除。
-  `@noble/hashes`（MD5）はキャップ・PON・識別子で使うので残す。
+  `@noble/hashes`（MD5）はキャップ・PON・識別子で使うため当時は残したが、2026-11-09 に MD5 ごと廃止し SHA-256 に置き換えた（docs/v6s実装メモ.md §3.3）。
 
 ### 2.2 ID の廃止
 
@@ -46,9 +46,9 @@
 
   | 項目 | 値 |
   | --- | --- |
-  | `ip` | `SHA-256(keyIp + ":" + md5Salt)`。`keyIp` は IPv4 はそのまま、IPv6 は展開した先頭 4 ブロック（/64） |
+  | `ip` | `SHA-256(keyIp + ":" + saltHash)`。`keyIp` は IPv4 はそのまま、IPv6 は展開した先頭 4 ブロック（/64） |
   | `shikibetsu` | そのレスの識別子（名前欄の `(…)` の中身）。空なら空 |
-  | `account` | 認証済なら `SHA-256(accountKey + ":" + md5Salt)`、未認証は空 |
+  | `account` | 認証済なら `SHA-256(accountKey + ":" + saltHash)`、未認証は空 |
 
 - 返信（>>2 以降）で、保存した値と投稿者の値のうち**空でない項目が 1 つでも一致**したら、名前欄の末尾（識別子の後）に ` (主)` を付ける。
 - 付けない条件: 名前欄に `!no`（直後が英数字・`_` でないもの）がある / 板の `SETTING.TXT` かスレ設定の `BBS_DISABLE_NUSI` が `checked` /

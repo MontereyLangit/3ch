@@ -5,6 +5,7 @@ import io._3ch.bbs.domain.posting.PostingUser
 import io._3ch.bbs.durable.DurableTestKit
 import io._3ch.bbs.durable.DurableTestKit.Env
 import io._3ch.bbs.external.web.{Request, TextEncoder}
+import io._3ch.bbs.hash.WebHash
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
@@ -480,7 +481,7 @@ class PostingHandlerSuite extends FunSuite {
         // unixtime=1700000000固定)。末尾の改行1つも含めdat全体を厳密一致させる。
         assertEquals(
           d,
-          "名前太郎 </b>(JP.SA.h3 Kx-042e35264c7d19b9)<b><><>2023/11/15(水) 07:13:20<> テスト本文 <>たておき\n"
+          "名前太郎 </b>(JP.Tw.oT wA-4bf50373e5a55843)<b><><>2023/11/15(水) 07:13:20<> テスト本文 <>たておき\n"
         )
         val fields = d.stripSuffix("\n").split("<>", -1)
         assertEquals(fields.length, 5)
@@ -506,8 +507,8 @@ class PostingHandlerSuite extends FunSuite {
         // (fields[4])はどちらも空文字になる。
         assertEquals(
           d,
-          "名無しさん＠３ちゃんねる </b>(JP.SA.h3 Kx-042e35264c7d19b9)<b><><>2023/11/15(水) 07:13:20<> テスト本文 <>たておき2\n" +
-          "名無しさん＠３ちゃんねる </b>(JP.SA.h3 Kx-042e35264c7d19b9)<b> (主)<><>2023/11/15(水) 07:13:20<> 2番目の返信 <>\n"
+          "名無しさん＠３ちゃんねる </b>(JP.Tw.oT wA-4bf50373e5a55843)<b><><>2023/11/15(水) 07:13:20<> テスト本文 <>たておき2\n" +
+          "名無しさん＠３ちゃんねる </b>(JP.Tw.oT wA-4bf50373e5a55843)<b> (主)<><>2023/11/15(水) 07:13:20<> 2番目の返信 <>\n"
         )
         val lines = d.stripSuffix("\n").split("\n", -1)
         assertEquals(lines.length, 2)
@@ -711,19 +712,20 @@ class PostingHandlerSuite extends FunSuite {
   }
 
   // これまでのキャップの例はすべて旧仕様(!接頭辞)の弱キャップだった。!が無い通常パス
-  // (SHA-1(SHA-256(MD5(pass)+salt))を27文字に切り詰めてKVキーにする)は一度も通っておらず、
+  // (SHA-1(SHA-256(pass+SHA-256(salt)))を27文字に切り詰めてKVキーにする)は一度も通っておらず、
   // このロジックを移植で丸ごと落とした/間違えた場合でもテストが検知できなかった。
-  test("processCap: !接頭辞が無い通常パスは SHA-1(SHA-256(MD5(pass)+salt)) の先頭27文字がKVキーになる") {
+  test("processCap: !接頭辞が無い通常パスは SHA-1(SHA-256(pass+SHA-256(salt))) の先頭27文字がKVキーになる") {
     val env = DurableTestKit.newEnv()
     val rawPass = "mynormalpass"
-    // 実測値: salt='test-salt-12345' の下で
-    // sha1Base64(sha256hex(md5(rawPass) + md5(salt))) の先頭27文字(=sha1Base64の全体)。
-    val capPass = "tSRvRHdM/NG0AWoskdPh+cSK1zY"
-    assertEquals(capPass.length, 27)
-    env.putCap(capPass, "通常キャップハンドル")
-    val env2 = DurableTestKit.newEnv()
-    env2.putCap(capPass, "通常キャップハンドル")
+    // salt='test-salt-12345' の下で sha1Base64(sha256hex(rawPass + sha256hex(salt))) (27文字)。
     for {
+      saltHash <- WebHash.hash("SHA-256", "test-salt-12345").toFuture
+      capHash <- WebHash.hash("SHA-256", rawPass + saltHash).toFuture
+      capPass <- WebHash.sha1Base64(capHash).toFuture
+      _ = assertEquals(capPass.length, 27)
+      _ = env.putCap(capPass, "通常キャップハンドル")
+      env2 = DurableTestKit.newEnv()
+      _ = env2.putCap(capPass, "通常キャップハンドル")
       fields <- firstRow(env, "mail" -> ("#" + rawPass), "FROM" -> "", "subject" -> "capnormal")
       _ = assertEquals(fields(0), "通常キャップハンドル ★ </b>(★)<b>")
       _ = assert(!fields(2).contains("ID"), fields(2))
@@ -778,7 +780,7 @@ class PostingHandlerSuite extends FunSuite {
         assertEquals(f1(0), f2(0)) // 名前欄(識別ID込み)が一致
         // 実測値(salt='test-salt-12345', asn=999, country=US, region=CA, city=LA,
         // unixtime=1700000000固定)。
-        assertEquals(f1(0), "samename </b>(US.3T.fb No-042e35264c7d19b9)<b>")
+        assertEquals(f1(0), "samename </b>(US.9E.K6 oL-4bf50373e5a55843)<b>")
       }
     }
   }
@@ -804,8 +806,8 @@ class PostingHandlerSuite extends FunSuite {
       after <- at(1699974000L)
     } yield {
       // 実測値。窓が変わるため、識別ID(地域/AS由来ハッシュ)が変化する。
-      assertEquals(before(0), "boundary </b>(JP.ZV.ca L0-b48da058688f6871)<b>")
-      assertEquals(after(0), "boundary </b>(JP.bR.9p tP-18b8714acc8fa8e6)<b>")
+      assertEquals(before(0), "boundary </b>(JP.Qn.GW xr-bb2f33323f65d785)<b>")
+      assertEquals(after(0), "boundary </b>(JP.c3.rK gL-a3e7001d7faa5a50)<b>")
       assertNotEquals(before(0), after(0))
     }
   }
@@ -818,7 +820,7 @@ class PostingHandlerSuite extends FunSuite {
       env.putR2("idsettingsboard/SETTING.TXT", "BBS_ID_GROUP=customgroup\nBBS_ID_RESET=3600\n")
       firstRowWith(env, Seq("FROM" -> "settingstest", "subject" -> "settingstest", "bbs" -> "idsettingsboard"), Nil, Nil, "idsettingsboard").map { fields =>
         // 実測値(BBS_ID_GROUP=customgroup, BBS_ID_RESET=3600, unixtime=1700000000固定)。
-        assertEquals(fields(0), "settingstest </b>(JP.7S.93 ju-ed4575071d4e9f87)<b>")
+        assertEquals(fields(0), "settingstest </b>(JP.DF.Qa TU-2f375863c0fe791c)<b>")
       }
     }
   }
@@ -828,7 +830,7 @@ class PostingHandlerSuite extends FunSuite {
   private val Alice = Some(PostingUser("aid1", "alice"))
   private val OtherHeaders = Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other")
   private val OtherCf = Seq("region" -> "Osaka", "city" -> "Osaka")
-  private val Shiki = "(JP.SA.h3 Kx-042e35264c7d19b9)"
+  private val Shiki = "(JP.Tw.oT wA-4bf50373e5a55843)"
 
   /** 識別子(Shiki)の実測値は時刻に依存するため、時刻を固定して実行する。 */
   private def fixed[A](body: => Future[A]): Future[A] = withFixedTime(1700000000d * 1000)(body)
@@ -1004,7 +1006,7 @@ class PostingHandlerSuite extends FunSuite {
     } yield {
       assert(!nameOf(d, 1).contains("(主)"), nameOf(d, 1))
       val o = owner.asInstanceOf[js.Dynamic]
-      assertEquals(o.shikibetsu.asInstanceOf[String], "JP.SA.h3 Kx-042e35264c7d19b9")
+      assertEquals(o.shikibetsu.asInstanceOf[String], "JP.Tw.oT wA-4bf50373e5a55843")
       assertEquals(o.ip.asInstanceOf[String].length, 64)
       assertEquals(o.account.asInstanceOf[String].length, 64)
       assert(!o.ip.asInstanceOf[String].contains("192.0.2.1"))

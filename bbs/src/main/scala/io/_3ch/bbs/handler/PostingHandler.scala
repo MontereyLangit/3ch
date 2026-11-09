@@ -2,7 +2,7 @@ package io._3ch.bbs.handler
 
 import io._3ch.bbs.external.cloudflare.*
 import io._3ch.bbs.external.web.{Request, Response}
-import io._3ch.bbs.hash.{Md5, WebHash}
+import io._3ch.bbs.hash.WebHash
 import io._3ch.bbs.repository.BoardRepository
 import io._3ch.bbs.domain.posting.{ClientIdentity, GlobalThread, KeyIp, NameCommands, NusiMark, PostingContext, PostingUser, ThreadOwner}
 import io._3ch.bbs.domain.posting.moderation.ThreadCreationRejection
@@ -34,8 +34,7 @@ object PostingHandler {
   private def deny(g: js.Dynamic, message: String): Nothing = { g.error = message; throw Rejected }
   private def sha(s: String): Future[String] = WebHash.sha1Base64(s).toFuture
   private def hash(s: String): Future[String] = WebHash.hash("SHA-256", s).toFuture
-  private def md5(s: String): String = Md5.md5(s)
-  private def digest(g: js.Dynamic, value: String): Future[String] = if value.isEmpty then Future.successful("") else hash(value + ":" + str(g.md5Salt))
+  private def digest(g: js.Dynamic, value: String): Future[String] = if value.isEmpty then Future.successful("") else hash(value + ":" + str(g.saltHash))
   private def thread(g: js.Dynamic, e: WorkerEnv): ThreadDoStub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"${str(g.form.bbs)}/${str(g.form.key)}"))
   private def errorText(e: Throwable): String = e match {
     case x: js.JavaScriptException => str(x.exception.asInstanceOf[js.Any])
@@ -58,11 +57,13 @@ object PostingHandler {
       host = request.headers.get("CF-Connecting-IP"), ip = request.headers.get("CF-Connecting-IP"), userAgent = header("user-agent"), browserInfo = "", deviceInfo = header("x-ch3-device-information"),
       asn = fallback(cf.asn, "0000"), country = fallback(cf.country, "unknown"), ken = fallback(cf.region, "catv?"), city = fallback(cf.city, ""),
       uid = "", userInfo = "", shikibetsuId = "", isMonazilla = 0, isSJIS = 0,
-      md5Salt = md5(str(rawEnv.salt)), showId = false, noNusi = false, boardDisableNusi = false, threadOwner = null, cap = 0, strongCap = 0, sage = 0,
+      saltHash = "", showId = false, noNusi = false, boardDisableNusi = false, threadOwner = null, cap = 0, strongCap = 0, sage = 0,
       path = "PATH", logPath = "LOGPATH", logFile = "LOGDAT", logData = "", subject = "", number = 0,
       settings = js.Dynamic.literal(), boardSettings = js.Dynamic.literal(), boardSettingsText = "", headers = js.Dictionary.empty[String]
     )
     (for {
+      salt <- hash(str(rawEnv.salt))
+      _ = g.saltHash = salt
       _ <- Future { checkRequest(g, request) }
       _ <- readForm(g, request)
       _ <- processCap(g, env)
@@ -179,7 +180,7 @@ object PostingHandler {
     pass match {
       case None => Future.unit
       case Some(password) =>
-        val capPass = if password.startsWith("!") then Future.successful(password.drop(1)) else hash(md5(password) + str(g.md5Salt)).flatMap(sha)
+        val capPass = if password.startsWith("!") then Future.successful(password.drop(1)) else hash(password + str(g.saltHash)).flatMap(sha)
         capPass.flatMap(p => e.CAP.get(p).toFuture).map { result =>
           if truth(result.asInstanceOf[js.Any]) then {
             var handle = str(result.asInstanceOf[js.Any])
@@ -232,7 +233,7 @@ object PostingHandler {
       val parts = pair.split("=", -1)
       if parts.length >= 2 && parts(0).nonEmpty && parts(1).nonEmpty then g.cookies.updateDynamic(parts(0))(parts(1))
     }
-    hash(md5(str(g.ip)) + str(g.md5Salt)).flatMap(sha).map { pon =>
+    hash(str(g.ip) + str(g.saltHash)).flatMap(sha).map { pon =>
       g.headers.updateDynamic("Set-Cookie")(s"PON=$pon; Max-Age=63072000; path=/; ${if !truth(g.isMonazilla) then "Secure;" else ""} HttpOnly")
     }
   }
@@ -262,14 +263,15 @@ object PostingHandler {
   private def makeShikibetsu(g: js.Dynamic, user: Option[PostingUser]): Future[Unit] = {
     val group = or(g.settings.BBS_ID_GROUP, str(g.form.bbs))
     val date = str(math.floor((int(g.unixtime) + 32400) / number(or(g.settings.BBS_ID_RESET, "86400"))))
-    def id(seed: String, len: Int) = sha(md5(seed + group + date + str(g.md5Salt))).map(_.take(len))
+    def id(seed: String, len: Int) = hash(seed + group + date + str(g.saltHash)).flatMap(sha).map(_.take(len))
     val shiki = if truth(g.cap) then Future.successful("★") else or(g.settings.BBS_ID_SHIKIBETSU, "checked") match {
       case "checked" =>
         for {
           ken <- id(str(g.ken), 2)
           city <- id(str(g.city) + "c", 2)
           asn <- id(str(g.asn), 2)
-        } yield s"${str(g.country)}.$ken.$city $asn-${md5(str(g.userAgent) + group + date + str(g.md5Salt)).take(16)}"
+          ua <- hash(str(g.userAgent) + group + date + str(g.saltHash))
+        } yield s"${str(g.country)}.$ken.$city $asn-${ua.take(16)}"
       case "raw" => Future.successful(s"${str(g.country)}.${str(g.ken)} ${str(g.asn)}")
       case "ken" => Future.successful(s"${str(g.country)}.${str(g.ken)}")
       case "city" => Future.successful(s"${str(g.country)}.${str(g.ken)}.${str(g.city)}")
