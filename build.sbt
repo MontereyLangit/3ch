@@ -11,7 +11,7 @@ val munitVersion  = "1.0.0"
 
 ThisBuild / scalaVersion := scala3Version
 ThisBuild / organization := "io._3ch"
-ThisBuild / version      := "1.2.0"
+ThisBuild / version      := "1.2.1"
 
 lazy val commonSettings = Seq(
   scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked"),
