@@ -36,7 +36,7 @@ class NusiMarkSuite extends FunSuite {
     assert(!applies(stored = None))
   }
 
-  test("接尾辞は半角スペース+(主)") {
-    assertEquals(NusiMark.suffix, " (主)")
+  test("接尾辞は識別子と同じく細字の (主)") {
+    assertEquals(NusiMark.suffix, " </b>(主)<b>")
   }
 }
