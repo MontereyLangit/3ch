@@ -284,7 +284,7 @@ object PostingHandler {
     }
   }
 
-  /** スレ立てなら保存する `owner` を返し、返信なら該当時に名前欄へ ` (主)` を付ける。キャップは対象外（docs/トリップ・ID廃止とスレ主表示.md §2.4）。 */
+  /** スレ立てなら保存する `owner` を返し、>>1 を含め該当時に名前欄へ ` (主)` を付ける。キャップは対象外（docs/トリップ・ID廃止とスレ主表示.md §2.4）。 */
   private def markNusi(g: js.Dynamic, user: Option[PostingUser]): Future[js.UndefOr[js.Dynamic]] =
     if truth(g.cap) then Future.successful(js.undefined) else {
       val ip = if g.ip == null || js.isUndefined(g.ip) then "" else KeyIp.of(str(g.ip))
@@ -293,13 +293,11 @@ object PostingHandler {
         accountHash <- digest(g, user.fold("")(_.accountKey))
       } yield {
         val poster = ThreadOwner(ipHash, str(g.shikibetsuId), accountHash)
-        if number(g.number) == 1 then ThreadOwnerCodec.encode(poster)
-        else {
-          val owner = if truth(g.threadOwner) then Some(ThreadOwnerCodec.decode(g.threadOwner)) else None
-          if NusiMark.applies(isReply = true, cap = false, noNusi = truth(g.noNusi), boardDisabled = truth(g.boardDisableNusi),
-            threadDisabled = eq(g.settings.BBS_DISABLE_NUSI, "checked"), owner = owner, poster = poster) then g.form.FROM = str(g.form.FROM) + NusiMark.suffix
-          js.undefined
-        }
+        val isFirst = number(g.number) == 1
+        val owner = if isFirst then Some(poster) else if truth(g.threadOwner) then Some(ThreadOwnerCodec.decode(g.threadOwner)) else None
+        if NusiMark.applies(cap = false, noNusi = truth(g.noNusi), boardDisabled = truth(g.boardDisableNusi),
+          threadDisabled = eq(g.settings.BBS_DISABLE_NUSI, "checked"), owner = owner, poster = poster) then g.form.FROM = str(g.form.FROM) + NusiMark.suffix
+        if isFirst then ThreadOwnerCodec.encode(poster) else js.undefined
       }
     }
 

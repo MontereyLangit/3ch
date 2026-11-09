@@ -481,7 +481,7 @@ class PostingHandlerSuite extends FunSuite {
         // unixtime=1700000000固定)。末尾の改行1つも含めdat全体を厳密一致させる。
         assertEquals(
           d,
-          "名前太郎 </b>(JP.Tw.oT wA-4bf50373e5a55843)<b><><>2023/11/15(水) 07:13:20<> テスト本文 <>たておき\n"
+          "名前太郎 </b>(JP.Tw.oT wA-4bf50373e5a55843)<b> (主)<><>2023/11/15(水) 07:13:20<> テスト本文 <>たておき\n"
         )
         val fields = d.stripSuffix("\n").split("<>", -1)
         assertEquals(fields.length, 5)
@@ -507,7 +507,7 @@ class PostingHandlerSuite extends FunSuite {
         // (fields[4])はどちらも空文字になる。
         assertEquals(
           d,
-          "名無しさん＠３ちゃんねる </b>(JP.Tw.oT wA-4bf50373e5a55843)<b><><>2023/11/15(水) 07:13:20<> テスト本文 <>たておき2\n" +
+          "名無しさん＠３ちゃんねる </b>(JP.Tw.oT wA-4bf50373e5a55843)<b> (主)<><>2023/11/15(水) 07:13:20<> テスト本文 <>たておき2\n" +
           "名無しさん＠３ちゃんねる </b>(JP.Tw.oT wA-4bf50373e5a55843)<b> (主)<><>2023/11/15(水) 07:13:20<> 2番目の返信 <>\n"
         )
         val lines = d.stripSuffix("\n").split("\n", -1)
@@ -760,7 +760,7 @@ class PostingHandlerSuite extends FunSuite {
     val env = DurableTestKit.newEnv()
     env.putR2("sample/SETTING.TXT", "BBS_ID_SHIKIBETSU=d\n")
     firstRow(env, "subject" -> "iddtest").map { fields =>
-      assertEquals(fields(0), "名無しさん＠３ちゃんねる </b>()<b>")
+      assertEquals(fields(0), "名無しさん＠３ちゃんねる </b>()<b> (主)")
     }
   }
 
@@ -780,7 +780,7 @@ class PostingHandlerSuite extends FunSuite {
         assertEquals(f1(0), f2(0)) // 名前欄(識別ID込み)が一致
         // 実測値(salt='test-salt-12345', asn=999, country=US, region=CA, city=LA,
         // unixtime=1700000000固定)。
-        assertEquals(f1(0), "samename </b>(US.9E.K6 oL-4bf50373e5a55843)<b>")
+        assertEquals(f1(0), "samename </b>(US.9E.K6 oL-4bf50373e5a55843)<b> (主)")
       }
     }
   }
@@ -806,8 +806,8 @@ class PostingHandlerSuite extends FunSuite {
       after <- at(1699974000L)
     } yield {
       // 実測値。窓が変わるため、識別ID(地域/AS由来ハッシュ)が変化する。
-      assertEquals(before(0), "boundary </b>(JP.Qn.GW xr-bb2f33323f65d785)<b>")
-      assertEquals(after(0), "boundary </b>(JP.c3.rK gL-a3e7001d7faa5a50)<b>")
+      assertEquals(before(0), "boundary </b>(JP.Qn.GW xr-bb2f33323f65d785)<b> (主)")
+      assertEquals(after(0), "boundary </b>(JP.c3.rK gL-a3e7001d7faa5a50)<b> (主)")
       assertNotEquals(before(0), after(0))
     }
   }
@@ -820,7 +820,7 @@ class PostingHandlerSuite extends FunSuite {
       env.putR2("idsettingsboard/SETTING.TXT", "BBS_ID_GROUP=customgroup\nBBS_ID_RESET=3600\n")
       firstRowWith(env, Seq("FROM" -> "settingstest", "subject" -> "settingstest", "bbs" -> "idsettingsboard"), Nil, Nil, "idsettingsboard").map { fields =>
         // 実測値(BBS_ID_GROUP=customgroup, BBS_ID_RESET=3600, unixtime=1700000000固定)。
-        assertEquals(fields(0), "settingstest </b>(JP.DF.Qa TU-2f375863c0fe791c)<b>")
+        assertEquals(fields(0), "settingstest </b>(JP.DF.Qa TU-2f375863c0fe791c)<b> (主)")
       }
     }
   }
@@ -859,13 +859,13 @@ class PostingHandlerSuite extends FunSuite {
 
   test("!id: 未認証では取り除くだけで何も付けない") {
     fixed(firstRow(DurableTestKit.newEnv(), "FROM" -> "名前 !id", "subject" -> "idcmd1")).map { fields =>
-      assertEquals(fields(0), s"名前 </b>$Shiki<b>")
+      assertEquals(fields(0), s"名前 </b>$Shiki<b> (主)")
     }
   }
 
   test("!id: 認証済なら名前の直後・識別子の前に </b>(@ユーザーID)<b> が付く") {
     fixed(firstRowAs(DurableTestKit.newEnv(), Alice, "FROM" -> "名前!id", "subject" -> "idcmd2")).map { fields =>
-      assertEquals(fields(0), s"名前 </b>(@alice)<b> </b>$Shiki<b>")
+      assertEquals(fields(0), s"名前 </b>(@alice)<b> </b>$Shiki<b> (主)")
     }
   }
 
@@ -874,8 +874,8 @@ class PostingHandlerSuite extends FunSuite {
       on <- fixed(firstRowAs(DurableTestKit.newEnv(), Alice, "FROM" -> "名前", "showid" -> "on", "subject" -> "idcmd3"))
       off <- fixed(firstRowAs(DurableTestKit.newEnv(), Alice, "FROM" -> "名前", "showid" -> "", "subject" -> "idcmd3b"))
     } yield {
-      assertEquals(on(0), s"名前 </b>(@alice)<b> </b>$Shiki<b>")
-      assertEquals(off(0), s"名前 </b>$Shiki<b>")
+      assertEquals(on(0), s"名前 </b>(@alice)<b> </b>$Shiki<b> (主)")
+      assertEquals(off(0), s"名前 </b>$Shiki<b> (主)")
     }
   }
 
@@ -895,7 +895,7 @@ class PostingHandlerSuite extends FunSuite {
 
   test("!id: 直後が英数字・_ なら対象外（!idol は名前に残る）") {
     fixed(firstRowAs(DurableTestKit.newEnv(), Alice, "FROM" -> "!idol !id_x", "subject" -> "idcmd6")).map { fields =>
-      assertEquals(fields(0), s"!idol !id_x </b>$Shiki<b>")
+      assertEquals(fields(0), s"!idol !id_x </b>$Shiki<b> (主)")
     }
   }
 
@@ -961,6 +961,20 @@ class PostingHandlerSuite extends FunSuite {
     }
   }
 
+  test("主: >>1 でも !no があれば付かず、!no は dat に残らない") {
+    fixed(firstRow(DurableTestKit.newEnv(), "FROM" -> "名前!no", "subject" -> "nofirst")).map { fields =>
+      assertEquals(fields(0), s"名前 </b>$Shiki<b>")
+    }
+  }
+
+  test("主: >>1 でも板のBBS_DISABLE_NUSI=checkedなら付かない") {
+    val env = DurableTestKit.newEnv()
+    env.putR2("sample/SETTING.TXT", "BBS_DISABLE_NUSI=checked\n")
+    fixed(firstRow(env, "subject" -> "disablefirst")).map { fields =>
+      assert(!fields(0).contains("(主)"), fields(0))
+    }
+  }
+
   test("主: 板のBBS_DISABLE_NUSI=checkedなら付かない（スレ設定が空でも板設定を見る）") {
     val env = DurableTestKit.newEnv()
     fixed(replyName(env, before = _ => Future.successful(env.putR2("sample/SETTING.TXT", "BBS_DISABLE_NUSI=checked\n")))).map { name =>
@@ -996,7 +1010,7 @@ class PostingHandlerSuite extends FunSuite {
     } yield assert(!nameOf(d, 2).contains("(主)"), nameOf(d, 2)))
   }
 
-  test("主: >>1 には付かず、ownerにはIP・アカウントのハッシュと識別子が保存される") {
+  test("主: >>1 にも付き、ownerにはIP・アカウントのハッシュと識別子が保存される") {
     val env = DurableTestKit.newEnv()
     fixed(for {
       p1 <- post(env, Seq("subject" -> "ownerstore"), user = Alice)
@@ -1004,7 +1018,7 @@ class PostingHandlerSuite extends FunSuite {
       d <- dat(env, "sample", key)
       owner <- env.thread(s"sample/$key").getOwner().toFuture
     } yield {
-      assert(!nameOf(d, 1).contains("(主)"), nameOf(d, 1))
+      assert(nameOf(d, 1).endsWith("<b> (主)"), nameOf(d, 1))
       val o = owner.asInstanceOf[js.Dynamic]
       assertEquals(o.shikibetsu.asInstanceOf[String], "JP.Tw.oT wA-4bf50373e5a55843")
       assertEquals(o.ip.asInstanceOf[String].length, 64)

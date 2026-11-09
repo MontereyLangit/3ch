@@ -7,9 +7,9 @@ class NusiMarkSuite extends FunSuite {
   private val sameIp = ThreadOwner("ip1", "", "")
   private val stranger = ThreadOwner("ip2", "shiki2", "acc2")
 
-  private def applies(isReply: Boolean = true, cap: Boolean = false, noNusi: Boolean = false, boardDisabled: Boolean = false,
+  private def applies(cap: Boolean = false, noNusi: Boolean = false, boardDisabled: Boolean = false,
                       threadDisabled: Boolean = false, stored: Option[ThreadOwner] = Some(owner), poster: ThreadOwner = sameIp): Boolean =
-    NusiMark.applies(isReply, cap, noNusi, boardDisabled, threadDisabled, stored, poster)
+    NusiMark.applies(cap, noNusi, boardDisabled, threadDisabled, stored, poster)
 
   test("返信・owner一致なら付く") {
     assert(applies())
@@ -17,10 +17,6 @@ class NusiMarkSuite extends FunSuite {
 
   test("owner と一致しなければ付かない") {
     assert(!applies(poster = stranger))
-  }
-
-  test(">>1 には付かない") {
-    assert(!applies(isReply = false))
   }
 
   test("キャップには付かない") {
