@@ -17,7 +17,7 @@ import scala.util.control.NonFatal
 object GoogleHandler {
   import AuthHandler.{Refused, header, secure}
 
-  private val Attributes = "; Path=/auth/google; Secure; HttpOnly; SameSite=Lax"
+  private val Attributes = "; Path=/; Secure; HttpOnly; SameSite=Lax"
   private val CallbackPath = "/auth/google/callback/"
 
   private def redirect(location: String, cookies: Seq[String]): Response = {
@@ -54,7 +54,7 @@ object GoogleHandler {
             case Left(LoginIdRejection.Reserved) => Future.successful(back("uid_taken", returnPath, login))
             case Right(id) => AuthHandler.device(request, env, form.getOrElse("device", "")).flatMap { evidence =>
               val state = OAuthState(AuthHmac.randomUrlSafe(43), AuthHmac.randomUrlSafe(43), AuthHmac.randomUrlSafe(64), evidence.deviceHash, returnPath,
-                form.get("popup").contains("1"), id.map(_.value), agreed, time.toLong + OAuthStateCodec.lifetime)
+                form.get("popup").contains("1"), id.map(_.value), if (agreed) config.agreementVersion else "", time.toLong + OAuthStateCodec.lifetime)
               val payload = OAuthStateCodec.payload(state).getOrElse(throw Refused(AuthApiError.Invalid))
               for {
                 signed <- signature(config.secret, payload).map(_.flatMap(OAuthStateCodec.encode(state, _)).getOrElse(throw Refused(AuthApiError.Unavailable)))
@@ -93,6 +93,8 @@ object GoogleHandler {
         readState(request, config.secret, time).flatMap {
           case None => Future.successful(back("oauth_state", "/", login = true, cleared))
           case Some(state) if param("error").nonEmpty => Future.successful(back("google_denied", state.returnPath, state.uid.isEmpty, cleared))
+          case Some(state) if state.uid.nonEmpty && state.agreedVersion != config.agreementVersion =>
+            Future.successful(back("agreement", state.returnPath, login = false, cleared))
           case Some(state) if !sameText(param("state"), state.state) || param("code").isEmpty =>
             Future.successful(back("oauth_state", state.returnPath, state.uid.isEmpty, cleared))
           case Some(state) =>
@@ -106,7 +108,7 @@ object GoogleHandler {
                 case Some(value) => AuthHandler.keyIp(request, config.secret).flatMap { key =>
                   val uid = state.uid.flatMap(LoginId.parse(_).toOption)
                   new GoogleAuthentication(repository, AuthHandler.keys(config.secret), config.agreementVersion)
-                    .signIn(value, uid, state.agreed && config.agreementVersion.nonEmpty, state.device, key, time).flatMap {
+                    .signIn(value, uid, state.agreedVersion == config.agreementVersion, state.device, key, time).flatMap {
                       case GoogleOutcome.Success(account) => AuthHandler.signed(account, state.device, request, config.secret, time).map { cookie =>
                         if (state.popup) popup(account, cleared :+ cookie) else redirect(state.returnPath, cleared :+ cookie)
                       }
