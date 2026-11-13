@@ -29,7 +29,7 @@ object ArchiveIndexRepository {
     }
 
   /**
-    * 空でない ETag があれば一致するときだけ書き、無ければ doesNotExist を付ける（R2 はこの条件を解さず無条件に書く。KB-25）
+    * 空でない ETag があれば一致するときだけ書き、無ければ doesNotExist を付ける
     * 書けたら true
     */
   def writeIndex(file: String, value: String, etag: Option[String], e: WorkerEnv): Future[Boolean] = {

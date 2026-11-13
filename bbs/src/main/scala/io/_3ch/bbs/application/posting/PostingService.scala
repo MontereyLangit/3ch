@@ -224,7 +224,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
   private def digest(context: PostingContext, value: String): Future[String] =
     if (value.isEmpty) Future.successful("") else ports.hasher.sha256Hex(value + ":" + context.identity.salt)
 
-  /** 段の途中の例外を内部エラーにする。時刻は BoardSettings・スレの読込・書込の段だけ受付時刻を出し、ほかは未設定（KB-39） */
+  /** 段の途中の例外を内部エラーにする。時刻は BoardSettings・スレの読込・書込の段だけ受付時刻を出し、ほかは未設定 */
   private def guarded[A](context: PostingContext, stage: PostingStage, clock: FailureClock)(f: => Future[A]): Future[A] =
     Future.unit.flatMap(_ => f).recover {
       case e if !e.isInstanceOf[Rejected] =>
@@ -240,7 +240,7 @@ object PostingService {
   /** 書き込み先の板と、スレ設定で上書きする前の板設定 */
   private final case class PostingBoard(id: BoardId, settings: BbsSettings)
 
-  /** 内部エラーの文言で、受付時刻を持たない段が出す時刻（KB-39） */
+  /** 内部エラーの文言で、受付時刻を持たない段が出す時刻 */
   private val UnsetTime = "undefined"
 
   private def reject(error: PostingError, context: PostingContext): Nothing = throw Rejected(error, context)
