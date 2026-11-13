@@ -14,12 +14,11 @@ class PostRateSettingsSuite extends FunSuite {
       BoardSettings(18, 10, 10, 1, PostRateKey.defaults), ThreadSettings(40, 3600, PostRateKey.defaults)))
   }
 
-  test("shiki の照合値は識別子が checked か phoebe でキャップでないときだけ使う") {
+  test("shiki の照合値は識別子が checked でキャップでないときだけ使う") {
     import io._3ch.common.domain.identity.ShikibetsuMode
     assertEquals(PostRateSettings.shikiSource(ShikibetsuMode.Checked, cap = false, "ID-1"), "ID-1")
-    assertEquals(PostRateSettings.shikiSource(ShikibetsuMode.Phoebe, cap = false, "JP.1"), "JP.1")
     assertEquals(PostRateSettings.shikiSource(ShikibetsuMode.Checked, cap = true, "★"), "")
-    Seq(ShikibetsuMode.Raw, ShikibetsuMode.Ken, ShikibetsuMode.City, ShikibetsuMode.As, ShikibetsuMode.Hidden).foreach { mode =>
+    Seq(ShikibetsuMode.Phoebe, ShikibetsuMode.Raw, ShikibetsuMode.Ken, ShikibetsuMode.City, ShikibetsuMode.As, ShikibetsuMode.Hidden).foreach { mode =>
       assertEquals(PostRateSettings.shikiSource(mode, cap = false, "JP.13"), "", mode.toString)
     }
   }
