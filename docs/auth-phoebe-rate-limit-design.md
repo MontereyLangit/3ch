@@ -397,7 +397,7 @@ PHOEBE.md の「L0〜L1 → 23h、L1〜L2 → 23×(Lv+1)h」は未ログイン�
 - `BBS_PHOEBE` は `Phoebe.required` で読む。前後の空白を除いた 1〜2 桁の 0〜10 だけを受け付ける。スレ立て時の書き写しから外したので、スレ設定にあるのはコマンドで書いた値（と段 C より前に立ったスレの書き写し）だけ。
 - 免除は `PostingAccount.staff`。権限は段 D なので、今は常に偽で誰も免除しない。
 - 未ログインの専ブラが Lv 不足のときは、従来どおり `auth:required:login`（`x-auth-required: login`）で認証へ誘導する。認証済の Lv 不足は `x-post-error: auth:required:level`・`x-auth-required: level`・`x-phoebe-required: n`。新 UI は `x-phoebe-required` の値を出し、再送しない（§13-17）。
-- コマンドは本文の先頭だけを読み、直後は本文の終わり・半角空白・改行のどれか（`!バルサンです` は対象外）。全角の `！` は読まない。スレ立て人の照合は `ownerAid` を足さず、既存の `owner.account`（`SHA-256(accountKey + ":" + md5Salt)`）と投稿者の同じ値を比べる。ログイン中のスレ立てでは本人をスレ立て人とする。`!バルサン` は staff でも下げない（「既に 3 より大きければ変えない」）。
+- コマンドは本文の先頭だけを読み、直後は本文の終わり・半角空白・改行のどれか（`!バルサンです` は対象外）。全角の `！` は読まない。スレ立て人の照合は `ownerAid` を足さず、既存の `owner.account`（`SHA-256(accountKey + ":" + saltHash)`）と投稿者の同じ値を比べる。ログイン中のスレ立てでは本人をスレ立て人とする。`!バルサン` は staff でも下げない（「既に 3 より大きければ変えない」）。
 - スレ設定に値が無いときの現在値は板設定の `BBS_PHOEBE`。投稿処理が板の値を `ThreadPhoebeRequest` に入れ、Thread DO はロック内でスレ設定の値と比べて書くかを決める。
 - スレ立て人（staff 以外）が `!バルサン` / `!SETTING:BBS_PHOEBE:n` で求められる Lv は自分の実効 Lv まで。自分の Lv を超える指定は自分の Lv に切り詰めて書く（無視はしない）。自分より高い Lv を要求して自分が書けなくなるスレを作らせないため。staff は上限なし。
 - 判定の後にスレ主が `!バルサン` で Lv を上げる競合に備え、投稿処理は投稿者の実効 Lv・免除・板の値を `addRes` の付帯情報 `phoebeAdmission` で渡し、Thread DO がロック内で最新のスレ設定に対して `PhoebeAdmission`（`common` の純粋関数）で判定し直す。足りなければ保存せず `thread-write:level:n` で拒否し、投稿処理は通常の Lv 不足と同じ応答（未ログインはログイン要求、認証済は `auth:required:level`）にする。`phoebeAdmission` が無い呼び出し（旧形式・Raw の書き込み）は判定し直さない。
