@@ -17,9 +17,12 @@ final class UserAgentRule private (pattern: js.RegExp, label: String) {
 object UserAgentRule {
   private val Group: Regex = "\\$([1-9])".r
 
-  /** 正規表現として読めない行と、g・y など照合の状態を持つフラグの行は None */
+  /** 照合にかかる時間を抑えるための pattern の長さの上限 */
+  val MaxPatternLength: Int = 200
+
+  /** 正規表現として読めない行、長すぎる pattern、g・y など照合の状態を持つフラグの行は None */
   def create(pattern: String, flags: String, label: String): Option[UserAgentRule] =
-    if (!flags.forall("ius".contains(_)) || flags.distinct.length != flags.length) None
+    if (pattern.length > MaxPatternLength || !flags.forall("ius".contains(_)) || flags.distinct.length != flags.length) None
     else Try(new js.RegExp(pattern, flags)).toOption.map(new UserAgentRule(_, label))
 }
 
@@ -32,6 +35,9 @@ final case class UserAgentTable(os: Seq[UserAgentRule], browser: Seq[UserAgentRu
 }
 
 object UserAgentTable {
+  /** 一つの表（os・browser・device）に読み込む行数の上限 */
+  val MaxRulesPerList: Int = 100
+
   /** 表が無いときの解析表。どの UA も解析できない */
   val empty: UserAgentTable = UserAgentTable(Nil, Nil, Nil)
 }

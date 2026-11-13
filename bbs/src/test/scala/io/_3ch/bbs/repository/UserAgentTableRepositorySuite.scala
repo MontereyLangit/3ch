@@ -1,5 +1,6 @@
 package io._3ch.bbs.repository
 
+import io._3ch.bbs.domain.posting.{UserAgentRule, UserAgentTable}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.common.domain.identity.UserAgentProfile
 import munit.FunSuite
@@ -26,17 +27,30 @@ class UserAgentTableRepositorySuite extends FunSuite {
     Seq("", "{", "[]", "null").foreach(text => assertEquals(UserAgentTableRepository.parse(text).profile("Mozilla"), UserAgentProfile(), text))
   }
 
-  test("ua-profiles.json が無いか読めなければ空の表にして失敗にしない") {
+  test("ua-profiles.json が無ければ空の表、読めない・JSON の根が不正なら失敗にする") {
     val requested = js.Array[String]()
     for {
-      missing <- UserAgentTableRepository.load(env { key => requested.push(key); js.Promise.resolve[js.Any](null) })
-      broken <- UserAgentTableRepository.load(env(_ => js.Promise.reject(new js.Error("r2"))))
-      loaded <- UserAgentTableRepository.load(env(_ => stored("""{"device": [{"match": "Mozilla", "label": "PC"}]}""")))
+      missing <- UserAgentTableRepository.fetch(env { key => requested.push(key); js.Promise.resolve[js.Any](null) })
+      broken <- UserAgentTableRepository.fetch(env(_ => js.Promise.reject(new js.Error("r2")))).failed
+      invalid <- UserAgentTableRepository.fetch(env(_ => stored("{"))).failed
+      loaded <- UserAgentTableRepository.fetch(env(_ => stored("""{"device": [{"match": "Mozilla", "label": "PC"}]}""")))
     } yield {
       assertEquals(requested.toList, List("ua-profiles.json"))
       assertEquals(missing.profile("Mozilla"), UserAgentProfile())
-      assertEquals(broken.profile("Mozilla"), UserAgentProfile())
+      assert(broken.isInstanceOf[js.JavaScriptException])
+      assert(invalid.isInstanceOf[IllegalArgumentException])
       assertEquals(loaded.profile("Mozilla"), UserAgentProfile(device = "PC"))
     }
+  }
+
+  test("行数は表ごとに上限まで、長すぎる pattern の行は飛ばす") {
+    val rows = (1 to UserAgentTable.MaxRulesPerList + 20).map(n => s"""{"match": "^a$n$$", "label": "L$n"}""").mkString(",")
+    val long = "a" * (UserAgentRule.MaxPatternLength + 1)
+    val table = UserAgentTableRepository.parse(
+      s"""{"os": [$rows], "browser": [{"match": "$long", "label": "long"}, {"match": "b", "label": "short"}]}""")
+    assertEquals(table.profile(s"a${UserAgentTable.MaxRulesPerList}").os, s"L${UserAgentTable.MaxRulesPerList}")
+    assertEquals(table.profile(s"a${UserAgentTable.MaxRulesPerList + 1}").os, "")
+    assertEquals(table.profile(long).browser, "")
+    assertEquals(table.profile("b").browser, "short")
   }
 }
