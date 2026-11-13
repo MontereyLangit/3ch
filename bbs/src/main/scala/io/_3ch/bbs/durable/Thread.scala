@@ -5,7 +5,7 @@ import io._3ch.bbs.durable.codec.{PostRateCodec, PostingCodec, ThreadCreationCod
 import io._3ch.bbs.domain.posting.ThreadPosting
 import io._3ch.bbs.domain.posting.moderation.{PostRateFlow, ThreadRecentPosts}
 import io._3ch.bbs.durable.support.DurableLock
-import io._3ch.common.domain.posting.{DatLineFormatter, ThreadWriteGuard, ThreadWriteKind}
+import io._3ch.common.domain.posting.{DatLineFormatter, PhoebeAdmission, ThreadWriteGuard, ThreadWriteKind}
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -150,7 +150,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
   def setSettings(settings: String): js.Promise[Unit] = put("settings" -> settings).toJSPromise
 
   /**
-   * 新しいレスを追加します。追記できないときは ThreadWriteRejection・ThreadCreationRejection・PostRateRejection のコードを Error の文言にして失敗します
+   * 新しいレスを追加します。追記できないときは ThreadWriteRejection・BBS_PHOEBE の Lv 不足（PhoebeAdmission）・ThreadCreationRejection・PostRateRejection のコードを Error の文言にして失敗します
    * @param datLine - dat形式の新しい行データ
    * @param logLine - log形式の新しい行データ
    * @param posting - 投稿の付帯情報（PostingCodec の形式）。null と省略は付帯情報なし
@@ -183,6 +183,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
       dat <- if unavailable then Future.successful("") else getDat(p.bbs.getOrElse(""), p.key.getOrElse("0")).toFuture
       settings <- if unavailable then Future.successful("") else text("settings")
       count = ThreadWriteGuard.check(unavailable, dat, settings, kind).fold(rejection => fail(rejection.code), identity)
+      _ = p.admission.flatMap(_.refusal(ThreadSettingsCodec.value(settings, "BBS_PHOEBE"))).foreach(required => fail(PhoebeAdmission.code(required)))
       log <- text("log")
       recent <- if rate.isDefined then read("recentPosts").map(PostRateCodec.decodeRecent) else Future.successful(ThreadRecentPosts.empty)
       judgement = rate.map(PostRateFlow.judgeThread(_, reply, recent, now))

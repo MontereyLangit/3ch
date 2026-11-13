@@ -8,7 +8,7 @@ import io._3ch.bbs.external.web.URL
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
 import io._3ch.common.domain.account.Phoebe
 import io._3ch.common.domain.identity.{DateSalt, IdentifierAxes, IdentifierAxis, ShikibetsuFormat, ShikibetsuMode, ShikibetsuSeeds}
-import io._3ch.common.domain.posting.{ArchiveIndexText, CapHandle, MailCommands, DatLineFormatter, NameField, PhoebeCommand, PostForm, PostKind, SageRule, ThreadPhoebeRequest, UserInfo}
+import io._3ch.common.domain.posting.{ArchiveIndexText, CapHandle, MailCommands, DatLineFormatter, NameField, PhoebeAdmission, PhoebeCommand, PostForm, PostKind, SageRule, ThreadPhoebeRequest, UserInfo}
 import io._3ch.common.text.JsNumber
 
 import scala.concurrent.Future
@@ -47,7 +47,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
       decided = marked.copy(sage = SageRule.sage(marked.number, marked.form.mail, marked.form.key, marked.unixtime, marked.settings, ports.random.next()))
       rateLimit <- postRateCheck(decided, board.settings, user, request)
       phoebe <- phoebeCommand(decided, account, board.settings)
-      (written, swallowed) <- updateThread(decided, board, creationLimit, owner, rateLimit, phoebe, userInfo)
+      (written, swallowed) <- updateThread(decided, board, creationLimit, owner, rateLimit, phoebe, admissionOf(account, board.settings), account, userInfo)
       recorded <- if (swallowed) Future.successful(written) else record(written, request, account)
       outcome <- if (swallowed) Future.successful(PostingOutcome.Swallowed(written, headers(written)))
         else for {
@@ -80,11 +80,12 @@ final class PostingService(ports: PostingPorts, salt: String) {
   private def admit(context: PostingContext, account: PostingAccount, request: PostingRequest): Unit = if (authEnabled && !account.legacyCap) {
     if (account.user.isEmpty && (!request.isMonazilla || context.mailCommands.auth)) reject(PostingError.Authentication(AuthenticationFailure.LoginRequired), context)
     val required = Phoebe.required(context.settings.get("BBS_PHOEBE"))
-    if (!Phoebe.admits(account.lv, required, account.staff)) {
-      if (account.user.isEmpty) reject(PostingError.Authentication(AuthenticationFailure.LoginRequired), context)
-      else reject(PostingError.AuthenticationLevel(required), context)
-    }
+    if (!Phoebe.admits(account.lv, required, account.staff)) reject(levelError(account, required), context)
   }
+
+  /** Lv 不足の拒否。未ログインならログインを求め、認証済なら必要 Lv を示す */
+  private def levelError(account: PostingAccount, required: Int): PostingError =
+    if (account.user.isEmpty) PostingError.Authentication(AuthenticationFailure.LoginRequired) else PostingError.AuthenticationLevel(required)
 
   /** 成功した投稿をアカウントに記録する。記録の失敗は投稿の成否に含めず、発行し直した Cookie だけを差し替える */
   private def record(context: PostingContext, request: PostingRequest, account: PostingAccount): Future[PostingContext] = ports.accounts match {
@@ -244,6 +245,10 @@ final class PostingService(ports: PostingPorts, salt: String) {
     } yield Some(PostRateCheck(settings.level, PostRateIdentity(ip, shiki, aid), settings.board, settings.thread))
   }
 
+  /** 書き込む直前に Thread DO で判定し直す BBS_PHOEBE の条件。認証を有効にしていない環境と旧キャップは判定しない */
+  private def admissionOf(account: PostingAccount, boardSettings: BbsSettings): Option[PhoebeAdmission] =
+    Option.when(authEnabled && !account.legacyCap)(PhoebeAdmission(account.lv, account.staff, Phoebe.required(boardSettings.get("BBS_PHOEBE"))))
+
   /** 本文先頭の !バルサン・!SETTING:BBS_PHOEBE:n をスレ設定の変更にする。スレ立て人と staff 以外のコマンドは無視して通常の投稿にする */
   private def phoebeCommand(context: PostingContext, account: PostingAccount, boardSettings: BbsSettings): Future[Option[ThreadPhoebeRequest]] =
     PhoebeCommand.parse(context.form.message).filter(_ => authEnabled) match {
@@ -255,12 +260,12 @@ final class PostingService(ports: PostingPorts, salt: String) {
           case Some(_) if context.creating => Future.successful(true)
           case Some(user) => digest(context, user.accountKey).map(hash => context.threadOwner().exists(_.ownedBy(hash)))
         }
-        owner.map(command.request(_, account.staff, Phoebe.required(boardSettings.get("BBS_PHOEBE"))))
+        owner.map(command.request(_, account.staff, Phoebe.required(boardSettings.get("BBS_PHOEBE")), account.lv))
     }
 
   /** dat に追記する。連投規制のコピペで吸い込んだら真を返す */
   private def updateThread(context: PostingContext, board: PostingBoard, creationLimit: Option[ThreadCreationLimit], owner: Option[ThreadOwner],
-                           rateLimit: Option[PostRateCheck], phoebe: Option[ThreadPhoebeRequest], userInfo: UserInfo): Future[(PostingContext, Boolean)] = {
+                           rateLimit: Option[PostRateCheck], phoebe: Option[ThreadPhoebeRequest], admission: Option[PhoebeAdmission], account: PostingAccount, userInfo: UserInfo): Future[(PostingContext, Boolean)] = {
     val spaced = context.copy(form = context.form.copy(message = DatLineFormatter.spaceFirstBreak(context.form.message)))
     guarded(spaced, PostingStage.ThreadWrite, FailureClock.Unixtime) {
       val form = spaced.form
@@ -269,7 +274,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
       val posting = ThreadPosting(bbs = Some(form.bbs), key = Some(form.key), title = Some(spaced.title), sage = spaced.sage,
         maxThreads = Some(spaced.settings.int("BBS_MAX_MENU_THREAD", "700")), create = create,
         initialSettings = Option.when(create)(PostRateSettings.copiedToThread(spaced.settings).toThreadSettings), creationLimit = creationLimit, owner = owner,
-        rateLimit = rateLimit, phoebe = phoebe)
+        rateLimit = rateLimit, phoebe = phoebe, admission = admission)
       ports.threads.addRes(board.id, form.key, dat, DatLineFormatter.logLine(spaced.number.toString, userInfo.text), posting).map {
         case ThreadWriteResult.Written(number, observed) =>
           rateLimit.filter(_ => observed.nonEmpty).foreach { check =>
@@ -278,6 +283,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
           (spaced.copy(number = number), false)
         case ThreadWriteResult.Swallowed(number) => (spaced.copy(number = number), true)
         case ThreadWriteResult.Refused(rejection) => reject(PostingError.ThreadRefused(rejection, site(spaced, FailureClock.Unixtime, spaced.time)), spaced)
+        case ThreadWriteResult.LevelRequired(required) => reject(levelError(account, required), spaced)
         case ThreadWriteResult.CreationLimited(rejection) => reject(PostingError.ThreadCreation(rejection), spaced)
         case ThreadWriteResult.RateLimited(rejection) => reject(PostingError.PostRate(rejection), spaced)
       }

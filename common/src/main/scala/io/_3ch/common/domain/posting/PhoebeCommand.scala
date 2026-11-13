@@ -13,9 +13,9 @@ enum PhoebeCommand {
     case Setting(n) => n
   }
 
-  /** スレ立て人か staff ならスレ設定への書き込みにする。下げてよいのは staff の !SETTING だけ。どちらでもなければ None */
-  def request(owner: Boolean, staff: Boolean, boardLevel: Int): Option[ThreadPhoebeRequest] =
-    Option.when(owner || staff)(ThreadPhoebeRequest(level, lower = staff && this != Balsan, boardLevel))
+  /** スレ立て人か staff ならスレ設定への書き込みにする。下げてよいのは staff の !SETTING だけ。どちらでもなければ None。staff 以外が求められる Lv は自分の Lv（lv）まで */
+  def request(owner: Boolean, staff: Boolean, boardLevel: Int, lv: Int): Option[ThreadPhoebeRequest] =
+    Option.when(owner || staff)(ThreadPhoebeRequest(if (staff) level else math.min(level, lv), lower = staff && this != Balsan, boardLevel))
 }
 
 object PhoebeCommand {

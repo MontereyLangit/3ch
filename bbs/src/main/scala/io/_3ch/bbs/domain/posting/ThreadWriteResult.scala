@@ -11,6 +11,8 @@ enum ThreadWriteResult {
   case Swallowed(number: Int)
   /** スレの状態で拒否された */
   case Refused(rejection: ThreadWriteRejection)
+  /** 書き込む直前の判定で、スレの BBS_PHOEBE が投稿者の Lv を上回っていた。required はそのときの必要 Lv */
+  case LevelRequired(required: Int)
   /** スレ立て規制で拒否された */
   case CreationLimited(rejection: ThreadCreationRejection)
   /** 連投規制で拒否された */

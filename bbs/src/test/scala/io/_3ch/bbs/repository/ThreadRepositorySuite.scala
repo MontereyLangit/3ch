@@ -4,7 +4,7 @@ import io._3ch.bbs.domain.posting.{ThreadPosting, ThreadWriteResult}
 import io._3ch.bbs.domain.posting.moderation.{PostRateFinding, PostRateRejection, ThreadCreationRateLimit, ThreadCreationRejection}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.common.domain.BoardId
-import io._3ch.common.domain.posting.ThreadWriteRejection
+import io._3ch.common.domain.posting.{PhoebeAdmission, ThreadWriteRejection}
 import munit.FunSuite
 
 import scala.concurrent.Future
@@ -29,6 +29,7 @@ class ThreadRepositorySuite extends FunSuite {
   test("RPC の拒否コードをスレ状態・スレ立て・連投の型付き結果に戻す") {
     val creation = ThreadCreationRejection.Narrow(ThreadCreationRateLimit.Reason.Ip)
     val cases = ThreadWriteRejection.values.toSeq.map(r => r.code -> ThreadWriteResult.Refused(r)) ++ Seq(
+      PhoebeAdmission.code(3) -> ThreadWriteResult.LevelRequired(3),
       creation.code -> ThreadWriteResult.CreationLimited(creation),
       PostRateRejection.Samba24(7).code -> ThreadWriteResult.RateLimited(PostRateRejection.Samba24(7)),
       PostRateRejection.Fr(2).code -> ThreadWriteResult.RateLimited(PostRateRejection.Fr(2)),

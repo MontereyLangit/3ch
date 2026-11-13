@@ -4,7 +4,7 @@ import io._3ch.bbs.domain.posting.ThreadPosting
 import io._3ch.bbs.domain.posting.moderation.PostRateFinding
 import io._3ch.bbs.external.cloudflare.ThreadAddResult
 import io._3ch.common.domain.account.Phoebe
-import io._3ch.common.domain.posting.ThreadPhoebeRequest
+import io._3ch.common.domain.posting.{PhoebeAdmission, ThreadPhoebeRequest}
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 
@@ -18,7 +18,8 @@ object PostingCodec {
     owner = posting.owner.map(ThreadOwnerCodec.encode).orUndefined,
     rateLimit = posting.rateLimit.map(PostRateCodec.encodeCheck).orUndefined,
     commands = posting.phoebe.map(request => js.Dynamic.literal(phoebe = js.Dynamic.literal(level = request.level, lower = request.lower,
-      board = request.boardLevel))).orUndefined)
+      board = request.boardLevel))).orUndefined,
+    phoebeAdmission = posting.admission.map(a => js.Dynamic.literal(lv = a.lv, exempt = a.exempt, board = a.boardLevel)).orUndefined)
 
   /** null と undefined は投稿情報なし。初期スレ設定・スレ立て規制・スレ主は create が真で値が真のときだけ、連投規制とコマンドは値が真のときだけ読む */
   def decode(value: js.UndefOr[js.Dynamic]): Option[ThreadPosting] = {
@@ -39,14 +40,22 @@ object PostingCodec {
         creationLimit = created(p.creationLimit).map(ThreadCreationCodec.decodeRequest),
         owner = created(p.owner).map(ThreadOwnerCodec.decode),
         rateLimit = if (truth(p.rateLimit)) Some(PostRateCodec.decodeCheck(p.rateLimit)) else None,
-        phoebe = if (truth(p.commands) && truth(p.commands.phoebe)) decodePhoebe(p.commands.phoebe) else None))
+        phoebe = if (truth(p.commands) && truth(p.commands.phoebe)) decodePhoebe(p.commands.phoebe) else None,
+        admission = if (truth(p.phoebeAdmission)) decodeAdmission(p.phoebeAdmission) else None))
     }
   }
 
+  private def level(value: js.Dynamic): Option[Int] =
+    if (js.typeOf(value) == "number" && value.asInstanceOf[Double].isValidInt) Some(value.asInstanceOf[Double].toInt).filter(n => n >= 0 && n <= Phoebe.MaxLevel) else None
+
+  /** Lv と板の値が 0〜10 の整数でなければ判定し直さない */
+  private def decodeAdmission(v: js.Dynamic): Option[PhoebeAdmission] = for {
+    lv <- level(v.lv)
+    board <- level(v.board)
+  } yield PhoebeAdmission(lv, truth(v.exempt), board)
+
   /** Lv と板の値が 0〜10 の整数でなければ変更しない */
   private def decodePhoebe(v: js.Dynamic): Option[ThreadPhoebeRequest] = {
-    def level(value: js.Dynamic): Option[Int] =
-      if (js.typeOf(value) == "number" && value.asInstanceOf[Double].isValidInt) Some(value.asInstanceOf[Double].toInt).filter(n => n >= 0 && n <= Phoebe.MaxLevel) else None
     for {
       requested <- level(v.level)
       board <- level(v.board)

@@ -6,7 +6,7 @@ import io._3ch.bbs.domain.posting.moderation.{PostRateFinding, PostRateRejection
 import io._3ch.bbs.durable.codec.{PostingCodec, ThreadOwnerCodec}
 import io._3ch.bbs.external.cloudflare.{ThreadDoStub, WorkerEnv}
 import io._3ch.common.domain.{BbsSettings, BoardId}
-import io._3ch.common.domain.posting.ThreadWriteRejection
+import io._3ch.common.domain.posting.{PhoebeAdmission, ThreadWriteRejection}
 
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -56,6 +56,7 @@ object ThreadRepository {
       }
       val code = text.stripPrefix("Error: ")
       ThreadWriteRejection.fromCode(code).map(ThreadWriteResult.Refused(_))
+        .orElse(PhoebeAdmission.requiredOf(code).map(ThreadWriteResult.LevelRequired(_)))
         .orElse(ThreadCreationRejection.fromCode(code).map(ThreadWriteResult.CreationLimited(_)))
         .orElse(PostRateRejection.fromCode(code).map(ThreadWriteResult.RateLimited(_)))
     }

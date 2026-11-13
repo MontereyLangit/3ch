@@ -6,7 +6,7 @@ import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRule
 import io._3ch.bbs.handler.PostingText
 import io._3ch.bbs.external.web.TextEncoder
 import io._3ch.common.domain.{BbsSettings, BoardId}
-import io._3ch.common.domain.posting.{CapHandle, ThreadPhoebeRequest}
+import io._3ch.common.domain.posting.{CapHandle, PhoebeAdmission, ThreadPhoebeRequest}
 import munit.FunSuite
 
 import scala.collection.immutable.ListMap
@@ -552,7 +552,7 @@ class PostingServiceSuite extends FunSuite {
   private def phoebeOf(fake: Fake): Option[ThreadPhoebeRequest] = fake.postings.head._3.phoebe
 
   test("スレ立て人の !バルサン と !SETTING は上げるだけの要求にし、本文はそのまま書き込む") {
-    val balsan = Fake(boardSettings = "BBS_PHOEBE=1\n", owner = ownedThread, authSource = Some(new AuthSource(member)))
+    val balsan = Fake(boardSettings = "BBS_PHOEBE=1\n", owner = ownedThread, authSource = Some(new AuthSource(member, lv = 3)))
     val setting = Fake(owner = ownedThread, authSource = Some(new AuthSource(member)))
     for {
       _ <- balsan.post(reply("MESSAGE" -> "!バルサン")*)()
@@ -581,13 +581,56 @@ class PostingServiceSuite extends FunSuite {
 
   test("staff はスレ立て人でなくても !SETTING で下げられ、ログインしたスレ立てではスレ立て人として扱う") {
     val staff = Fake(owner = None, authSource = Some(new AuthSource(member, staff = true)))
-    val creator = Fake(authSource = Some(new AuthSource(member)))
+    val creator = Fake(authSource = Some(new AuthSource(member, lv = 4)))
     for {
       _ <- staff.post(reply("MESSAGE" -> "!SETTING:BBS_PHOEBE:0")*)()
       _ <- creator.post("MESSAGE" -> "!SETTING:BBS_PHOEBE:4")()
     } yield {
       assertEquals(phoebeOf(staff), Some(ThreadPhoebeRequest(0, lower = true, 0)))
       assertEquals(phoebeOf(creator), Some(ThreadPhoebeRequest(4, lower = false, 0)))
+    }
+  }
+
+  test("スレ立て人が求められる Lv は自分の Lv までで、それ以上の指定は自分の Lv にする") {
+    val low = Fake(owner = ownedThread, authSource = Some(new AuthSource(member, lv = 2)))
+    val setting = Fake(owner = ownedThread, authSource = Some(new AuthSource(member, lv = 2)))
+    val creator = Fake(authSource = Some(new AuthSource(member, lv = 1)))
+    for {
+      _ <- low.post(reply("MESSAGE" -> "!バルサン")*)()
+      _ <- setting.post(reply("MESSAGE" -> "!SETTING:BBS_PHOEBE:9")*)()
+      _ <- creator.post("MESSAGE" -> "!SETTING:BBS_PHOEBE:5")()
+    } yield {
+      assertEquals(phoebeOf(low), Some(ThreadPhoebeRequest(2, lower = false, 0)))
+      assertEquals(phoebeOf(setting), Some(ThreadPhoebeRequest(2, lower = false, 0)))
+      assertEquals(phoebeOf(creator), Some(ThreadPhoebeRequest(1, lower = false, 0)))
+    }
+  }
+
+  test("Lv の判定条件を Thread DO に渡し、認証を有効にしていない環境には渡さない") {
+    val member3 = Fake(boardSettings = "BBS_PHOEBE=2\n", authSource = Some(new AuthSource(member, lv = 3)))
+    val staff = Fake(authSource = Some(new AuthSource(member, lv = 0, staff = true)))
+    val plain = Fake()
+    for {
+      _ <- member3.post(reply()*)()
+      _ <- staff.post(reply()*)()
+      _ <- plain.post(reply()*)()
+    } yield {
+      assertEquals(member3.postings.head._3.admission, Some(PhoebeAdmission(3, exempt = false, boardLevel = 2)))
+      assertEquals(staff.postings.head._3.admission, Some(PhoebeAdmission(0, exempt = true, boardLevel = 0)))
+      assertEquals(plain.postings.head._3.admission, None)
+    }
+  }
+
+  test("Thread DO が書き込む直前に Lv 不足と判定したら、通常の Lv 不足と同じ拒否にする") {
+    val level = Fake(authSource = Some(new AuthSource(member, lv = 2)), write = _ => Future.successful(ThreadWriteResult.LevelRequired(3)))
+    val login = Fake(authSource = Some(new AuthSource()), write = _ => Future.successful(ThreadWriteResult.LevelRequired(1)))
+    val monazilla: PostingRequest => PostingRequest = _.copy(userAgent = "Monazilla/1.00 Test/1.0")
+    for {
+      byLevel <- level.post(reply()*)()
+      byLogin <- login.post(reply()*)(monazilla)
+    } yield {
+      assertEquals(rejected(byLevel).error, levelRequired)
+      assertEquals(rejected(byLogin).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.LoginRequired))
     }
   }
 

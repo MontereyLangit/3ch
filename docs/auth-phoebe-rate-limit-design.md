@@ -385,6 +385,8 @@ PHOEBE.md の「L0〜L1 → 23h、L1〜L2 → 23×(Lv+1)h」は未ログイン�
 - 未ログインの専ブラが Lv 不足のときは、従来どおり `auth:required:login`（`x-auth-required: login`）で認証へ誘導する。認証済の Lv 不足は `x-post-error: auth:required:level`・`x-auth-required: level`・`x-phoebe-required: n`。新 UI は `x-phoebe-required` の値を出し、再送しない（§13-17）。
 - コマンドは本文の先頭だけを読み、直後は本文の終わり・半角空白・改行のどれか（`!バルサンです` は対象外）。全角の `！` は読まない。スレ立て人の照合は `ownerAid` を足さず、既存の `owner.account`（`SHA-256(accountKey + ":" + md5Salt)`）と投稿者の同じ値を比べる。ログイン中のスレ立てでは本人をスレ立て人とする。`!バルサン` は staff でも下げない（「既に 3 より大きければ変えない」）。
 - スレ設定に値が無いときの現在値は板設定の `BBS_PHOEBE`。投稿処理が板の値を `ThreadPhoebeRequest` に入れ、Thread DO はロック内でスレ設定の値と比べて書くかを決める。
+- スレ立て人（staff 以外）が `!バルサン` / `!SETTING:BBS_PHOEBE:n` で求められる Lv は自分の実効 Lv まで。自分の Lv を超える指定は自分の Lv に切り詰めて書く（無視はしない）。自分より高い Lv を要求して自分が書けなくなるスレを作らせないため。staff は上限なし。
+- 判定の後にスレ主が `!バルサン` で Lv を上げる競合に備え、投稿処理は投稿者の実効 Lv・免除・板の値を `addRes` の付帯情報 `phoebeAdmission` で渡し、Thread DO がロック内で最新のスレ設定に対して `PhoebeAdmission`（`common` の純粋関数）で判定し直す。足りなければ保存せず `thread-write:level:n` で拒否し、投稿処理は通常の Lv 不足と同じ応答（未ログインはログイン要求、認証済は `auth:required:level`）にする。`phoebeAdmission` が無い呼び出し（旧形式・Raw の書き込み）は判定し直さない。
 
 ## 5. 名前欄の識別子
 
@@ -416,7 +418,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 | `XXX` | Client Hints（現行 `g.userAgent` に追記している `sec-ch-ua-full-version-list` / `sec-ch-ua`）＋ `Accept-Language` | 第 9 軸（`Sec-CH-UA-Model`） |
 
 - UA 解析は v3（PHP）の解析表を `common` の純粋関数 `UserAgentProfile.parse` に移植する（v3 はリポジトリ外。移植時に表を `tests/golden/ua-profile.json` に固定する）。
-  - 実装（段 C）: v3 の bbs.php には解析表が無かった（`$platform` は未定義、`$browser` にも代入が無い。引き継ぎの「外部資料」）。表を推測で作らず、R2 の `ua-profiles.json` を `bbs` の `UserAgentTable`（`js.RegExp` を使うので `common` ではなく `bbs/domain`）で読む。書式は `{"os": [{"match", "flags"?, "label"}…], "browser": […], "device": […]}`。表が無い・読めないときは OS・ブラウザ・端末種別の軸を `000` にする。表のデータを用意したら `tests/golden/ua-profile.json` に入出力を固定する。
+  - 実装（段 C）: v3 の bbs.php には解析表が無かった（`$platform` は未定義、`$browser` にも代入が無い。引き継ぎの「外部資料」）。表を推測で作らず、R2 の `ua-profiles.json` を `bbs` の `UserAgentTable`（`js.RegExp` を使うので `common` ではなく `bbs/domain`）で読む。書式は `{"os": [{"match", "flags"?, "label"}…], "browser": […], "device": […]}`。表が無いときは OS・ブラウザ・端末種別の軸を `000` にする。読み込んだ表は isolate ごとに 60 秒使い回し、R2 の読み込みや書式の失敗では最後に読めた表を使い続ける（一度も読めていないときだけ `000`）。表ごとの行数は 100 行、`match` は 200 文字までで、超えた行は読まない。表のデータを用意したら `tests/golden/ua-profile.json` に入出力を固定する。
 - 認証済の軸値は端末ハッシュ 18 hex を 2 桁ずつ軸に割り当てて連結した文字列。端末ハッシュが空（全欠損）なら 5 軸とも未ログインと同じ UA 解析で埋め、`D` だけ Lv を出す。
 - 端末ハッシュは Cookie の `dev`（§3.3）から取る。キーによる専ブラ認証（§3.4 の 2）では `dev` が無いので UA 解析側を使う。
 
@@ -559,7 +561,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 
 - **適用除外**: `BBS_LIVE` が `checked` または `1` の板・スレ（5 種すべて。既存の強制 sage は `checked` のときだけで変えない）。`BBS_RENTOU_PASS` で免除される投稿者。`saku` 板には適用する。
 - **照合キー**: 板設定 `BBS_RENTOU_KEYS`（§8.8）で選ぶ。ごんたくれ（§8.2）とスレ単位（§8.4）に使う（実装）。Samba24（§8.3）は `ip,aid` 固定、広域連投規制（§8.3a）は `shiki` だけで照合する。候補は `ip`（IPv6 は URL 正規化、スレ立て規制と同じ）、`shiki`（識別子。`D` を除いた `JP.AA CC-EEEFFFGGGZZZXXX`。`★` は照合しない）、`aid`（認証済のアカウント。移行しても変わらない）。選んだキーのいずれか 1 つでも一致すれば「同一」。
-  既定は `ip,shiki,aid`（原案の `id` は日付欄の ID の廃止で使えなくなったので外した）。値に `id` が書かれていれば無視する。**ただし `shiki` は同じキャリア・同じ地域・同じ機種の別人で一致しうる**（現行の `checked` 識別子は県・市・AS・UA のハッシュ。新書式でも iOS は機種クラス粒度）。Samba24 のような秒単位の板全体規制では巻き添えが起きるため、§13-24 で Samba24 を `ip,aid` に限り、識別子は短い秒数の広域連投規制（§8.3a）で見ることにした。巻き添えの実測は `BBS_FR_LEVEL=log`（下記）を書いた板で行う。
+  既定は `ip,shiki,aid`（原案の `id` は日付欄の ID の廃止で使えなくなったので外した）。値に `id` が書かれていれば無視する。**ただし `shiki` は同じキャリア・同じ地域・同じ機種の別人で一致しうる**（現行の `checked` 識別子は県・市・AS・UA のハッシュ。新書式でも iOS は機種クラス粒度）。Samba24 のような秒単位の板全体規制では巻き添えが起きるため、§13-24 で Samba24 を `ip,aid` に限り、識別子は短い秒数の広域連投規制（§8.3a）で見ることにした。`BBS_ID_SHIKIBETSU=phoebe` の板では UA 解析表が無い間 E/F/G が `000` で市も含まず粗すぎるため、`shiki` は照合しない（`checked` のときだけ使う）。巻き添えの実測は `BBS_FR_LEVEL=log`（下記）を書いた板で行う。
 - **段階**: 板設定 `BBS_FR_LEVEL`。`off` は判定も記録もしない。`log` は判定と履歴の記録だけ行い、拒否せず Workers Logs に出す（試行モード）。
   キーが無い（既定 `1`）・1 以上の整数は規制モードで拒否し、広域連投規制（FlyRibbon, FR。§8.3a）も判定する。整数は旧 3ch の広域連投規制の強さで、意味は未実装（型には保持する）。
   `0` と空の値は規制モードだが広域連投規制だけを判定しない（§13-35）。`log` は広域連投規制も判定して記録する。
