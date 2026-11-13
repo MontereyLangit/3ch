@@ -85,6 +85,15 @@ class PostingAccountServiceSuite extends munit.FunSuite {
         .map(_ => assertEquals(google.issued.map(c => (c.lv, c.expiresAt)).toList, List((10, oldExpiry.toLong))))
     }
   }
+  test("投稿中にアカウントの世代が進んでいたら、記録はするが古いセッションに Cookie を発行しない") {
+    val fake = new Fake(account.copy(generation = 2, lv = 2, expiresAt = Some(now + AccountProfile.clientLifetime)))
+    val session = SessionClaims(aid, "abcdefgh", 1, oldExpiry.toLong, 1)
+    fake.service.posted(context, request, PostingAccount(None, authentication = Some(poster(AccountVia.Web, Some(session))))).map { cookie =>
+      assertEquals(cookie, None)
+      assert(fake.issued.isEmpty)
+      assertEquals(fake.posts.size, 1)
+    }
+  }
   test("セッションを持たないキャップの投稿には Cookie を発行しない") {
     val fake = new Fake(account.copy(expiresAt = Some(now + AccountProfile.clientLifetime)))
     fake.service.posted(context, request, PostingAccount(None, authentication = Some(poster(AccountVia.Cap, None)))).map { cookie =>
