@@ -13,7 +13,7 @@
       ],
       [
         "set-cookie",
-        "PON=FjcWvAiw8YTQ0rJMvRNHD+hxZCs; Max-Age=63072000; path=/; Secure; HttpOnly"
+        "PON=q4pXMpiV4D+74CIKl6fd3fkamHI; Max-Age=63072000; path=/; Secure; HttpOnly"
       ],
       [
         "x-resnum",
@@ -34,7 +34,7 @@
       "settings": ""
     },
     "sample/1699990000": {
-      "dat": "名無しさん＠３ちゃんねる </b>(JP.ab.cd ef-0123456789abcdef)<b><><>2023/11/14(火) 19:26:40<> 最初の本文 <>既存スレ\n名無しさん＠３ちゃんねる </b>(JP.SA.CG Kx-6aaf84f6b028f27c)<b><><>2023/11/15(水) 07:11:40<> 返信本文 <>\n",
+      "dat": "名無しさん＠３ちゃんねる </b>(JP.ab.cd ef-0123456789abcdef)<b><><>2023/11/14(火) 19:26:40<> 最初の本文 <>既存スレ\n名無しさん＠３ちゃんねる </b>(JP.Tw.fv wA-20794c976ca248eb)<b><><>2023/11/15(水) 07:11:40<> 返信本文 <>\n",
       "log": "1<>UID: IP:192.0.2.100 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0\n2<>UID: IP:192.0.2.77 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0 (OtherBrowser)\n",
       "settings": "BBS_TITLE=sample＠3ch掲示板<>BBS_NONAME_NAME=名無しさん＠３ちゃんねる<>BBS_SHIKIBETSU=off<>"
     }

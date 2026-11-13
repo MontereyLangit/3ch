@@ -386,12 +386,12 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 | 部分 | 内容 | 算出 |
 | --- | --- | --- |
 | `JP` | 国コード（`cf.country`。欠損は現行どおり `unknown`） | そのまま |
-| `AA` | 県 | 現行 `kenHash` と同じ: `sha1Base64(md5(ken + group + date + salt)).take(2)` |
+| `AA` | 県 | 現行 `kenHash` と同じ: `sha1Base64(sha256(ken + group + date + saltHash)).take(2)` |
 | `CC` | ASN | 現行 `asnHash` と同じ |
-| `EEE`〜`XXX` | 端末情報 5 軸 × 3 桁 | 軸ごとに `sha1Base64(md5(axisValue + "|" + axisName + group + date + salt)).take(3)`。欠損軸は `000` |
+| `EEE`〜`XXX` | 端末情報 5 軸 × 3 桁 | 軸ごとに `sha1Base64(sha256(axisValue + "|" + axisName + group + date + saltHash)).take(3)`。欠損軸は `000` |
 | `D` | Lv | 未ログイン `0`、1〜9 はその数字、10 以上 `*` |
 
-`group`・`date`・`salt` は現行 `makeShikibetsu` と同じ（`BBS_ID_GROUP`・`BBS_ID_RESET`・`md5Salt`）。全部分が日替わりで変わる点は現行と同じ。
+`group`・`date`・`salt` は現行 `makeShikibetsu` と同じ（`BBS_ID_GROUP`・`BBS_ID_RESET`・`saltHash`）。全部分が日替わりで変わる点は現行と同じ。
 文字集合も現行の 2 桁ハッシュと同じ Base64 文字（`+` `/` を含む）。市区町村ハッシュと 16 桁 UA ハッシュは廃止する。
 
 ### 5.2 5 軸の値
@@ -441,7 +441,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 ### 6.2 キャップ
 
 - 発行は権限を 1 つ以上持つアカウントが自分宛に 1 個まで。`admin` は無制限で他アカウント宛にも発行できる。
-- 保存: `Account.caps[]`＝`{capId, name, hash, strong, issuedBy, issuedAt, revokedAt}`。`hash` は現行の照合値 `SHA-1(SHA-256(MD5(pass)+salt))` 先頭 27 文字をそのまま使う。
+- 保存: `Account.caps[]`＝`{capId, name, hash, strong, issuedBy, issuedAt, revokedAt}`。`hash` は現行の照合値 `SHA-1(SHA-256(pass+saltHash))` 先頭 27 文字をそのまま使う。
 - 互換: KV `CAP`（hash → 表示名）は現行どおり読み書きし、所有者は `AccountIndex("cap")`（hash → `aid`）で引く。所有者のない既存エントリは「旧キャップ」として動き続ける（ログ無し・Lv 無し）。管理画面から既存キャップをアカウントに紐づけられる。
 - 強キャップ（表示名末尾 `★`、サイズ検証スキップ）は `admin` だけが発行できる。
 - 利用ログ: `Account.log`（§9.1 の書き込み記録）に `via: "cap"` と `capId` 付きで残る。所有者と `admin` が閲覧でき、失効（`revokedAt`）と再発行（新 hash）ができる。失効時は KV `CAP` からも削除する。
@@ -553,7 +553,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
   `0` と空の値は規制モードだが広域連投規制だけを判定しない（§13-35）。`log` は広域連投規制も判定して記録する。
   それ以外の値（負数・`OFF` などの不正な文字列）はキー無しと同じにし、設定ミスで規制が外れないようにする。前後の空白は除き、`off` / `log` は小文字だけに一致させる（`BBS_LIVE` の `checked` と同じく値をそのまま比べる）。
   **コード既定は規制モード**（2026-11-06 利用者決定。デプロイした時点で全板で拒否が始まることも承認済み）。当初案の `BBS_RENTOU_MODE`（`off` / `log` / `on`、既定 `log`）は置き換え、読まない。
-- **保存値**: 全てソルト付き SHA-256（`hash(value + ":" + md5Salt)`。スレ立て規制と同じ `digest`）。空値は空のまま保存し照合しない。
+- **保存値**: 全てソルト付き SHA-256（`hash(value + ":" + saltHash)`。スレ立て規制と同じ `digest`）。空値は空のまま保存し照合しない。
 - **予約中の扱い**: 有効な予約（§8.7）は確定済みと同じく件数に 1 件として数える（スレ立て規制の「別枠で 1 件ずつ」と違い、ごんたくれの件数窓にも入れる）。
 - **判定主体**: 板単位（§8.2・8.3・8.3a）は Board DO、スレ単位（§8.4・8.5）は Thread DO。純粋判定は `domain/posting/moderation/PostRateLimit.scala`。
 - **設定の出どころ**: 板単位の規制は**板設定だけ**で判定する（スレ設定の書き写しを見ない）。スレ単位の規制と `BBS_PHOEBE` は「明示的なスレ設定 → 板設定」の順。スレ立て時の設定書き写しから本書の新キーを除く（§8.8）。
@@ -632,15 +632,15 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 - RPC: `reservePost(key, entry, settings): String`（空＝許可、それ以外＝拒否コード）、`completePost(key)`、`cancelPost(key)`。いずれも `DurableLock.serialized`。
 - 書き込みは**最新ページと `postRateMeta` だけ**（スレ立て規制の全ページ読み書きを踏襲しない。全投稿で呼ばれるため）。読み込みは判定に要る件数分のページだけ（直近 `timecount` 件と `BBS_SAMBA24`・`BBS_FR_SECOND` の大きい方の秒数以内。最大でも 1,000 件＝16 ページ）。`complete` / `cancel` は `key` を含むページだけ書き換える。
 - 判定は確定済みと有効な予約を合わせて件数窓で行う（§8.1）。予約の有効期限は 120 秒。期限切れの予約は確定済みと同じ扱い（保守的）。
-- 保持規則: **直近 `max(timecount, 1)` 件 ∪ `now − BBS_SAMBA24 ≤ t` の件 ∪ `now − BBS_FR_SECOND ≤ t` の件 ∪ 有効な予約**（秒数の 2 つは大きい方で足りる）。24 時間分を残さない（§8.2 は直近 `timecount` 件しか見ない）。上限 1,024 件（16 ページ）。超えたら古いページから捨てる。**容量で拒否しない**（板全体の投稿停止や意図的な埋め立てを防ぐ）。
+- 保持規則: **確定済みの直近 `max(timecount, 1)` 件 ∪ `now − BBS_SAMBA24 ≤ t` の件 ∪ `now − BBS_FR_SECOND ≤ t` の件 ∪ 有効な予約**（秒数の 2 つは大きい方で足りる。板設定だけで決め、予約中は数えず、追記前の履歴で見直すので取消で範囲が戻る。スレ設定の `BBS_FR_LEVEL` で縮めない）。24 時間分を残さない（§8.2 は直近 `timecount` 件しか見ない）。上限 1,024 件（16 ページ）。超えたら古いページから捨てる。**容量で拒否しない**（板全体の投稿停止や意図的な埋め立てを防ぐ）。
 - 集約 `PostRateHistory`（純粋）が `reserve` / `complete` / `cancel` / `retained` を持ち、DO は `PostRateCodec` で変換して読み書きするだけ。
 
 **Thread DO**
 
 | キー | 内容 |
 | --- | --- |
-| `recentPosts` | `{t, ip, shiki, aid}` の配列（新しい順）。`now − BBS_THREAD_RENTOU_RESET ≤ t` の件だけ残し、上限 1,000 件 |
-| `ownerAid` | スレ立て人の `aid`（未ログインなら空）。`!バルサン` 等の権限判定に使う（§4.4）。既存の `owner.account`（`SHA-256(accountKey + ":" + md5Salt)`。スレ主表示用）と同じ値で照合できるなら、このキーは足さずにそれを使う |
+| `recentPosts` | `{t, ip, shiki, aid}` の配列（新しい順）。`now − BBS_THREAD_RENTOU_RESET ≤ t` の件だけ残し、上限 1,000 件。照合値は先頭 12 文字に短縮（DO の値の上限 128 KiB のため）し、スレの移動で引き継ぐ |
+| `ownerAid` | スレ立て人の `aid`（未ログインなら空）。`!バルサン` 等の権限判定に使う（§4.4）。既存の `owner.account`（`SHA-256(accountKey + ":" + saltHash)`。スレ主表示用）と同じ値で照合できるなら、このキーは足さずにそれを使う |
 
 - `addRes` の排他区間内で判定・追記し、`dat`・`log` と同じ `storage.put` で一括保存する。コピペ判定も同じ区間内で `dat` 末尾 2 行を見る。
 - 既存の `addRes` 引数 `posting` に `rateLimit`（§8.1 の材料と設定）と `commands`（§4.4 のスレ設定変更）を足し、戻り値を `{count, swallowed}` にする。`rateLimit` が無ければ判定しない（管理画面やテストの既存経路を壊さない）。

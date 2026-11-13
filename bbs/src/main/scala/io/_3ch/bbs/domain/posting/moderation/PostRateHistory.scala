@@ -45,21 +45,25 @@ final case class PostRateHistory(meta: PostRateMeta, pages: Vector[PostRatePage]
   /** 読み込んだページを古い側に足す */
   def withOlder(page: PostRatePage): PostRateHistory = copy(pages = pages :+ page)
 
-  /** 板単位の判定のために次に読むページ。直近 timecount 件と Samba24・広域の秒数の範囲を読み終えていれば None */
+  /**
+    * 板単位の判定と保持のために次に読むページ。確定済みの直近 timecount 件と Samba24・広域の秒数の範囲を読み終えていれば None。
+    * 保持が読み込み済みのページだけで決まるよう、予約中は件数に数えない
+    */
   def nextPage(settings: BoardSettings, now: Double): Option[Int] = older.filter { _ =>
     val loaded = records
-    pages.isEmpty || loaded.size < math.max(settings.timecount, 1) ||
+    pages.isEmpty || loaded.count(_.status == PostRateStatus.Completed) < math.max(settings.timecount, 1) ||
       (settings.windowSeconds > 0 && loaded.lastOption.exists(_.timestampSeconds >= now - settings.windowSeconds))
   }
 
   /**
     * 判定して予約を最新ページに追記する。enforce が偽（試行モード）なら拒否理由があっても記録する。
-    * 容量では拒否せず、上限を超えたら古いページから範囲を外す
+    * 保持は追記前の履歴（予約中を数えない）で決めるので、予約を取り消せば範囲は予約前と同じになる。
+    * 容量では拒否せず、ページ数の上限を超えたら古いページから範囲を外す
     */
   def reserve(key: String, identity: PostRateIdentity, settings: BoardSettings, enforce: Boolean, now: Double): PostRateReservation = {
     val rejection = PostRateLimit.checkBoard(settings, records.map(_.toEntry), identity, now)
     if (rejection.isDefined && enforce) PostRateReservation(rejection, None)
-    else PostRateReservation(rejection, Some(appended(PostRateRecord(key, now, identity, PostRateStatus.Pending)).retained(settings, now)))
+    else PostRateReservation(rejection, Some(retained(settings, now).appended(PostRateRecord(key, now, identity, PostRateStatus.Pending))))
   }
 
   private def appended(record: PostRateRecord): PostRateHistory = pages.headOption.filter(_.records.size < PageSize) match {
@@ -69,13 +73,19 @@ final case class PostRateHistory(meta: PostRateMeta, pages: Vector[PostRatePage]
       PostRateHistory(PostRateMeta(number, math.max(meta.oldest, number - MaxPages + 1)), PostRatePage(number, Vector(record)) +: pages)
   }
 
-  /** 直近 max(timecount, 1) 件・Samba24 か広域の秒数以内・期限内の予約のどれかを含むページまでを残し、それより古いページを範囲から外す */
+  /**
+    * 確定済みの直近 max(timecount, 1) 件・Samba24 か広域の秒数以内の確定済み・期限内の予約のどれかを含むページまでを残し、それより古いページを範囲から外す。
+    * 板設定だけで決まり、予約中の記録は件数と秒数に数えない
+    */
   def retained(settings: BoardSettings, now: Double): PostRateHistory = {
     val count = math.max(settings.timecount, 1)
-    val kept = pages.flatMap(page => page.records.reverseIterator.map(page.number -> _)).zipWithIndex.collect {
-      case ((number, record), index)
-        if index < count || (settings.windowSeconds > 0 && record.timestampSeconds >= now - settings.windowSeconds) || record.isActivePending(now) => number
-    }
+    val kept = pages.flatMap(page => page.records.reverseIterator.map(page.number -> _)).foldLeft((0, Vector.empty[Int])) {
+      case ((completed, numbers), (number, record)) =>
+        val isCompleted = record.status == PostRateStatus.Completed
+        val keep = (isCompleted && completed < count) ||
+          (isCompleted && settings.windowSeconds > 0 && record.timestampSeconds >= now - settings.windowSeconds) || record.isActivePending(now)
+        (if (isCompleted) completed + 1 else completed, if (keep) numbers :+ number else numbers)
+    }._2
     val oldest = math.max(meta.oldest, kept.minOption.getOrElse(meta.newest))
     PostRateHistory(meta.copy(oldest = oldest), pages.filter(_.number >= oldest))
   }

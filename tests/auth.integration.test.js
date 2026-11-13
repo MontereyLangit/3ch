@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac, pbkdf2Sync } from 'node:crypto';
@@ -14,8 +15,8 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
   timeout: 120000,
   skip: built ? false : 'dist/index.js がありません（npm run v6:build を先に実行）',
 }, async t => {
-  const worker = await unstable_dev(new URL('./support/auth-worker.mjs', import.meta.url).pathname, {
-    config: new URL('./support/wrangler.auth.jsonc', import.meta.url).pathname,
+  const worker = await unstable_dev(fileURLToPath(new URL('./support/auth-worker.mjs', import.meta.url)), {
+    config: fileURLToPath(new URL('./support/wrangler.auth.jsonc', import.meta.url)),
     local: true, persist: false, port: 0, logLevel: 'error',
     experimental: { disableExperimentalWarning: true, disableDevRegistry: true, watch: false },
   });
@@ -174,7 +175,7 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
     const redirect = await fetch(origin + '/auth', { redirect: 'manual' });
     assert.equal(redirect.status, 301);
     assert.ok(redirect.headers.get('accept-ch'));
-    const unchanged = await fetch(origin + '/auth-test/subject.txt', { headers: { 'if-modified-since': new Date(Date.now() + 86400000).toUTCString() } });
+    const unchanged = await fetch(origin + '/authtest/subject.txt', { headers: { 'if-modified-since': new Date(Date.now() + 86400000).toUTCString() } });
     assert.equal(unchanged.status, 304);
     assert.ok(unchanged.headers.get('accept-ch'));
   });

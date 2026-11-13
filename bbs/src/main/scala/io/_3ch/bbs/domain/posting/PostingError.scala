@@ -86,7 +86,7 @@ enum PostingError {
   /** 段の途中で起きた例外。cause は例外の文字列 */
   case Internal(stage: PostingStage, site: FailureSite, cause: String)
 
-  /** 拒否理由の識別子。種別:詳細 の形で、設計書 §8.9 のエラーコードに合わせる */
+  /** 拒否理由の識別子。種別:詳細 の形 */
   def code: String = this match {
     case Authentication(reason) => reason.code
     case AuthenticationLevel(_) => "auth:required:level"
