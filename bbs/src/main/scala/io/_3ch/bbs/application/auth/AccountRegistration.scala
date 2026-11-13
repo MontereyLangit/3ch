@@ -11,6 +11,8 @@ final class AccountRegistration(accounts: AccountManagementStore & AccountSignIn
   private def hash(kind: String, value: String): Future[String] =
     keys.index(kind, value).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
 
+  private val stale = new StaleIndex(accounts)
+
   private def release(kind: String, hash: String, aid: String): Future[Unit] =
     accounts.remove(kind, hash, aid).recover { case NonFatal(_) => () }
 
@@ -22,7 +24,8 @@ final class AccountRegistration(accounts: AccountManagementStore & AccountSignIn
     hash("uid", profile.uid).flatMap { uidHash =>
       val aid = profile.aid
       def failed[A](error: Throwable): Future[A] = releaseBoth(signIn, uidHash, aid).flatMap(_ => Future.failed(error))
-      def owned(kind: String, hash: String): Future[Unit] = reserve(kind, hash, aid, now).recoverWith {
+      val signValue = if (signIn._1 == "login") profile.loginId.getOrElse("") else signIn._2
+      def owned(kind: String, hash: String): Future[Unit] = reserve(kind, if (kind == "uid") "" else signValue, hash, aid, now).recoverWith {
         case error @ AuthServiceException(AuthServiceFailure.Taken) => Future.failed(error)
         case NonFatal(error) => release(kind, hash, aid).flatMap(_ => Future.failed(error))
       }
@@ -56,6 +59,16 @@ final class AccountRegistration(accounts: AccountManagementStore & AccountSignIn
       }
     }.flatMap(_ => accounts.activate(aid, now))
 
-  private def reserve(kind: String, hash: String, aid: String, now: Double): Future[Unit] =
-    accounts.reserve(kind, hash, aid, now).map(reserved => if (!reserved) throw AuthServiceException(AuthServiceFailure.Taken))
+  /** 予約できなければ Taken。login・google の確定済みの索引で持ち主が値を持たなければ（退会の後始末が止まった）解放して取り直す */
+  private def reserve(kind: String, value: String, hash: String, aid: String, now: Double): Future[Unit] =
+    accounts.reserve(kind, hash, aid, now).flatMap { reserved =>
+      if (reserved) Future.unit
+      else if (kind == "uid") Future.failed(AuthServiceException(AuthServiceFailure.Taken))
+      else accounts.lookup(kind, hash).flatMap {
+        case Some(owner) if owner != aid => stale.reclaim(kind, value, hash, owner).flatMap(freed =>
+          if (freed) accounts.reserve(kind, hash, aid, now).map(ok => if (!ok) throw AuthServiceException(AuthServiceFailure.Taken))
+          else Future.failed(AuthServiceException(AuthServiceFailure.Taken)))
+        case _ => Future.failed(AuthServiceException(AuthServiceFailure.Taken))
+      }
+    }
 }

@@ -27,6 +27,28 @@ Google Cloud ConsoleでOAuthクライアント（ウェブアプリケーショ�
 
 固定の予約語（`admin`・`root`・`test`・`3ch`・`saku`・`auth`・`mod`・`noname`）と既存の板名（R2の `{ID}/SETTING.TXT` がある名前）に加え、R2の `reserved-ids.txt` に1行1つで書いたIDを拒否する。空行と `#` で始まる行は読み飛ばす。R2を読めないときは登録しない。
 
+## メール（認証・パスワードの再設定）
+
+送信先が設定されているときだけ、登録のメール欄、アカウント設定のメールアドレスとパスワードの再設定、`/auth/email`・`/auth/email/verify`・`/auth/reset/request`・`/auth/reset` を使える。無ければ画面は「準備中」、API は503を返す。パスワードの変更（`/auth/password`）はメールと関係なく使える。
+
+メールの提供元は未定。いまの実装が読むのは `MAIL_SENDER` だけで、`send({to, subject, text})` を RPC で受ける別の Worker を service binding で渡す。提供元を選んだら、`bbs/.../repository/MailSenders.scala` に secret `MAIL_API_KEY`（設計書 §9.3）を読む実装を足す。本文は固定の文面とトークン付きのリンクだけで、利用者の入力を含めない。
+
+使い捨てメールのドメインは R2 の `disposable-domains.txt`（1行1ドメイン、空行と `#` の行は読み飛ばす。サブドメインも拒否）。R2を読めないときはメールアドレスを受け付けない。
+
+## エッジ防御・Lv の上限
+
+R2 の `edge-rules.json` に規則を置く。
+
+```json
+{"mode": "log", "datacenterAsns": [16509, 14618], "rttMs": 400, "tls": [{"ua": "Chrome/", "min": 500, "max": 2000}]}
+```
+
+`mode` は `log`（記録だけ。既定）か `on`（拒否）。判定は Workers Logs に `{"event":"edge",...}` の1行で残る。ファイルが無い・読めない・壊れているときは規則なしで通す。データセンターの AS は認証（verify・register・login・Google の開始）と、認証を有効にした環境の投稿に当てる。`tls` は UA が `ua` に一致するブラウザの ClientHello の長さの範囲で、認証画面の要求だけに当てる。免除は Lv3 以上で作成から7日以上のアカウント。
+
+Lv の上限は R2 の `phoebe.cgi`（`対象 userInfo の正規表現<>上限 Lv` の行。空行と `#` の行は読み飛ばす）。当てはまる行の上限のうち最も低いものを、その投稿の実効 Lv にする。壊れていれば上限なしで通し、行番号を Workers Logs に残す。
+
+乱造検知の「要確認」は、名前が `review` の AuthRate DO に残る（RPC `flagged`。管理画面は後続）。
+
 ## ローカルで確認する
 
 ```bash

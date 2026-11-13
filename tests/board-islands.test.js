@@ -1121,3 +1121,55 @@ test('専ブラ用キー: 日時は日本時間で出し、無効化の理由は
   assert.match(container.textContent, /期限の専ブラ 2027\/01\/15 13:13 未使用のまま失効/);
   assert.doesNotMatch(container.textContent, /UTC/);
 });
+
+test('キャップ: 役割の無い人には案内だけを出し、発行欄を置かない', async () => {
+  const container = await mount(client.AccountCapJs, { caps: [], admin: false, canIssue: false });
+  assert.match(container.textContent, /削除・規制などの権限を持つ人だけが発行できます。/);
+  assert.equal(container.querySelector('#cap-name'), null);
+});
+
+test('キャップ: 発行したパスワードはその場だけで出し、再発行と無効化で一覧を更新する', async () => {
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    const params = new URLSearchParams(init.body.toString());
+    requests.push({ url, name: params.get('name'), id: params.get('id') });
+    if (url === '/auth/cap/issue') return { ok: true, json: async () => ({ id: 'newcap', password: '#cap-secret-one' }) };
+    if (url === '/auth/cap/reissue') return { ok: true, json: async () => ({ id: 'nextcap', password: '#cap-secret-two' }) };
+    return { ok: true, json: async () => ({ ok: true }) };
+  };
+  const container = await mount(client.AccountCapJs, { caps: [], admin: false, canIssue: true });
+  assert.equal(container.querySelector('input[type="checkbox"]'), null, '強キャップは admin だけ');
+  await type('#cap-name', '削除人');
+  await click([...container.querySelectorAll('button')].find(button => button.textContent === 'キャップを発行'));
+  await flush();
+  assert.match(container.textContent, /#cap-secret-one/);
+  assert.match(container.textContent, /削除人 ★/);
+  assert.equal(container.querySelector('#cap-name'), null, '自分用は1個まで');
+  await click([...container.querySelectorAll('button')].find(button => button.textContent === 'パスワードを再発行'));
+  await flush();
+  assert.doesNotMatch(container.textContent, /cap-secret-one/);
+  assert.match(container.textContent, /#cap-secret-two/);
+  await click([...container.querySelectorAll('button')].find(button => button.textContent === '無効にする'));
+  await flush();
+  assert.deepEqual(requests, [{ url: '/auth/cap/issue', name: '削除人', id: null }, { url: '/auth/cap/reissue', name: null, id: 'newcap' }, { url: '/auth/cap/revoke', name: null, id: 'nextcap' }]);
+  assert.match(container.textContent, /キャップを無効にしました/);
+  assert.equal([...container.querySelectorAll('button')].filter(button => button.textContent === '無効にする').length, 0);
+  assert.ok(container.querySelector('#cap-name'), '無効にすると発行し直せる');
+  assert.equal(window.localStorage.length, 0);
+});
+
+test('キャップ: 直近の書き込みを出し、拒否はサーバの文言を出す', async () => {
+  globalThis.fetch = async () => ({ ok: false, json: async () => ({ error: 'キャップの名前に使えない文字が含まれています。' }) });
+  const container = await mount(client.AccountCapJs, {
+    admin: true, canIssue: true,
+    caps: [{ id: 'cap1', name: '運営', strong: true, issuedAt: 1800000000,
+      recentPosts: [{ t: 1800000001, bbs: 'sample', key: '1800000001', title: '投稿先', resNum: 3, excerpt: '本文', network: '回線・東京都' }] }],
+  });
+  assert.match(container.textContent, /運営 ★（強キャップ）/);
+  assert.match(container.textContent, /sample › 投稿先 >>3/);
+  assert.ok(container.querySelector('input[type="checkbox"]'));
+  await type('#cap-name', '<b>');
+  await click([...container.querySelectorAll('button')].find(button => button.textContent === 'キャップを発行'));
+  await flush();
+  assert.match(container.textContent, /使えない文字/);
+});

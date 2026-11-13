@@ -31,6 +31,17 @@ private[islands] object AuthClient {
     val e = js.Dynamic.newInstance(js.Dynamic.global.CustomEvent)(name, js.Dynamic.literal(detail = detail)).asInstanceOf[dom.Event]
     dom.window.dispatchEvent(e)
   }
+  /** フォームの値を認証 API へ送り、成否と JSON の本文を返す。通信の失敗は Future の失敗 */
+  def post(path: String, fields: Seq[(String, String)]): Future[(Boolean, js.Object)] = {
+    val params = new dom.URLSearchParams()
+    fields.foreach { case (name, value) => params.set(name, value) }
+    dom.fetch(path, new dom.RequestInit { method = dom.HttpMethod.POST; credentials = dom.RequestCredentials.`same-origin`; body = params }).toFuture
+      .flatMap(r => r.json().toFuture.map(json => (r.ok, json.asInstanceOf[js.Object])))
+  }
+  /** 失敗の応答の文言 */
+  def error(json: js.Object, fallback: String = "操作できませんでした"): String =
+    if json == null then fallback else text(json, "error", fallback)
+
   /** ログアウトを送る。成功したら表示をログアウト状態にする */
   def logout(): Future[Boolean] = {
     dom.fetch("/auth/logout", new dom.RequestInit {

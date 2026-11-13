@@ -37,6 +37,7 @@ class AccountManagementSuite extends FunSuite {
       def uid(): String = f"$attempts%08x"
       def token(): String = "a" * 20
       def tokenId(): String = "newtoken"
+      def linkSecret(): String = "s" * 43
       def index(kind: String, value: String): Future[Option[String]] = {
         sequence += 1
         Future.successful(if (keyFailure) None else Some(f"$sequence%064x"))
@@ -69,6 +70,10 @@ class AccountManagementSuite extends FunSuite {
         entries.get(kind -> hash).foreach { entry =>
           entry.remove(AccountIndexKind.parse(kind).get, aid).fold(reason => throw new IllegalStateException(reason.code), _ => entries.remove(kind -> hash))
         }
+      }
+      def holds(aid: String, kind: String, value: String): Future[Boolean] = Future.successful(true)
+      def releaseReservation(kind: String, hash: String, aid: String): Future[Unit] = result("release:" + kind) {
+        entries.get(kind -> hash).filter(entry => entry.aid == aid && !entry.confirmed).foreach(_ => entries.remove(kind -> hash))
       }
       def create(profile: AccountProfile, now: Double): Future[AccountDescription] = result("create") {
         val state = AccountState.create(profile, now).toOption.get

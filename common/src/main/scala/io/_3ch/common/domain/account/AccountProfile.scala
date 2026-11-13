@@ -35,6 +35,20 @@ object AccountRole {
 /** アカウントの役割。クライアント ID には付与しない */
 final case class Roles(values: Set[AccountRole] = Set.empty) {
   def permitted(kind: AccountKind): Boolean = kind != AccountKind.Client || values.isEmpty
+  def admin: Boolean = values.contains(AccountRole.Admin)
+
+  /** 削除・規制・管理のいずれかを持つ。cap だけの人は含めない */
+  def staff: Boolean = values.exists(_ != AccountRole.Cap)
+
+  /** 相手のアカウントを操作できるか。admin は誰でも、ほかの staff は staff でない相手だけ */
+  def manages(target: Roles): Boolean = admin || (staff && !target.staff)
+}
+object Roles {
+  /** 保存値・RPC の役割の名前を読む。知らない名前があれば None */
+  def parse(codes: Seq[String]): Option[Roles] = {
+    val parsed = codes.map(AccountRole.parse)
+    Option.when(parsed.forall(_.isDefined))(Roles(parsed.flatten.toSet))
+  }
 }
 
 /** 公開 ID と認証方式、同意・状態・世代。資格情報は別に保存する */
@@ -83,6 +97,9 @@ final case class AccountLevel(lv: Int, lvSince: Double, lvPosts: Int = 0, lvOver
     if (reached) AccountLevel(lv + 1, now) else counted
   }
 
+  /** Lv が minimum 未満なら minimum にして数え直す。固定値は保つ */
+  def atLeast(minimum: Int, now: Double): AccountLevel = if (lv >= minimum) this else AccountLevel(minimum, now, 0, lvOverride)
+
   /** 管理者による固定値を設定する。None で固定を外す */
   def overridden(value: Option[Int]): Option[AccountLevel] =
     Option.when(value.forall(n => n >= 0 && n <= Phoebe.MaxLevel))(copy(lvOverride = value))
@@ -101,6 +118,8 @@ enum AccountRejection(val code: String) {
   case Deleted extends AccountRejection("auth:deleted")
   case Agreement extends AccountRejection("auth:agreement:required")
   case RolesForbidden extends AccountRejection("auth:roles:forbidden")
+  /** 操作する人の役割が足りないか、上位の役割を持つ相手への操作 */
+  case Forbidden extends AccountRejection("auth:forbidden")
   case TokenUnknown extends AccountRejection("auth:token:unknown")
   case TokenRevoked extends AccountRejection("auth:token:revoked")
   case TokenUaMismatch extends AccountRejection("auth:token:ua-mismatch")
@@ -110,4 +129,8 @@ enum AccountRejection(val code: String) {
   case IndexOwnership extends AccountRejection("auth:index:ownership")
   case IndexPermanent extends AccountRejection("auth:index:permanent")
   case LoginFailed extends AccountRejection("auth:login:failed")
+  /** 保留トークンが無い・一致しない・期限切れ */
+  case PendingInvalid extends AccountRejection("auth:pending:invalid")
+  /** この登録方式では使えない操作 */
+  case KindForbidden extends AccountRejection("auth:kind:forbidden")
 }

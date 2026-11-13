@@ -1,18 +1,25 @@
 package io._3ch.bbs.handler.auth
 
+import io._3ch.bbs.application.auth.AccountRoles
 import io._3ch.bbs.durable.DurableTestKit
 import io._3ch.bbs.domain.posting.KeyIp
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.handler.HandlerTestKit
 import io._3ch.bbs.hash.AuthHmac
+import io._3ch.bbs.repository.AccountRepository
+import io._3ch.common.domain.account.{AccountKind, AccountProfile}
 import scala.collection.mutable
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
 /** 実 DO を記憶域だけ差し替えて動かし、外部の Turnstile と Google の応答を固定する */
-final class AuthSignInTestKit(google: Boolean = false) {
+final class AuthSignInTestKit(google: Boolean = false, mail: Boolean = false) {
+  /** 送ったメール（宛先・件名・本文）。mail が真のときだけ送信先を設定する */
+  val outbox = mutable.ArrayBuffer.empty[(String, String, String)]
+  /** 真なら送信先が失敗を返す */
+  var mailFails: Boolean = false
   val origin = "https://www.3ch.io"
   val kit: DurableTestKit.Env = DurableTestKit.newEnv()
   val env: WorkerEnv = {
@@ -21,6 +28,15 @@ final class AuthSignInTestKit(google: Boolean = false) {
     raw.AGREEMENT_VERSION = "v1"
     raw.TURNSTILE_SITE_KEY = "test-site-key"
     raw.TURNSTILE_SECRET_KEY = "test-server-key"
+    if (mail) {
+      raw.MAIL_SENDER = js.Dynamic.literal(send = ((message: js.Dynamic) => {
+        if (mailFails) js.Promise.reject(new js.Error("mail down"))
+        else {
+          outbox += ((message.to.asInstanceOf[String], message.subject.asInstanceOf[String], message.text.asInstanceOf[String]))
+          js.Promise.resolve[js.Any](js.undefined)
+        }
+      }): js.Function1[js.Dynamic, js.Promise[js.Any]])
+    }
     if (google) {
       raw.GOOGLE_CLIENT_ID = "test-client.apps.googleusercontent.com"
       raw.GOOGLE_CLIENT_SECRET = "test-client-secret"
@@ -33,6 +49,20 @@ final class AuthSignInTestKit(google: Boolean = false) {
   val external = mutable.ArrayBuffer.empty[String]
   /** 応答の遅延として要求された秒数 */
   val delays = mutable.ArrayBuffer.empty[Double]
+
+  private var adminActor: Option[Future[String]] = None
+
+  /** admin の役割を持つ別のアカウントを一つだけ作り、操作する人（actor）の aid を返す */
+  def admin(): Future[String] = adminActor.getOrElse {
+    val repository = new AccountRepository(env)
+    val aid = "adminactor000000"
+    val now = math.floor(js.Date.now() / 1000)
+    val created = repository.create(AccountProfile(aid, "admin_actor", AccountKind.Google, now, None, now, "v1", googleSubHash = Some("a" * 64)), now)
+      .flatMap(_ => repository.activate(aid, now)).flatMap(_ => new AccountRoles(repository, AuthHandler.keys(AuthTestEnv.secret)).claimFirstAdmin(aid, now, breakGlass = false))
+      .map(_ => aid)
+    adminActor = Some(created)
+    created
+  }
 
   def keyIp(ip: String): Future[String] = AuthHmac.indexKey(AuthTestEnv.secret, "key-ip", KeyIp.of(ip)).map(_.get)
   def index(kind: String, value: String): Future[String] = AuthHmac.indexKey(AuthTestEnv.secret, kind, value).map(_.get)
@@ -49,6 +79,12 @@ final class AuthSignInTestKit(google: Boolean = false) {
     HandlerTestKit.request(origin + path, headers = Seq("CF-Connecting-IP" -> ip) ++ (if (cookie.nonEmpty) Seq("Cookie" -> cookie) else Nil))
 
   def send(request: Request): Future[Response] = AuthHandler.handle(request, env).toFuture
+
+  /** 送ったメールの本文にあるリンクのトークン */
+  def mailedToken(index: Int = -1): String = {
+    val text = if (index < 0) outbox.last._3 else outbox(index)._3
+    "token=([a-z0-9]{16}\\.[A-Za-z0-9_-]{43})".r.findFirstMatchIn(text).map(_.group(1)).getOrElse("")
+  }
 
   def body(response: Response): Future[js.Dynamic] = response.json().toFuture.map(_.asInstanceOf[js.Dynamic])
 

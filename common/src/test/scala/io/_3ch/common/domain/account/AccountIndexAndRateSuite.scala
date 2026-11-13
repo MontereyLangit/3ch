@@ -76,6 +76,19 @@ class AccountIndexAndRateSuite extends FunSuite {
     assert(flood._2.distinctDevices24h > 5)
   }
 
+  test("確定済みの uid と cap の索引は削除できず、確定前の予約だけ取り消せる") {
+    val entry = AccountIndexEntry("abcdefghijklmnop", now)
+    val confirmed = entry.copy(confirmed = true)
+    assertEquals(confirmed.remove(AccountIndexKind.Cap, entry.aid), Left(AccountRejection.IndexPermanent))
+    assertEquals(confirmed.remove(AccountIndexKind.Uid, entry.aid), Left(AccountRejection.IndexPermanent))
+    assertEquals(confirmed.remove(AccountIndexKind.Login, entry.aid), Right(()))
+    assertEquals(entry.remove(AccountIndexKind.Cap, entry.aid), Right(()))
+    assertEquals(entry.release(entry.aid), Right(()))
+    assertEquals(entry.release("qrstuvwxyz012345"), Left(AccountRejection.IndexOwnership))
+    assertEquals(confirmed.release(entry.aid), Left(AccountRejection.IndexPermanent))
+    assert(entry.claimedBy(entry.aid, now + 599) && !entry.claimedBy(entry.aid, now + 600) && confirmed.claimedBy(entry.aid, now + 9999) && !entry.claimedBy("qrstuvwxyz012345", now))
+  }
+
   test("乱造検知は verify 回数と相異なる端末数の両方で制限する") {
     assert(AbuseThresholds.verify(AuthRateCounts(10, 100, 5)))
     assert(!AbuseThresholds.verify(AuthRateCounts(11, 100, 5)))

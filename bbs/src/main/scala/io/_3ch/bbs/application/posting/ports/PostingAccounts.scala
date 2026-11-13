@@ -3,15 +3,16 @@ package io._3ch.bbs.application.posting.ports
 import io._3ch.bbs.application.posting.PostingRequest
 import io._3ch.bbs.domain.account.{AuthenticatedPoster, AuthenticationFailure}
 import io._3ch.bbs.domain.posting.{PostingContext, PostingUser}
+import io._3ch.common.domain.account.Roles
 import io._3ch.common.domain.posting.MailCommands
 import scala.concurrent.Future
 
-/**
-  * 投稿者の認証結果。legacyCap は所有者のない旧キャップ、sessionCookie は応答に付ける Set-Cookie の値
-  * staff は BBS_PHOEBE を免除し、スレの必要 Lv を下げられる投稿者
-  */
+/** 投稿者の認証結果。legacyCap は所有者のない旧キャップ、sessionCookie は応答に付ける Set-Cookie の値、roles はアカウントの役割 */
 final case class PostingAccount(user: Option[PostingUser], lv: Int = 0, device: String = "", legacyCap: Boolean = false,
-  sessionCookie: Option[String] = None, authentication: Option[AuthenticatedPoster] = None, staff: Boolean = false)
+  sessionCookie: Option[String] = None, authentication: Option[AuthenticatedPoster] = None, roles: Roles = Roles(), createdAt: Double = 0) {
+  /** BBS_PHOEBE を免除し、スレの必要 Lv を下げられる投稿者 */
+  def staff: Boolean = roles.staff
+}
 
 /** 認証を有効にした環境で、投稿者の認証と成功した投稿の記録を行う */
 trait PostingAccounts {

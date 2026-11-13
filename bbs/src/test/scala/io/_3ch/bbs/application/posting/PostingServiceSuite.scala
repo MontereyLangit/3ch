@@ -1,11 +1,13 @@
 package io._3ch.bbs.application.posting
 
-import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingAccount, PostingAccounts, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore, UserAgentTableStore}
+import io._3ch.bbs.application.posting.ports.{EdgeRuleStore, PhoebeRuleStore, ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingAccount, PostingAccounts, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore, UserAgentTableStore}
 import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureClock, FailureSite, ModerationDenial, PostingError, PostingStage, PostingUser, ThreadOwner, ThreadPosting, ThreadWriteResult, UserAgentRule, UserAgentTable}
-import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, PostRateFinding, PostRateIdentity, PostRateLevel, PostRateRejection, ThreadCreationRejection, ThreadCreationRateLimit}
+import io._3ch.bbs.domain.posting.moderation.{PhoebeCapRules, ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, PostRateFinding, PostRateIdentity, PostRateLevel, PostRateRejection, ThreadCreationRejection, ThreadCreationRateLimit}
 import io._3ch.bbs.handler.PostingText
+import io._3ch.bbs.domain.account.{EdgeDecision, EdgeMode, EdgeRules, EdgeSignal}
 import io._3ch.bbs.external.web.TextEncoder
 import io._3ch.common.domain.{BbsSettings, BoardId}
+import io._3ch.common.domain.account.{AccountRole, Roles}
 import io._3ch.common.domain.posting.{CapHandle, PhoebeAdmission, ThreadPhoebeRequest}
 import munit.FunSuite
 
@@ -35,7 +37,9 @@ class PostingServiceSuite extends FunSuite {
     write: ThreadPosting => Future[ThreadWriteResult] = posting => Future.successful(ThreadWriteResult.Written(if (posting.create) 1 else 2)),
     indexWritten: Boolean = true,
     record: PostRateObservation => Unit = _ => (),
-    agents: UserAgentTableStore = UserAgentTableStore.empty
+    agents: UserAgentTableStore = UserAgentTableStore.empty,
+    edge: EdgeRuleStore = EdgeRuleStore.empty,
+    phoebe: String = ""
   ) {
     val calls: mutable.Buffer[String] = mutable.Buffer.empty
     val postings: mutable.Buffer[(String, String, ThreadPosting)] = mutable.Buffer.empty
@@ -83,6 +87,8 @@ class PostingServiceSuite extends FunSuite {
       },
       accounts = authSource,
       agents = agents,
+      edge = edge,
+      phoebe = () => Future.successful(PhoebeCapRules.parse(phoebe).toOption.get),
       hasher = new Hasher {
         def sha1Base64(value: String): Future[String] = Future.successful(s"s1($value)")
         def sha256Hex(value: String): Future[String] = { sha256Inputs += value; Future.successful(s"s2($value)") }
@@ -127,13 +133,14 @@ class PostingServiceSuite extends FunSuite {
   private val pon = s"PON=s1(s2(192.0.2.1$salt)); Max-Age=63072000; path=/; Secure; HttpOnly"
 
   private final class AuthSource(user: Option[PostingUser] = None, failRecord: Boolean = false, device: String = "p012345678901234567",
-    refreshed: Option[String] = None, lv: Int = 1, staff: Boolean = false) extends PostingAccounts {
+    refreshed: Option[String] = None, lv: Int = 1, staff: Boolean = false, roles: Set[AccountRole] = Set.empty, createdAt: Double = 0) extends PostingAccounts {
     var records = 0
     var recordFailures = 0
     val received: mutable.Buffer[(io._3ch.common.domain.posting.MailCommands, Option[String])] = mutable.Buffer.empty
     def authenticate(commands: io._3ch.common.domain.posting.MailCommands, capKey: Option[String], request: PostingRequest, now: Double) = {
       received += (commands -> capKey)
-      Future.successful(Right(PostingAccount(user, if (user.isEmpty) 0 else lv, device, sessionCookie = Some("auth=present"), staff = staff)))
+      Future.successful(Right(PostingAccount(user, if (user.isEmpty) 0 else lv, device, sessionCookie = Some("auth=present"),
+        roles = Roles(if (staff) roles + AccountRole.Delete else roles), createdAt = createdAt)))
     }
     def posted(context: io._3ch.bbs.domain.posting.PostingContext, request: PostingRequest, account: PostingAccount): Future[Option[String]] = {
       records += 1
@@ -511,6 +518,59 @@ class PostingServiceSuite extends FunSuite {
   private val member = Some(PostingUser("account-a", "user_a"))
   private val levelRequired = PostingError.AuthenticationLevel(3)
 
+  test("staff の名無し投稿は deny.cgi・ngwords.cgi・連投規制・スレ立て規制を既定で免除される") {
+    val rules = Map(ModerationRuleFile.Access -> "<><><>deny\n", ModerationRuleFile.NgWords -> "<><>本文<>deny\n")
+    val staff = Fake(rules = rules, authSource = Some(new AuthSource(member, roles = Set(AccountRole.Regulate))))
+    val capRole = Fake(rules = rules, authSource = Some(new AuthSource(member, roles = Set(AccountRole.Cap))))
+    for {
+      _ <- staff.post()()
+      refused <- capRole.post()()
+    } yield {
+      val posting = staff.postings.head._3
+      assertEquals((posting.creationLimit, posting.rateLimit), (None, None))
+      assertEquals(rejected(refused).error, PostingError.Moderated(ModerationDenial.Host), "cap 権限は名無しでは免除しない")
+    }
+  }
+
+  test("cap 権限者はキャップを付けた投稿だけ免除され、上の段階の行と設定には従う") {
+    val capRole = Some(new AuthSource(member, roles = Set(AccountRole.Cap)))
+    val named = Fake(caps = Map("pass" -> "管理人"), authSource = capRole)
+    val plain = Fake(authSource = capRole)
+    val strict = Fake(boardSettings = "BBS_THREAD_PASS=staff\nBBS_RENTOU_PASS=staff\n", caps = Map("pass" -> "管理人"), authSource = capRole,
+      rules = Map(ModerationRuleFile.Access -> "<><><>mark<>staff\n"))
+    for {
+      _ <- named.post("mail" -> "#!pass")()
+      _ <- plain.post()()
+      strictOutcome <- strict.post("mail" -> "#!pass")()
+    } yield {
+      assertEquals((named.postings.head._3.creationLimit, named.postings.head._3.rateLimit), (None, None))
+      assert(plain.postings.head._3.creationLimit.isDefined && plain.postings.head._3.rateLimit.isDefined)
+      assert(strict.postings.head._3.creationLimit.isDefined && strict.postings.head._3.rateLimit.isDefined)
+      assert(strictOutcome.context.form.name.startsWith("</b>[´・ω・｀]<b> "), strictOutcome.context.form.name)
+    }
+  }
+
+  test("BBS_THREAD_PASS で免除される投稿者はスレ立て規制を判定せず、設定の誤りでも拒否しない") {
+    val cases = Seq(
+      Fake(boardSettings = "BBS_THREAD_PASS=login\n", authSource = Some(new AuthSource(member))) -> None,
+      Fake(boardSettings = "BBS_THREAD_PASS=l10\n", authSource = Some(new AuthSource(member, lv = 10))) -> None,
+      Fake(boardSettings = "BBS_THREAD_PASS=l10\n", authSource = Some(new AuthSource(member, lv = 9))) -> Some(true),
+      Fake(boardSettings = "BBS_THREAD_PASS=admin\nBBS_THREAD_TATESUGI=bad\n", authSource = Some(new AuthSource(member, roles = Set(AccountRole.Admin)))) -> None,
+      Fake(boardSettings = "BBS_THREAD_PASS=unknown\n", caps = Map("pass" -> "管理人")) -> None)
+    Future.traverse(cases) { case (fake, _) => fake.post("mail" -> (if (fake eq cases.last._1) "#!pass" else ""))().map(_ => fake.postings.headOption.map(_._3.creationLimit.isDefined)) }
+      .map(results => assertEquals(results, cases.map(_._2.orElse(Some(false)))))
+  }
+
+  test("BBS_RENTOU_PASS は認証を有効にした環境で実効 Lv と役割を見る") {
+    val cases = Seq(
+      Fake(boardSettings = "BBS_RENTOU_PASS=l10\n", authSource = Some(new AuthSource(member, lv = 10))) -> false,
+      Fake(boardSettings = "BBS_RENTOU_PASS=l10\n", authSource = Some(new AuthSource(member, lv = 9))) -> true,
+      Fake(boardSettings = "BBS_RENTOU_PASS=admin\n", authSource = Some(new AuthSource(member, roles = Set(AccountRole.Delete)))) -> true,
+      Fake(boardSettings = "BBS_RENTOU_PASS=admin\n", authSource = Some(new AuthSource(member, roles = Set(AccountRole.Admin)))) -> false)
+    Future.traverse(cases) { case (fake, _) => fake.post()().map(_ => fake.postings.head._3.rateLimit.isDefined) }
+      .map(results => assertEquals(results, cases.map(_._2)))
+  }
+
   test("BBS_PHOEBE は Lv が足りない認証済の投稿を書き込む前に拒否する") {
     val fake = Fake(boardSettings = "BBS_PHOEBE=3\n", authSource = Some(new AuthSource(member, lv = 2)))
     fake.post(reply()*)().map { outcome =>
@@ -545,6 +605,55 @@ class PostingServiceSuite extends FunSuite {
     } yield {
       assert(!open.isInstanceOf[PostingOutcome.Rejected])
       assertEquals(rejected(closed).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.LoginRequired))
+    }
+  }
+
+  private def edgeRules(mode: EdgeMode): EdgeRuleStore = new EdgeRuleStore {
+    def load(): Future[EdgeRules] = Future.successful(EdgeRules(mode, Set("2516")))
+    def report(endpoint: String, signal: EdgeSignal, decision: EdgeDecision): Unit = ()
+  }
+
+  test("エッジ防御はデータセンターの AS からの投稿を拒否し、試行モードと Lv3 以上で作成から7日以上の認証済みは通す") {
+    val old = Now / 1000 - 8 * 86400
+    for {
+      denied <- Fake(authSource = Some(new AuthSource(member, lv = 2, createdAt = old)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
+      fresh <- Fake(authSource = Some(new AuthSource(member, lv = 10, createdAt = Now / 1000 - 86400)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
+      logged <- Fake(authSource = Some(new AuthSource(member, lv = 1)), edge = edgeRules(EdgeMode.Log)).post(reply()*)()
+      trusted <- Fake(authSource = Some(new AuthSource(member, lv = 3, createdAt = old)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
+      other <- Fake(authSource = Some(new AuthSource(member, lv = 1)), edge = edgeRules(EdgeMode.On)).post(reply()*)(_.copy(asn = Some("17676")))
+      disabled <- Fake(edge = edgeRules(EdgeMode.On)).post(reply()*)()
+    } yield {
+      assertEquals(rejected(denied).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.Datacenter))
+      assertEquals(rejected(fresh).error.code, "auth:edge:datacenter")
+      Seq(logged, trusted, other, disabled).foreach(outcome => assert(!outcome.isInstanceOf[PostingOutcome.Rejected], outcome.toString))
+    }
+  }
+
+  test("エッジ防御は役割の保持者とキャップ付きの投稿を免除し、Lv3 の免除は phoebe.cgi の上限をかける前の Lv で判定する") {
+    val old = Now / 1000 - 8 * 86400
+    for {
+      staff <- Fake(authSource = Some(new AuthSource(member, lv = 1, staff = true)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
+      capRole <- Fake(authSource = Some(new AuthSource(member, lv = 1, roles = Set(AccountRole.Cap))), edge = edgeRules(EdgeMode.On)).post(reply()*)()
+      signed <- Fake(caps = Map("pass" -> "管理人"), authSource = Some(new AuthSource(member, lv = 1)), edge = edgeRules(EdgeMode.On)).post(reply("mail" -> "#!pass")*)()
+      beforeCap <- Fake(phoebe = "<>1\n", authSource = Some(new AuthSource(member, lv = 10, createdAt = old)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
+    } yield {
+      assertEquals(rejected(capRole).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.Datacenter), "cap だけの役割は免除しない")
+      Seq(staff, signed, beforeCap).foreach(outcome => assert(!outcome.isInstanceOf[PostingOutcome.Rejected], outcome.toString))
+    }
+  }
+
+  test("phoebe.cgi の上限ルールは当てはまる投稿の実効 Lv を抑え、BBS_PHOEBE と識別子の D に使う") {
+    for {
+      capped <- Fake(boardSettings = "BBS_PHOEBE=3\n", phoebe = "# 上限\nAS2516-<>2\n", authSource = Some(new AuthSource(member, lv = 5))).post(reply()*)()
+      other <- Fake(boardSettings = "BBS_PHOEBE=3\n", phoebe = "AS9999-<>2\n", authSource = Some(new AuthSource(member, lv = 5))).post(reply()*)()
+      lowest = Fake(boardSettings = "BBS_ID_SHIKIBETSU=phoebe\n", phoebe = "UID:user_a <>7\n<>4\n", authSource = Some(new AuthSource(member, lv = 10)))
+      _ <- lowest.post(reply()*)()
+      disabled <- Fake(boardSettings = "BBS_PHOEBE=3\n", phoebe = "<>0\n").post(reply()*)()
+    } yield {
+      assertEquals(rejected(capped).error, PostingError.AuthenticationLevel(3))
+      assert(!other.isInstanceOf[PostingOutcome.Rejected])
+      assert(lowest.postings.head._1.contains("4)"), lowest.postings.head._1)
+      assert(!disabled.isInstanceOf[PostingOutcome.Rejected])
     }
   }
 

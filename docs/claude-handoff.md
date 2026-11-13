@@ -1,6 +1,6 @@
 # 認証実装の引き継ぎ
 
-作業ブランチは `ccr-9c002284-dbai2f`。2026-11-07（日本時間）の段Bの成果、段E-1（ID・パスワードとGoogleログイン）と段C（PHOEBE）の完了を区切りとして引き継ぐ。ビルドとテストを通した小さな単位ごとにcommit・pushし、完了範囲と残件をこの文書へ記録する。
+作業ブランチは `ccr-9c002284-dbai2f`。2026-11-07（日本時間）の段Bの成果、段E-1（ID・パスワードとGoogleログイン）と段C（PHOEBE）の完了、段Dのうち管理画面以外（権限・キャップ・回避レベル）とE-2の完了を区切りとして引き継ぐ。ビルドとテストを通した小さな単位ごとにcommit・pushし、完了範囲と残件をこの文書へ記録する。
 
 ## 前提と現在の範囲
 
@@ -20,14 +20,14 @@
 
 AS・地域・UA・日別識別子の観測集計（Account.seen）、AccountDirectoryへの反映、管理者用RPC・役割の管理も未実装。専ブラの表示名は製品名・版・既知のOSを抽出する限定的な実装で、識別子のUA解析表（段C）とは別のもの。接続元の表示は現在取得できるAS番号と地域・国を使い、AS名の取得は後続で揃える。iOSの既知プロファイル表はR2から読む口だけを用意しており、本番の表データを作成したわけではない。
 
-次の実施順は **D → E-2**。E-1とCは完了した（下記「E-1の実装範囲」「Cの実装範囲」）。段Bの残件と境界も引き続き確認する。
+次は **管理画面（改修計画 M0〜M4）**。M1 に含む Origin 検証の復活と CSP の変更（`script-src 'self'`）は2026-11-07に利用者が承認した（[改修計画](admin-spa-auth-plan.md) §0・§10-9）。E-1・C・E-2 と、D のうち管理画面以外は完了した（下記「E-1の実装範囲」「Cの実装範囲」「Dの実装範囲」「E-2の実装範囲」）。段Bの残件と境界も引き続き確認する。
 
 | 段 | 次に実装する内容 |
 | --- | --- |
 | E-1 | 完了。残りはGoogle OAuthのクライアント登録と本番での接続確認（外部設定）だけ |
 | C | 完了。残りはUA解析表 `ua-profiles.json` のデータ（利用者が用意する）と、既定の識別子を `phoebe` に切り替える承認（設計書§14-1） |
-| D | 権限・回避レベル・管理画面のアカウント認証と操作画面、スレ立て規制の設定を進める。管理画面の別計画も参照する。段Cで空けておいた `PostingAccount.staff`（BBS_PHOEBEの免除とスレのLvを下げる操作）を役割から埋め、Lvの固定（`Account.setLevel`）と状態変更の操作画面を作る |
-| E-2 | メール認証（登録画面のメール欄もここで出す）、パスワード変更・再設定のHTTP（照合と `setPassword` のRPCはE-1で用意済み）、クライアントIDからの方式移行、退会、エッジ防御など。メール送信APIの提供元は未定のため、送信ポートと提供元の設定を分ける |
+| D | 管理画面以外は完了。残りは管理画面の作り直し（[改修計画](admin-spa-auth-plan.md) M0〜M4）: bootstrap の HTTP、管理者セッション、役割の付与・Lvの固定・凍結・他人へのキャップ発行と旧キャップの紐づけの画面、`BBS_THREAD_PASS`・`BBS_RENTOU_PASS` の専用フォーム。§14-4（名無しの staff の規制免除）は2026-11-07に承認済み |
+| E-2 | 完了。残りはメールの提供元の選定と実装（`MailSenders` に1ファイル足す。外部設定）、要確認の一覧・edge-rules.json・phoebe.cgi を扱う管理画面（M3）、AccountDirectory への要確認の移し替え |
 
 ## 外部資料
 
@@ -71,6 +71,33 @@ UA解析表はR2の `ua-profiles.json`（`{"os": [{"match", "flags"?, "label"}�
 
 段Cに含めなかったもの: Lvの進み具合の表示、上限ルール `phoebe.cgi`（§4.3。§12でE-2）、staffと回避レベル `l10`・`login` のLv連携（段D）、投稿ログ `Device:` のUA解析の要約（§5.4。表のデータが無いので書式を変えていない）、既定の識別子の切替（§14-1の承認待ち）。
 
+## Dの実装範囲
+
+設計書§6.1・§6.2・§6.4・§7のうち、管理画面を除く部分。管理画面の作り直し（SPA・アカウント認証への切替・操作画面）は改修計画 M0〜M4 として残す。レビューと設計からの差分は [レビュー記録](auth-implementation-review.md) の「段 D」にまとめた。
+
+権限は Account の `roles`（admin / delete / regulate / cap）。`Roles.staff` は cap 以外の役割を持つこと、`Roles.manages` は「admin は誰でも、ほかの staff は staff でない相手だけ」を操作できる規則。役割を変えられるのは admin だけで（`AccountState.assignRoles`）、Account DO の `setRoles(roles, actorRoles, now)` がロック内で判定する。admin の付け外しは application の `AccountRoles` が `AccountIndex("role:admin")` に反映する。初回の管理者は `AccountIndex("role:admin").claimFirstAdmin(hash, aid, now, breakGlass)` が有効な admin（確定済みで、Account の `adminStatus` が真）と他人の期限内の予約を数え、居なければ（非常用期間なら居ても）予約する。続く `Account.grantFirstAdmin` → `confirm` と失敗時の予約の取り消しは `AccountRoles.claimFirstAdmin`。非常用期間の判定は `FirstAdminClaim.breakGlass`（現在より先で24時間以内）。bootstrap の HTTP・トークンの照合・監査ログは M2。
+
+投稿では `PostingAccount.roles` を認証結果の役割から埋め、`staff`（BBS_PHOEBE の免除と `!SETTING` で下げる権限）は役割から決まる。回避レベル `BypassLevel` は `BypassPoster`（役割・★・認証済・実効 Lv）で判定する。適用先は deny.cgi / ngwords.cgi の5列目（省略・空欄は privileged、不正な値は書式の誤り）、`BBS_RENTOU_PASS`、`BBS_THREAD_PASS`（キャップ除外を置き換え。スレ設定に書き写さない）。admin の投稿はルールファイルを読まない。既定の段階（privileged）で免除される投稿者は、ルールファイルが壊れている・読めないときも通す（キャップの従来の挙動を保つため）。Tor の拒否はキャップだけを免除する（staff は免除しない）。saku 板は従来どおり deny.cgi / ngwords.cgi をスルーする。
+
+キャップは本人が `/auth/account` のキャップ欄で発行・パスワードの再発行・失効できる（`/auth/cap/issue`・`reissue`・`revoke`。発行は一日十回まで）。パスワードは `#` ＋20文字で、発行した応答にだけ出す。KV の `CAP` に従来の照合キー（`CapKey.of`。投稿処理と共有）で表示名を書き、`AccountIndex("cap")` に照合キーの HMAC → aid を載せる。失効では KV を消してから索引を外す（KV を消せなかったら索引を残し、所有者の失効の記録で照合を拒否する）。役割保持者は自分用に1個まで、admin は無制限・強キャップ・他人宛て（他人宛ては `CapIssuing.issue` まで。画面は M3）。自分で発行したキャップは役割を全て外すと使えない。旧キャップ（索引に無い KV の値）は従来どおり動く。キャップ欄には直近5件の書き込みを出す（Account の書き込み記録のうち `via=cap` の行）。
+
+段Dに含めなかったもの: 管理画面（M0〜M4）、`adminGen`（管理者セッションの世代。M2）、旧キャップの紐づけ、`BBS_THREAD_PASS`・`BBS_RENTOU_PASS` の管理画面の専用フォーム（M3）。
+
+## E-2の実装範囲
+
+設計書§3.6・§3.7（乱造検知の「要確認」）・§3.9・§3.10（移行と退会）・§4.3（上限ルール）。レビューと設計からの差分は [レビュー記録](auth-implementation-review.md) の「段 E-2」にまとめた。
+
+- メール: 送信は application の `MailSender` ポート。送信先は service binding `MAIL_SENDER`（`send({to, subject, text})`）だけを読み、提供元の実装（secret `MAIL_API_KEY`）は未選定。送信先が無い間は登録のメール欄・アカウント設定のメールアドレス・パスワードの再設定を「準備中」にし、API は503。
+- メール認証: `EmailAddress` で正規化（前後の空白・小文字・punycode、gmail のドットと `+` 以降）、R2 の `disposable-domains.txt` を拒否。保留トークンは Account の `pending:email`（HMAC・24時間）。確認で `email` 索引を予約・確定してから Lv を3にする（下げない）。変更は確認まで前のアドレスを残し、確認後に前の索引を外す。
+- パスワード: `/auth/password` は現在のパスワードを照合して置き換え、この端末だけに新しい世代の Cookie を出す。役割があれば16文字以上。再設定は `/auth/reset/request`（ユーザーIDとTurnstile。結果を区別しない）→ メール → `/auth/reset/?token=` の画面 → `POST /auth/reset`。メール認証済みで役割の無いアカウントだけに送り、接続元ごととアカウントごとに一日三回。
+- 移行: アカウント設定から `/auth/?upgrade=1`。ID・パスワードは `/auth/register` に `upgrade=1`、Googleは認可の Cookie（版2。目的と aid を持つ）で同じアカウントのセッションに限る。aid・Lv・書き込み数・端末・履歴を引き継ぎ、uid は登録したIDに替わり、旧 uid の索引は残る。Google は Lv10。Google から他方式へは移さない。
+- 退会: アカウント設定の「ログアウト・退会」から `POST /auth/account`（`action=delete`）。ID・パスワードはパスワード、Googleは認可のやり直し、かんたん登録は確認の印。deleted にして世代を進め、キャップと専ブラ用キーを失効させ、login・email・google・token の索引とキャップの KV を外す。uid・cap の索引と書き込みは残る。
+- エッジ防御: R2 の `edge-rules.json`（既定は試行モード `log`）。データセンターの AS は認証4経路と投稿、TLS の ClientHello の長さと UA の矛盾は `/auth/*` だけ。免除は Lv3 以上で作成から7日以上。国内で RTT が閾値を超えると乱造検知の閾値を半分にする。
+- 乱造検知: 閾値（1時間10回・24時間5端末、登録は一日5件）を超えたら拒否し、名前が `review` の AuthRate に「要確認」として残す（自動では規制しない）。
+- Lv 上限: R2 の `phoebe.cgi` に当てはまる投稿の実効 Lv を抑える。アカウントの Lv は下げない。
+
+E-2に含めなかったもの: メールの提供元、要確認・規則の管理画面（M3）、AccountDirectory、RTT 条件での Turnstile の再実行、移行・退会の監査ログ（管理画面の段）。
+
 ## 設定と検証
 
 [認証の検証設定](auth-integration.md) に従う。`AUTH_SECRET` がないと認証は有効にならない。登録には `AGREEMENT_VERSION`、`TURNSTILE_SITE_KEY`、`TURNSTILE_SECRET_KEY` も必要。Googleログインには `GOOGLE_CLIENT_ID` と `GOOGLE_CLIENT_SECRET` を足す。秘密鍵は `.dev.vars` または環境のsecretで管理し、この文書やコミットへ書かない。
@@ -89,8 +116,8 @@ npm run v6:typecheck
 
 | 検証 | この区切りの結果 |
 | --- | --- |
-| Scala単体テスト | 段Cの区切りで sbt test 1,246件成功（commonJVM 183、commonJS 186、codegen 27、bbsClient 2、bbs 848）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功。E-1の区切りは1,181件 |
-| workerd・SSR・hydration | 段Cの区切りで npm test 71件成功、skipなし（E-1の70件にLv不足の表示と再送しないことのboard-islandsを1件追加）。E-1の区切りでは実workerdで登録→ログアウト→ログイン→投稿、未登録・不一致の同じ応答、十回の失敗による接続元のロックと応答の遅延、別の接続元からのログイン、認証画面の方式の表示を検証した |
+| Scala単体テスト | E-2の区切りで sbt test 1,345件成功（commonJVM 209、commonJS 212、codegen 27、bbsClient 2、bbs 895）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功。段Dの区切りで sbt test 1,291件成功（commonJVM 194、commonJS 197、codegen 27、bbsClient 2、bbs 871）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功。段Cの区切りで sbt test 1,246件成功（commonJVM 183、commonJS 186、codegen 27、bbsClient 2、bbs 848）。既存の投稿スナップショット・PostingSuite・goldenは変更なし。`-no-indent` のTest/compileも成功。E-1の区切りは1,181件 |
+| workerd・SSR・hydration | E-2の区切りで npm test 76件成功、skipなし（実workerdに、差し替えた送信先で登録→メール認証→Lv3、再設定、退会、かんたん登録からの移行を1件）。段Dの区切りで npm test 75件成功、skipなし（board-islandsにキャップ欄3件、実workerdにキャップの発行→★の書き込み→失効を1件）。段Cの区切りで npm test 71件成功、skipなし（E-1の70件にLv不足の表示と再送しないことのboard-islandsを1件追加）。E-1の区切りでは実workerdで登録→ログアウト→ログイン→投稿、未登録・不一致の同じ応答、十回の失敗による接続元のロックと応答の遅延、別の接続元からのログイン、認証画面の方式の表示を検証した |
 | ビルド | npm run v6:build成功 |
 | 型チェック | npm run v6:typecheck成功 |
 | コミット | E-1はRPC・登録とログイン・HTTP・画面・Google・文書の順に、CはLvの純粋関数・昇格の保存・BBS_PHOEBE・コマンド・識別子の純粋関数・識別子とUA解析表・文書の順に小さく分けてコミットした（pushはオーケストレーターが行う） |

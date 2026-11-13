@@ -18,6 +18,9 @@ trait DurableObjectStorage extends js.Object {
   /** 複数キー版 */
   def get(keys: js.Array[String]): js.Promise[js.Map[String, js.Any]] = js.native
   def put(entries: js.Dictionary[js.Any]): js.Promise[Unit] = js.native
+
+  /** 全キーと値。件数の少ない索引でだけ使う */
+  def list(): js.Promise[js.Map[String, js.Any]] = js.native
 }
 
 @js.native
@@ -98,12 +101,19 @@ trait R2Bucket extends js.Object {
 trait KVNamespace extends js.Object {
   def get(key: String): js.Promise[js.UndefOr[String]] = js.native
   def put(key: String, value: String): js.Promise[Unit] = js.native
+  def delete(key: String): js.Promise[Unit] = js.native
 }
 
 /** Workers Static Assets バインディング（`env.ASSETS`）。3chiko.html配信に使う（PublicRoutes参照）。 */
 @js.native
 trait Fetcher extends js.Object {
   def fetch(request: Request): js.Promise[Response] = js.native
+}
+
+/** メールを送る service binding。send({to, subject, text}) を RPC で呼ぶ */
+@js.native
+trait MailBinding extends js.Object {
+  def send(message: js.Object): js.Promise[js.Any] = js.native
 }
 
 /** Workers バインディング一式。`env.THREAD_DO` 等へ型付きで触るためのキャスト先。 */
@@ -129,6 +139,8 @@ trait WorkerEnv extends js.Object {
   /** Google ログインのクライアント ID と秘密。どちらか欠ければ Google ログインを出さない */
   val GOOGLE_CLIENT_ID: js.UndefOr[String] = js.native
   val GOOGLE_CLIENT_SECRET: js.UndefOr[String] = js.native
+  /** 確認メール・再設定メールの送信先。無ければメール機能を「準備中」にする */
+  val MAIL_SENDER: js.UndefOr[MailBinding] = js.native
   /** 現在の法的投稿確認の版 */
   val AGREEMENT_VERSION: js.UndefOr[String] = js.native
   /** 投稿者の照合値に混ぜるソルト（wrangler.jsonc の vars） */

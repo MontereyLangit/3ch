@@ -62,8 +62,8 @@ final case class PostRateCheck(level: PostRateLevel, identity: PostRateIdentity,
 /** 連投規制の設定。不正な値は拒否せず既定値で動き、BBS_FR_LEVEL の不正な値は規制と広域連投規制の側に倒す */
 final case class PostRateSettings(level: PostRateLevel, pass: BypassLevel, live: Boolean, board: BoardSettings, thread: ThreadSettings) {
   /** この投稿を判定するか。off・BBS_LIVE・回避レベルで免除される投稿者は判定も記録もしない */
-  def applies(cap: Boolean, authenticated: Boolean): Boolean =
-    level != PostRateLevel.Off && !live && !pass.exempts(cap, authenticated)
+  def applies(poster: BypassPoster): Boolean =
+    level != PostRateLevel.Off && !live && !pass.exempts(poster)
 }
 
 object PostRateSettings {
@@ -79,7 +79,8 @@ object PostRateSettings {
 
   /** スレ立て時にスレ設定へ書き写さないキー。BBS_PHOEBE はコマンドで書いたときだけスレ設定に置く */
   val NotCopiedToThread: Set[String] =
-    Set("BBS_SAMBA24", "BBS_FR_SECOND", "BBS_THREAD_RENTOU", "BBS_THREAD_RENTOU_RESET", "BBS_RENTOU_PASS", "BBS_RENTOU_KEYS", "BBS_FR_LEVEL", "BBS_PHOEBE")
+    Set("BBS_SAMBA24", "BBS_FR_SECOND", "BBS_THREAD_RENTOU", "BBS_THREAD_RENTOU_RESET", "BBS_RENTOU_PASS", "BBS_RENTOU_KEYS", "BBS_FR_LEVEL", "BBS_PHOEBE",
+      "BBS_THREAD_PASS")
 
   /**
     * board は板設定、merged は返信ならスレ設定を重ねたもの。
@@ -93,7 +94,7 @@ object PostRateSettings {
     val keys = PostRateKey.parse(values.getOrElse("BBS_RENTOU_KEYS", ""))
     PostRateSettings(
       level = PostRateLevel.parse(values.get("BBS_FR_LEVEL")),
-      pass = BypassLevel.parse(values.getOrElse("BBS_RENTOU_PASS", "")).getOrElse(BypassLevel.Privileged),
+      pass = BypassLevel.parse(values.getOrElse("BBS_RENTOU_PASS", "")).getOrElse(BypassLevel.Default),
       live = values.get("BBS_LIVE").exists(value => value == "checked" || value == "1"),
       board = BoardSettings(
         timecount = integer(boardValues, "timecount", 18, 1000),

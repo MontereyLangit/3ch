@@ -33,6 +33,11 @@ object ThreadCreationSettings {
   /** SETTING.TXT 本文から検証する。管理画面の保存時に使う */
   def parseText(text: String): Either[ThreadCreationSettingError, Parsed] = parse(settingsMap(text))
 
+  /** 規制を免除する段階（BBS_THREAD_PASS）。無いか知らない値なら既定の privileged */
+  def pass(settings: BbsSettings): BypassLevel =
+    settings.value.foldLeft(Option.empty[String]) { case (acc, (k, v)) => if (k.trim == "BBS_THREAD_PASS") Some(v) else acc }
+      .flatMap(BypassLevel.parse).getOrElse(BypassLevel.Default)
+
   /** 板設定から読む。設定名の前後の空白は除き、重複は後勝ち */
   def fromSettings(settings: BbsSettings): Either[ThreadCreationSettingError, Parsed] =
     parse(settings.value.foldLeft(Map.empty[String, String]) { case (acc, (k, v)) => acc.updated(k.trim, v) })

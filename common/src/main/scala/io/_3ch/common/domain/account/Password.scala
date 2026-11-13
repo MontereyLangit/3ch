@@ -5,6 +5,8 @@ enum PasswordRejection {
   case InvalidUnicode
   case Length
   case ContainsLoginId
+  /** 役割のあるアカウントで 16 文字に満たない */
+  case RoleLength
 }
 
 /** NFC 正規化済みのパスワード。空白と大文字小文字を保ち、ログ表示には平文を出さない */
@@ -40,6 +42,15 @@ object Password {
       if (length < 8 || length > 128) Left(PasswordRejection.Length)
       else Right(new Password(value))
     }
+  }
+
+  /** 役割のあるアカウントに求める文字数（Unicode のコードポイント数） */
+  val RoleMinimum: Int = 16
+
+  /** 変更・再設定用。登録の規則に加え、役割のあるアカウントは 16 文字以上を求める */
+  def create(raw: String, loginId: LoginId, roles: Roles): Either[PasswordRejection, Password] = create(raw, loginId).flatMap { password =>
+    if (roles.values.nonEmpty && password.value.codePointCount(0, password.value.length) < RoleMinimum) Left(PasswordRejection.RoleLength)
+    else Right(password)
   }
 
   /** 登録用に検証する。ID の包含は ASCII の大文字小文字を区別しない */

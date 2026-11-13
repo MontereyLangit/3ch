@@ -43,7 +43,12 @@ object DurableTestKit {
         val existed = data.contains(k)
         data.subtractOne(k)
         js.Promise.resolve[js.Any](existed)
-      }): js.Function1[js.Any, js.Promise[js.Any]]
+      }): js.Function1[js.Any, js.Promise[js.Any]],
+      list = (() => {
+        val result = js.Map[String, js.Any]()
+        data.keys.toSeq.sorted.foreach(k => result.update(k, clone(data(k))))
+        js.Promise.resolve[js.Any](result)
+      }): js.Function0[js.Promise[js.Any]]
     )
     obj.asInstanceOf[DurableObjectStorage]
   }
@@ -148,7 +153,9 @@ object DurableTestKit {
           get = ((key: String) => js.Promise.resolve[js.Any](capStore.get(key) match {
             case Some(v) => v
             case None => null.asInstanceOf[js.Any]
-          })): js.Function1[String, js.Promise[js.Any]]
+          })): js.Function1[String, js.Promise[js.Any]],
+          put = ((key: String, value: String) => { capStore.update(key, value); js.Promise.resolve[js.Any](js.undefined) }): js.Function2[String, String, js.Promise[js.Any]],
+          delete = ((key: String) => { capStore.subtractOne(key); js.Promise.resolve[js.Any](js.undefined) }): js.Function1[String, js.Promise[js.Any]]
         ),
         ASSETS = js.Dynamic.literal(
           fetch = ((req: js.Dynamic) => {
@@ -172,6 +179,8 @@ object DurableTestKit {
 
     /** KV (`CAP`) にキャップを登録する（キー: パスワードハッシュ、値: 表示名）。 */
     def putCap(key: String, name: String): Unit = capStore.update(key, name)
+    /** KV (`CAP`) の値 */
+    def capValue(key: String): Option[String] = capStore.get(key)
 
     /** R2 の現在の本文。存在しなければ None。 */
     def r2Text(key: String): Option[String] = r2.get(key).map(_._1)

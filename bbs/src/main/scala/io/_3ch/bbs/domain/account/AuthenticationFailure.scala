@@ -9,6 +9,8 @@ enum AuthenticationFailure {
   case TokenNotDedicated
   case TokenInsecure
   case Unavailable
+  /** エッジ防御でデータセンターからの投稿と判定した */
+  case Datacenter
 
   def code: String = this match {
     case Account(reason) => reason.code
@@ -16,5 +18,6 @@ enum AuthenticationFailure {
     case TokenNotDedicated => "auth:token:not-dedicated"
     case TokenInsecure => "auth:token:insecure"
     case Unavailable => "auth:unavailable"
+    case Datacenter => "auth:edge:datacenter"
   }
 }

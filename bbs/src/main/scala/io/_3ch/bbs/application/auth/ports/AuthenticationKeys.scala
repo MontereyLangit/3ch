@@ -8,5 +8,7 @@ trait AuthenticationKeys {
   def uid(): String
   def token(): String
   def tokenId(): String
+  /** メールのリンクに載せる 32 バイトの乱数（base64url 43 文字） */
+  def linkSecret(): String
   def index(kind: String, value: String): Future[Option[String]]
 }

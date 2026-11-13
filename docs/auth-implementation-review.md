@@ -115,3 +115,84 @@ KotlinJSの [生成済み空白表](https://github.com/JetBrains/kotlin/blob/v2.
 | 設計からの差分 | v3 の UA 解析表は存在しなかったので移植せず、R2 の表を読む形にした（§13-38）。`ownerAid` は足さず `owner.account` で照合した（§8.7 の注記どおり）。`!バルサン` は staff でも下げない。未ログインの専ブラの Lv 不足は `login` のまま（§13-39）。staff は差し込み口だけで、段 D まで誰も免除しない |
 | UI | 新 UI の Lv 不足は応答の `x-phoebe-required` を表示に使う（スレ設定の値は板トップの props に無いため）。既存の文言と部品のまま。モーダルを開かず再送しないことを board-islands で確かめた |
 | テスト | common に PhoebeSuite・PhoebeCommandSuite・IdentifierSuite、ShikibetsuSuite の phoebe。bbs に UserAgentTableSuite・UserAgentTableRepositorySuite、PostingServiceSuite（ゲート 5 件・コマンド 3 件・識別子 3 件）、ThreadSuite 2 件、PostingCodecSuite 1 件、AccountInfrastructureSuite・PostingAccountServiceSuite・ThreadOwnerSuite 各 1 件。board-islands に 1 件 |
+
+## 段 D（2026-11-07、日本時間）
+
+対象は権限・キャップ・回避レベルで、管理画面は含めない（改修計画 M0〜M4）。範囲と残件は [引き継ぎ](claude-handoff.md) の「Dの実装範囲」を参照する。
+
+| 観点 | 実装・確認 |
+| --- | --- |
+| DO はインフラのみ | 役割の規則は common の `Roles.manages`・`AccountState.assignRoles`、初回の管理者の判定は `FirstAdminClaim.claim`、キャップの発行数・強キャップ・再発行・失効の記録は `AccountState`。AccountIndex DO はロック内で索引を列挙し、各所有者の `adminStatus` を聞いて純粋関数に渡すだけ。KV と索引を揃える順序は application の `AccountRoles`・`CapIssuing` |
+| 種別 | 回避レベルは enum `BypassLevel`、5 列目の誤りは `ModerationRuleProblem.Bypass`、キャップ名の誤りは `CapNameRejection`、権限不足は `AccountRejection.Forbidden`。文言は handler（`AuthHandler`・`AdminText`） |
+| 既存の振る舞い | 認証を有効にしていない環境と役割の無い投稿者では、回避の判定は以前と同じ（admin・staff は誰も該当せず、l10 は実効 Lv が 0 なので privileged と同じ）。既存の投稿スナップショット・PostingSuite・golden は変更なし。4 列の deny.cgi の行の結果も同じ。DO の既存キーは変えていない（キャップは既存の `caps` キー、索引は既存の DO に新しい種別 `role:admin` の値を足しただけ） |
+| 変えたもの | キャップの投稿でも deny.cgi / ngwords.cgi を読むようになった（上の段階の行を当てるため）。既定の段階で免除される投稿者は読込の障害でも通すので、キャップの投稿が以前より失敗することはない。`ModerationRuleSetSuite` の「5 列の行は書式の誤り」の期待値を、5 列目の不正値として読む形に改めた。Account の `revokeCap` の戻り値を照合値付きにした |
+| 設計からの差分 | Tor の拒否は staff を免除しない（§7 に記載が無く、振る舞いを変えない側に倒した）。`BBS_THREAD_PASS`・`BBS_RENTOU_PASS` の不正値は拒否せず privileged（スレ立て規制の既存キーは不正値でスレ立てを拒否するが、免除の設定ミスで板を止めないため）。自分で発行したキャップは役割を全て外すと使えないようにした（設計に無い。権限を外した後もキャップが残るのを防ぐ）。`adminGen` は管理者セッションと一緒に M2 で足す |
+| UI | キャップ欄は専ブラ用キーの欄と同じ部品・配色・文言の調子にした（角丸なし）。モックはキャップ欄が案内の1行だけなので、役割の無い人にはその1行だけを出す。書き込みの1行の表示は専ブラ用キーの欄と共通の `AccountPostView` に切り出した。状態は useState、パスワードはメモリ上だけ |
+| 確認が要る点 | §14-4（名無しの staff の規制免除）は実装したが承認待ち |
+| テスト | common に AccountRolesSuite（6）・AccountCapSuite（5）。bbs に BypassLevelSuite（4）、AccountRolesSuite（5、同時に確保しても admin は一人）、AuthCapSuite（5）、PostingServiceSuite 4 件、ModerationRuleSetSuite・ModerationServiceSuite・PostingModerationSuite・PostRateSettingsSuite・AdminHandlerSuite に追加。board-islands に 3 件、実 workerd に 1 件（キャップの発行 → ★ の書き込み → 失効） |
+
+## 段 E-2（2026-11-07、日本時間）
+
+対象はメール認証、パスワードの変更と再設定、クライアント ID からの方式移行、退会、エッジ防御、乱造検知の「要確認」、Lv 上限ルール。範囲と残件は [引き継ぎ](claude-handoff.md) の「E-2の実装範囲」を参照する。
+
+| 観点 | 実装・確認 |
+| --- | --- |
+| DO はインフラのみ | 状態遷移は common の `AccountState`（`issuePending`・`pendingFor`・`verifyEmail`・`resetPassword`・`convert`・`withdraw`）、メールの正規化と使い捨てドメインは `EmailAddress`・`DisposableDomains`、保留トークンは `PendingToken`、乱造検知は `AbuseReason`・`AbuseReview`。エッジ防御と Lv 上限は正規表現を使うので bbs の domain（`EdgeDefense`・`PhoebeCapRules`）。索引・KV・メールの順序は application の `AccountMail`・`PasswordChange`・`AccountUpgrade`・`AccountWithdrawal` |
+| 種別 | `PendingKind`・`AccountConversion`・`OAuthPurpose`・`EdgeMode`・`EdgeFinding`・`AbuseReason` を enum にした。拒否は `AccountRejection.PendingInvalid`・`KindForbidden`、`AuthServiceFailure.EmailTaken`・`MailFailed`、`AuthenticationFailure.Datacenter`。文言は handler |
+| 既存の振る舞い | 認証を有効にしていない環境の投稿は、エッジ防御・Lv 上限のファイルを読まず以前と同じ。edge-rules.json・phoebe.cgi が無い環境も同じ。既存の投稿スナップショット・PostingSuite・golden は変更なし。Board・Thread・Account の既存キーの形式は変えていない（Account に `pending:email`・`pending:reset` を足し、AuthRate の名前 `review` に一覧を置いた） |
+| 変えたもの | Google 認可の Cookie の書式を版 2 にし、目的と aid を足した（往復中の旧書式は callback で oauth_state になる。寿命は10分）。RPC の `AccountDescription` に `createdAt` を足した。AuthenticationKeys に `linkSecret` を足した |
+| 設計からの差分 | 下の表 |
+| テスト | common に EmailAddressSuite（6）・AbuseReviewSuite（2）、AccountStateSuite に5件（メール認証・保留トークン・再設定・移行・退会）、PasswordSuite・OAuthStateSuite に各1件。bbs に AccountMailHandlerSuite（7）・AccountUpgradeSuite（3）・AccountWithdrawSuite（3）・AuthEdgeSuite（2）・EdgeDefenseSuite（5）・PhoebeCapRulesSuite（2）、PostingServiceSuite に2件。実 workerd に1件（差し替えた送信先で登録→メール認証→Lv3、再設定、退会、移行） |
+
+設計からの差分と判断:
+
+| 項目 | 実装 |
+| --- | --- |
+| メールの送信 | 提供元が未定なので、送信先は `MAIL_SENDER`（`send({to, subject, text})` を持つ service binding）だけを読む。提供元を選んだら `MailSenders.from` に `MAIL_API_KEY` を読む実装を一つ足す。どちらも無ければメール関連の画面は準備中、API は 503 |
+| email 索引の確定 | 登録時ではなくメールの確認時に予約・確定する（他人のアドレスを先に押さえられないようにする）。登録・変更の時点では確認済みの所有者がいれば拒否するだけ |
+| 確認リンク | `GET /auth/email/verify/?token=` は画面だけを返し、トークンの消費はボタンからの `POST`（メールの先読みで消費されないようにする）。トークンは `aid.乱数` で、保存値は SHA-256 ではなく AUTH_SECRET の HMAC |
+| gmail の照合 | googlemail.com も gmail.com として照合する |
+| 再設定の申請 | 入力はユーザー ID（メールアドレスは受け付けない）。Turnstile を求め、接続元ごとと送り先のアカウントごとに一日三回 |
+| 移行の入口 | アカウント設定から `/auth/?upgrade=1` を開き、登録と同じフォームで送る（`/auth/account?upgrade=1` は使わない）。Google への移行は認可の Cookie に aid を持たせ、callback で同じアカウントのセッションに限る |
+| 退会 | `POST /auth/account`（`action=delete`）。かんたん登録は確認の印だけで退会できる（再認証の手段が無いため）。役割は外さない（deleted なので使えない） |
+| RTT | 国内で RTT が閾値を超える verify・register は乱造検知と登録数の閾値を半分にするだけで、Turnstile の再実行はしていない |
+| エッジ防御の免除 | 投稿のデータセンター判定は「Lv2 以下」ではなく、免除（Lv3 以上かつ作成から7日以上）に当たらない投稿すべてに当てる。TLS の矛盾表は ClientHello の長さの範囲だけ |
+| 「要確認」の記録先 | AccountDirectory が未実装なので、名前が `review` の AuthRate に置いた。管理画面（M3）で読む RPC は `flagged`。AccountDirectory を作ったら移す |
+| Lv 上限の表示 | 上限は投稿時の判定（BBS_PHOEBE・回避レベル・識別子の D・エッジ防御の免除）にだけ使い、Cookie とアカウント設定の Lv は上限前の値 |
+| コミットの単位 | メールの認証と、パスワードの変更・再設定は同じコミットにした（索引・トークン・画面を共有するため） |
+
+セルフレビュー（AGENTS.md 3.5）で直したもの: 登録フォームが送信先の無い環境でもメール欄を送っていた（board-islands で検出）、メールの送信回数のテストが並行実行で順序に依存していた、退会テストの意味の無い比較。
+
+## 利用者の決定（2026-11-07）
+
+- 利用者: 名無しの staff の規制免除（設計書 §14-4）を承認。Tor の拒否は staff でも免除しない、自分で発行したキャップは役割をすべて外すと使えない、かんたん登録は確認のチェックだけで退会できる、を決定（設計書 §13-40〜42）。
+
+## セキュリティレビューの修正（段 D・E-2）
+
+PR #65 のセキュリティレビューで見つけた次の点を直した。既存の保存キー・形式は変えていない（段 D・E-2 で足した `pending:*` に世代を足し、cap 索引の確定後の削除をやめた）。
+
+| 指摘 | 修正 |
+| --- | --- |
+| 失効・再発行・退会したキャップが KV の伝播の間、旧キャップとして使える | cap 索引は確定したら削除できない（`AccountIndexEntry.remove`）。発行は索引の確定を KV の書き込みより先にし、失効・再発行・退会は KV だけを消す。古い KV の写しは所有者に解決され、失効の記録で拒否される |
+| 再設定・メール確認のトークンが資格情報の変更後も使える | パスワードの変更・再設定・メールの確認・方式移行・退会で保留トークンを全て捨てる。トークンは発行時の世代を持ち、一致しなければ拒否する |
+| メールの登録・変更がセッションだけでできる | 現在のパスワードを `verifyPassword` で確かめる（失敗計数に含める）。Google とかんたん登録はメールを使えない。アカウント設定にパスワード欄を足した |
+| 移行の失敗の後始末が先に確定したログイン索引を消す | 取り消せるのは、この試行で新しく取った確定前の予約だけ（DO の `release`。確定済みは外さない）。試行どうしの競合は、確定した索引を残す |
+| 初回の admin の確保とロールの索引のずれ | 確保の途中で止まったら admin の有無を読み直し、admin なら確定、admin でなければ確保を外し、読み直せなければ残す。確定前でも admin が付いた所有者は有効な admin に数える。admin を足すときは索引が先。最後の有効な admin は外せない。`grantFirstAdmin` は索引の確保を確かめ、`setRoles` は操作する人の Account の役割で判定する |
+| メール確認の後始末が確認済みの索引を消す | 失敗したら Account を読み直し、そのアドレスを持っていない場合だけ索引を外す。前のアドレスの索引を外せなくても、持ち主が持たなくなった索引は次の登録・確認で解放する |
+| 名無しの admin が Tor の拒否をすり抜ける | Tor の拒否を admin の免除より先にした。キャップ付きだけ免除する。認証 API（register・verify）には適用しない（設計書 §3.6 の対象は投稿） |
+| エッジ防御の試行モードでも乱造検知を厳しくする | RTT による閾値の半減は `mode=on` のときだけ。役割の保持者・キャップ付きの投稿をエッジ防御の対象から外し、Lv3 の免除は phoebe.cgi の上限をかける前の Lv で判定する |
+| 降格しても自分で発行した強キャップが使える | 自分で発行した強キャップは使う時点で admin を要る |
+| 再設定の後も専ブラ用キーが使える | 再設定で専ブラ用キーを全て無効にして token 索引から外す（通常のパスワード変更は残す） |
+| 退会の後始末の失敗が放置される | 退会は同じセッションの世代なら再実行できる。残った login・email・google の索引は、持ち主が退会済み・値を替えたときに、ログイン・登録・確認で解放する |
+| 方式移行が登録の乱造計数を通らない | 移行も `register` の計数・「要確認」・厳格化を共有する（`RegistrationRate`）。Google への移行は厳格化の判定を持ち回れないので通常の閾値 |
+| 確認画面が対象を示さない | 確認リンクの GET が、確定させるアドレス（伏せ字）とユーザー ID（再設定はユーザー ID）を示す。リンクが無効なら画面は「無効」にする |
+
+範囲外として残した点:
+
+- 再設定の申請の計数は接続元ごとと送り先のアカウントごとで、他人のアカウントに対して申請を重ねるとその人の再設定を妨害できる（メールの送信は一日三回まで）。
+- 退会後もパスワードの資格情報・失敗計数・端末の記録は Account に残る（利用できない状態にはなる）。
+- 16 文字のパスワードの規則は変更時だけで、役割の付与時には確かめない。
+- §3.3 の細かい体裁（Scaladoc の長さなど）。
+- QUIC の接続（HTTP/3）には RTT が無いので、RTT の条件は掛からない。
+- Google への新規登録は `register` の計数に含めていない（設計の対象外のまま）。
+- 退会の後始末の失敗は、本人のセッションが失効した後は同じ世代の再実行の口を HTTP に持たない（次のログイン・登録・確認での解放に任せる）。

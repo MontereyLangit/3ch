@@ -310,4 +310,105 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
     assert.ok(Date.now() - started >= 5000, '失敗の多いアカウントは応答を遅らせる');
     assert.equal((await attempt('taro_2026', 'correct horse', '192.0.2.61')).status, 200);
   });
+
+  await t.test('役割を付けたアカウントがキャップを発行し、そのパスワードで ★ 付きの書き込みができる', async () => {
+    const headers = { 'user-agent': 'Mozilla/5.0 IntegrationBrowser', 'CF-Connecting-IP': '192.0.2.70' };
+    const registered = await post('/auth/register/', { id: 'jiro_2026', password: 'correct horse', password2: 'correct horse', agreement: 'v1', 'cf-turnstile-response': 'accepted' }, headers);
+    assert.equal(registered.status, 200);
+    const cookie = registered.headers.get('set-cookie').split(';')[0];
+    const aid = cookie.split('.')[1];
+    const hash = (kind, value) => createHmac('sha256', secret).update(`${kind}:${value}`).digest('hex');
+    assert.equal(await index('role:admin', 'claimFirstAdmin', hash('role:admin', aid), aid, now, false), '');
+    assert.equal(await account(aid, 'grantFirstAdmin', hash('role:admin', aid), now), '');
+    assert.equal(await index('role:admin', 'confirm', hash('role:admin', aid), aid, now), '');
+    assert.equal(await index('role:admin', 'claimFirstAdmin', hash('role:admin', 'cccccccccccccccc'), 'cccccccccccccccc', now, false), 'auth:forbidden');
+    assert.equal(await account(aid, 'setRoles', ['admin', 'delete'], 'cccccccccccccccc', now), 'auth:forbidden');
+
+    const refused = await post('/auth/cap/issue/', { name: '<b>' }, { ...headers, cookie });
+    assert.equal(refused.status, 400);
+    const issued = await post('/auth/cap/issue/', { name: '運営' }, { ...headers, cookie });
+    const cap = await issued.json();
+    assert.equal(issued.status, 200, JSON.stringify(cap));
+    assert.match(cap.password, /^#[a-z2-7]{20}$/);
+    const page = await (await fetch(origin + '/auth/account/', { headers: { ...headers, cookie } })).text();
+    assert.ok(page.includes('運営 ★'), 'アカウント設定にキャップが出る');
+    assert.ok(!page.includes(cap.password), 'パスワードは発行した応答にだけ出す');
+
+    const posted = await fetch(origin + '/test/bbs.cgi', {
+      method: 'POST',
+      headers: { 'user-agent': 'Monazilla/1.00 IntegrationBrowser/1.0', 'CF-Connecting-IP': '192.0.2.71', referer: 'http://127.0.0.1:8787/' },
+      body: new URLSearchParams({ bbs: 'authcap', key: '', MESSAGE: 'cap post', FROM: '', mail: cap.password, subject: 'cap title', time: '1', submit: '書き込む' }),
+    });
+    const html = await posted.text();
+    assert.match(html, /書きこみました/, html);
+    const key = posted.headers.get('x-threadkey');
+    const dat = new TextDecoder('shift_jis').decode(await (await fetch(origin + `/authcap/dat/${key}.dat`)).arrayBuffer());
+    assert.match(dat, /^運営 ★ <\/b>\(★\)<b><>/, dat);
+    const log = (await account(aid, 'inspect')).log;
+    assert.equal(log.at(-1).via, 'cap');
+    assert.equal(log.at(-1).capId, cap.id);
+
+    assert.equal((await post('/auth/cap/revoke/', { id: cap.id }, { ...headers, cookie })).status, 200);
+    const after = await fetch(origin + '/test/bbs.cgi', {
+      method: 'POST',
+      headers: { 'user-agent': 'Monazilla/1.00 IntegrationBrowser/1.0', 'CF-Connecting-IP': '192.0.2.72', referer: 'http://127.0.0.1:8787/' },
+      body: new URLSearchParams({ bbs: 'authcap', key, MESSAGE: 'after revoke', FROM: '', mail: cap.password, time: '1', submit: '書き込む' }),
+    });
+    assert.match(await after.text(), /書きこみました/);
+    const lines = new TextDecoder('shift_jis').decode(await (await fetch(origin + `/authcap/dat/${key}.dat`)).arrayBuffer()).split('\n');
+    assert.doesNotMatch(lines[1], /★/, '失効したパスワードは KV から消え、キャップにならない');
+  });
+
+  await t.test('メールを差し替えた送信先で、登録→メール認証で Lv3、再設定、かんたん登録からの移行、退会を通す', async () => {
+    const mailPost = (path, data, headers) => post('/__test/mail' + path, data, headers);
+    const outbox = async () => (await fetch(origin + '/__test/outbox')).json();
+    const tokenOf = mail => mail.text.match(/token=([a-z0-9]{16}\.[A-Za-z0-9_-]{43})/)[1];
+    const hash = (kind, value) => createHmac('sha256', secret).update(`${kind}:${value}`).digest('hex');
+    const headers = { 'user-agent': 'Mozilla/5.0 IntegrationBrowser', 'CF-Connecting-IP': '192.0.2.110' };
+    const disabled = await (await fetch(origin + '/auth/reset/?token=x')).text();
+    assert.ok(disabled.includes('準備中'), 'メールの送信先が無ければ準備中');
+
+    const registered = await mailPost('/auth/register/', { id: 'mail_user', password: 'correct horse', password2: 'correct horse', email: 'Mail.User@Example.com',
+      agreement: 'v1', 'cf-turnstile-response': 'accepted' }, headers);
+    const body = await registered.json();
+    assert.equal(registered.status, 200, JSON.stringify(body));
+    assert.deepEqual(body, { uid: 'mail_user', lv: 1, returnPath: '/', mail: 'sent' });
+    const cookie = registered.headers.get('set-cookie').split(';')[0];
+    const aid = cookie.split('.')[1];
+    const [verification] = await outbox();
+    assert.equal(verification.to, 'mail.user@example.com');
+    assert.ok(verification.text.includes(`${origin}/auth/email/verify/?token=`));
+    assert.ok((await (await fetch(origin + '/__test/mail/auth/email/verify/?token=' + tokenOf(verification))).text()).includes('確認する'));
+    const verified = await mailPost('/auth/email/verify/', { token: tokenOf(verification) }, { ...headers, cookie });
+    assert.deepEqual(await verified.json(), { uid: 'mail_user', lv: 3 });
+    assert.equal((await index('email', 'lookup', hash('email', 'mail.user@example.com'))).aid, aid);
+
+    assert.equal((await mailPost('/auth/reset/request/', { id: 'mail_user', 'cf-turnstile-response': 'accepted' }, headers)).status, 200);
+    const reset = (await outbox()).at(-1);
+    assert.equal(reset.to, 'mail.user@example.com');
+    assert.equal((await mailPost('/auth/reset/', { token: tokenOf(reset), password: 'brand new pass', password2: 'brand new pass' }, headers)).status, 200);
+    assert.equal(await session(cookie), null, '再設定で全端末がログアウトする');
+    const login = await post('/auth/login/', { id: 'mail_user', password: 'brand new pass', 'cf-turnstile-response': 'accepted' }, { ...headers, 'CF-Connecting-IP': '192.0.2.111' });
+    assert.equal(login.status, 200);
+
+    const loginCookie = login.headers.get('set-cookie').split(';')[0];
+    const deleted = await post('/auth/account/', { action: 'delete', password: 'brand new pass' }, { ...headers, cookie: loginCookie });
+    assert.equal(deleted.status, 200);
+    assert.equal((await account(aid, 'describeForPosting', aid, 2, Math.floor(Date.now() / 1000))).code, 'auth:deleted');
+    assert.equal((await index('login', 'lookup', hash('login', 'mail_user'))).code, 'auth:index:missing');
+    assert.equal((await index('email', 'lookup', hash('email', 'mail.user@example.com'))).code, 'auth:index:missing');
+    assert.equal((await index('uid', 'lookup', hash('uid', 'mail_user'))).aid, aid, 'uid の索引は残す');
+
+    const client = await post('/auth/verify/', { agreement: 'v1', 'cf-turnstile-response': 'accepted' }, { ...headers, 'CF-Connecting-IP': '192.0.2.112' });
+    const clientCookie = client.headers.get('set-cookie').split(';')[0];
+    const clientAid = clientCookie.split('.')[1];
+    const oldUid = clientCookie.split('.')[2];
+    const upgraded = await post('/auth/register/', { id: 'moved_user', password: 'correct horse', password2: 'correct horse', agreement: 'v1',
+      'cf-turnstile-response': 'accepted', upgrade: '1' }, { ...headers, 'CF-Connecting-IP': '192.0.2.112', cookie: clientCookie });
+    assert.equal(upgraded.status, 200);
+    assert.equal(upgraded.headers.get('set-cookie').split('.')[1], clientAid, '同じ aid のまま移る');
+    assert.equal((await account(clientAid, 'inspect')).account.kind, 'password');
+    assert.equal((await index('uid', 'lookup', hash('uid', oldUid))).aid, clientAid, '旧 uid の索引は残す');
+    assert.equal(await session(clientCookie), null);
+  });
 });

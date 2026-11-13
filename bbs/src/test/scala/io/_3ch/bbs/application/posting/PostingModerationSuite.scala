@@ -5,6 +5,7 @@ import io._3ch.bbs.domain.posting.moderation.*
 
 import io._3ch.bbs.domain.posting.ModerationDenial
 import io._3ch.common.domain.BbsSettings
+import io._3ch.common.domain.account.{AccountRole, Roles}
 import io._3ch.common.domain.posting.{PostForm, UserInfo}
 import munit.FunSuite
 
@@ -21,7 +22,7 @@ class PostingModerationSuite extends FunSuite {
   private val caution = " <small>👀 Madakana: Caution</small>"
 
   private def input(form: PostForm = form, cap: Boolean = false, country: String = "JP", number: Double = 2, settings: (String, String)*): ModerationInput =
-    ModerationInput(form, userInfo, cap, country, number, BbsSettings(ListMap.from(settings)))
+    ModerationInput(form, userInfo, BypassPoster(cap = cap), country, number, BbsSettings(ListMap.from(settings)))
 
   private def source(text: String): ModerationRuleSource =
     ModerationRuleSet.parse(text).fold(_ => ModerationRuleSource.Broken, ModerationRuleSource.Loaded(_))
@@ -58,15 +59,49 @@ class PostingModerationSuite extends FunSuite {
     } yield ()
   }
 
-  test("キャップと saku 板は対象外で、ルールファイルを読まない") {
-    val capLoader = new Loader("<><><>deny")
+  test("saku 板と admin はルールファイルを読まずに通す") {
+    val adminLoader = new Loader("<><><>deny<>admin")
     val sakuLoader = new Loader("<><><>deny")
     for {
-      capped <- PostingModeration.check(input(cap = true), capLoader)
-      _ = assertEquals(capped, Pass(form))
+      admin <- PostingModeration.check(input().copy(poster = BypassPoster(Roles(Set(AccountRole.Admin)))), adminLoader)
+      _ = assertEquals(admin, Pass(form))
       saku <- PostingModeration.check(input(form = form.copy(bbs = "saku")), sakuLoader)
       _ = assertEquals(saku, Pass(form.copy(bbs = "saku")))
-      _ = assertEquals((capLoader.loaded.toList, sakuLoader.loaded.toList), (Nil, Nil))
+      _ = assertEquals((adminLoader.loaded.toList, sakuLoader.loaded.toList), (Nil, Nil))
+    } yield ()
+  }
+
+  test("キャップは 4 列の行と既定の段階の行を免除され、上の段階の行には従う") {
+    val staff = input().copy(poster = BypassPoster(Roles(Set(AccountRole.Regulate))))
+    for {
+      fourColumns <- check(input(cap = true), "<><><>deny", "<><>hello<>deny")
+      _ = assertEquals(fourColumns, Pass(form))
+      privileged <- check(input(cap = true), "<><><>deny<>privileged")
+      _ = assertEquals(privileged, Pass(form))
+      staffOnly <- check(input(cap = true), "<><><>deny<>staff")
+      _ = assertEquals(staffOnly, Deny(ModerationDenial.Host, form))
+      staffPasses <- check(staff, "<><><>deny<>staff\n<><><>mark")
+      _ = assertEquals(staffPasses, Pass(form))
+      adminOnly <- check(staff, "<><><>deny<>admin")
+      _ = assertEquals(adminOnly, Deny(ModerationDenial.Host, form))
+      login <- check(input().copy(poster = BypassPoster(authenticated = true)), "<><><>deny<>login")
+      _ = assertEquals(login, Pass(form))
+      l10 <- check(input().copy(poster = BypassPoster(authenticated = true, lv = 9)), "<><><>deny<>l10")
+      _ = assertEquals(l10, Deny(ModerationDenial.Host, form))
+    } yield ()
+  }
+
+  test("既定の段階で免除される投稿者は、壊れたファイルや読み込みの障害でも通す") {
+    val failing: RuleStore = _ => Future.failed(new IllegalStateException("storage unavailable"))
+    for {
+      broken <- check(input(cap = true), "invalid")
+      _ = assertEquals(broken, Pass(form))
+      unreadable <- PostingModeration.check(input(cap = true), failing)
+      _ = assertEquals(unreadable, Pass(form))
+      tor <- check(input(cap = true, country = "T1"), "<><><>deny")
+      _ = assertEquals(tor, Pass(form))
+      staffTor <- check(input(country = "T1").copy(poster = BypassPoster(Roles(Set(AccountRole.Delete)))), "")
+      _ = assertEquals(staffTor, Deny(ModerationDenial.Tor, form))
     } yield ()
   }
 

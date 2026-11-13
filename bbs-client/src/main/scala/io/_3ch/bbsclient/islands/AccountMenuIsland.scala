@@ -1,41 +1,22 @@
 package io._3ch.bbsclient.islands
 
-import io._3ch.common.domain.SubjectText
 import io._3ch.common.domain.account.TokenRevokeReason
-import io._3ch.common.text.JstTime
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
 import scala.scalajs.js
-import scala.scalajs.js.URIUtils
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
 /** 専ブラ用キーを発行し、その場だけで表示する */
 object AccountMenuIsland {
-  private val button = "cursor-pointer border border-[#d6dce3] bg-white px-3 py-1 disabled:opacity-50"
-  private def number(raw: js.Object, name: String): Option[Double] = {
-    val value = raw.asInstanceOf[js.Dynamic].selectDynamic(name)
-    Option.when(js.typeOf(value) == "number")(value.asInstanceOf[Double]).filter(_.isFinite)
-  }
-  private def objects(raw: js.Object, name: String): List[js.Object] =
-    raw.asInstanceOf[js.Dynamic].selectDynamic(name).asInstanceOf[js.UndefOr[js.Array[js.Object]]].toOption.fold(List.empty[js.Object])(_.toList)
-  private def time(raw: js.Object, name: String): String = number(raw, name).filter(_ > 0).fold("")(JstTime.dateTime)
+  import AccountPostView.{button, number, objects, time}
   private def revokedReason(raw: js.Object): String = TokenRevokeReason.parse(AuthClient.text(raw, "revokeReason")) match {
     case Some(TokenRevokeReason.Superseded) => "新しいキーへ置き換え"
     case Some(TokenRevokeReason.Revoked) => "手動で無効化"
     case Some(TokenRevokeReason.Expired) => "未使用のまま失効"
     case None => "無効化済み"
   }
-  private def postView(raw: js.Object): VdomElement = {
-    val bbs = AuthClient.text(raw, "bbs")
-    val key = AuthClient.text(raw, "key")
-    val resNum = number(raw, "resNum").fold(0)(_.toInt)
-    val path = s"/test/read.cgi/${URIUtils.encodeURIComponent(bbs)}/${URIUtils.encodeURIComponent(key)}/$resNum"
-    <.div(^.className := "mt-2 text-xs", <.span(^.className := "mr-2 text-[#697785]", time(raw, "t")),
-      <.a(^.href := path, ^.className := "text-[#06f] hover:underline", s"$bbs › ${SubjectText.decode(AuthClient.text(raw, "title"))} >>$resNum"),
-      <.span(^.className := "ml-2 text-[#697785]", AuthClient.text(raw, "network")),
-      <.p(^.className := "mt-1 whitespace-pre-wrap", SubjectText.decode(AuthClient.text(raw, "excerpt"))))
-  }
+  private def postView(raw: js.Object): VdomElement = AccountPostView(raw)
   final val Component = ScalaFnComponent[js.Object] { raw =>
     for {
       issued <- useState(Option.empty[String])
