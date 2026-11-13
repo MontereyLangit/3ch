@@ -33,6 +33,14 @@ final case class PostRateIdentity(ip: String = "", shiki: String = "", aid: Stri
   /** keys のどれか 1 つでも空でなく一致すれば同一の投稿者 */
   def sameAs(other: PostRateIdentity, keys: Set[PostRateKey]): Boolean =
     keys.exists(key => value(key).nonEmpty && value(key) == other.value(key))
+
+  /** 各値を先頭 ShortLength 文字にした照合値。1 つのスレの中だけで照合する値の保存に使う */
+  def shortened: PostRateIdentity = PostRateIdentity(ip.take(PostRateIdentity.ShortLength), shiki.take(PostRateIdentity.ShortLength), aid.take(PostRateIdentity.ShortLength))
+}
+
+object PostRateIdentity {
+  /** スレの直近の投稿に保存するハッシュの長さ（16 進 12 文字 = 48 bit） */
+  val ShortLength: Int = 12
 }
 
 /** 連投規制の拒否理由。RPC では code の文字列で返す */
@@ -99,9 +107,12 @@ object PostRateLimit {
   /** ごんたくれで見る期間（秒） */
   val DaySeconds: Double = 86400
 
-  /** 板単位の設定。timecount・timeclose・samba24・fr は 0 で無効。keys はごんたくれの照合キー */
-  final case class BoardSettings(timecount: Int, timeclose: Int, samba24: Int, fr: Int, keys: Set[PostRateKey]) {
-    /** 秒数で見る規制（Samba24・広域）が見る期間（秒）。どちらも無効なら 0 */
+  /**
+    * 板単位の設定。timecount・timeclose・samba24・fr は 0 で無効。keys はごんたくれの照合キー。
+    * checksFr が偽ならこの投稿では広域連投規制を判定しない（履歴の保持には fr を使う）
+    */
+  final case class BoardSettings(timecount: Int, timeclose: Int, samba24: Int, fr: Int, keys: Set[PostRateKey], checksFr: Boolean = true) {
+    /** 履歴の保持と読み込みに使う秒数。板設定だけから決まり、投稿ごとの判定の有無によらない。どちらも無効なら 0 */
     def windowSeconds: Int = math.max(samba24, fr)
   }
 
@@ -125,7 +136,7 @@ object PostRateLimit {
         .map(remaining => math.max(1, math.ceil(remaining).toInt))
     if (gontakure) Some(PostRateRejection.Gontakure)
     else within(settings.samba24, PostRateKey.samba24).map(PostRateRejection.Samba24(_))
-      .orElse(within(settings.fr, Set(PostRateKey.Shiki)).map(PostRateRejection.Fr(_)))
+      .orElse((if (settings.checksFr) within(settings.fr, Set(PostRateKey.Shiki)) else None).map(PostRateRejection.Fr(_)))
   }
 
   /** スレ単位の判定。recent はスレの直近の投稿で、RESET 秒以内の同一投稿者が count 件以上なら拒否 */

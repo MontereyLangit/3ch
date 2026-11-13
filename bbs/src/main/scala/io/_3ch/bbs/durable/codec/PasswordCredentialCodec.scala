@@ -26,15 +26,32 @@ object PasswordCredentialCodec {
   }
   private def hex(value: Vector[Byte]): String = value.iterator.map(byte => Integer.toHexString((byte.toInt & 255) | 256).substring(1)).mkString
 
+  private def integer(value: js.Any): Int = {
+    val number = time(value)
+    if (number != math.floor(number) || number > Int.MaxValue) invalid()
+    number.toInt
+  }
+  private def optionalTime(value: js.Any): Option[Double] = if (js.isUndefined(value)) None else Some(time(value))
+
   private def decodeThrottle(value: js.Any): LoginThrottle = {
-    val failures = field(value, "failures")
-    if (!js.Array.isArray(failures)) invalid()
-    val events = failures.asInstanceOf[js.Array[js.Any]].toVector.map(event =>
-      LoginFailure(text(field(event, "keyIpHash")), time(field(event, "t"))))
-    val locks = record(field(value, "locks")).asInstanceOf[js.Dictionary[js.Any]].iterator.map { case (key, until) => key -> time(until) }.toMap
-    val state = LoginThrottle(events, locks)
+    val sources = record(field(value, "sources")).asInstanceOf[js.Dictionary[js.Any]].iterator.map { case (key, source) =>
+      key -> LoginSource(integer(field(source, "count")), time(field(source, "since")), optionalTime(field(source, "lockedUntil")))
+    }.toMap
+    val account = field(value, "account")
+    val state = LoginThrottle(sources, LoginAccountFailures(integer(field(account, "count")), time(field(account, "since")), optionalTime(field(account, "lockedUntil"))))
     if (!state.valid) invalid()
     state
+  }
+
+  private def encodeThrottle(value: LoginThrottle): js.Dynamic = {
+    def source(entry: LoginSource): js.Dynamic = {
+      val result = js.Dynamic.literal(count = entry.count, since = entry.since)
+      entry.lockedUntil.foreach(until => result.lockedUntil = until)
+      result
+    }
+    val account = js.Dynamic.literal(count = value.account.count, since = value.account.since)
+    value.account.lockedUntil.foreach(until => account.lockedUntil = until)
+    js.Dynamic.literal(sources = js.Dictionary(value.sources.toSeq.map { case (key, entry) => key -> source(entry).asInstanceOf[js.Any] }*), account = account)
   }
 
   /** 必須項目の型・長さ・計数状態を検証する。欠損値を初期設定で補わない */
@@ -51,7 +68,6 @@ object PasswordCredentialCodec {
   def encode(value: PasswordCredential): js.Dynamic = {
     if (value == null || !value.valid) invalid()
     js.Dynamic.literal(algo = value.algo.code, iterations = value.iterations, salt = hex(value.salt), hash = hex(value.hash), updatedAt = value.updatedAt,
-      throttle = js.Dynamic.literal(failures = value.throttle.failures.map(failure => js.Dynamic.literal(keyIpHash = failure.keyIpHash, t = failure.t)).toJSArray,
-        locks = js.Dictionary(value.throttle.locks.toSeq.map { case (key, until) => key -> until.asInstanceOf[js.Any] }*)))
+      throttle = encodeThrottle(value.throttle))
   }
 }

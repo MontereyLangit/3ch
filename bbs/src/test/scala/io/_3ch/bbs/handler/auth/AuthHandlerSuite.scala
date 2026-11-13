@@ -2,6 +2,7 @@ package io._3ch.bbs.handler.auth
 
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.handler.HandlerTestKit
+import io._3ch.common.domain.account.SessionBinding
 import scala.concurrent.Future
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -120,8 +121,50 @@ class AuthHandlerSuite extends munit.FunSuite {
           assertEquals(value.error.asInstanceOf[String], "ユーザーIDまたはパスワードが違います。")
         }
         assertEquals(locked.headers.get("Set-Cookie"), null)
-        assertEquals(t.delays.toVector, Vector(6d))
+        assertEquals(t.delays.toVector, Vector.empty[Double])
         assertEquals(elsewhere.status, 200)
+      }
+    }
+  }
+
+  test("失敗の遅延は接続元ごとの失敗数だけで決まり、ID が存在するかで変わらない") {
+    val t = new AuthSignInTestKit()
+    t.run {
+      def failures(id: String, ip: String): Future[Vector[Double]] = {
+        val before = t.delays.size
+        (1 to 7).foldLeft(Future.unit)((previous, _) => previous.flatMap(_ => t.send(t.post("/auth/login", login(id, "wrong password"), ip = ip)).map(_ => ())))
+          .map(_ => t.delays.toVector.drop(before))
+      }
+      for {
+        _ <- t.send(t.post("/auth/register", register))
+        unknown <- failures("nobody_here", "198.51.100.1")
+        existing <- failures("taro_2026", "198.51.100.2")
+      } yield {
+        assertEquals(unknown, Vector(1d, 2d, 3d))
+        assertEquals(existing, unknown)
+      }
+    }
+  }
+
+  test("専ブラのキーに結び付いたセッションは、キー発行・失効・同意の更新に使えず、ログアウトだけできる") {
+    val t = new AuthSignInTestKit()
+    t.run {
+      val time = js.Date.now() / 1000
+      for {
+        registered <- t.send(t.post("/auth/register", register))
+        session = t.cookie(registered, "__Host-ch3s_sid").get
+        claims <- SessionCookies.verify(session, AuthTestEnv.secret, time)
+        uaHash <- io._3ch.bbs.hash.AuthHmac.uaHash(AuthTestEnv.secret, "Monazilla/1.00 Test/1.0")
+        issued <- SessionCookies.issue(claims.get.copy(binding = Some(SessionBinding("token1", uaHash.get.take(16)))), AuthTestEnv.secret, t.origin + "/auth/", time)
+        bound = issued.get.takeWhile(_ != ';')
+        send = (path: String, form: Seq[(String, String)]) => t.send(t.post(path, form, cookie = bound))
+        issue <- send("/auth/token/issue", Nil)
+        revoke <- send("/auth/token/revoke", Seq("id" -> "ABCDEFGHIJKLMNOP"))
+        agree <- send("/auth/agree", Seq("agreement" -> "v1"))
+        logout <- send("/auth/logout", Nil)
+      } yield {
+        Seq(issue, revoke, agree).foreach(response => assertEquals(response.status, 401))
+        assert(logout.headers.get("Set-Cookie").startsWith("__Host-ch3s_sid=; Max-Age=0"))
       }
     }
   }

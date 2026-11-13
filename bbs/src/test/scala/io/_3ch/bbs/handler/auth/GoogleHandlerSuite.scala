@@ -16,7 +16,7 @@ class GoogleHandlerSuite extends FunSuite {
     started <- t.send(t.post("/auth/google/start", fields))
     _ = assertEquals(started.status, 302)
     authorize = location(started)
-    oauth = t.cookie(started, "ch3s_oauth").get
+    oauth = t.cookie(started, "__Host-ch3s_oauth").get
     _ = { t.jwks = js.Dynamic.literal(keys = js.Array(keys.jwk)) }
     token <- keys.token(GoogleTestKeys.claims(sub, nonce.getOrElse(authorize.searchParams.get("nonce")), math.floor(js.Date.now() / 1000)))
     _ = { t.idToken = token }
@@ -35,8 +35,8 @@ class GoogleHandlerSuite extends FunSuite {
         }
         assert(url.searchParams.get("code_challenge").matches("[A-Za-z0-9_-]{43}"))
         val cookie = response.headers.get("Set-Cookie")
-        assert(cookie.startsWith("ch3s_oauth=1|"), cookie)
-        assert(cookie.contains("; Max-Age=600; Path=/auth/google; Secure; HttpOnly; SameSite=Lax"))
+        assert(cookie.startsWith("__Host-ch3s_oauth=1|"), cookie)
+        assert(cookie.contains("; Max-Age=600; Path=/; Secure; HttpOnly; SameSite=Lax"))
         assert(cookie.contains(url.searchParams.get("state")))
         assert(!cookie.contains(url.searchParams.get("code_challenge")))
       }
@@ -53,7 +53,7 @@ class GoogleHandlerSuite extends FunSuite {
         _ = assertEquals(created.headers.get("Location"), "/sample/")
         session <- SessionCookies.verify(t.cookie(created, "__Host-ch3s_sid").get, AuthTestEnv.secret, js.Date.now() / 1000)
         _ = assertEquals(session.map(s => (s.uid, s.lv)), Some(("hanako", 10)))
-        _ = assertEquals(t.cookie(created, "ch3s_oauth"), Some("ch3s_oauth="))
+        _ = assertEquals(t.cookie(created, "__Host-ch3s_oauth"), Some("__Host-ch3s_oauth="))
         panel <- t.kit.account(session.get.aid).inspect().toFuture
         _ = assertEquals(panel.account.kind.asInstanceOf[String], AccountKind.Google.code)
         again <- roundTrip(t, keys, "109876543210", Seq("return" -> "/"))
@@ -78,7 +78,7 @@ class GoogleHandlerSuite extends FunSuite {
         noCookie <- t.send(t.get("/auth/google/callback/?code=x&state=y"))
         _ = assertEquals(noCookie.headers.get("Location"), "/auth/?mode=login&error=oauth_state&return=%2F")
         denied <- t.send(t.post("/auth/google/start", Seq("return" -> "/"))).flatMap { started =>
-          t.send(t.get("/auth/google/callback/?error=access_denied", cookie = t.cookie(started, "ch3s_oauth").get))
+          t.send(t.get("/auth/google/callback/?error=access_denied", cookie = t.cookie(started, "__Host-ch3s_oauth").get))
         }
         _ = assertEquals(denied.headers.get("Location"), "/auth/?mode=login&error=google_denied&return=%2F")
         noAgreement <- t.send(t.post("/auth/google/start", Seq("uid" -> "hanako")))
@@ -86,6 +86,24 @@ class GoogleHandlerSuite extends FunSuite {
         badUid <- t.send(t.post("/auth/google/start", Seq("uid" -> "x", "agreement" -> "v1")))
       } yield {
         assertEquals(badUid.headers.get("Location"), "/auth/?error=uid&return=%2F")
+        assertEquals(t.kit.accountNames, Set.empty[String])
+      }
+    }
+  }
+
+  test("同意後に規約の版が変わった callback は登録せず、同意のやり直しを求める") {
+    val t = new AuthSignInTestKit(google = true)
+    t.run {
+      for {
+        keys <- GoogleTestKeys.generate("handler-kid-agreement")
+        started <- t.send(t.post("/auth/google/start", Seq("uid" -> "hanako", "agreement" -> "v1")))
+        authorize = location(started)
+        _ = { t.jwks = js.Dynamic.literal(keys = js.Array(keys.jwk)) }
+        token <- keys.token(GoogleTestKeys.claims("109876543210", authorize.searchParams.get("nonce"), math.floor(js.Date.now() / 1000)))
+        _ = { t.idToken = token; t.env.asInstanceOf[js.Dynamic].AGREEMENT_VERSION = "v2" }
+        callback <- t.send(t.get(s"/auth/google/callback/?code=test-code&state=${authorize.searchParams.get("state")}", cookie = t.cookie(started, "__Host-ch3s_oauth").get))
+      } yield {
+        assertEquals(callback.headers.get("Location"), "/auth/?error=agreement&return=%2F")
         assertEquals(t.kit.accountNames, Set.empty[String])
       }
     }

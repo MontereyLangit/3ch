@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac, pbkdf2Sync } from 'node:crypto';
@@ -14,8 +15,8 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
   timeout: 120000,
   skip: built ? false : 'dist/index.js がありません（npm run v6:build を先に実行）',
 }, async t => {
-  const worker = await unstable_dev(new URL('./support/auth-worker.mjs', import.meta.url).pathname, {
-    config: new URL('./support/wrangler.auth.jsonc', import.meta.url).pathname,
+  const worker = await unstable_dev(fileURLToPath(new URL('./support/auth-worker.mjs', import.meta.url)), {
+    config: fileURLToPath(new URL('./support/wrangler.auth.jsonc', import.meta.url)),
     local: true, persist: false, port: 0, logLevel: 'error',
     experimental: { disableExperimentalWarning: true, disableDevRegistry: true, watch: false },
   });
@@ -106,12 +107,15 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
 
     const pending = '2'.repeat(64);
     assert.equal(await index('login', 'register', pending, owner, now), '');
-    assert.equal(await index('login', 'confirm', pending, owner, now + 600), 'auth:index:ownership');
     assert.equal(await index('login', 'register', pending, other, now + 600), '');
     assert.equal(await index('login', 'confirm', pending, owner, now + 600), 'auth:index:ownership');
     assert.equal(await index('login', 'confirm', pending, other, now + 600), '');
     assert.equal(await index('login', 'remove', pending, other), '');
     assert.deepEqual(await index('login', 'lookup', pending), { code: 'auth:index:missing' });
+
+    const stalled = '3'.repeat(64);
+    assert.equal(await index('login', 'register', stalled, owner, now), '');
+    assert.equal(await index('login', 'confirm', stalled, owner, now + 600), '');
 
     const token = '3'.repeat(64);
     assert.equal(await index('token', 'register', token, owner, now), 'auth:invalid');
@@ -174,7 +178,7 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
     const redirect = await fetch(origin + '/auth', { redirect: 'manual' });
     assert.equal(redirect.status, 301);
     assert.ok(redirect.headers.get('accept-ch'));
-    const unchanged = await fetch(origin + '/auth-test/subject.txt', { headers: { 'if-modified-since': new Date(Date.now() + 86400000).toUTCString() } });
+    const unchanged = await fetch(origin + '/authtest/subject.txt', { headers: { 'if-modified-since': new Date(Date.now() + 86400000).toUTCString() } });
     assert.equal(unchanged.status, 304);
     assert.ok(unchanged.headers.get('accept-ch'));
   });
@@ -298,6 +302,7 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
     for (let i = 0; i < 10; i++) {
       assert.equal((await account(aid, 'verifyPassword', 'wrong password', lockedIp, now)).code, 'auth:login:failed');
     }
+    for (let i = 0; i < 8; i++) assert.equal((await rate(lockedIp, 'loginFail', Math.floor(Date.now() / 1000))).code, '');
     const started = Date.now();
     const locked = await attempt('taro_2026', 'correct horse', '192.0.2.60');
     assert.equal(locked.status, 401);

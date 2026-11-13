@@ -119,7 +119,7 @@ class PostingSnapshotSuite extends FunSuite {
   private def caps: Env => Future[Unit] = env => Future.successful {
     env.putCap("weakpass", "キャップ")
     env.putCap("strongpass", "つよいキャップ★")
-    env.putCap("tSRvRHdM/NG0AWoskdPh+cSK1zY", "通常キャップ")
+    env.putCap("+3470EAMAflrDvV5NQgr8kedQTI", "通常キャップ")
   }
 
   private def all(steps: (Env => Future[Unit])*): Env => Future[Unit] = env =>

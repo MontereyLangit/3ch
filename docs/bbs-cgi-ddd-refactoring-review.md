@@ -81,7 +81,7 @@
 
 | 観点 | 指摘と対応 |
 | --- | --- |
-| 数値の互換性・テスト | `JsNumber` の `BigDecimal` による変換で負のゼロの符号が失われ、Scala.js では巨大な指数が例外になっていた（KB-41）。十進構文を検査して `Double.parseDouble` で読むように変更。負のゼロは逆数の符号も比較し、指数・非正規化数・丸め境界と日付窓を JVM / JS で検証する。HTTP 回帰テストは巨大指数の文字数設定と負のゼロの日付窓を扱う |
+| 数値の互換性・テスト | `JsNumber` の `BigDecimal` による変換で負のゼロの符号が失われ、Scala.js では巨大な指数が例外になっていた（KB-43）。十進構文を検査して `Double.parseDouble` で読むように変更。負のゼロは逆数の符号も比較し、指数・非正規化数・丸め境界と日付窓を JVM / JS で検証する。HTTP 回帰テストは巨大指数の文字数設定と負のゼロの日付窓を扱う |
 | DDD・エラーモデル | `InvalidCreationSettings` の日本語文字列を `ThreadCreationSettingError` に、`Internal` の文字列段名と説明を `PostingStage` に置換。表示文言と診断用の段名は `PostingText` に集約した。管理画面も同じ設定エラーの変換を使い、表示内容を維持する |
 | 純粋関数・依存方向 | `handler/PostingFormDecoder` がバイト列・パーセント符号化を復号し、ドメインの `FormSanitizer.fromFields` が文字列を整形する。ドメインから `TextDecoder` と `SjisEncoding` への依存を削除。復号前の submit 検査、不正なパーセント符号化、重複項目、UTF-8 / Shift_JIS を別スイートで検証する |
 | Scaladoc・コメント | `ThreadCreationSettings.fromSettings` などを現在の契約の説明に絞り、互換化の経緯はこの記録に残した。型付きエラーが表示文言を保持しなくなり、Scaladoc と実装の食い違いも解消した |

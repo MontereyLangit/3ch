@@ -1,10 +1,11 @@
 package io._3ch.bbs.durable.codec
 
 import io._3ch.bbs.domain.posting.{ClientIdentity, ThreadOwner, ThreadPosting}
-import io._3ch.bbs.domain.posting.moderation.{PostRateCheck, PostRateIdentity, PostRateKey, PostRateLevel, PostRateLimit, ThreadCreationLimit, ThreadCreationRateLimit, ThreadCreationRequest}
+import io._3ch.bbs.domain.posting.moderation.{PostRateCheck, PostRateHistory, PostRateIdentity, PostRateKey, PostRateLevel, PostRateLimit, PostRateRecord, PostRateStatus, ThreadCreationLimit, ThreadCreationRateLimit, ThreadCreationRequest, ThreadRecentPosts}
 import io._3ch.common.domain.posting.ThreadPhoebeRequest
 import munit.FunSuite
 import scala.scalajs.js
+import scala.scalajs.js.JSConverters.*
 
 class PostingCodecSuite extends FunSuite {
   private val limit = ThreadCreationLimit(ThreadCreationRateLimit.Settings(2, 3600, 1, 60), ThreadCreationRequest(ClientIdentity("ip", "ua", "net"), "title"))
@@ -54,7 +55,33 @@ class PostingCodecSuite extends FunSuite {
     val encoded = PostRateCodec.encodeCheck(check)
     assertEquals(encoded.level.asInstanceOf[String], "0")
     assertEquals(PostRateCodec.decodeCheck(encoded), check)
-    assertEquals(PostRateCodec.decodeBoardSettings(PostRateCodec.encodeBoardSettings(check.boardSettings, check.enforce)), (check.board.copy(fr = 0), true))
+    assertEquals(PostRateCodec.decodeBoardSettings(PostRateCodec.encodeBoardSettings(check.boardSettings, check.enforce)), (check.board.copy(checksFr = false), true))
+  }
+
+  test("スレの直近の投稿は短縮して保存し、全長の値で保存した旧形式も短縮して読む") {
+    val full = "a" * 64
+    val recent = ThreadRecentPosts(Vector(PostRateLimit.Entry(2e9, PostRateIdentity(full, full, ""))))
+    val encoded = PostRateCodec.encodeRecent(recent)
+    assertEquals(js.JSON.stringify(encoded), """[{"t":2000000000,"ip":"aaaaaaaaaaaa","shiki":"aaaaaaaaaaaa"}]""")
+    val legacy = js.JSON.parse(s"""[{"t":2000000000,"ip":"$full","shiki":"$full","aid":""}]""").asInstanceOf[js.Any]
+    assertEquals(PostRateCodec.decodeRecent(legacy), PostRateCodec.decodeRecent(encoded))
+  }
+
+  test("スレの直近の投稿は上限の件数でも DO の値の上限 128 KiB に十分収まる") {
+    val full = "f" * 64
+    val identity = PostRateIdentity(full, full, full)
+    val settings = PostRateLimit.ThreadSettings(40, 315360000, PostRateKey.defaults)
+    val recent = (1 to ThreadRecentPosts.MaxPosts + 10).foldLeft(ThreadRecentPosts.empty)((acc, n) => acc.appended(PostRateLimit.Entry(1999999999.123 + n, identity), settings, 2e9))
+    assertEquals(recent.posts.size, ThreadRecentPosts.MaxPosts)
+    assert(js.JSON.stringify(PostRateCodec.encodeRecent(recent)).length < 100 * 1000)
+  }
+
+  test("板の連投履歴の 1 ページは全長のハッシュでも DO の値の上限 128 KiB に十分収まる") {
+    val full = "f" * 64
+    val records = (1 to PostRateHistory.PageSize).map { n =>
+      PostRateRecord(s"${"9" * 10}:${"u" * 36}", 1999999999.123 + n, PostRateIdentity(full, full, full), PostRateStatus.Completed)
+    }
+    assert(js.JSON.stringify(records.map(PostRateCodec.encodeRecord).toJSArray).length < 64 * 1024)
   }
 
   test("スレ Lv のコマンドは往復し、0〜10 の整数でない値は読まない") {

@@ -24,7 +24,8 @@ final class PostingService(ports: PostingPorts, salt: String) {
   /** 書き込む。拒否は Rejected で返し、規制ルールの読込失敗などの想定外の障害は Future の失敗になる */
   def post(request: PostingRequest): Future[PostingOutcome] =
     (for {
-      checked <- checkRequest(initial(request), request)
+      saltHash <- ports.hasher.sha256Hex(salt)
+      checked <- checkRequest(initial(request, saltHash), request)
       read <- readForm(checked, request)
       capped <- processCap(read)
       _ = GlobalThread.postingError(capped.form.key, capped.form.kind == PostKind.NewThread, capped.cap.isDefined).foreach(reject(_, capped))
@@ -57,10 +58,10 @@ final class PostingService(ports: PostingPorts, salt: String) {
       case Rejected(error, context) => PostingOutcome.Rejected(error, context, headers(context))
     }
 
-  private def initial(request: PostingRequest): PostingContext = {
+  private def initial(request: PostingRequest, saltHash: String): PostingContext = {
     val now = ports.clock.nowMillis()
     val identity = PostingIdentity(request.connectingIp, request.connectingIp.getOrElse("null"), request.userAgent, "", request.deviceInformation,
-      request.asn.getOrElse("0000"), request.country.getOrElse("unknown"), request.region.getOrElse("catv?"), request.city.getOrElse(""), ports.hasher.md5(salt))
+      request.asn.getOrElse("0000"), request.country.getOrElse("unknown"), request.region.getOrElse("catv?"), request.city.getOrElse(""), saltHash)
     PostingContext(PostForm(), identity, time = now.toString, unixtime = math.floor(now / 1000).toString)
   }
 
@@ -115,7 +116,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
     case None => Future.successful(context)
     case Some(password) =>
       val hasher = ports.hasher
-      val key = if (password.startsWith("!")) Future.successful(password.drop(1)) else hasher.sha256Hex(hasher.md5(password) + context.identity.salt).flatMap(hasher.sha1Base64)
+      val key = if (password.startsWith("!")) Future.successful(password.drop(1)) else hasher.sha256Hex(password + context.identity.salt).flatMap(hasher.sha1Base64)
       key.flatMap(value => ports.caps.find(value).map(cap => (value, cap))).map { case (value, cap) =>
         context.copy(cap = cap, capKey = Option.when(cap.isDefined)(value), form = cap.fold(context.form)(handle => context.form.copy(name = handle.displayName(context.form.name))))
       }
@@ -143,7 +144,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
 
   private def identify(context: PostingContext): Future[PostingContext] = {
     val hasher = ports.hasher
-    hasher.sha256Hex(hasher.md5(context.identity.ip.getOrElse("null")) + context.identity.salt).flatMap(hasher.sha1Base64).map { pon =>
+    hasher.sha256Hex(context.identity.ip.getOrElse("null") + context.identity.salt).flatMap(hasher.sha1Base64).map { pon =>
       context.copy(settings = context.settings.updated("BBS_SHIKIBETSU", "off"), ponCookie = Some(ponCookie(pon, context.form.isMonazilla)))
     }
   }
@@ -180,14 +181,15 @@ final class PostingService(ports: PostingPorts, salt: String) {
     val date = DateSalt.window(context.unixtime, context.settings.orElse("BBS_ID_RESET", "86400")).toString
     val seeds = ShikibetsuSeeds(identity.region, identity.city, identity.asn, identity.userAgent, context.settings.orElse("BBS_ID_GROUP", context.form.bbs), date, identity.salt)
     val hasher = ports.hasher
-    def id(seed: String): Future[String] = hasher.sha1Base64(hasher.md5(seed))
+    def id(seed: String): Future[String] = hasher.sha256Hex(seed).flatMap(hasher.sha1Base64)
     val shikibetsu = if (context.cap.isDefined) Future.successful("★") else ShikibetsuMode.parse(context.settings.orElse("BBS_ID_SHIKIBETSU", "checked")) match {
       case ShikibetsuMode.Checked =>
         for {
           region <- id(seeds.regionSeed)
           city <- id(seeds.citySeed)
           asn <- id(seeds.asnSeed)
-        } yield ShikibetsuFormat.checked(identity.country, region, city, asn, hasher.md5(seeds.userAgentSeed))
+          userAgent <- hasher.sha256Hex(seeds.userAgentSeed)
+        } yield ShikibetsuFormat.checked(identity.country, region, city, asn, userAgent)
       case ShikibetsuMode.Phoebe =>
         for {
           axes <- identifierAxes(account, request)
@@ -215,7 +217,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
       }
     }
 
-  /** スレ立て時のスレ主を返し、返信者がスレ主なら名前欄に (主) を付ける。キャップは対象外 */
+  /** スレ立てなら保存するスレ主を返し、>>1 を含めスレ主なら名前欄に (主) を付ける。キャップは対象外（docs/トリップ・ID廃止とスレ主表示.md §2.4） */
   private def markNusi(context: PostingContext, user: Option[PostingUser], boardSettings: BbsSettings): Future[(PostingContext, Option[ThreadOwner])] =
     if (context.cap.isDefined) Future.successful((context, None))
     else for {
@@ -223,12 +225,11 @@ final class PostingService(ports: PostingPorts, salt: String) {
       accountHash <- digest(context, user.fold("")(_.accountKey))
     } yield {
       val poster = ThreadOwner(ipHash, context.shikibetsu, accountHash)
-      if (context.creating) (context, Some(poster))
-      else {
-        val owner = NusiMark.applies(isReply = true, cap = false, noNusi = context.form.noNusi, boardDisabled = boardSettings.checked("BBS_DISABLE_NUSI"),
-          threadDisabled = context.settings.checked("BBS_DISABLE_NUSI"), owner = context.threadOwner(), poster = poster)
-        (if (owner) context.copy(form = context.form.copy(name = context.form.name + NusiMark.suffix)) else context, None)
-      }
+      val owner = if (context.creating) Some(poster) else context.threadOwner()
+      val marked = NusiMark.applies(cap = false, noNusi = context.form.noNusi, boardDisabled = boardSettings.checked("BBS_DISABLE_NUSI"),
+        threadDisabled = context.settings.checked("BBS_DISABLE_NUSI"), owner = owner, poster = poster)
+      val named = if (marked) context.copy(form = context.form.copy(name = context.form.name + NusiMark.suffix)) else context
+      (named, Option.when(context.creating)(poster))
     }
 
   /** 連投規制の材料。判定しない投稿（off・BBS_LIVE・回避レベルで免除）は None。aid は認証主体の accountKey（未認証は空）、キャップの識別子（★）は空にして照合しない */
@@ -237,7 +238,8 @@ final class PostingService(ports: PostingPorts, salt: String) {
     if (!settings.applies(context.cap.isDefined, user.isDefined)) Future.successful(None)
     else for {
       ip <- digest(context, canonicalIp(request.connectingIp.getOrElse("")))
-      shiki <- digest(context, if (context.cap.isDefined) "" else context.shikibetsu)
+      mode = ShikibetsuMode.parse(context.settings.orElse("BBS_ID_SHIKIBETSU", "checked"))
+      shiki <- digest(context, PostRateSettings.shikiSource(mode, context.cap.isDefined, context.shikibetsu))
       aid <- digest(context, user.fold("")(_.accountKey))
     } yield Some(PostRateCheck(settings.level, PostRateIdentity(ip, shiki, aid), settings.board, settings.thread))
   }
@@ -321,7 +323,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
   private def digest(context: PostingContext, value: String): Future[String] =
     if (value.isEmpty) Future.successful("") else ports.hasher.sha256Hex(value + ":" + context.identity.salt)
 
-  /** 段の途中の例外を内部エラーにする。板設定・スレの読込・書込は受付時刻を出し、ほかは未設定 */
+  /** 段の途中の例外を内部エラーにする。時刻は BoardSettings・スレの読込・書込の段だけ受付時刻を出し、ほかは未設定 */
   private def guarded[A](context: PostingContext, stage: PostingStage, clock: FailureClock)(f: => Future[A]): Future[A] =
     Future.unit.flatMap(_ => f).recover {
       case e if !e.isInstanceOf[Rejected] =>
@@ -337,7 +339,7 @@ object PostingService {
   /** 書き込み先の板と、スレ設定で上書きする前の板設定 */
   private final case class PostingBoard(id: BoardId, settings: BbsSettings)
 
-  /** 内部エラーの文言で、受付時刻を持たない段が出す値 */
+  /** 内部エラーの文言で、受付時刻を持たない段が出す時刻 */
   private val UnsetTime = "undefined"
 
   private def reject(error: PostingError, context: PostingContext): Nothing = throw Rejected(error, context)

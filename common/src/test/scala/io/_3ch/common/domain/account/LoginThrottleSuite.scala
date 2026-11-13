@@ -6,23 +6,19 @@ class LoginThrottleSuite extends FunSuite {
   private val now = 2000000000d
   private val ipA = "a" * 64
   private val ipB = "b" * 64
+  private def ip(i: Int): String = f"$i%064x"
 
   private def failed(state: LoginThrottle, keyIp: String, time: Double): LoginThrottleUpdate =
     state.recordFailure(keyIp, time).toOption.get
 
-  test("null の保存値と接続元ハッシュは例外を出さず不正と判定する") {
-    Seq(LoginThrottle(failures = null), LoginThrottle(locks = null), LoginThrottle(failures = Vector(null)),
-      LoginThrottle(failures = Vector(LoginFailure(null, 1))), LoginThrottle(locks = Map(null.asInstanceOf[String] -> 1d)))
-      .foreach(value => assert(!value.valid))
-  }
+  private def failures(state: LoginThrottle, keyIp: String, count: Int, time: Double): LoginThrottle =
+    (0 until count).foldLeft(state)((current, _) => failed(current, keyIp, time).state)
 
-  test("五回目の失敗を含めて遅延を増やし十二回目から八秒で止める") {
-    val updates = (1 to 14).foldLeft(Vector.empty[LoginThrottleUpdate]) { (updates, i) =>
-      val state = updates.lastOption.fold(LoginThrottle())(_.state)
-      updates :+ failed(state, f"$i%064x", now)
-    }
-    assertEquals(updates.map(_.decision.delaySeconds), Vector(0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 8, 8))
-    assert(updates.forall(update => !update.decision.locked))
+  test("null の保存値と接続元ハッシュは例外を出さず不正と判定する") {
+    Seq(LoginThrottle(sources = null), LoginThrottle(account = null), LoginThrottle(sources = Map(null.asInstanceOf[String] -> LoginSource(1, now))),
+      LoginThrottle(sources = Map(ipA -> null)), LoginThrottle(sources = Map(ipA -> LoginSource(0, now))),
+      LoginThrottle(sources = Map(ipA -> LoginSource(1, now, Some(-1d)))), LoginThrottle(account = LoginAccountFailures(-1, now)))
+      .foreach(value => assert(!value.valid))
   }
 
   test("同じ接続元の十回目の失敗でその時刻から一時間だけロックする") {
@@ -34,57 +30,73 @@ class LoginThrottleSuite extends FunSuite {
     assert(!locked.state.check(ipA, now + 9 + 3600).toOption.get.locked)
   }
 
-  test("別の接続元はロックせずアカウント全体の失敗遅延だけを共有する") {
-    val locked = (1 to 10).foldLeft(LoginThrottle())((state, _) => failed(state, ipA, now).state)
-    val other = failed(locked, ipB, now + 1)
-    assert(!other.decision.locked)
-    assertEquals(other.decision.delaySeconds, 7)
-    assert(other.state.check(ipA, now + 1).toOption.get.locked)
-    val separateAccount = failed(LoginThrottle(), ipA, now + 1)
-    assert(!separateAccount.decision.locked)
-    assertEquals(separateAccount.decision.delaySeconds, 0)
+  test("別の接続元の失敗に挟まれても、同じ接続元の十回目でロックする") {
+    val others = (1 to 4).map(ip)
+    val state = (0 until 10).foldLeft(LoginThrottle()) { (current, i) =>
+      val withOthers = others.foldLeft(current)((state, other) => failed(state, other, now + i).state)
+      failed(withOthers, ipA, now + i).state
+    }
+    assert(state.check(ipA, now + 10).toOption.get.locked)
+    assert(!state.check(ipB, now + 10).toOption.get.locked)
   }
 
-  test("直近一時間の境界にある失敗は件数から除く") {
-    val state = LoginThrottle(Vector.fill(9)(LoginFailure(ipA, now)))
-    assert(failed(state, ipA, now + 3599).decision.locked)
-    val boundary = failed(state, ipA, now + 3600)
-    assert(!boundary.decision.locked)
-    assertEquals(boundary.state.failures, Vector(LoginFailure(ipA, now + 3600)))
-    assertEquals(boundary.decision.delaySeconds, 0)
+  test("接続元を回し続けても、百回目の失敗で全接続元を一時間ロックする") {
+    val state = (0 until 100).foldLeft(LoginThrottle())((current, i) => failed(current, ip(i % 20), now + i).state)
+    assert(state.account.lockedUntil.isDefined)
+    assert(state.check(ipB, now + 100).toOption.get.locked)
+    assertEquals(state.check(ipB, now + 99 + 3599).map(_.locked), Right(true))
+    assertEquals(state.check(ipB, now + 99 + 3600).map(_.locked), Right(false))
+    val during = failed(state, ipB, now + 200)
+    assertEquals(during.state, state)
+    assertEquals(during.decision.lockedUntil, state.account.lockedUntil)
+    assertEquals(state.recordSuccess(ipB, now + 201).toOption.get.state, state)
   }
 
-  test("ロック期限は失敗履歴の窓とは別に保持し期限中の試行で延長しない") {
-    val state = LoginThrottle(Vector.fill(9)(LoginFailure(ipA, now)), Map.empty)
-    val locked = failed(state, ipA, now + 3599).state
+  test("ロック中の接続元が百一件になっても期限内のロックを捨てず、保持できない新しい接続元はロック扱いにする") {
+    val locked = (0 until 101).foldLeft(LoginThrottle())((state, i) => failures(state, ip(i), 10, now).copy(account = LoginAccountFailures()))
+    assert(locked.sources.size <= LoginThrottle.sourceLimit)
+    assertEquals(locked.sources.values.count(_.lockedUntil.isDefined), LoginThrottle.sourceLimit)
+    (0 until LoginThrottle.sourceLimit).foreach(i => assert(locked.check(ip(i), now + 1).toOption.get.locked, i.toString))
+    val fresh = ip(500)
+    assert(locked.check(fresh, now + 1).toOption.get.locked)
+    val refused = failed(locked, fresh, now + 1)
+    assertEquals(refused.state, locked)
+    assert(refused.decision.locked)
+    assert(!locked.check(fresh, now + 3600).toOption.get.locked)
+  }
+
+  test("期限切れの接続元だけを整理し、成功した接続元の失敗は消すがアカウント全体の失敗数は残す") {
+    val state = failures(failures(LoginThrottle(), ipA, 3, now), ipB, 2, now + 3000)
+    val later = failed(state, ipB, now + 3600)
+    assertEquals(later.state.sources.keySet, Set(ipB))
+    assertEquals(later.state.sources(ipB).count, 3)
+    assertEquals(later.state.account, LoginAccountFailures(1, now + 3600))
+    val success = later.state.recordSuccess(ipB, now + 3601).toOption.get
+    assert(!success.decision.locked)
+    assertEquals(success.state.sources, Map.empty[String, LoginSource])
+    assertEquals(success.state.account.count, 1)
+    val reset = failed(state, ipB, now + 7200)
+    assertEquals(reset.state.account, LoginAccountFailures(1, now + 7200))
+  }
+
+  test("ロック期限は窓とは別に保持し期限中の試行で延長しない") {
+    val locked = failures(LoginThrottle(), ipA, 10, now + 3599).copy(account = LoginAccountFailures())
     val during = failed(locked, ipA, now + 3601)
-    assertEquals(during.state.failures, Vector(LoginFailure(ipA, now + 3599)))
-    assertEquals(during.decision.lockedUntil, Some(now + 7199))
+    assertEquals(during.state, locked)
+    assertEquals(during.decision.lockedUntil, Some(now + 3599 + 3600))
     val successfulPassword = during.state.recordSuccess(ipA, now + 3602).toOption.get
     assert(successfulPassword.decision.locked)
-    assertEquals(successfulPassword.state.locks, locked.locks)
-    assertEquals(successfulPassword.state.failures, during.state.failures)
+    assertEquals(successfulPassword.state, locked)
   }
 
-  test("成功時はその接続元の失敗を消し別の接続元のロックと履歴を残す") {
-    val locked = (1 to 10).foldLeft(LoginThrottle())((state, _) => failed(state, ipA, now).state)
-    val withOther = failed(locked, ipB, now + 1).state
-    val success = withOther.recordSuccess(ipB, now + 2).toOption.get
-    assert(!success.decision.locked)
-    assertEquals(success.decision.delaySeconds, 0)
-    assertEquals(success.state.failures.map(_.keyIpHash).toSet, Set(ipA))
-    assert(success.state.check(ipA, now + 2).toOption.get.locked)
-  }
-
-  test("時刻が逆行しても未来側の失敗とロックを消さない") {
-    val locked = (1 to 10).foldLeft(LoginThrottle())((state, _) => failed(state, ipA, now).state)
+  test("時刻が逆行しても未来側の記録を消さない") {
+    val locked = failures(LoginThrottle(), ipA, 10, now)
     val backwards = failed(locked, ipA, now - 100)
     assertEquals(backwards.state, locked)
     assertEquals(backwards.decision.lockedUntil, Some(now + 3600))
-    assertEquals(backwards.decision.delaySeconds, 6)
     val other = failed(locked, ipB, now - 100)
-    assertEquals(other.state.failures.size, 11)
-    assertEquals(other.decision.delaySeconds, 7)
+    assertEquals(other.state.sources(ipA), locked.sources(ipA))
+    assertEquals(other.state.account.count, 11)
   }
 
   test("不正な時刻・接続元・保存状態では計数を進めない") {
@@ -98,26 +110,16 @@ class LoginThrottleSuite extends FunSuite {
       assertEquals(LoginThrottle().recordFailure(key, now), Left(LoginThrottleRejection.Invalid))
       assertEquals(LoginThrottle().recordSuccess(key, now), Left(LoginThrottleRejection.Invalid))
     }
-    assertEquals(LoginThrottle(Vector(LoginFailure(ipA, Double.NaN))).check(ipA, now), Left(LoginThrottleRejection.Invalid))
-    assertEquals(LoginThrottle(locks = Map(ipA -> -1d)).check(ipA, now), Left(LoginThrottleRejection.Invalid))
+    assertEquals(LoginThrottle(Map(ipA -> LoginSource(1, Double.NaN))).check(ipA, now), Left(LoginThrottleRejection.Invalid))
+    assertEquals(LoginThrottle(Map(ipA -> LoginSource(1, now, Some(-1d)))).check(ipA, now), Left(LoginThrottleRejection.Invalid))
   }
 
-  test("失敗とロックはアカウントごとに上限まで残す") {
-    val start = 2000000000d
-    val throttle = (0 until 150).foldLeft(LoginThrottle()) { (state, i) =>
-      val key = f"$i%064x"
-      (0 until 10).foldLeft(state)((current, n) => current.recordFailure(key, start + i + n * 0.0).toOption.get.state)
-    }
-    assert(throttle.failures.size <= LoginThrottle.failureLimit)
-    assert(throttle.locks.size <= LoginThrottle.lockLimit)
-  }
-
-  test("試行前の確認は記録を変えず、ロック中でも照合の前に遅延とロック期限を返す") {
-    val five = (1 to 5).foldLeft(LoginThrottle())((state, i) => failed(state, ipA, now + i).state)
-    assertEquals(five.check(ipA, now + 6), Right(LoginThrottleDecision(None, 1)))
-    assertEquals(five.check(ipB, now + 6), Right(LoginThrottleDecision(None, 1)))
-    val locked = (6 to 10).foldLeft(five)((state, i) => failed(state, ipA, now + i).state)
-    assertEquals(locked.check(ipA, now + 11), Right(LoginThrottleDecision(Some(now + 10 + LoginThrottle.window), 6)))
+  test("試行前の確認は記録を変えず、ロック期限を返す") {
+    val five = failures(LoginThrottle(), ipA, 5, now + 1)
+    assertEquals(five.check(ipA, now + 6), Right(LoginThrottleDecision(None)))
+    assertEquals(five.check(ipB, now + 6), Right(LoginThrottleDecision(None)))
+    val locked = failures(five, ipA, 5, now + 10)
+    assertEquals(locked.check(ipA, now + 11), Right(LoginThrottleDecision(Some(now + 10 + LoginThrottle.window))))
     assertEquals(locked.check(ipA, now + 11 + LoginThrottle.window).map(_.locked), Right(false))
   }
 }

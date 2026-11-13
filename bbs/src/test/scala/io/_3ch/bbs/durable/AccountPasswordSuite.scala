@@ -68,10 +68,8 @@ class AccountPasswordSuite extends FunSuite {
       _ <- prepared(env)
       results <- Future.sequence(Vector.fill(12)(env.account(aid).verifyPassword("wrong password", ip, now + 1).toFuture))
       _ = assert(results.forall(_.code.asInstanceOf[String] == AccountRejection.LoginFailed.code))
-      _ = assertEquals(results.map(_.delay.asInstanceOf[Int]).sorted, Vector(0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 6, 6))
       state <- stored(env)
-      _ = assertEquals(state.credential.get.throttle.failures.size, 10)
-      _ = assertEquals(state.credential.get.throttle.locks.get(ip), Some(now + 1 + 3600))
+      _ = assertEquals(state.credential.get.throttle.sources.get(ip), Some(LoginSource(10, now + 1, Some(now + 1 + 3600))))
       locked <- env.account(aid).verifyPassword(secret, ip, now + 2).toFuture
       _ = assertEquals(locked.code.asInstanceOf[String], AccountRejection.LoginFailed.code)
       elsewhere <- env.account(aid).verifyPassword(secret, other, now + 2).toFuture
@@ -87,10 +85,9 @@ class AccountPasswordSuite extends FunSuite {
       _ <- Future.traverse(Vector(ip, ip, other))(key => env.account(aid).verifyPassword("wrong password", key, now + 1).toFuture)
       _ <- env.account(aid).verifyPassword(secret, ip, now + 2).toFuture
       state <- stored(env)
-      _ = assertEquals(state.credential.get.throttle.failures.map(_.keyIpHash), Vector(other))
+      _ = assertEquals(state.credential.get.throttle.sources.keySet, Set(other))
       (dummy, dummyCalls) <- counting(env.account("dummy").verifyPassword(secret, ip, now).toFuture)
       _ = assertEquals(dummy.code.asInstanceOf[String], AccountRejection.LoginFailed.code)
-      _ = assertEquals(dummy.delay.asInstanceOf[Int], 0)
       _ = assertEquals(dummyCalls, 1)
       dummyState <- env.accountInstance("dummy").state.storage.get(AccountCodec.stateKeys).toFuture
       _ = assertEquals(dummyState.size, 0)

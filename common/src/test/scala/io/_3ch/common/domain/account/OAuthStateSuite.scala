@@ -4,7 +4,7 @@ import munit.FunSuite
 
 class OAuthStateSuite extends FunSuite {
   private val random = "A" * 43
-  private val state = OAuthState(random, "B" * 43, "C" * 64, "p" + "0" * 18, "/sample/?q=1", popup = true, Some("taro_2026"), agreed = true, 2000000600L)
+  private val state = OAuthState(random, "B" * 43, "C" * 64, "p" + "0" * 18, "/sample/?q=1", popup = true, Some("taro_2026"), agreedVersion = "v1", 2000000600L)
   private val signature = "A" * 22
 
   test("書式を確かめて往復させ、署名の対象は署名の手前までにする") {
@@ -14,7 +14,7 @@ class OAuthStateSuite extends FunSuite {
     assertEquals(parsed.payload, OAuthStateCodec.payload(state).get)
     assertEquals(OAuthStateCodec.fromHeader(s"a=b; ${OAuthStateCodec.Name}=$encoded").map(_.state), Some(state))
     assertEquals(OAuthStateCodec.fromHeader(s"${OAuthStateCodec.Name}=$encoded; ${OAuthStateCodec.Name}=$encoded"), None)
-    val login = state.copy(uid = None, popup = false, agreed = false, device = "")
+    val login = state.copy(uid = None, popup = false, agreedVersion = "", device = "")
     assertEquals(OAuthStateCodec.parse(OAuthStateCodec.encode(login, signature).get).map(_.state), Some(login))
   }
 
@@ -22,7 +22,7 @@ class OAuthStateSuite extends FunSuite {
     assert(state.isCurrent(2000000599))
     assert(!state.isCurrent(2000000600))
     Seq(state.copy(state = "short"), state.copy(returnPath = "//evil.example/"), state.copy(returnPath = "/a|b"),
-      state.copy(uid = Some("UPPER")), state.copy(device = "x"), state.copy(nonce = "B" * 42 + "|")).foreach { value =>
+      state.copy(uid = Some("UPPER")), state.copy(device = "x"), state.copy(agreedVersion = "v|1"), state.copy(agreedVersion = "v 1"), state.copy(nonce = "B" * 42 + "|")).foreach { value =>
       assertEquals(OAuthStateCodec.payload(value), None, value.toString)
     }
     val encoded = OAuthStateCodec.encode(state, signature).get

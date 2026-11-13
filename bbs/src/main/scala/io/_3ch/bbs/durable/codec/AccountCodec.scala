@@ -108,8 +108,8 @@ object AccountCodec {
     case other => describe(other)
   }
 
-  /** ログインの失敗。delay はアカウント全体の失敗数から決めた応答の遅延秒数 */
-  def loginFailure(delay: Int): js.Dynamic = js.Dynamic.literal(code = AccountRejection.LoginFailed.code, delay = delay)
+  /** ログインの失敗。存在しない ID・不一致・ロック中を区別しない */
+  def loginFailure(): js.Dynamic = js.Dynamic.literal(code = AccountRejection.LoginFailed.code)
 
   def tokenDescription(value: AccountDescription, tokenId: String): js.Dynamic = {
     val result = description(value)

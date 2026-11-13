@@ -28,7 +28,7 @@ final class GoogleAuthentication(accounts: AccountManagementStore & AccountSignI
           case SignInResult.Verified(account) => success(account, deviceHash, keyIp, now)
           case SignInResult.Unfinished(uid) => registration.resume(aid, uid, now).flatMap(success(_, deviceHash, keyIp, now))
           case SignInResult.Refused(reason) => Future.successful(GoogleOutcome.Refused(reason))
-          case SignInResult.Failed(_) => Future.failed(AuthServiceException(AuthServiceFailure.Unavailable))
+          case SignInResult.Failed => Future.failed(AuthServiceException(AuthServiceFailure.Unavailable))
         }
         case None => requestedUid.filter(_ => agreed) match {
           case None => Future.successful(GoogleOutcome.Registration)

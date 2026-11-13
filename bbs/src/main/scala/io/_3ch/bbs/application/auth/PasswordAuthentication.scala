@@ -35,7 +35,7 @@ final class PasswordAuthentication(accounts: AccountManagementStore & AccountSig
 
   /**
    * 接続元ごとに一時間三十回まで。存在しない ID も固定の Account("dummy") で同じ照合を行い、
-   * 不一致・ロック中・未登録を区別しない
+   * 不一致・ロック中・未登録を区別しない。失敗の遅延は接続元の失敗数だけで決める
    */
   def login(loginId: Option[LoginId], password: String, deviceHash: String, keyIp: String, now: Double): Future[LoginOutcome] =
     for {
@@ -51,12 +51,15 @@ final class PasswordAuthentication(accounts: AccountManagementStore & AccountSig
         case (Some(_), SignInResult.Verified(account)) => bind(account, deviceHash, keyIp, now).map(_ => LoginOutcome.Success(account))
         case (Some(aid), SignInResult.Unfinished(uid)) if loginId.exists(_.value == uid) =>
           registration.resume(aid, uid, now).flatMap(account => bind(account, deviceHash, keyIp, now).map(_ => LoginOutcome.Success(account)))
-            .recover { case AuthServiceException(AuthServiceFailure.Invalid) => LoginOutcome.Failed(0) }
+            .recoverWith { case AuthServiceException(AuthServiceFailure.Invalid) => failed(keyIp, now) }
         case (Some(_), SignInResult.Refused(reason)) => Future.successful(LoginOutcome.Refused(reason))
-        case (_, SignInResult.Failed(delay)) => Future.successful(LoginOutcome.Failed(delay))
-        case _ => Future.successful(LoginOutcome.Failed(0))
+        case _ => failed(keyIp, now)
       }
     } yield outcome
+
+  /** 失敗の遅延は ID の有無にかかわらず、接続元ごとの直近一時間の失敗数から決める */
+  private def failed(keyIp: String, now: Double): Future[LoginOutcome] =
+    accounts.rate(keyIp, "loginFail", now).map(counts => LoginOutcome.Failed(AbuseThresholds.loginFailureDelay(counts)))
 
   /** 端末の記録は観測のためで、失敗してもログイン・登録は成功のままにする */
   private def bind(account: AccountDescription, deviceHash: String, keyIp: String, now: Double): Future[Unit] =

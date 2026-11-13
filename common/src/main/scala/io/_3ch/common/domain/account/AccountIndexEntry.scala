@@ -18,10 +18,10 @@ object AccountIndexKind {
 final case class AccountIndexEntry(aid: String, createdAt: Double, confirmed: Boolean = false, tokenId: Option[String] = None) {
   def reserved(now: Double): Boolean = confirmed || createdAt > now - AccountIndexEntry.reservationLifetime
 
-  /** 有効な予約を同じ所有者だけが確定できる。確定済みの再確認も受け付ける */
+  /** 同じ所有者だけが確定できる。期限切れでも、他の所有者に取られていなければ確定できる。確定済みの再確認も受け付ける */
   def confirm(expectedAid: String, now: Double): Either[AccountRejection, AccountIndexEntry] =
     if (!AccountProfile.validTime(now)) Left(AccountRejection.Invalid)
-    else if (aid != expectedAid || !reserved(now)) Left(AccountRejection.IndexOwnership) else Right(copy(confirmed = true))
+    else if (aid != expectedAid) Left(AccountRejection.IndexOwnership) else Right(copy(confirmed = true))
 
   /** 所有者を照合し、確定済み UID の削除は退会後も許可しない */
   def remove(kind: AccountIndexKind, expectedAid: String): Either[AccountRejection, Unit] =

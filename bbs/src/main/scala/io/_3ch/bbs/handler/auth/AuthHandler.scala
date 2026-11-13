@@ -156,10 +156,11 @@ object AuthHandler {
     SessionClaims(account.aid, account.uid, account.generation.toLong, account.expiresAt.getOrElse(time + AccountProfile.clientLifetime).toLong, account.lv, device, binding)
   private[auth] def signed(account: AccountDescription, device: String, request: Request, secret: String, time: Double, binding: Option[SessionBinding] = None): Future[String] =
     SessionCookies.issue(claims(account, time, device, binding), secret, request.url, time).map(_.getOrElse(throw Refused(AuthApiError.Unavailable)))
-  private def current(request: Request, secret: String, repository: AccountRepository, time: Double): Future[(SessionClaims, AccountDescription)] =
+  private def current(request: Request, secret: String, repository: AccountRepository, time: Double, allowBound: Boolean = true): Future[(SessionClaims, AccountDescription)] =
     SessionCookies.verify(header(request, "Cookie"), secret, time).flatMap {
       case None => Future.failed(Refused(AuthApiError.LoginRequired))
       case Some(session) if !session.generation.isValidInt || session.generation < 0 => Future.failed(Refused(AuthApiError.LoginRequired))
+      case Some(session) if !allowBound && session.binding.isDefined => Future.failed(Refused(AuthApiError.LoginRequired))
       case Some(session) =>
         val proof = session.binding.fold(Future.successful(Option.empty[TokenProof])) { binding =>
           AuthHmac.uaHash(secret, header(request, "User-Agent")).map { hash =>
@@ -170,6 +171,10 @@ object AuthHandler {
           session -> result.fold(reason => throw Refused(AuthApiError.Session(reason)), identity)
         }
     }
+
+  /** アカウント管理用。専ブラのキーに結び付いたセッションは投稿とログアウトにだけ使えるので、未ログインとして扱う */
+  private def managed(request: Request, secret: String, repository: AccountRepository, time: Double): Future[(SessionClaims, AccountDescription)] =
+    current(request, secret, repository, time, allowBound = false)
 
   /** Google ログインから戻したときの理由。知らない値は出さない */
   private def notice(code: String): Option[String] = code match {
@@ -209,7 +214,7 @@ object AuthHandler {
 
   private def account(c: HonoContextFacade, config: AuthSettings, props: RenderProps): Future[Response] = {
     val repository = new AccountRepository(c.env)
-    current(c.req.raw, config.secret, repository, now).flatMap { case (session, account) =>
+    managed(c.req.raw, config.secret, repository, now).flatMap { case (session, account) =>
       repository.inspect(account.aid).flatMap { panel =>
         val tokens = panel.tokens.map(token => AccountTokenProps(token.id, token.label, token.issuedAt, token.expiresAt,
           token.boundAt, token.lastUsedAt, token.revokedAt, token.revokeReason, token.replacedTokenAt,
@@ -245,15 +250,15 @@ object AuthHandler {
             case "/auth/login" => login(request, env, repository, form, config, time)
             case "/auth/google/start" => GoogleHandler.start(request, env, form, config, time)
             case "/auth/logout" => logout(request, config, repository, time)
-            case "/auth/agree" => current(request, config.secret, repository, time).flatMap { case (_, account) =>
+            case "/auth/agree" => managed(request, config.secret, repository, time).flatMap { case (_, account) =>
               if (!form.get("agreement").contains(config.agreementVersion)) throw Refused(AuthApiError.AgreementRequired)
               repository.agree(account.aid, config.agreementVersion, time).map(_ => json(js.Dynamic.literal(uid = account.uid, lv = account.lv)))
             }
-            case "/auth/token/issue" => current(request, config.secret, repository, time).flatMap { case (_, account) =>
+            case "/auth/token/issue" => managed(request, config.secret, repository, time).flatMap { case (_, account) =>
               if (account.agreementVersion != config.agreementVersion) throw Refused(AuthApiError.AgreementRequired)
               issueToken(repository, account, config.secret, time)
             }
-            case "/auth/token/revoke" => current(request, config.secret, repository, time).flatMap { case (_, account) =>
+            case "/auth/token/revoke" => managed(request, config.secret, repository, time).flatMap { case (_, account) =>
               val id = form.getOrElse("id", "")
               if (!DedicatedBrowserTokens.validId(id)) throw Refused(AuthApiError.Invalid)
               repository.revokeToken(account.aid, id, time).map(_ => json(js.Dynamic.literal(uid = account.uid, lv = account.lv)))
