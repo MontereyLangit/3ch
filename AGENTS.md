@@ -67,7 +67,7 @@ bbs/
     repository/        ports の実装。DO スタブ / R2 / KV を包み、js.Dynamic をここで止める
     durable/           Board DO, Thread DO
     external/cloudflare/  Workers / DO / R2 / KV の facade（DO の RPC スタブ `*DoStub` はコンパイル時に codegen が生成。docs/durable-object-stubs.md）
-    hash/, util/       Web Crypto ハッシュ・MD5 の npm facade（`@noble/hashes`）, Shift_JIS 変換
+    hash/, util/       Web Crypto ハッシュ（SHA-1 / SHA-256）, Shift_JIS 変換
   src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
   test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ
 bbs-client/            クライアント側（hydration）Scala
@@ -150,6 +150,8 @@ npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc
 
 ### 3.3 コーディング規約
 - scalajs-reactのコンポーネントは原則関数コンポーネント（ScalaFnComponent）とする。React公式がクラスコンポーネントの新規採用を推奨していないため。
+- **ライブラリは Scala.js のものを npm より優先する**（2026-11-09 ユーザー指示）: 同じ用途の Scala.js ライブラリがあればそちらを使い、
+  npm パッケージを `@JSImport` の facade で取り込むのは、Scala.js 側に適当なものが無い場合に限る。
 - 既存コードのスタイルに合わせる。不要なコメント・過剰な抽象化を入れない。
 - TypeScript の `any`、Scala の未型付け構造型を避ける。コンパイル / Lint 警告は抑制せず解消する。
 - **Scala の Optional Braces（インデント構文）は原則使わない**（2026-09-08 ユーザー指示）: Scala 3 の

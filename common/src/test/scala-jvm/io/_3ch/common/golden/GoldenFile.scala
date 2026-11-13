@@ -8,7 +8,7 @@ import java.nio.file.Files
  * `tests/golden` 配下の JSON ファイルを読むための JVM 側実装。
  *
  * テスト専用のコード（`common/src/test/scala-jvm`）であり、`common/src/main` の
- * 「純粋関数のみ・I/O禁止」方針とは無関係（本番の Sjis/Md5/UnixCrypt/SaltChar/HexToBinary は
+ * 「純粋関数のみ・I/O禁止」方針とは無関係（本番の Sjis/UnixCrypt/SaltChar/HexToBinary は
  * このファイルに依存しない）。
  *
  * sbt を実行するカレントディレクトリは通常リポジトリルートだが、確実性のため

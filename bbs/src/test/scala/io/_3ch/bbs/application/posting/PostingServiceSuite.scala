@@ -36,7 +36,7 @@ class PostingServiceSuite extends FunSuite {
     val calls: mutable.Buffer[String] = mutable.Buffer.empty
     val postings: mutable.Buffer[(String, String, ThreadPosting)] = mutable.Buffer.empty
     val writes: mutable.Buffer[(String, String)] = mutable.Buffer.empty
-    val md5Inputs: mutable.Buffer[String] = mutable.Buffer.empty
+    val sha256Inputs: mutable.Buffer[String] = mutable.Buffer.empty
     private def called[A](name: String)(value: => A): Future[A] = { calls += name; Future(value) }
 
     val ports: PostingPorts = PostingPorts(
@@ -77,9 +77,8 @@ class PostingServiceSuite extends FunSuite {
         def current(): Future[Option[PostingUser]] = called("users")(user)
       },
       hasher = new Hasher {
-        def md5(value: String): String = { md5Inputs += value; s"m($value)" }
         def sha1Base64(value: String): Future[String] = Future.successful(s"s1($value)")
-        def sha256Hex(value: String): Future[String] = Future.successful(s"s2($value)")
+        def sha256Hex(value: String): Future[String] = { sha256Inputs += value; Future.successful(s"s2($value)") }
       },
       clock = new Clock {
         def nowMillis(): Double = Now
@@ -111,8 +110,8 @@ class PostingServiceSuite extends FunSuite {
     case other => fail(s"拒否されなかった: $other")
   }
 
-  private val salt = "m(salt)"
-  private val pon = s"PON=s1(s2(m(192.0.2.1)$salt)); Max-Age=63072000; path=/; Secure; HttpOnly"
+  private val salt = "s2(salt)"
+  private val pon = s"PON=s1(s2(192.0.2.1$salt)); Max-Age=63072000; path=/; Secure; HttpOnly"
 
   test("スレ立ては段の順にポートを呼び、確定したレス番号と Set-Cookie を返す") {
     val fake = Fake()
@@ -132,9 +131,9 @@ class PostingServiceSuite extends FunSuite {
           assertEquals(context.form.key, "1700000000")
           assertEquals(context.sage, false)
           assertEquals(context.settings.value.toList, List("BBS_TITLE" -> "看板", "BBS_SHIKIBETSU" -> "off"))
-          val shikibetsu = "JP.s1.s1 s1-m(Mozilla/5.0 (T"
+          val shikibetsu = "JP.s1.s1 s1-s2(Mozilla/5.0 ("
           assertEquals(context.shikibetsu, shikibetsu)
-          assertEquals(context.form.name, s"名無しさん＠３ちゃんねる </b>($shikibetsu)<b>")
+          assertEquals(context.form.name, s"名無しさん＠３ちゃんねる </b>($shikibetsu)<b> </b>(主)<b>")
           assertEquals(context.identity.host, "192.0.2.1")
           assertEquals(context.identity.salt, salt)
         case other => fail(s"書けなかった: $other")
@@ -180,7 +179,12 @@ class PostingServiceSuite extends FunSuite {
 
   test("返信のスレ主には (主) を付ける") {
     val fake = Fake(owner = Some(ThreadOwner(s"s2(192.0.2.1:$salt)", "", "")))
-    fake.post(reply()*)().map(outcome => assert(outcome.context.form.name.endsWith(" (主)"), outcome.context.form.name))
+    fake.post(reply()*)().map(outcome => assert(outcome.context.form.name.endsWith(" </b>(主)<b>"), outcome.context.form.name))
+  }
+
+  test("スレ立て (>>1) の投稿者にも (主) を付ける") {
+    val fake = Fake()
+    fake.post()().map(outcome => assert(outcome.context.form.name.endsWith(" </b>(主)<b>"), outcome.context.form.name))
   }
 
   test("sage の判定は BBS_LIVE のときだけ乱数を読み、sage なら headline を書かない") {
@@ -302,14 +306,14 @@ class PostingServiceSuite extends FunSuite {
   test("BBS_ID_RESET の負のゼロと負数のアンダーフローは同じ識別子の日付窓になる") {
     def seed(reset: String): Future[Seq[String]] = {
       val fake = Fake(boardSettings = s"BBS_ID_RESET=$reset\n")
-      fake.post()().map(_ => fake.md5Inputs.filter(_.startsWith("Mozilla")).toSeq)
+      fake.post()().map(_ => fake.sha256Inputs.filter(_.startsWith("Mozilla/5.0 (Test)sample-")).toSeq)
     }
     for {
       negativeZero <- seed("-0")
       underflow <- seed("-1e-2147483649")
       positive <- seed("86400")
     } yield {
-      assertEquals(negativeZero, Seq("Mozilla/5.0 (Test)sample-Infinitym(salt)"))
+      assertEquals(negativeZero, Seq("Mozilla/5.0 (Test)sample-Infinitys2(salt)"))
       assertEquals(negativeZero, underflow)
       assertNotEquals(negativeZero, positive)
     }

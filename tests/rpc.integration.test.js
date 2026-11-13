@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { unstable_dev } from 'wrangler';
 
 // 前提: `npm run v6:build` で dist/index.js が生成済みであること（無ければスキップ）。
@@ -9,7 +10,7 @@ import { unstable_dev } from 'wrangler';
 const built = existsSync(new URL('../dist/index.js', import.meta.url));
 
 test('Wrangler: DO RPC の省略引数に本体の既定値が適用される', { timeout: 120000, skip: built ? false : 'dist/index.js がありません（npm run v6:build を先に実行）' }, async t => {
-  const worker = await unstable_dev(new URL('./support/rpc-worker.mjs', import.meta.url).pathname, { config: new URL('./support/wrangler.rpc.jsonc', import.meta.url).pathname, local: true, persist: false, port: 0, logLevel: 'error', experimental: { disableExperimentalWarning: true, disableDevRegistry: true, watch: false } });
+  const worker = await unstable_dev(fileURLToPath(new URL('./support/rpc-worker.mjs', import.meta.url)), { config: fileURLToPath(new URL('./support/wrangler.rpc.jsonc', import.meta.url)), local: true, persist: false, port: 0, logLevel: 'error', experimental: { disableExperimentalWarning: true, disableDevRegistry: true, watch: false } });
   t.after(() => worker.stop());
   const origin = `http://${worker.address}:${worker.port}`;
   const rpc = async (binding, name, method, ...args) => {

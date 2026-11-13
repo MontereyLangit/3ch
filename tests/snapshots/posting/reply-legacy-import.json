@@ -13,7 +13,7 @@
       ],
       [
         "set-cookie",
-        "PON=FjcWvAiw8YTQ0rJMvRNHD+hxZCs; Max-Age=63072000; path=/; Secure; HttpOnly"
+        "PON=q4pXMpiV4D+74CIKl6fd3fkamHI; Max-Age=63072000; path=/; Secure; HttpOnly"
       ],
       [
         "x-resnum",
@@ -39,7 +39,7 @@
       "settings": ""
     },
     "sample/1600000000": {
-      "dat": "名前 </b>(識別)<b><><>2020/09/13(日) 21:26:40 ID:old<> 過去本文 <>過去スレ\n2<>あぼーん<>あぼーん<>あぼーん<>あぼーん\n過去の名無し<><>2020/09/13(日) 21:28:20<> 三番目 <>\n名無しさん＠３ちゃんねる </b>(JP.SA.CG Kx-042e35264c7d19b9)<b><><>2023/11/15(水) 07:13:20<> 返信本文 <>\n",
+      "dat": "名前 </b>(識別)<b><><>2020/09/13(日) 21:26:40 ID:old<> 過去本文 <>過去スレ\n2<>あぼーん<>あぼーん<>あぼーん<>あぼーん\n過去の名無し<><>2020/09/13(日) 21:28:20<> 三番目 <>\n名無しさん＠３ちゃんねる </b>(JP.Tw.fv wA-4bf50373e5a55843)<b><><>2023/11/15(水) 07:13:20<> 返信本文 <>\n",
       "log": "4<>UID: IP:192.0.2.1 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0 (TestBrowser)\n",
       "settings": "BBS_NONAME_NAME=過去の名無し<>"
     }

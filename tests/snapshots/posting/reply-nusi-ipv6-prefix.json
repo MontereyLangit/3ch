@@ -13,7 +13,7 @@
       ],
       [
         "set-cookie",
-        "PON=OmH7Y2knANJjHCLxz3rm77lINno; Max-Age=63072000; path=/; Secure; HttpOnly"
+        "PON=3NH8VwVU1xPb7waYZbxAGQlbtqM; Max-Age=63072000; path=/; Secure; HttpOnly"
       ],
       [
         "x-resnum",
@@ -34,12 +34,12 @@
       "settings": ""
     },
     "sample/1699990000": {
-      "dat": "名無しさん＠３ちゃんねる </b>(JP.SA.CG Kx-042e35264c7d19b9)<b><><>2023/11/15(水) 04:26:40<> テスト本文 <>テストスレ\n名無しさん＠３ちゃんねる </b>(JP.SA.CG Kx-042e35264c7d19b9)<b> (主)<><>2023/11/15(水) 07:13:20<> 返信本文 <>\n",
+      "dat": "名無しさん＠３ちゃんねる </b>(JP.Tw.fv wA-4bf50373e5a55843)<b> </b>(主)<b><><>2023/11/15(水) 04:26:40<> テスト本文 <>テストスレ\n名無しさん＠３ちゃんねる </b>(JP.Tw.fv wA-4bf50373e5a55843)<b> </b>(主)<b><><>2023/11/15(水) 07:13:20<> 返信本文 <>\n",
       "log": "1<>UID: IP:2001:db8:1:2::1 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0 (TestBrowser)\n2<>UID: IP:2001:db8:1:2::99 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0 (TestBrowser)\n",
       "settings": "BBS_TITLE=sample＠3ch掲示板<>BBS_NONAME_NAME=名無しさん＠３ちゃんねる<>BBS_MAX_MENU_THREAD=300<>BBS_FORCE_SAGE=<>BBS_ADD_THREAD=on<>BBS_SHIKIBETSU=off<>BBS_ID_GROUP=<>BBS_ID_RESET=86400<>BBS_ID_SHIKIBETSU=checked<>BBS_SUBJECT_COUNT=64<>BBS_NAME_COUNT=64<>BBS_MAIL_COUNT=64<>BBS_MESSAGE_COUNT=4096<>BBS_LINE_NUMBER=30<>BBS_THREAD_TATESUGI=1<>BBS_THREAD_TATESUGI_RESET=3600<>BBS_THREAD_JUNBAN=1<>BBS_THREAD_JUNBAN_RESET=3600<>BBS_THREAD_JUNBAN_AS_ONLY=<>BBS_CREATETHREAD_INTERVAL=5<>BBS_COPIPE=3/86400<>timecount=18<>timeclose=10<>timecover=3600<>BBS_COOK82=10<>BBS_COOK82_POST_LIMIT=60<>BBS_LIVE=<>BBS_KISEIOFF=<>BBS_NO_MADAKANA=<>BBS_THREAD_SETTINGS=on<>BBS_DISABLE_NUSI=<>BBS_FORCE_NONAME=<>BBS_ARR=<>BBS_HEISA=<>",
       "owner": {
-        "ip": "8d07948012b651425ec755397f6783200b9da8834b6c5320ab3ce5944872724b",
-        "shikibetsu": "JP.SA.CG Kx-042e35264c7d19b9",
+        "ip": "42b797fbb7642f5563d12b19a17802b478136293b8d67cf5a0445629899e1b62",
+        "shikibetsu": "JP.Tw.fv wA-4bf50373e5a55843",
         "account": ""
       }
     }
@@ -49,7 +49,7 @@
   },
   "r2": {
     "sample/thread/1700/subject.txt": null,
-    "sample/thread/1699/subject.txt": "1699990000\n1699990000<>テストスレ<>名無しさん＠３ちゃんねる </b>(JP.SA.CG Kx-042e35264c7d19b9)<b><>JP.SA.CG Kx-042e35264c7d19b9<><>テスト本文\n",
+    "sample/thread/1699/subject.txt": "1699990000\n1699990000<>テストスレ<>名無しさん＠３ちゃんねる </b>(JP.Tw.fv wA-4bf50373e5a55843)<b> </b>(主)<b><>JP.Tw.fv wA-4bf50373e5a55843<><>テスト本文\n",
     "sample/thread/subject.txt": "1699990000\n1699<>1699990000\n",
     "headline.txt": "1700000000\nsample<>sample＠3ch掲示板<>1700000000<>1699990000<>返信本文\n"
   }
