@@ -2,7 +2,7 @@ package io._3ch.bbs.components
 
 import io._3ch.bbs.components.layout.{FooterComponent, HeaderComponent, RightSidebarComponent, RightSidebarProps, HeaderProps}
 import io._3ch.bbs.generated.IslandComponents
-import io._3ch.common.domain.account.SessionView
+import io._3ch.common.domain.account.{Phoebe, SessionView}
 import io._3ch.common.domain.{BbsSubjects, BoardId}
 import japgolly.scalajs.react.ScalaFnComponent
 import japgolly.scalajs.react.vdom.html_<^.*
@@ -41,7 +41,7 @@ object BoardIndexComponent {
     }
 
     val details = PostingFormComponent.islandProps(PostingFormProps(props.bbs, props.time, imgurClientId = props.imgurClientId, authEnabled = props.authEnabled, session = props.session,
-      requiredLevel = props.settings.get("BBS_PHOEBE").flatMap(_.toIntOption).getOrElse(0), returnPath = props.returnPath)).asInstanceOf[js.Dynamic]
+      requiredLevel = Phoebe.required(props.settings.get("BBS_PHOEBE")), returnPath = props.returnPath)).asInstanceOf[js.Dynamic]
     details.updateDynamic("headText")(props.headText)
     details.updateDynamic("settingsText")(props.settings.map { case (k, v) => s"$k=$v" }.mkString("\n"))
 

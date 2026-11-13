@@ -24,4 +24,11 @@ class ThreadOwnerSuite extends FunSuite {
   test("保存側が空でも投稿者側の空と一致しない") {
     assert(!ThreadOwner("", "", "acc1").matches(ThreadOwner("ip9", "", "")))
   }
+
+  test("スレ立て人の照合はアカウントだけを見て、空同士は一致としない") {
+    assert(owner.ownedBy("acc1"))
+    assert(!owner.ownedBy("ip1"))
+    assert(!owner.ownedBy("shiki1"))
+    assert(!ThreadOwner("ip1", "shiki1", "").ownedBy(""))
+  }
 }

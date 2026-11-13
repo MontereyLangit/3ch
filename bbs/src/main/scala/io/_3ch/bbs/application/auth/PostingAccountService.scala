@@ -47,11 +47,14 @@ final class PostingAccountService(accounts: AccountStore, credentials: PostingCr
 
   def recordFailed(error: Throwable): Unit = onRecordFailed(error)
 
-  /** 投稿で期限が1日以上延びたら、同じ端末とキーの紐付けで Cookie を発行し直す */
-  private def refreshed(poster: AuthenticatedPoster, updated: AccountDescription, now: Double): Future[Option[String]] =
-    (poster.session, updated.expiresAt) match {
-      case (Some(session), Some(expiry)) if math.abs(expiry - session.expiresAt.toDouble) >= 86400 =>
-        credentials.issue(SessionClaims(updated.aid, updated.uid, updated.generation.toLong, expiry.toLong, updated.lv, poster.device, session.binding), now)
-      case _ => Future.successful(None)
-    }
+  /** 投稿で期限が1日以上延びたか Lv が変わったら、同じ端末とキーの紐付けで Cookie を発行し直す。投稿中に世代が進んだセッションには発行しない */
+  private def refreshed(poster: AuthenticatedPoster, updated: AccountDescription, now: Double): Future[Option[String]] = poster.session match {
+    case Some(session) if session.generation != updated.generation.toLong => Future.successful(None)
+    case Some(session) =>
+      val expiry = updated.expiresAt.fold(session.expiresAt)(_.toLong)
+      if (math.abs(expiry.toDouble - session.expiresAt.toDouble) >= 86400 || updated.lv != session.lv)
+        credentials.issue(SessionClaims(updated.aid, updated.uid, updated.generation.toLong, expiry, updated.lv, poster.device, session.binding), now)
+      else Future.successful(None)
+    case None => Future.successful(None)
+  }
 }

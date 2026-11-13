@@ -140,6 +140,9 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
       description
     }.fold(reason => throw AccountStoreException(reason), identity))
   def revokeToken(aid: String, tokenId: String, now: Double): Future[Unit] = raw(account(aid).revokeToken(tokenId, now)).map(checked)
+  /** Lv を固定する。None で固定を外す */
+  def setLevel(aid: String, lvOverride: Option[Int], now: Double): Future[Unit] =
+    raw(account(aid).setLevel(lvOverride.orUndefined, now)).map(checked)
   def recordPost(aid: String, post: AccountPost, observation: AccountObservation): Future[AccountDescription] =
     account(aid).recordPost(post.t, AccountCodec.encodePost(post), js.Dynamic.literal(deviceHash = observation.deviceHash, keyIpHash = observation.keyIpHash)).toFuture.map(v =>
       decode(v, aid).fold(reason => throw AccountStoreException(reason), identity))

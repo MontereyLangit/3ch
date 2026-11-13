@@ -11,4 +11,6 @@ final case class ShikibetsuSeeds(region: String, city: String, asn: String, user
   def asnSeed: String = seed(asn)
   /** UA の種 */
   def userAgentSeed: String = seed(userAgent)
+  /** phoebe 書式の端末の軸の種。軸の名前を混ぜて、同じ値でも軸ごとに別のハッシュにする */
+  def axisSeed(axis: IdentifierAxis, value: String): String = seed(value + "|" + axis.code)
 }

@@ -72,14 +72,14 @@ object PostRateSettings {
 
   /**
     * 連投規制で shiki の照合値にする文字列。識別子が checked のときだけ使い、
-    * ken・city・as・raw などは県・市・AS の単位で別人が一致するので空（照合しない）にする。キャップ（★）も空
+    * phoebe・ken・city・as・raw などは県・市・AS・機種の単位で別人が一致するので空（照合しない）にする。キャップ（★）も空
     */
   def shikiSource(mode: ShikibetsuMode, cap: Boolean, shikibetsu: String): String =
     if (cap || mode != ShikibetsuMode.Checked) "" else shikibetsu
 
-  /** スレ立て時にスレ設定へ書き写さないキー */
+  /** スレ立て時にスレ設定へ書き写さないキー。BBS_PHOEBE はコマンドで書いたときだけスレ設定に置く */
   val NotCopiedToThread: Set[String] =
-    Set("BBS_SAMBA24", "BBS_FR_SECOND", "BBS_THREAD_RENTOU", "BBS_THREAD_RENTOU_RESET", "BBS_RENTOU_PASS", "BBS_RENTOU_KEYS", "BBS_FR_LEVEL")
+    Set("BBS_SAMBA24", "BBS_FR_SECOND", "BBS_THREAD_RENTOU", "BBS_THREAD_RENTOU_RESET", "BBS_RENTOU_PASS", "BBS_RENTOU_KEYS", "BBS_FR_LEVEL", "BBS_PHOEBE")
 
   /**
     * board は板設定、merged は返信ならスレ設定を重ねたもの。

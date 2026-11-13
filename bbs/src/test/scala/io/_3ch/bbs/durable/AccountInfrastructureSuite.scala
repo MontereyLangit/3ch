@@ -145,6 +145,25 @@ class AccountInfrastructureSuite extends FunSuite {
     } yield ()
   }
 
+  test("成功投稿で条件を満たせば Lv を上げて保存し、固定値の設定と解除を保存する") {
+    val storage = new Storage(aid)
+    val account = new Account(storage.state, js.Dynamic.literal())
+    val day = now + 23 * 3600
+    for {
+      _ <- account.create(AccountCodec.encodeProfile(profile), now).toFuture
+      _ <- (1 to 23).foldLeft(Future.unit)((previous, _) => previous.flatMap(_ =>
+        account.recordPost(day, AccountCodec.encodePost(AccountPost(day)), js.Dynamic.literal()).toFuture.map(_ => ())))
+      _ = assertEquals(AccountCodec.decodeState(storage.data).get.level, AccountLevel(2, day))
+      fixed <- account.setLevel(5, day).toFuture
+      _ = assertEquals(fixed, "")
+      _ = assertEquals(AccountCodec.decodeState(storage.data).get.level.effective, 5)
+      invalid <- account.setLevel(11, day).toFuture
+      _ = assertEquals(invalid, AccountRejection.Invalid.code)
+      cleared <- account.setLevel(js.undefined, day).toFuture
+      _ = assertEquals(cleared, "")
+    } yield assertEquals(AccountCodec.decodeState(storage.data).get.level, AccountLevel(2, day))
+  }
+
   test("uid 索引は競合・取り直し・所有者確認・確定後の削除拒否を保存状態に反映する") {
     val storage = new Storage("uid")
     val index = new AccountIndex(storage.state, js.Dynamic.literal())

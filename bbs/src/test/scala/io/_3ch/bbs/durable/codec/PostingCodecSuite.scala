@@ -2,6 +2,7 @@ package io._3ch.bbs.durable.codec
 
 import io._3ch.bbs.domain.posting.{ClientIdentity, ThreadOwner, ThreadPosting}
 import io._3ch.bbs.domain.posting.moderation.{PostRateCheck, PostRateHistory, PostRateIdentity, PostRateKey, PostRateLevel, PostRateLimit, PostRateRecord, PostRateStatus, ThreadCreationLimit, ThreadCreationRateLimit, ThreadCreationRequest, ThreadRecentPosts}
+import io._3ch.common.domain.posting.{PhoebeAdmission, ThreadPhoebeRequest}
 import munit.FunSuite
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -21,7 +22,7 @@ class PostingCodecSuite extends FunSuite {
   test("RPC の外形は従来のプレーンオブジェクト") {
     val encoded = PostingCodec.encode(create)
     assertEquals(js.Object.keys(encoded.asInstanceOf[js.Object]).toList,
-      List("bbs", "key", "title", "sage", "maxThreads", "create", "initialSettings", "creationLimit", "owner", "rateLimit"))
+      List("bbs", "key", "title", "sage", "maxThreads", "create", "initialSettings", "creationLimit", "owner", "rateLimit", "commands", "phoebeAdmission"))
     assertEquals(js.JSON.stringify(encoded.creationLimit),
       """{"ip":"ip","userAgent":"ua","networkGroup":"net","title":"title","tatesugi":2,"tatesugiResetSeconds":3600,"junban":1,"junbanResetSeconds":60}""")
     assertEquals(js.JSON.stringify(encoded.owner), """{"ip":"iph","shikibetsu":"JP.x","account":""}""")
@@ -81,6 +82,25 @@ class PostingCodecSuite extends FunSuite {
       PostRateRecord(s"${"9" * 10}:${"u" * 36}", 1999999999.123 + n, PostRateIdentity(full, full, full), PostRateStatus.Completed)
     }
     assert(js.JSON.stringify(records.map(PostRateCodec.encodeRecord).toJSArray).length < 64 * 1024)
+  }
+
+  test("スレ Lv のコマンドは往復し、0〜10 の整数でない値は読まない") {
+    val reply = ThreadPosting(Some("sample"), Some("1"), None, phoebe = Some(ThreadPhoebeRequest(5, lower = true, 2)))
+    assertEquals(PostingCodec.decode(PostingCodec.encode(reply)), Some(reply))
+    assertEquals(js.JSON.stringify(PostingCodec.encode(reply).commands), """{"phoebe":{"level":5,"lower":true,"board":2}}""")
+    Seq(js.Dynamic.literal(level = 11, lower = false, board = 0), js.Dynamic.literal(level = "3", lower = false, board = 0),
+      js.Dynamic.literal(level = 3.5, lower = false, board = 0), js.Dynamic.literal(level = 3, lower = false))
+      .foreach(phoebe => assertEquals(PostingCodec.decode(js.Dynamic.literal(commands = js.Dynamic.literal(phoebe = phoebe))), Some(ThreadPosting())))
+  }
+
+  test("書き込み直前の Lv の判定条件は往復し、0〜10 の整数でない値は判定し直さない") {
+    val reply = ThreadPosting(Some("sample"), Some("1"), None, admission = Some(PhoebeAdmission(2, exempt = true, 1)))
+    assertEquals(PostingCodec.decode(PostingCodec.encode(reply)), Some(reply))
+    assertEquals(js.JSON.stringify(PostingCodec.encode(reply).phoebeAdmission), """{"lv":2,"exempt":true,"board":1}""")
+    assertEquals(PostingCodec.decode(PostingCodec.encode(ThreadPosting(Some("sample"), Some("1"), None))).flatMap(_.admission), None)
+    Seq(js.Dynamic.literal(lv = 11, exempt = false, board = 0), js.Dynamic.literal(lv = "3", exempt = false, board = 0),
+      js.Dynamic.literal(lv = 3, exempt = false), js.Dynamic.literal(lv = 3, exempt = false, board = -1))
+      .foreach(value => assertEquals(PostingCodec.decode(js.Dynamic.literal(phoebeAdmission = value)), Some(ThreadPosting())))
   }
 
   test("null と undefined は投稿情報なし") {

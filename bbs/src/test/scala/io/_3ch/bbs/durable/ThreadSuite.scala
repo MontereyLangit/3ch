@@ -241,6 +241,67 @@ class ThreadSuite extends FunSuite {
     } yield ()
   }
 
+  test("本文コマンドのスレ Lv は dat と同じ put でスレ設定に書き、上げない要求では設定を変えない") {
+    val env = newEnv()
+    val instance = env.threadInstance("board1/4")
+    val thread = env.thread("board1/4")
+    def reply(level: Int, lower: Boolean, board: Int = 0): js.Dynamic = js.Dynamic.literal(bbs = "board1", key = "4", create = false,
+      commands = js.Dynamic.literal(phoebe = js.Dynamic.literal(level = level, lower = lower, board = board)))
+    for {
+      _ <- seed(instance, "dat" -> dat, "settings" -> "FOO=bar<>BBS_HEISA=<>BAR=baz")
+      _ <- thread.addRes("r<><>d<> !バルサン <>", "2<>log", reply(3, lower = false)).toFuture
+      raised <- thread.getSettings().toFuture
+      _ = assertEquals(raised, "FOO=bar<>BBS_HEISA=<>BAR=baz<>BBS_PHOEBE=3<>")
+      _ <- thread.addRes("r<><>d<> 本文 <>", "3<>log", reply(2, lower = false)).toFuture
+      kept <- thread.getSettings().toFuture
+      _ = assertEquals(kept, raised, "スレ立て人は下げられない")
+      _ <- thread.addRes("r<><>d<> 本文 <>", "4<>log", reply(1, lower = true)).toFuture
+      lowered <- thread.getSettings().toFuture
+      _ = assertEquals(lowered, "FOO=bar<>BBS_HEISA=<>BAR=baz<>BBS_PHOEBE=1<>")
+      inspected <- thread.inspect().toFuture
+      _ = assertEquals(inspected.dat.toOption.map(_.split("\n").length), Some(4))
+    } yield ()
+  }
+
+  test("書き込む直前に最新のスレ設定の BBS_PHOEBE で Lv を判定し直し、足りなければ保存せず Lv 不足で拒否する") {
+    val env = newEnv()
+    val instance = env.threadInstance("board1/7")
+    val thread = env.thread("board1/7")
+    val dat = "1<>x<><>msg<>title\n"
+    def reply(lv: Int, exempt: Boolean = false, board: Int = 0): js.Dynamic = js.Dynamic.literal(bbs = "board1", key = "7", create = false,
+      phoebeAdmission = js.Dynamic.literal(lv = lv, exempt = exempt, board = board))
+    for {
+      _ <- seed(instance, "dat" -> dat, "log" -> "", "settings" -> "BBS_PHOEBE=3<>")
+      refused <- rejectionMessage(thread.addRes("r<><>d<> 本文 <>", "2<>log", reply(2)).toFuture)
+      _ = assertEquals(refused, "thread-write:level:3")
+      unchanged <- thread.getDat().toFuture
+      _ = assertEquals(unchanged, dat, "拒否された投稿は dat に反映されない")
+      exempt <- thread.addRes("r<><>d<> 免除 <>", "2<>log", reply(0, exempt = true)).toFuture
+      _ = assertEquals(exempt.count, 2)
+      admitted <- thread.addRes("r<><>d<> 十分 <>", "3<>log", reply(3)).toFuture
+      _ = assertEquals(admitted.count, 3)
+      absent <- thread.addRes("r<><>d<> 判定なし <>", "4<>log", js.Dynamic.literal(bbs = "board1", key = "7", create = false)).toFuture
+      _ = assertEquals(absent.count, 4)
+      _ <- seed(env.threadInstance("board1/8"), "dat" -> dat, "log" -> "")
+      byBoard <- rejectionMessage(env.thread("board1/8").addRes("r<><>d<> 板 <>", "2<>log",
+        js.Dynamic.literal(bbs = "board1", key = "8", create = false, phoebeAdmission = js.Dynamic.literal(lv = 4, exempt = false, board = 5))).toFuture)
+    } yield assertEquals(byBoard, "thread-write:level:5", "スレ設定に値が無ければ板の値で判定する")
+  }
+
+  test("スレ立てのコマンドは初期スレ設定に重ね、板の値より上げない要求はスレ設定に書かない") {
+    val env = newEnv()
+    def create(key: String, board: Int): Future[ThreadAddResult] = env.thread(s"board1/$key").addRes("n<><>d<> !バルサン <>t", "1<>log",
+      js.Dynamic.literal(bbs = "board1", key = key, title = "t", create = true, sage = false, maxThreads = 700d, initialSettings = "BBS_TITLE=板<>",
+        commands = js.Dynamic.literal(phoebe = js.Dynamic.literal(level = 3, lower = false, board = board)))).toFuture
+    for {
+      _ <- create("5", 0)
+      first <- env.thread("board1/5").getSettings().toFuture
+      _ = assertEquals(first, "BBS_TITLE=板<>BBS_PHOEBE=3<>")
+      _ <- create("6", 5)
+      second <- env.thread("board1/6").getSettings().toFuture
+    } yield assertEquals(second, "BBS_TITLE=板<>")
+  }
+
   test("stop/resumeはBBS_HEISAだけを入れ替え、他の設定の順序・値を保ちながら文字列を完全一致で組み立てる") {
     val env = newEnv()
     val instance = env.threadInstance("board1/3")

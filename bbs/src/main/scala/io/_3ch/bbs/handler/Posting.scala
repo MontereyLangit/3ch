@@ -10,7 +10,7 @@ import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.handler.auth.{AuthEnv, SessionCredentials}
 import io._3ch.bbs.hash.WebHasher
 import io._3ch.common.domain.account.AccountRejection
-import io._3ch.bbs.repository.{AccountRepository, ArchiveIndexRepository, BoardRepository, CapRepository, ModerationRuleRepository, ThreadRepository}
+import io._3ch.bbs.repository.{AccountRepository, ArchiveIndexRepository, BoardRepository, CapRepository, ModerationRuleRepository, ThreadRepository, UserAgentTableRepository}
 
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
@@ -32,7 +32,8 @@ object Posting {
       random = Random.system,
       rateLog = PostRateLog.console,
       accounts = settings.map(config => new PostingAccountService(new AccountRepository(env), new SessionCredentials(config.secret, request.url),
-        config.agreementVersion, _ => js.Dynamic.global.console.warn("account post recording failed")))
+        config.agreementVersion, _ => js.Dynamic.global.console.warn("account post recording failed"))),
+      agents = UserAgentTableRepository.store(env)
     )
     new PostingService(ports, String.valueOf(env.salt)).post(PostingRequest.from(request)).map(outcome => respond(outcome, settings.isDefined)).toJSPromise
   }

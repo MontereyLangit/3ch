@@ -165,6 +165,11 @@ final case class AccountState(
   def bumpGeneration(now: Double): Either[AccountRejection, AccountState] =
     if (!AccountProfile.validTime(now)) Left(AccountRejection.Invalid) else bumpGeneration
 
+  /** 管理者が Lv を固定する。None で固定を外して投稿による昇格に戻す */
+  def setLevelOverride(value: Option[Int], now: Double): Either[AccountRejection, AccountState] =
+    if (!AccountProfile.validTime(now) || !valid) Left(AccountRejection.Invalid)
+    else level.overridden(value).toRight(AccountRejection.Invalid).map(next => copy(level = next))
+
   /** 状態が変わったときだけ世代も進め、既存セッションを失効させる */
   def setStatus(status: AccountStatus): Either[AccountRejection, AccountState] =
     if (profile.status == status) Right(this) else bumpGeneration.map(s => s.copy(profile = s.profile.copy(status = status)))
@@ -244,14 +249,14 @@ final case class AccountState(
     if (profile.kind != AccountKind.Google || !profile.googleSubHash.contains(subHash)) Left(AccountRejection.Invalid)
     else usable(now).map(_ => description)
 
-  /** 成功投稿だけで期限・投稿数・端末とキーの直近五件を更新する。失効済み ID は復活させない */
+  /** 成功投稿だけで期限・投稿数と Lv・端末とキーの直近五件を更新する。失効済み ID は復活させない */
   def recordPost(now: Double, post: AccountPost, observation: AccountObservation): Either[AccountRejection, AccountState] = {
     if (!AccountProfile.validTime(now) || !AccountProfile.validTime(post.t)) Left(AccountRejection.Invalid)
     else if (post.result != "posted") Right(this)
     else usable(now).flatMap { _ =>
       bindDevice(observation.deviceHash, observation.keyIpHash, now).map { observed =>
         val recorded = post.tokenId.fold(observed.tokens)(id => DedicatedBrowserTokens.recordPost(observed.tokens, id, post.tokenPost, now))
-        observed.copy(profile = observed.profile.afterPost(now), level = level.afterPost, tokens = recorded)
+        observed.copy(profile = observed.profile.afterPost(now), level = level.afterPost(profile.kind, now), tokens = recorded)
       }
     }
   }
@@ -260,7 +265,7 @@ object AccountState {
   /** 同意・時刻・初期状態を確認して作成する。パスワード方式と Google は索引の確定まで登録準備中にする */
   def create(profile: AccountProfile, now: Double, credential: Option[PasswordCredential] = None): Either[AccountRejection, AccountState] = {
     val initial = profile.copy(expiresAt = if (profile.kind == AccountKind.Client) Some(profile.createdAt + AccountProfile.clientLifetime) else None)
-    val state = AccountState(initial, AccountLevel(if (profile.kind == AccountKind.Google) 10 else if (profile.kind == AccountKind.Password && profile.emailVerifiedAt.isDefined) 3 else 1, now),
+    val state = AccountState(initial, AccountLevel(Phoebe.initial(profile.kind, profile.emailVerifiedAt.isDefined), now),
       credential = credential, readiness = if (profile.kind == AccountKind.Client) AccountReadiness.Ready else AccountReadiness.Pending)
     if (!initial.valid || !AccountProfile.validTime(now) || profile.createdAt > now || profile.agreedAt > now ||
       profile.emailVerifiedAt.exists(_ > now) || profile.status != AccountStatus.Active || profile.generation != 0 || initial.expired(now) ||

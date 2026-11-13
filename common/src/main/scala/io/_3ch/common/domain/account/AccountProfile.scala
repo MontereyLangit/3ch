@@ -73,7 +73,19 @@ object AccountProfile {
 final case class AccountLevel(lv: Int, lvSince: Double, lvPosts: Int = 0, lvOverride: Option[Int] = None) {
   def valid: Boolean = lv >= 0 && lv <= 10 && AccountProfile.validTime(lvSince) && lvPosts >= 0 && lvOverride.forall(n => n >= 0 && n <= 10)
   def effective: Int = lvOverride.getOrElse(lv)
-  def afterPost: AccountLevel = copy(lvPosts = if (lvPosts == Int.MaxValue) Int.MaxValue else lvPosts + 1)
+
+  /** 成功投稿を数え、経過時間と投稿数が揃えば一段だけ上げて両方を数え直す。固定中は上げない */
+  def afterPost(kind: AccountKind, now: Double): AccountLevel = {
+    val counted = copy(lvPosts = if (lvPosts == Int.MaxValue) Int.MaxValue else lvPosts + 1)
+    val reached = lvOverride.isEmpty && Phoebe.seconds(kind, lv).zip(Phoebe.posts(kind, lv)).exists { case (seconds, posts) =>
+      now - lvSince >= seconds && counted.lvPosts >= posts
+    }
+    if (reached) AccountLevel(lv + 1, now) else counted
+  }
+
+  /** 管理者による固定値を設定する。None で固定を外す */
+  def overridden(value: Option[Int]): Option[AccountLevel] =
+    Option.when(value.forall(n => n >= 0 && n <= Phoebe.MaxLevel))(copy(lvOverride = value))
 }
 
 /** 認証基盤の拒否理由。表示文言は HTTP 層で組み立てる */

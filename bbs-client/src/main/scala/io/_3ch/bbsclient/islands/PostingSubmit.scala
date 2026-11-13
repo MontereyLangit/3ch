@@ -52,7 +52,7 @@ private[islands] object PostingSubmit {
    * UTF-8 application/x-www-form-urlencodedでbbs.cgiへPOSTし、応答の分類を返す
    * 失敗は Unrecognized
    */
-  private final case class Reply(outcome: PostingOutcome, auth: String, error: String)
+  private final case class Reply(outcome: PostingOutcome, auth: String, error: String, level: Option[Int] = None)
 
   private def postForm(payload: String): Future[Reply] = {
     Future.delegate {
@@ -71,7 +71,8 @@ private[islands] object PostingSubmit {
             case success: PostingOutcome.Posted => success
             case _ => PostingOutcome.Posted(None)
           } else outcome,
-            Option(r.headers.get("x-auth-required")).getOrElse(""), Option(r.headers.get("x-post-error")).getOrElse(""))
+            Option(r.headers.get("x-auth-required")).getOrElse(""), Option(r.headers.get("x-post-error")).getOrElse(""),
+            Option(r.headers.get("x-phoebe-required")).flatMap(_.toIntOption).filter(_ > 0))
         }
       }
     }.recover { case _ => Reply(PostingOutcome.Unrecognized, "", "") }
@@ -99,11 +100,12 @@ private[islands] object PostingSubmit {
         } else Future.successful(first)
       }
       AsyncCallback.fromFuture(response).map {
-        case Reply(_, "level", _) => SubmitResult.Level(if props.requiredLevel > 0 then s"Lv${props.requiredLevel}以上が必要です" else "このスレに書き込むにはLvが足りません")
-        case Reply(_, "login", _) => SubmitResult.Error("書き込みには認証・登録が必要です")
-        case Reply(PostingOutcome.Rejected(message), _, error) if error.nonEmpty => SubmitResult.Error(message)
-        case Reply(_, _, error) if error.nonEmpty => SubmitResult.Error(if error.startsWith("post-rate:") then "しばらく待ってから書き込んでください" else UnknownMessage)
-        case Reply(outcome, _, _) => outcome match {
+        case Reply(_, "level", _, level) =>
+          SubmitResult.Level(level.orElse(Option.when(props.requiredLevel > 0)(props.requiredLevel)).fold("このスレに書き込むにはLvが足りません")(n => s"Lv${n}以上が必要です"))
+        case Reply(_, "login", _, _) => SubmitResult.Error("書き込みには認証・登録が必要です")
+        case Reply(PostingOutcome.Rejected(message), _, error, _) if error.nonEmpty => SubmitResult.Error(message)
+        case Reply(_, _, error, _) if error.nonEmpty => SubmitResult.Error(if error.startsWith("post-rate:") then "しばらく待ってから書き込んでください" else UnknownMessage)
+        case Reply(outcome, _, _, _) => outcome match {
           case PostingOutcome.Posted(redirect) =>
             fields.clearPosted.runNow()
             if props.threadKey.isDefined then {
