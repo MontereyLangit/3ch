@@ -24,7 +24,8 @@ class AccountWithdrawSuite extends munit.FunSuite {
         aid = t.kit.accountNames.head
         _ <- new AccountRepository(t.env).setRoles(aid, Roles(Set(AccountRole.Cap)), Roles(Set(AccountRole.Admin)), now)
         issued <- t.send(t.post("/auth/cap/issue", Seq("name" -> "管理人"), cookie = cookie)).flatMap(t.body)
-        capKey <- CapKey.of(WebHasher, issued.password.asInstanceOf[String].stripPrefix("#"), WebHasher.md5(String.valueOf(t.env.salt)))
+        saltHash <- WebHasher.sha256Hex(String.valueOf(t.env.salt))
+        capKey <- CapKey.of(WebHasher, issued.password.asInstanceOf[String].stripPrefix("#"), saltHash)
         _ = assert(t.kit.capValue(capKey).isDefined)
         noAction <- t.send(t.post("/auth/account", Seq("password" -> "correct horse"), cookie = cookie))
         _ = assertEquals(noAction.status, 400)
@@ -81,7 +82,7 @@ class AccountWithdrawSuite extends munit.FunSuite {
       token <- keys.token(GoogleTestKeys.claims(sub, authorize.searchParams.get("nonce"), now))
       _ = { t.idToken = token }
       callback <- t.send(t.get(s"/auth/google/callback/?code=c&state=${authorize.searchParams.get("state")}",
-        cookie = Seq(t.cookie(started, "ch3s_oauth").get, cookie).filter(_.nonEmpty).mkString("; ")))
+        cookie = Seq(t.cookie(started, "__Host-ch3s_oauth").get, cookie).filter(_.nonEmpty).mkString("; ")))
     } yield callback
     t.run {
       for {

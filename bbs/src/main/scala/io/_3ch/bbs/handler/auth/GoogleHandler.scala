@@ -18,7 +18,7 @@ import scala.util.control.NonFatal
 object GoogleHandler {
   import AuthHandler.{Refused, header, secure}
 
-  private val Attributes = "; Path=/auth/google; Secure; HttpOnly; SameSite=Lax"
+  private val Attributes = "; Path=/; Secure; HttpOnly; SameSite=Lax"
   private val CallbackPath = "/auth/google/callback/"
 
   private def redirect(location: String, cookies: Seq[String]): Response = {
@@ -38,7 +38,7 @@ object GoogleHandler {
   private def owner(request: Request, repository: AccountRepository, config: AuthSettings, purpose: OAuthPurpose, time: Double): Future[Option[AccountDescription]] =
     purpose match {
       case OAuthPurpose.SignIn => Future.successful(None)
-      case _ => AuthHandler.current(request, config.secret, repository, time).map { case (_, account) =>
+      case _ => AuthHandler.managed(request, config.secret, repository, time).map { case (_, account) =>
         val expected = if (purpose == OAuthPurpose.Link) AccountKind.Client else AccountKind.Google
         if (account.kind != expected) throw Refused(AuthApiError.Refused(AccountRejection.KindForbidden))
         Some(account)
@@ -77,7 +77,7 @@ object GoogleHandler {
             case (_, Left(LoginIdRejection.Reserved)) => Future.successful(back("uid_taken", returnPath, login, purpose = purpose))
             case (account, Right(id)) => AuthHandler.device(request, env, form.getOrElse("device", "")).flatMap { evidence =>
               val state = OAuthState(AuthHmac.randomUrlSafe(43), AuthHmac.randomUrlSafe(43), AuthHmac.randomUrlSafe(64), evidence.deviceHash, returnPath,
-                form.get("popup").contains("1"), id.map(_.value), agreed, time.toLong + OAuthStateCodec.lifetime, purpose, account.map(_.aid))
+                form.get("popup").contains("1"), id.map(_.value), if (agreed) config.agreementVersion else "", time.toLong + OAuthStateCodec.lifetime, purpose, account.map(_.aid))
               val payload = OAuthStateCodec.payload(state).getOrElse(throw Refused(AuthApiError.Invalid))
               for {
                 signed <- signature(config.secret, payload).map(_.flatMap(OAuthStateCodec.encode(state, _)).getOrElse(throw Refused(AuthApiError.Unavailable)))
@@ -119,6 +119,8 @@ object GoogleHandler {
         readState(request, config.secret, time).flatMap {
           case None => Future.successful(back("oauth_state", "/", login = true, cleared))
           case Some(state) if param("error").nonEmpty => Future.successful(back("google_denied", state.returnPath, state.uid.isEmpty, cleared, state.purpose))
+          case Some(state) if state.uid.nonEmpty && state.agreedVersion != config.agreementVersion =>
+            Future.successful(back("agreement", state.returnPath, login = false, cleared, state.purpose))
           case Some(state) if !sameText(param("state"), state.state) || param("code").isEmpty =>
             Future.successful(back("oauth_state", state.returnPath, state.uid.isEmpty, cleared, state.purpose))
           case Some(state) =>
@@ -137,7 +139,7 @@ object GoogleHandler {
                   val uid = state.uid.flatMap(LoginId.parse(_).toOption)
                   state.purpose match {
                     case OAuthPurpose.SignIn => new GoogleAuthentication(repository, AuthHandler.keys(config.secret), config.agreementVersion)
-                      .signIn(value, uid, state.agreed && config.agreementVersion.nonEmpty, state.device, key, time).flatMap {
+                      .signIn(value, uid, state.agreedVersion == config.agreementVersion && config.agreementVersion.nonEmpty, state.device, key, time).flatMap {
                         case GoogleOutcome.Success(account) => signedIn(account)
                         case GoogleOutcome.Registration => fail("google_register", asLogin = false)
                         case GoogleOutcome.Taken => fail("uid_taken", asLogin = false)
@@ -172,7 +174,7 @@ object GoogleHandler {
 
   /** 認可を始めたセッションが今も同じアカウントで有効なら、そのアカウント */
   private def sessionOwner(request: Request, repository: AccountRepository, config: AuthSettings, state: OAuthState, time: Double): Future[Option[AccountDescription]] =
-    AuthHandler.current(request, config.secret, repository, time).map { case (_, account) => Option.when(state.aid.contains(account.aid))(account) }
+    AuthHandler.managed(request, config.secret, repository, time).map { case (_, account) => Option.when(state.aid.contains(account.aid))(account) }
       .recover { case Refused(_) => None }
 
   /** ポップアップで開いたときは開いた側と他のタブへ通知して閉じる */

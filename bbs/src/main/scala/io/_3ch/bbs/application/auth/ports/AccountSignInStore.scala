@@ -9,8 +9,8 @@ enum SignInResult {
   case Verified(account: AccountDescription)
   /** 本人と確認できたが、登録の確定が途中で止まっている */
   case Unfinished(uid: String)
-  /** 照合に失敗した。delaySeconds は応答を返すまで待つ秒数 */
-  case Failed(delaySeconds: Int)
+  /** 照合に失敗した。存在しない ID・不一致・ロック中を区別しない */
+  case Failed
   /** 本人と確認できたが、凍結などで利用できない */
   case Refused(reason: AccountRejection)
 }

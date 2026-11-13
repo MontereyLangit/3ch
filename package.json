@@ -27,7 +27,6 @@
   },
   "dependencies": {
     "@hono/react-renderer": "1.0.1",
-    "@noble/hashes": "2.4.0",
     "hono": "4.13.11",
     "honox": "^0.1.62",
     "react": "19.2.8",

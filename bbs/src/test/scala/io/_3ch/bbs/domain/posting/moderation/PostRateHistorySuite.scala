@@ -16,8 +16,9 @@ class PostRateHistorySuite extends FunSuite {
     result.saved.getOrElse(fail(s"unexpected rejection: ${result.rejection.map(_.code)}"))
   }
 
-  /** 保存したページだけを次の読み込みに使う DO の動きをまねる。全ページを保持する */
-  private final class Store(var meta: PostRateMeta = PostRateHistory.InitialMeta, val pages: scala.collection.mutable.Map[Int, Vector[PostRateRecord]] = scala.collection.mutable.Map.empty) {
+  /** 保存したページだけを次の読み込みに使う DO の動きをまねる。全ページを保持し、completeOnSave なら保存した予約を直ちに確定する */
+  private final class Store(var meta: PostRateMeta = PostRateHistory.InitialMeta, val pages: scala.collection.mutable.Map[Int, Vector[PostRateRecord]] = scala.collection.mutable.Map.empty,
+                            completeOnSave: Boolean = true) {
     def load(s: BoardSettings, now: Double): PostRateHistory = {
       var history = PostRateHistory(meta, Vector.empty)
       var next = history.nextPage(s, now)
@@ -29,7 +30,8 @@ class PostRateHistorySuite extends FunSuite {
     }
     def save(history: PostRateHistory): Unit = {
       meta = history.meta
-      pages(history.pages.head.number) = history.pages.head.records
+      val records = history.pages.head.records
+      pages(history.pages.head.number) = if (completeOnSave) records.map(_.copy(status = PostRateStatus.Completed)) else records
     }
   }
 
@@ -98,7 +100,8 @@ class PostRateHistorySuite extends FunSuite {
 
   test("保持規則は Samba24 と広域連投規制の大きい方の秒数以内を残す") {
     val page0 = PostRatePage(0, Vector.tabulate(64)(n => PostRateRecord(s"c$n", t0 - 300, who("a"), PostRateStatus.Completed)))
-    def kept(s: BoardSettings): PostRateMeta = reserve(PostRateHistory(PostRateMeta(0, 0), Vector(page0)), "new", "b", s).meta
+    val page1 = PostRatePage(1, Vector(PostRateRecord("latest", t0, who("a"), PostRateStatus.Completed)))
+    def kept(s: BoardSettings): PostRateMeta = reserve(PostRateHistory(PostRateMeta(1, 0), Vector(page1, page0)), "new", "b", s).meta
     assertEquals(kept(settings(timecount = 1, timeclose = 0, samba24 = 0, fr = 300)), PostRateMeta(1, 0))
     assertEquals(kept(settings(timecount = 1, timeclose = 0, samba24 = 300, fr = 1)), PostRateMeta(1, 0))
     assertEquals(kept(settings(timecount = 1, timeclose = 0, samba24 = 10, fr = 299)), PostRateMeta(1, 1))
@@ -108,11 +111,64 @@ class PostRateHistorySuite extends FunSuite {
     val s = settings(timecount = 1, timeclose = 0, samba24 = 0)
     val page0 = PostRatePage(0, Vector(PostRateRecord("old", t0 - 10, who("a"), PostRateStatus.Pending)) ++
       Vector.tabulate(63)(n => PostRateRecord(s"c$n", t0 - 10, who("a"), PostRateStatus.Completed)))
-    val h = PostRateHistory(PostRateMeta(0, 0), Vector(page0))
+    val page1 = PostRatePage(1, Vector(PostRateRecord("latest", t0, who("a"), PostRateStatus.Completed)))
+    val h = PostRateHistory(PostRateMeta(1, 0), Vector(page1, page0))
     val kept = reserve(h, "new", "b", s)
     assertEquals(kept.meta, PostRateMeta(1, 0))
-    val expired = reserve(PostRateHistory(PostRateMeta(0, 0), Vector(page0)), "new", "b", s, t0 + 200)
+    val expired = reserve(h, "new", "b", s, t0 + 200)
     assertEquals(expired.meta, PostRateMeta(1, 1))
+  }
+
+  /** 前のページの末尾に a が 1 件、最新ページに 17 件（a が 9 件）の確定済みの履歴を保存した板 */
+  private def seeded(): Store = {
+    val store = new Store(PostRateMeta(1, 0), completeOnSave = false)
+    def done(key: String, name: String): PostRateRecord = PostRateRecord(key, t0 - 1000, who(name), PostRateStatus.Completed)
+    store.pages(0) = Vector(done("p0", "a"))
+    store.pages(1) = (1 to 17).map(n => done(s"n$n", if (n <= 9) "a" else s"x$n")).toVector
+    store
+  }
+
+  test("予約を取り消すと保持の範囲も履歴も予約前と同じに戻り、同じ投稿者の次の投稿を拒否できる") {
+    val s = settings(timecount = 18, timeclose = 10, samba24 = 0)
+    val store = seeded()
+    val before = (store.meta, store.pages.toMap)
+    val reserved = reserve(store.load(s, t0), "c1", "c", s)
+    store.save(reserved)
+    assertEquals(store.pages(1).size, 18)
+    assertEquals(store.meta, PostRateMeta(1, 0), "予約で前のページを範囲から外さない")
+    val cancelled = store.load(s, t0).cancel("c1").getOrElse(fail("予約が見つからない"))
+    store.pages(cancelled.number) = cancelled.records
+    assertEquals((store.meta, store.pages.toMap), before)
+    val next = store.load(s, t0)
+    assertEquals(next.records.size, 18, "取消後も前のページの a を数える")
+    assertEquals(next.reserve("a1", who("a"), s, enforce = true, t0).rejection, Some(PostRateRejection.Gontakure))
+  }
+
+  test("確定した予約は次の予約で保持に数えられ、押し出された古いページが範囲から外れる") {
+    val s = settings(timecount = 18, timeclose = 0, samba24 = 0)
+    val store = seeded()
+    store.save(reserve(store.load(s, t0), "c1", "c", s))
+    store.pages(1) = store.load(s, t0).complete("c1").get.records
+    store.save(reserve(store.load(s, t0), "c2", "d", s))
+    assertEquals(store.meta, PostRateMeta(1, 1), "確定済みが 18 件を超えたので前のページは要らない")
+  }
+
+  test("保持の範囲は予約中を数えず、読み込みも確定済みの件数で決める") {
+    val s = settings(timecount = 2, timeclose = 0, samba24 = 0)
+    val page0 = PostRatePage(0, Vector(PostRateRecord("c", t0 - 1000, who("a"), PostRateStatus.Completed), PostRateRecord("c2", t0 - 1000, who("a"), PostRateStatus.Completed)))
+    val page1 = PostRatePage(1, Vector(PostRateRecord("p1", t0 - 1000, who("b"), PostRateStatus.Pending), PostRateRecord("p2", t0 - 1000, who("b"), PostRateStatus.Pending)))
+    val history = PostRateHistory(PostRateMeta(1, 0), Vector(page1))
+    assertEquals(history.nextPage(s, t0), Some(0), "予約中が 2 件あっても確定済みが足りなければ読み足す")
+    assertEquals(history.withOlder(page0).nextPage(s, t0), None)
+    assertEquals(history.withOlder(page0).retained(s, t0).meta.oldest, 0)
+  }
+
+  test("広域連投規制を判定しない投稿でも履歴は fr の秒数まで保持する") {
+    val page0 = PostRatePage(0, Vector.tabulate(64)(n => PostRateRecord(s"c$n", t0 - 300, who("a"), PostRateStatus.Completed)))
+    val history = PostRateHistory(PostRateMeta(0, 0), Vector(page0))
+    val skipping = settings(timecount = 1, timeclose = 0, samba24 = 0, fr = 3600).copy(checksFr = false)
+    assertEquals(reserve(history, "new", "b", skipping).meta, PostRateMeta(1, 0))
+    assertEquals(PostRateHistory(PostRateMeta(1, 0), Vector(PostRatePage(1, Vector.empty))).nextPage(skipping, t0), Some(0), "読み込みも fr の秒数を満たすまで続ける")
   }
 
   test("リングバッファは番号が進んでも範囲内のページだけを読む") {

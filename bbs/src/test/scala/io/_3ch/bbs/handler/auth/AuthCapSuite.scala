@@ -25,7 +25,7 @@ class AuthCapSuite extends munit.FunSuite {
   } yield (cookie, aid)
 
   private val salt = "test-salt-12345"
-  private def kvKey(password: String): Future[String] = CapKey.of(WebHasher, password.stripPrefix("#"), WebHasher.md5(salt))
+  private def kvKey(password: String): Future[String] = WebHasher.sha256Hex(salt).flatMap(CapKey.of(WebHasher, password.stripPrefix("#"), _))
 
   test("役割の無いアカウントは発行できず、権限を持つ人の文言を返す") {
     val t = new AuthSignInTestKit()
@@ -110,7 +110,7 @@ class AuthCapSuite extends munit.FunSuite {
   test("admin は他人に強キャップを発行でき、admin でない人の他人宛て発行と一日十一回目の発行は拒否する") {
     val t = new AuthSignInTestKit()
     val repository = new AccountRepository(t.env)
-    def service = new CapIssuing(repository, CapRepository.directory(t.env), AuthHandler.keys(AuthTestEnv.secret), CapKey.of(WebHasher, _, WebHasher.md5(salt)))
+    def service = new CapIssuing(repository, CapRepository.directory(t.env), AuthHandler.keys(AuthTestEnv.secret), password => WebHasher.sha256Hex(salt).flatMap(CapKey.of(WebHasher, password, _)))
     val now = math.floor(js.Date.now() / 1000)
     t.run {
       for {

@@ -2,6 +2,7 @@ package io._3ch.bbs.domain.posting.moderation
 
 import io._3ch.bbs.domain.posting.moderation.PostRateLimit.{BoardSettings, ThreadSettings}
 import io._3ch.common.domain.BbsSettings
+import io._3ch.common.domain.identity.ShikibetsuMode
 
 /** 連投規制の段階（BBS_FR_LEVEL）。Log は判定と記録だけして拒否しない */
 enum PostRateLevel {
@@ -54,8 +55,8 @@ final case class PostRateCheck(level: PostRateLevel, identity: PostRateIdentity,
     case PostRateLevel.Off | PostRateLevel.Log => false
   }
 
-  /** Board.reservePost に渡す板単位の設定。広域連投規制を判定しない段階なら fr を 0 にする */
-  def boardSettings: BoardSettings = if (level.checksFlyRibbon) board else board.copy(fr = 0)
+  /** Board.reservePost に渡す板単位の設定。広域連投規制を判定しない段階では checksFr を偽にする（fr は履歴の保持のため板設定のまま） */
+  def boardSettings: BoardSettings = board.copy(checksFr = level.checksFlyRibbon)
 }
 
 /** 連投規制の設定。不正な値は拒否せず既定値で動き、BBS_FR_LEVEL の不正な値は規制と広域連投規制の側に倒す */
@@ -68,6 +69,13 @@ final case class PostRateSettings(level: PostRateLevel, pass: BypassLevel, live:
 object PostRateSettings {
   /** BBS_FR_SECOND の既定（秒） */
   val DefaultFrSeconds: Int = 1
+
+  /**
+    * 連投規制で shiki の照合値にする文字列。識別子が checked のときだけ使い、
+    * phoebe・ken・city・as・raw などは県・市・AS・機種の単位で別人が一致するので空（照合しない）にする。キャップ（★）も空
+    */
+  def shikiSource(mode: ShikibetsuMode, cap: Boolean, shikibetsu: String): String =
+    if (cap || mode != ShikibetsuMode.Checked) "" else shikibetsu
 
   /** スレ立て時にスレ設定へ書き写さないキー。BBS_PHOEBE はコマンドで書いたときだけスレ設定に置く */
   val NotCopiedToThread: Set[String] =

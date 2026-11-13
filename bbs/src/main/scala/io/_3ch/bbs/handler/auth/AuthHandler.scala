@@ -190,10 +190,11 @@ object AuthHandler {
     SessionClaims(account.aid, account.uid, account.generation.toLong, account.expiresAt.getOrElse(time + AccountProfile.clientLifetime).toLong, account.lv, device, binding)
   private[auth] def signed(account: AccountDescription, device: String, request: Request, secret: String, time: Double, binding: Option[SessionBinding] = None): Future[String] =
     SessionCookies.issue(claims(account, time, device, binding), secret, request.url, time).map(_.getOrElse(throw Refused(AuthApiError.Unavailable)))
-  private[auth] def current(request: Request, secret: String, repository: AccountRepository, time: Double): Future[(SessionClaims, AccountDescription)] =
+  private[auth] def current(request: Request, secret: String, repository: AccountRepository, time: Double, allowBound: Boolean = true): Future[(SessionClaims, AccountDescription)] =
     SessionCookies.verify(header(request, "Cookie"), secret, time).flatMap {
       case None => Future.failed(Refused(AuthApiError.LoginRequired))
       case Some(session) if !session.generation.isValidInt || session.generation < 0 => Future.failed(Refused(AuthApiError.LoginRequired))
+      case Some(session) if !allowBound && session.binding.isDefined => Future.failed(Refused(AuthApiError.LoginRequired))
       case Some(session) =>
         val proof = session.binding.fold(Future.successful(Option.empty[TokenProof])) { binding =>
           AuthHmac.uaHash(secret, header(request, "User-Agent")).map { hash =>
@@ -204,6 +205,10 @@ object AuthHandler {
           session -> result.fold(reason => throw Refused(AuthApiError.Session(reason)), identity)
         }
     }
+
+  /** アカウント管理用。専ブラのキーに結び付いたセッションは投稿とログアウトにだけ使えるので、未ログインとして扱う */
+  private[auth] def managed(request: Request, secret: String, repository: AccountRepository, time: Double): Future[(SessionClaims, AccountDescription)] =
+    current(request, secret, repository, time, allowBound = false)
 
   /** Google ログインから戻したときの理由。知らない値は出さない */
   private def notice(code: String): Option[String] = code match {
@@ -262,7 +267,7 @@ object AuthHandler {
 
   private def account(c: HonoContextFacade, config: AuthSettings, props: RenderProps): Future[Response] = {
     val repository = new AccountRepository(c.env)
-    current(c.req.raw, config.secret, repository, now).flatMap { case (session, account) =>
+    managed(c.req.raw, config.secret, repository, now).flatMap { case (session, account) =>
       repository.inspect(account.aid).flatMap { panel =>
         val tokens = panel.tokens.map(token => AccountTokenProps(token.id, token.label, token.issuedAt, token.expiresAt,
           token.boundAt, token.lastUsedAt, token.revokedAt, token.revokeReason, token.replacedTokenAt,
@@ -302,15 +307,15 @@ object AuthHandler {
             case "/auth/login" => login(request, env, repository, form, config, time)
             case "/auth/google/start" => GoogleHandler.start(request, env, form, config, time)
             case "/auth/logout" => logout(request, config, repository, time)
-            case "/auth/agree" => current(request, config.secret, repository, time).flatMap { case (_, account) =>
+            case "/auth/agree" => managed(request, config.secret, repository, time).flatMap { case (_, account) =>
               if (!form.get("agreement").contains(config.agreementVersion)) throw Refused(AuthApiError.AgreementRequired)
               repository.agree(account.aid, config.agreementVersion, time).map(_ => json(js.Dynamic.literal(uid = account.uid, lv = account.lv)))
             }
-            case "/auth/token/issue" => current(request, config.secret, repository, time).flatMap { case (_, account) =>
+            case "/auth/token/issue" => managed(request, config.secret, repository, time).flatMap { case (_, account) =>
               if (account.agreementVersion != config.agreementVersion) throw Refused(AuthApiError.AgreementRequired)
               issueToken(repository, account, config.secret, time)
             }
-            case "/auth/cap/issue" | "/auth/cap/revoke" | "/auth/cap/reissue" => current(request, config.secret, repository, time).flatMap { case (_, account) =>
+            case "/auth/cap/issue" | "/auth/cap/revoke" | "/auth/cap/reissue" => managed(request, config.secret, repository, time).flatMap { case (_, account) =>
               if (account.agreementVersion != config.agreementVersion) throw Refused(AuthApiError.AgreementRequired)
               cap(path, form, env, repository, account, config.secret, time)
             }
@@ -320,7 +325,7 @@ object AuthHandler {
             case "/auth/password" => AccountMailHandler.password(request, repository, form, config, time)
             case "/auth/reset/request" => AccountMailHandler.resetRequest(request, env, repository, form, config, time)
             case "/auth/reset" => AccountMailHandler.reset(env, repository, form, config, time)
-            case "/auth/token/revoke" => current(request, config.secret, repository, time).flatMap { case (_, account) =>
+            case "/auth/token/revoke" => managed(request, config.secret, repository, time).flatMap { case (_, account) =>
               val id = form.getOrElse("id", "")
               if (!DedicatedBrowserTokens.validId(id)) throw Refused(AuthApiError.Invalid)
               repository.revokeToken(account.aid, id, time).map(_ => json(js.Dynamic.literal(uid = account.uid, lv = account.lv)))
@@ -338,12 +343,12 @@ object AuthHandler {
     */
   private def withdraw(request: Request, env: WorkerEnv, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] =
     if (!form.get("action").contains("delete")) Future.failed(Refused(AuthApiError.Invalid))
-    else current(request, config.secret, repository, time).flatMap { case (_, account) =>
+    else managed(request, config.secret, repository, time).flatMap { case (_, account) =>
       val confirmed: Future[Unit] = account.kind match {
         case AccountKind.Client => if (form.get("confirm").contains("1")) Future.unit else Future.failed(Refused(AuthApiError.Invalid))
         case AccountKind.Password => keyIp(request, config.secret).flatMap(repository.verifyPassword(account.aid, form.getOrElse("password", ""), _, time)).flatMap {
           case SignInResult.Verified(_) => Future.unit
-          case SignInResult.Failed(delay) => pause(delay).flatMap(_ => Future.failed(Refused(AuthApiError.LoginFailed)))
+          case SignInResult.Failed => Future.failed(Refused(AuthApiError.LoginFailed))
           case SignInResult.Refused(reason) => Future.failed(Refused(AuthApiError.Refused(reason)))
           case SignInResult.Unfinished(_) => Future.failed(Refused(AuthApiError.Refused(AccountRejection.Pending)))
         }
@@ -471,7 +476,7 @@ object AuthHandler {
       case Left(error) => Future.failed(Refused(error))
       case Right((password, email)) => for {
         upgrading <- if (!form.get("upgrade").contains("1")) Future.successful(None)
-          else current(request, config.secret, repository, time).map { case (_, account) =>
+          else managed(request, config.secret, repository, time).map { case (_, account) =>
             if (account.kind != AccountKind.Client) throw Refused(AuthApiError.Refused(AccountRejection.KindForbidden))
             Some(account)
           }
@@ -495,7 +500,7 @@ object AuthHandler {
     }
   }
 
-  /** 失敗は理由を区別せず同じ文言・状態にし、アカウント全体の失敗数に応じて応答を遅らせる */
+  /** 失敗は理由を区別せず同じ文言・状態にし、接続元ごとの失敗数に応じて応答を遅らせる */
   private def login(request: Request, env: WorkerEnv, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] = for {
     _ <- edge(request, env, repository, config, "login", time)
     (key, evidence) <- human(request, env, form, config)
@@ -508,7 +513,7 @@ object AuthHandler {
     }
   } yield response
 
-  private[auth] def pause(seconds: Int): Future[Unit] = {
+  private def pause(seconds: Int): Future[Unit] = {
     if (seconds <= 0) Future.unit
     else {
       val promise = scala.concurrent.Promise[Unit]()
@@ -526,8 +531,8 @@ object AuthHandler {
     def index(kind: String, value: String): Future[Option[String]] = AuthHmac.indexKey(secret, kind, value)
   }
   private def capIssuing(env: WorkerEnv, repository: AccountRepository, secret: String): CapIssuing = {
-    val salt = WebHasher.md5(String.valueOf(env.salt))
-    new CapIssuing(repository, CapRepository.directory(env), keys(secret), password => CapKey.of(WebHasher, password, salt))
+    val saltHash = WebHasher.sha256Hex(String.valueOf(env.salt))
+    new CapIssuing(repository, CapRepository.directory(env), keys(secret), password => saltHash.flatMap(CapKey.of(WebHasher, password, _)))
   }
 
   /** 本人のキャップを発行・失効・再発行する。パスワードは発行した応答でだけ返す。強キャップは admin だけが選べる */

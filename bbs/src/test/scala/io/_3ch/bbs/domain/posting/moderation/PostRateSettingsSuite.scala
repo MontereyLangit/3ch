@@ -15,6 +15,25 @@ class PostRateSettingsSuite extends FunSuite {
       BoardSettings(18, 10, 10, 1, PostRateKey.defaults), ThreadSettings(40, 3600, PostRateKey.defaults)))
   }
 
+  test("shiki の照合値は識別子が checked でキャップでないときだけ使う") {
+    import io._3ch.common.domain.identity.ShikibetsuMode
+    assertEquals(PostRateSettings.shikiSource(ShikibetsuMode.Checked, cap = false, "ID-1"), "ID-1")
+    assertEquals(PostRateSettings.shikiSource(ShikibetsuMode.Checked, cap = true, "★"), "")
+    Seq(ShikibetsuMode.Phoebe, ShikibetsuMode.Raw, ShikibetsuMode.Ken, ShikibetsuMode.City, ShikibetsuMode.As, ShikibetsuMode.Hidden).foreach { mode =>
+      assertEquals(PostRateSettings.shikiSource(mode, cap = false, "JP.13"), "", mode.toString)
+    }
+  }
+
+  test("板の履歴の件数・秒数は板設定だけで決まり、広域連投規制を判定しない段階でも fr を保持する") {
+    val board = parse("BBS_FR_SECOND=3600\n")
+    val merged = parse("BBS_FR_SECOND=1\nBBS_FR_LEVEL=0\ntimecount=1\n")
+    val settings = PostRateSettings.from(board, merged)
+    val check = PostRateCheck(settings.level, PostRateIdentity(), settings.board, settings.thread)
+    assertEquals(settings.level, PostRateLevel.Enforce(None))
+    assertEquals((check.boardSettings.fr, check.boardSettings.timecount, check.boardSettings.checksFr), (3600, 18, false))
+    assertEquals(check.boardSettings.windowSeconds, 3600)
+  }
+
   test("不正な値は既定値で動き、上限を超えた値も既定値にする") {
     val board = parse("timecount=-1\ntimeclose=abc\nBBS_SAMBA24=86401\nBBS_FR_SECOND=-1\nBBS_THREAD_RENTOU=1.5\nBBS_THREAD_RENTOU_RESET=\nBBS_FR_LEVEL=yes\nBBS_RENTOU_PASS=all\nBBS_RENTOU_KEYS=id\n")
     assertEquals(PostRateSettings.from(board, board), PostRateSettings.from(none, none))
@@ -82,8 +101,9 @@ class PostRateSettingsSuite extends FunSuite {
     val checks = levels.map(level => PostRateCheck(level, identity, defaults.board, defaults.thread))
     assertEquals(checks.map(_.enabled), Seq(false, true, true, true))
     assertEquals(checks.map(_.enforce), Seq(false, false, true, true))
-    assertEquals(checks.map(_.boardSettings.fr), Seq(0, 1, 0, 1))
-    assertEquals(checks.map(_.boardSettings.copy(fr = 1)), Seq.fill(levels.size)(defaults.board), "fr のほかは変えない")
+    assertEquals(checks.map(_.boardSettings.checksFr), Seq(false, true, false, true))
+    assertEquals(checks.map(_.boardSettings.fr), Seq(1, 1, 1, 1), "履歴の保持のため fr は板設定のまま")
+    assertEquals(checks.map(_.boardSettings.copy(checksFr = true)), Seq.fill(levels.size)(defaults.board), "checksFr のほかは変えない")
   }
 
   test("設定名の前後の空白は無視する") {

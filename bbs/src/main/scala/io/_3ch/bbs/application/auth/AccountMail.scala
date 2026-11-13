@@ -15,10 +15,10 @@ object AuthMail {
     s"パスワードの再設定を受け付けました。\n次のリンクを開いて、新しいパスワードを設定してください（1時間有効）。\n\n$link\n\n心当たりが無い場合は、このメールを破棄してください。パスワードは変わりません。\n")
 }
 
-/** パスワードの変更の結果。照合の失敗は応答を遅らせる秒数だけを持つ */
+/** パスワードの変更の結果 */
 enum PasswordChangeOutcome {
   case Changed(account: AccountDescription)
-  case Failed(delaySeconds: Int)
+  case Failed
 }
 
 /** メールアドレスの登録・変更と確認、パスワードの変更と再設定 */
@@ -123,7 +123,7 @@ final class PasswordChange(accounts: AccountEmailStore, hashing: PasswordHashing
           credential <- hashing.create(next, now).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
           changed <- accounts.setPassword(account.aid, credential, now)
         } yield PasswordChangeOutcome.Changed(changed)
-        case SignInResult.Failed(delay) => Future.successful(PasswordChangeOutcome.Failed(delay))
+        case SignInResult.Failed => Future.successful(PasswordChangeOutcome.Failed)
         case SignInResult.Refused(reason) => Future.failed(AccountStoreException(reason))
         case SignInResult.Unfinished(_) => Future.failed(AccountStoreException(AccountRejection.Pending))
       }

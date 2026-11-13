@@ -84,7 +84,7 @@ class AccountUpgradeSuite extends munit.FunSuite {
       token <- keys.token(GoogleTestKeys.claims(sub, authorize.searchParams.get("nonce"), now))
       _ = { t.idToken = token }
       callback <- t.send(t.get(s"/auth/google/callback/?code=test-code&state=${authorize.searchParams.get("state")}",
-        cookie = Seq(t.cookie(started, "ch3s_oauth").get, cookie).filter(_.nonEmpty).mkString("; ")))
+        cookie = Seq(t.cookie(started, "__Host-ch3s_oauth").get, cookie).filter(_.nonEmpty).mkString("; ")))
     } yield callback
     t.run {
       for {

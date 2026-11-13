@@ -19,10 +19,18 @@ class PhoebeCommandSuite extends FunSuite {
   }
 
   test("スレ立て人は上げるだけ、staff の !SETTING は下げられ、どちらでもなければ要求にしない") {
-    assertEquals(PhoebeCommand.Setting(5).request(owner = true, staff = false, boardLevel = 0), Some(ThreadPhoebeRequest(5, lower = false, 0)))
-    assertEquals(PhoebeCommand.Setting(1).request(owner = false, staff = true, boardLevel = 2), Some(ThreadPhoebeRequest(1, lower = true, 2)))
-    assertEquals(PhoebeCommand.Balsan.request(owner = false, staff = true, boardLevel = 0), Some(ThreadPhoebeRequest(3, lower = false, 0)))
-    assertEquals(PhoebeCommand.Balsan.request(owner = false, staff = false, boardLevel = 0), None)
+    assertEquals(PhoebeCommand.Setting(5).request(owner = true, staff = false, boardLevel = 0, lv = 5), Some(ThreadPhoebeRequest(5, lower = false, 0)))
+    assertEquals(PhoebeCommand.Setting(1).request(owner = false, staff = true, boardLevel = 2, lv = 0), Some(ThreadPhoebeRequest(1, lower = true, 2)))
+    assertEquals(PhoebeCommand.Balsan.request(owner = false, staff = true, boardLevel = 0, lv = 0), Some(ThreadPhoebeRequest(3, lower = false, 0)))
+    assertEquals(PhoebeCommand.Balsan.request(owner = false, staff = false, boardLevel = 0, lv = 5), None)
+  }
+
+  test("スレ立て人が求められる Lv は自分の Lv まで、staff は上限なし") {
+    assertEquals(PhoebeCommand.Setting(9).request(owner = true, staff = false, boardLevel = 0, lv = 4), Some(ThreadPhoebeRequest(4, lower = false, 0)))
+    assertEquals(PhoebeCommand.Balsan.request(owner = true, staff = false, boardLevel = 0, lv = 1), Some(ThreadPhoebeRequest(1, lower = false, 0)))
+    assertEquals(PhoebeCommand.Balsan.request(owner = true, staff = false, boardLevel = 0, lv = 10), Some(ThreadPhoebeRequest(3, lower = false, 0)))
+    assertEquals(PhoebeCommand.Setting(9).request(owner = false, staff = true, boardLevel = 0, lv = 0), Some(ThreadPhoebeRequest(9, lower = true, 0)))
+    assertEquals(ThreadPhoebeRequest(1, lower = false, boardLevel = 3).next(Some("3")), None, "上限で頭打ちになった値は現在値を下げない")
   }
 
   test("スレ設定の値が無ければ板の値を現在値にし、上げるときと許された下げだけ書く") {

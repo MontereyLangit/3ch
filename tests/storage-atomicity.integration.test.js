@@ -1,10 +1,11 @@
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { unstable_dev } from 'wrangler';
 
 test('Wrangler: SQLite DO の同期 KV と SQL が同じトランザクションで確定・取消される', { timeout: 120000 }, async t => {
-  const worker = await unstable_dev(new URL('./support/storage-probe-worker.mjs', import.meta.url).pathname, {
-    config: new URL('./support/wrangler.storage-probe.jsonc', import.meta.url).pathname,
+  const worker = await unstable_dev(fileURLToPath(new URL('./support/storage-probe-worker.mjs', import.meta.url)), {
+    config: fileURLToPath(new URL('./support/wrangler.storage-probe.jsonc', import.meta.url)),
     local: true, persist: false, port: 0, logLevel: 'error',
     experimental: { disableExperimentalWarning: true, disableDevRegistry: true, watch: false },
   });

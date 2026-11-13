@@ -31,8 +31,7 @@ final class ClientAuthentication(accounts: AccountManagementStore, keys: Authent
         (deviceHash.nonEmpty && !deviceHash.matches("[pgu](?:[0-9a-f]{18}|[0-9a-f]{16})"))) {
         throw AuthServiceException(AuthServiceFailure.Invalid)
       }
-      val counted = if (deviceHash.isEmpty) Future.unit
-      else accounts.rate(keyIp, "deviceHash:" + deviceHash, now).map(_ => ())
+      val counted = accounts.rate(keyIp, if (deviceHash.isEmpty) AuthRateHistory.anonymousDevice else "deviceHash:" + deviceHash, now).map(_ => ())
       for {
         _ <- counted
         counts <- accounts.rate(keyIp, "verify", now)

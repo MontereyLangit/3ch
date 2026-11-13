@@ -3,9 +3,9 @@ package io._3ch.bbs.durable
 import io._3ch.bbs.external.cloudflare.*
 import io._3ch.bbs.durable.codec.{PostRateCodec, PostingCodec, ThreadCreationCodec, ThreadOwnerCodec, ThreadSettingsCodec}
 import io._3ch.bbs.domain.posting.ThreadPosting
-import io._3ch.bbs.domain.posting.moderation.{PostRateFinding, PostRateLimit, ThreadRecentPosts}
+import io._3ch.bbs.domain.posting.moderation.{PostRateFlow, ThreadRecentPosts}
 import io._3ch.bbs.durable.support.DurableLock
-import io._3ch.common.domain.posting.{DatLineFormatter, ThreadWriteGuard, ThreadWriteKind}
+import io._3ch.common.domain.posting.{DatLineFormatter, PhoebeAdmission, ThreadWriteGuard, ThreadWriteKind}
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -150,7 +150,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
   def setSettings(settings: String): js.Promise[Unit] = put("settings" -> settings).toJSPromise
 
   /**
-   * 新しいレスを追加します。追記できないときは ThreadWriteRejection・ThreadCreationRejection・PostRateRejection のコードを Error の文言にして失敗します
+   * 新しいレスを追加します。追記できないときは ThreadWriteRejection・BBS_PHOEBE の Lv 不足（PhoebeAdmission）・ThreadCreationRejection・PostRateRejection のコードを Error の文言にして失敗します
    * @param datLine - dat形式の新しい行データ
    * @param logLine - log形式の新しい行データ
    * @param posting - 投稿の付帯情報（PostingCodec の形式）。null と省略は付帯情報なし
@@ -183,10 +183,11 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
       dat <- if unavailable then Future.successful("") else getDat(p.bbs.getOrElse(""), p.key.getOrElse("0")).toFuture
       settings <- if unavailable then Future.successful("") else text("settings")
       count = ThreadWriteGuard.check(unavailable, dat, settings, kind).fold(rejection => fail(rejection.code), identity)
+      _ = p.admission.flatMap(_.refusal(ThreadSettingsCodec.value(settings, "BBS_PHOEBE"))).foreach(required => fail(PhoebeAdmission.code(required)))
       log <- text("log")
       recent <- if rate.isDefined then read("recentPosts").map(PostRateCodec.decodeRecent) else Future.successful(ThreadRecentPosts.empty)
-      threadRejection = rate.filter(_ => reply).flatMap(r => recent.check(r.thread, r.identity, now))
-      _ = if rate.exists(_.enforce) then threadRejection.foreach(rejection => fail(rejection.code))
+      judgement = rate.map(PostRateFlow.judgeThread(_, reply, recent, now))
+      _ = judgement.flatMap(_.refusal).foreach(rejection => fail(rejection.code))
       update = js.Dictionary[js.Any]("dat" -> (dat + datLine + "\n"), "log" -> (log + DatLineFormatter.renumberLog(logLine, count) + "\n"), "modifiedAt" -> nowMillis)
       _ = if p.create then update("settings") = p.initialSettings.getOrElse("")
       _ = if p.create then p.owner.foreach(owner => update("owner") = ThreadOwnerCodec.encode(owner))
@@ -194,7 +195,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
       _ = if kind != ThreadWriteKind.Raw then p.phoebe.flatMap(_.next(ThreadSettingsCodec.value(base, "BBS_PHOEBE"))).foreach { level =>
         update("settings") = ThreadSettingsCodec.updated(base, "BBS_PHOEBE", level.toString)
       }
-      _ = rate.foreach(r => update("recentPosts") = PostRateCodec.encodeRecent(recent.appended(PostRateLimit.Entry(now, r.identity), r.thread, now)))
+      _ = rate.foreach(r => update("recentPosts") = PostRateCodec.encodeRecent(PostRateFlow.recorded(r, recent, now)))
       _ <- creationLimit.fold(Future.unit) { limit =>
         board(boardName).reserveThreadCreation(keyName, ThreadCreationCodec.encodeRequest(limit)).toFuture.map { error =>
           if error.nonEmpty then fail(error)
@@ -208,11 +209,13 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
             } else Future.successful("")
           }
       }
-      _ <- if rate.exists(_.enforce) && boardCode.nonEmpty then cancelCreation().map(_ => fail(boardCode)) else Future.unit
-      copipe = rate.isDefined && reply && PostRateLimit.copipe(dat, datLine)
-      observed = threadRejection.map(PostRateFinding.Rejected(_)).toSeq ++ PostRateFinding.fromCode(boardCode) ++ Option.when(copipe)(PostRateFinding.Copipe)
-      result <- if copipe && rate.exists(_.enforce) then completePost().map(_ => PostingCodec.encodeResult(count, swallowed = true, Nil))
-        else for {
+      _ <- rate.flatMap(PostRateFlow.boardRefusal(_, boardCode)).fold(Future.unit)(code => cancelCreation().map(_ => fail(code)))
+      verdict = rate.zip(judgement).headOption.fold[PostRateFlow.Verdict](PostRateFlow.Verdict.Store(Nil)) { case (r, j) =>
+        PostRateFlow.conclude(r, reply, j, boardCode, dat, datLine)
+      }
+      result <- verdict match {
+        case PostRateFlow.Verdict.Swallow => completePost().map(_ => PostingCodec.encodeResult(count, swallowed = true, Nil))
+        case PostRateFlow.Verdict.Store(observed) => for {
           _ <- state.storage.put(update).toFuture.recoverWith { case error =>
             cancelCreation().flatMap(_ => cancelPost()).transformWith(_ => Future.failed(error))
           }
@@ -220,6 +223,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
           _ <- completePost()
           _ <- if kind != ThreadWriteKind.Raw then board(boardName).updateThread(js.Dynamic.literal(key = p.key.orUndefined, title = p.title.orUndefined, resNum = count), p.sage, p.maxThreads.orUndefined).toFuture else Future.unit
         } yield PostingCodec.encodeResult(count, swallowed = false, observed)
+      }
     } yield result
   }.toJSPromise
 
@@ -296,8 +300,10 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
         stopped <- read("stopped")
         edited <- read("edited")
         owner <- read("owner")
+        recent <- read("recentPosts")
         data = js.Dynamic.literal(dat = dat, log = log, legacyLog = legacy, settings = settings, stopped = truth(stopped), edited = truth(edited), modifiedAt = js.Date.now())
         _ = if truth(owner) then data.owner = owner
+        _ = if truth(recent) then data.recentPosts = recent
         _ <- thread(target).receiveMove(data, source).toFuture
       } yield ()).recoverWith { case e =>
         val message = e match {

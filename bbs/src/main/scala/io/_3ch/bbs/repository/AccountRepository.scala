@@ -123,7 +123,7 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
   def activate(aid: String, now: Double): Future[AccountDescription] = account(aid).activate(now).toFuture.map(v =>
     decode(v, aid).fold(reason => throw AccountStoreException(reason), identity))
   private def signIn(v: js.Dynamic, expectedAid: String): SignInResult = text(v, "code") match {
-    case code if code == AccountRejection.LoginFailed.code => SignInResult.Failed(integer(record(v).selectDynamic("delay").asInstanceOf[js.Any], 8))
+    case code if code == AccountRejection.LoginFailed.code => SignInResult.Failed
     case code if code == AccountRejection.Pending.code =>
       val uid = text(v, "uid")
       if (!uid.matches("[a-z0-9_]{3,16}")) invalid()

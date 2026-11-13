@@ -79,10 +79,10 @@ enum AccountConversion {
 /** 退会で外す索引と KV。loginId と email は索引の HMAC を計算する前の値、googleSubHash は google 索引のキー、caps は失効させたキャップ */
 final case class Withdrawal(loginId: Option[String], email: Option[String], googleSubHash: Option[String], caps: Vector[AccountCap])
 
-/** パスワード照合の結果。失敗にはアカウント全体の失敗数による応答の遅延を付ける */
+/** パスワード照合の結果 */
 enum PasswordAttempt {
   case Accepted
-  case Failed(delaySeconds: Int)
+  case Failed
 }
 
 /** アカウントの状態遷移。現在時刻は呼び出し元から UNIX 秒で受ける */
@@ -260,7 +260,7 @@ final case class AccountState(
       val updated = if (matched && !before.locked) value.throttle.recordSuccess(keyIpHash, now) else value.throttle.recordFailure(keyIpHash, now)
       updated.left.map(_ => AccountRejection.Invalid).map { update =>
         val next = copy(credential = Some(value.copy(throttle = update.state)))
-        if (matched && !before.locked) (next, PasswordAttempt.Accepted) else (next, PasswordAttempt.Failed(update.decision.delaySeconds))
+        if (matched && !before.locked) (next, PasswordAttempt.Accepted) else (next, PasswordAttempt.Failed)
       }
     }
 

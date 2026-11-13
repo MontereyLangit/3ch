@@ -121,12 +121,15 @@ class AccountManagementSuite extends FunSuite {
     }
   }
 
-  test("空の端末では端末数を計数せず verify のみを計数する") {
+  test("端末の申告が無い要求は毎回別の端末として数え、省略しても端末数の制限を避けられない") {
     val fixture = new Fixture
-    fixture.service.verify("", keyIp, now).map { _ =>
-      assertEquals(fixture.history.events.map(_.kind), Vector("verify"))
-      assert(fixture.states.values.head.devices.isEmpty)
-    }
+    for {
+      _ <- fixture.service.verify("", keyIp, now)
+      _ = assertEquals(fixture.history.events.map(_.kind).sorted, Vector("anonymousDevice", "verify"))
+      _ = assert(fixture.states.values.head.devices.isEmpty)
+      _ = fixture.history = AuthRateHistory((1 to 5).map(i => AuthRateEvent(AuthRateHistory.anonymousDevice, now - i)).toVector)
+      error <- fixture.error(fixture.service.verify("", keyIp, now + 1))
+    } yield assertEquals(error, "auth:rate")
   }
 
   test("認証回数または端末数の超過は作成前に拒否する") {

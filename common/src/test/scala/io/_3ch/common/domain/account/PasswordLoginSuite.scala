@@ -24,25 +24,25 @@ class PasswordLoginSuite extends FunSuite {
     assertEquals(AccountState.create(profile.copy(kind = AccountKind.Client, loginId = None, uid = "abcd1234"), now, Some(credential)), Left(AccountRejection.Invalid))
   }
 
-  test("一致すればその接続元の失敗を消し、不一致はアカウント全体の五回目から遅延を返す") {
+  test("一致すればその接続元の失敗を消し、不一致は失敗として数える") {
     val failed = fail(ready, ip, 4)
     val (fifth, attempt) = failed.afterPasswordAttempt(ip, matched = false, now + 5).toOption.get
-    assertEquals(attempt, PasswordAttempt.Failed(1))
+    assertEquals(attempt, PasswordAttempt.Failed)
     val (success, accepted) = fifth.afterPasswordAttempt(ip, matched = true, now + 6).toOption.get
     assertEquals(accepted, PasswordAttempt.Accepted)
-    assertEquals(success.credential.get.throttle.failures, Vector.empty)
+    assertEquals(success.credential.get.throttle.sources, Map.empty)
     assertEquals(success.credential.get.hash, credential.hash)
   }
 
   test("十回目の失敗で接続元をロックし、ロック中は正しいパスワードでも失敗にする") {
     val locked = fail(ready, ip, 10)
-    assertEquals(locked.credential.get.throttle.locks.get(ip), Some(now + 10 + 3600))
+    assertEquals(locked.credential.get.throttle.sources.get(ip).flatMap(_.lockedUntil), Some(now + 10 + 3600))
     val (after, attempt) = locked.afterPasswordAttempt(ip, matched = true, now + 11).toOption.get
-    assertEquals(attempt, PasswordAttempt.Failed(6))
+    assertEquals(attempt, PasswordAttempt.Failed)
     assertEquals(after, locked)
     val (elsewhere, accepted) = locked.afterPasswordAttempt(other, matched = true, now + 11).toOption.get
     assertEquals(accepted, PasswordAttempt.Accepted)
-    assertEquals(elsewhere.credential.get.throttle.locks.keySet, Set(ip))
+    assertEquals(elsewhere.credential.get.throttle.sources.keySet, Set(ip))
   }
 
   test("パスワード方式以外や不正な接続元では照合しない") {

@@ -102,7 +102,7 @@ class PasswordHasherSuite extends FunSuite {
         credential.copy(salt = Vector.empty), credential.copy(salt = Vector.fill(17)(0.toByte)), credential.copy(salt = null),
         credential.copy(hash = Vector.empty), credential.copy(hash = Vector.fill(31)(0.toByte)), credential.copy(hash = Vector.fill(33)(0.toByte)),
         credential.copy(hash = null), credential.copy(updatedAt = -1), credential.copy(updatedAt = 0.5), credential.copy(updatedAt = Double.NaN),
-        credential.copy(throttle = null), credential.copy(throttle = LoginThrottle(locks = Map("raw-ip" -> now))))
+        credential.copy(throttle = null), credential.copy(throttle = LoginThrottle(sources = Map("raw-ip" -> io._3ch.common.domain.account.LoginSource(1, now)))))
       for {
         results <- Future.traverse(invalid)(PasswordHasher.verify(password, _))
         times <- Future.traverse(Seq(-1d, 0.5, Double.NaN, Double.PositiveInfinity))(PasswordHasher.create(password, _))

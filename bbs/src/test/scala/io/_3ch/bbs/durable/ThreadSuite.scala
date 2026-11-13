@@ -143,6 +143,22 @@ class ThreadSuite extends FunSuite {
     } yield ()
   }
 
+  test("移動は recentPosts を移動先へ引き継ぎ、無ければキーを作らない") {
+    val env = newEnv()
+    val recent = js.Array(js.Dynamic.literal(t = 1800000000d, ip = "aaaaaaaaaaaa", shiki = "bbbbbbbbbbbb"))
+    for {
+      _ <- createWith(env, "source/1800000000", "1800000000", js.Dynamic.literal()).toFuture
+      _ <- createWith(env, "source/1800000002", "1800000002", js.Dynamic.literal()).toFuture
+      _ <- seed(env.threadInstance("source/1800000000"), "recentPosts" -> recent)
+      _ <- env.thread("source/1800000000").moderate("move", moveInput()).toFuture
+      _ <- env.thread("source/1800000002").moderate("move", moveInput(key = "1800000002", targetKey = "1800000003")).toFuture
+      moved <- env.threadInstance("target/1800000001").state.storage.get[js.Any]("recentPosts").toFuture
+      none <- env.threadInstance("target/1800000003").state.storage.get[js.Any]("recentPosts").toFuture
+      _ = assertEquals(js.JSON.stringify(moved.get), js.JSON.stringify(recent))
+      _ = assert(none.isEmpty)
+    } yield ()
+  }
+
   test("既存スレ同士の相互移動はロック前に拒否し、元データを保持する") {
     val env = newEnv()
     val source = env.thread("source/1800000000")
@@ -245,6 +261,31 @@ class ThreadSuite extends FunSuite {
       inspected <- thread.inspect().toFuture
       _ = assertEquals(inspected.dat.toOption.map(_.split("\n").length), Some(4))
     } yield ()
+  }
+
+  test("書き込む直前に最新のスレ設定の BBS_PHOEBE で Lv を判定し直し、足りなければ保存せず Lv 不足で拒否する") {
+    val env = newEnv()
+    val instance = env.threadInstance("board1/7")
+    val thread = env.thread("board1/7")
+    val dat = "1<>x<><>msg<>title\n"
+    def reply(lv: Int, exempt: Boolean = false, board: Int = 0): js.Dynamic = js.Dynamic.literal(bbs = "board1", key = "7", create = false,
+      phoebeAdmission = js.Dynamic.literal(lv = lv, exempt = exempt, board = board))
+    for {
+      _ <- seed(instance, "dat" -> dat, "log" -> "", "settings" -> "BBS_PHOEBE=3<>")
+      refused <- rejectionMessage(thread.addRes("r<><>d<> 本文 <>", "2<>log", reply(2)).toFuture)
+      _ = assertEquals(refused, "thread-write:level:3")
+      unchanged <- thread.getDat().toFuture
+      _ = assertEquals(unchanged, dat, "拒否された投稿は dat に反映されない")
+      exempt <- thread.addRes("r<><>d<> 免除 <>", "2<>log", reply(0, exempt = true)).toFuture
+      _ = assertEquals(exempt.count, 2)
+      admitted <- thread.addRes("r<><>d<> 十分 <>", "3<>log", reply(3)).toFuture
+      _ = assertEquals(admitted.count, 3)
+      absent <- thread.addRes("r<><>d<> 判定なし <>", "4<>log", js.Dynamic.literal(bbs = "board1", key = "7", create = false)).toFuture
+      _ = assertEquals(absent.count, 4)
+      _ <- seed(env.threadInstance("board1/8"), "dat" -> dat, "log" -> "")
+      byBoard <- rejectionMessage(env.thread("board1/8").addRes("r<><>d<> 板 <>", "2<>log",
+        js.Dynamic.literal(bbs = "board1", key = "8", create = false, phoebeAdmission = js.Dynamic.literal(lv = 4, exempt = false, board = 5))).toFuture)
+    } yield assertEquals(byBoard, "thread-write:level:5", "スレ設定に値が無ければ板の値で判定する")
   }
 
   test("スレ立てのコマンドは初期スレ設定に重ね、板の値より上げない要求はスレ設定に書かない") {

@@ -8,7 +8,7 @@ import io._3ch.bbs.domain.account.{EdgeDecision, EdgeMode, EdgeRules, EdgeSignal
 import io._3ch.bbs.external.web.TextEncoder
 import io._3ch.common.domain.{BbsSettings, BoardId}
 import io._3ch.common.domain.account.{AccountRole, Roles}
-import io._3ch.common.domain.posting.{CapHandle, ThreadPhoebeRequest}
+import io._3ch.common.domain.posting.{CapHandle, PhoebeAdmission, ThreadPhoebeRequest}
 import munit.FunSuite
 
 import scala.collection.immutable.ListMap
@@ -44,7 +44,7 @@ class PostingServiceSuite extends FunSuite {
     val calls: mutable.Buffer[String] = mutable.Buffer.empty
     val postings: mutable.Buffer[(String, String, ThreadPosting)] = mutable.Buffer.empty
     val writes: mutable.Buffer[(String, String)] = mutable.Buffer.empty
-    val md5Inputs: mutable.Buffer[String] = mutable.Buffer.empty
+    val sha256Inputs: mutable.Buffer[String] = mutable.Buffer.empty
     val observations: mutable.Buffer[PostRateObservation] = mutable.Buffer.empty
     private def called[A](name: String)(value: => A): Future[A] = { calls += name; Future(value) }
 
@@ -90,9 +90,8 @@ class PostingServiceSuite extends FunSuite {
       edge = edge,
       phoebe = () => Future.successful(PhoebeCapRules.parse(phoebe).toOption.get),
       hasher = new Hasher {
-        def md5(value: String): String = { md5Inputs += value; s"m($value)" }
         def sha1Base64(value: String): Future[String] = Future.successful(s"s1($value)")
-        def sha256Hex(value: String): Future[String] = Future.successful(s"s2($value)")
+        def sha256Hex(value: String): Future[String] = { sha256Inputs += value; Future.successful(s"s2($value)") }
       },
       clock = new Clock {
         def nowMillis(): Double = Now
@@ -130,8 +129,8 @@ class PostingServiceSuite extends FunSuite {
     case other => fail(s"拒否されなかった: $other")
   }
 
-  private val salt = "m(salt)"
-  private val pon = s"PON=s1(s2(m(192.0.2.1)$salt)); Max-Age=63072000; path=/; Secure; HttpOnly"
+  private val salt = "s2(salt)"
+  private val pon = s"PON=s1(s2(192.0.2.1$salt)); Max-Age=63072000; path=/; Secure; HttpOnly"
 
   private final class AuthSource(user: Option[PostingUser] = None, failRecord: Boolean = false, device: String = "p012345678901234567",
     refreshed: Option[String] = None, lv: Int = 1, staff: Boolean = false, roles: Set[AccountRole] = Set.empty, createdAt: Double = 0) extends PostingAccounts {
@@ -256,9 +255,9 @@ class PostingServiceSuite extends FunSuite {
           assertEquals(context.form.key, "1700000000")
           assertEquals(context.sage, false)
           assertEquals(context.settings.value.toList, List("BBS_TITLE" -> "看板", "BBS_SHIKIBETSU" -> "off"))
-          val shikibetsu = "JP.s1.s1 s1-m(Mozilla/5.0 (T"
+          val shikibetsu = "JP.s1.s1 s1-s2(Mozilla/5.0 ("
           assertEquals(context.shikibetsu, shikibetsu)
-          assertEquals(context.form.name, s"名無しさん＠３ちゃんねる </b>($shikibetsu)<b>")
+          assertEquals(context.form.name, s"名無しさん＠３ちゃんねる </b>($shikibetsu)<b> </b>(主)<b>")
           assertEquals(context.identity.host, "192.0.2.1")
           assertEquals(context.identity.salt, salt)
         case other => fail(s"書けなかった: $other")
@@ -304,7 +303,12 @@ class PostingServiceSuite extends FunSuite {
 
   test("返信のスレ主には (主) を付ける") {
     val fake = Fake(owner = Some(ThreadOwner(s"s2(192.0.2.1:$salt)", "", "")))
-    fake.post(reply()*)().map(outcome => assert(outcome.context.form.name.endsWith(" (主)"), outcome.context.form.name))
+    fake.post(reply()*)().map(outcome => assert(outcome.context.form.name.endsWith(" </b>(主)<b>"), outcome.context.form.name))
+  }
+
+  test("スレ立て (>>1) の投稿者にも (主) を付ける") {
+    val fake = Fake()
+    fake.post()().map(outcome => assert(outcome.context.form.name.endsWith(" </b>(主)<b>"), outcome.context.form.name))
   }
 
   test("sage の判定は BBS_LIVE のときだけ乱数を読み、sage なら headline を書かない") {
@@ -426,14 +430,14 @@ class PostingServiceSuite extends FunSuite {
   test("BBS_ID_RESET の負のゼロと負数のアンダーフローは同じ識別子の日付窓になる") {
     def seed(reset: String): Future[Seq[String]] = {
       val fake = Fake(boardSettings = s"BBS_ID_RESET=$reset\n")
-      fake.post()().map(_ => fake.md5Inputs.filter(_.startsWith("Mozilla")).toSeq)
+      fake.post()().map(_ => fake.sha256Inputs.filter(_.startsWith("Mozilla/5.0 (Test)sample-")).toSeq)
     }
     for {
       negativeZero <- seed("-0")
       underflow <- seed("-1e-2147483649")
       positive <- seed("86400")
     } yield {
-      assertEquals(negativeZero, Seq("Mozilla/5.0 (Test)sample-Infinitym(salt)"))
+      assertEquals(negativeZero, Seq("Mozilla/5.0 (Test)sample-Infinitys2(salt)"))
       assertEquals(negativeZero, underflow)
       assertNotEquals(negativeZero, positive)
     }
@@ -473,16 +477,23 @@ class PostingServiceSuite extends FunSuite {
     }
   }
 
-  test("BBS_FR_LEVEL が 0 か空なら規制したまま、板には広域連投規制を外して渡す") {
-    val cases = Seq("BBS_FR_LEVEL=0\n" -> (PostRateLevel.Enforce(None), 0), "BBS_FR_LEVEL=\n" -> (PostRateLevel.Enforce(None), 0),
-      "" -> (PostRateLevel.Enforce(Some(1)), 4), "BBS_FR_LEVEL=30\n" -> (PostRateLevel.Enforce(Some(30)), 4))
+  test("BBS_FR_LEVEL が 0 か空なら規制したまま、板には広域連投規制を判定しない印を付けて渡す（fr は保持のため板設定のまま）") {
+    val cases = Seq("BBS_FR_LEVEL=0\n" -> (PostRateLevel.Enforce(None), (4, false)), "BBS_FR_LEVEL=\n" -> (PostRateLevel.Enforce(None), (4, false)),
+      "" -> (PostRateLevel.Enforce(Some(1)), (4, true)), "BBS_FR_LEVEL=30\n" -> (PostRateLevel.Enforce(Some(30)), (4, true)))
     Future.traverse(cases) { case (text, _) =>
       val fake = Fake(boardSettings = text + "BBS_FR_SECOND=4\n")
       fake.post(reply()*)().map { _ =>
         val check = fake.postings.head._3.rateLimit.get
-        (check.level, check.boardSettings.fr)
+        (check.level, (check.boardSettings.fr, check.boardSettings.checksFr))
       }
     }.map(results => assertEquals(results, cases.map(_._2)))
+  }
+
+  test("識別子が checked 以外の板では shiki を照合値にしない（県・市・AS 単位で別人が一致するため）") {
+    Future.traverse(Seq("checked", "raw", "ken", "city", "as", "hidden")) { mode =>
+      val fake = Fake(boardSettings = s"BBS_ID_SHIKIBETSU=$mode\n")
+      fake.post(reply()*)().map(_ => mode -> fake.postings.head._3.rateLimit.map(_.identity.shiki.nonEmpty))
+    }.map(results => assertEquals(results, Seq("checked" -> Some(true), "raw" -> Some(false), "ken" -> Some(false), "city" -> Some(false), "as" -> Some(false), "hidden" -> Some(false))))
   }
 
   test("キャップを判定するときは識別子（★）を照合値にしない") {
@@ -633,11 +644,11 @@ class PostingServiceSuite extends FunSuite {
     }
   }
 
-  private val ownedThread = Some(ThreadOwner("", "", "s2(account-a:m(salt))"))
+  private val ownedThread = Some(ThreadOwner("", "", "s2(account-a:s2(salt))"))
   private def phoebeOf(fake: Fake): Option[ThreadPhoebeRequest] = fake.postings.head._3.phoebe
 
   test("スレ立て人の !バルサン と !SETTING は上げるだけの要求にし、本文はそのまま書き込む") {
-    val balsan = Fake(boardSettings = "BBS_PHOEBE=1\n", owner = ownedThread, authSource = Some(new AuthSource(member)))
+    val balsan = Fake(boardSettings = "BBS_PHOEBE=1\n", owner = ownedThread, authSource = Some(new AuthSource(member, lv = 3)))
     val setting = Fake(owner = ownedThread, authSource = Some(new AuthSource(member)))
     for {
       _ <- balsan.post(reply("MESSAGE" -> "!バルサン")*)()
@@ -650,7 +661,7 @@ class PostingServiceSuite extends FunSuite {
   }
 
   test("スレ立て人でない投稿者・未ログイン・スレ主表示を止めた板ではコマンドを無視して通常の投稿にする") {
-    val other = Some(ThreadOwner("s2(192.0.2.1:m(salt))", "", "s2(account-b:m(salt))"))
+    val other = Some(ThreadOwner("s2(192.0.2.1:s2(salt))", "", "s2(account-b:s2(salt))"))
     val cases = Seq(
       Fake(owner = other, authSource = Some(new AuthSource(member))),
       Fake(owner = ownedThread, authSource = Some(new AuthSource())),
@@ -666,7 +677,7 @@ class PostingServiceSuite extends FunSuite {
 
   test("staff はスレ立て人でなくても !SETTING で下げられ、ログインしたスレ立てではスレ立て人として扱う") {
     val staff = Fake(owner = None, authSource = Some(new AuthSource(member, staff = true)))
-    val creator = Fake(authSource = Some(new AuthSource(member)))
+    val creator = Fake(authSource = Some(new AuthSource(member, lv = 4)))
     for {
       _ <- staff.post(reply("MESSAGE" -> "!SETTING:BBS_PHOEBE:0")*)()
       _ <- creator.post("MESSAGE" -> "!SETTING:BBS_PHOEBE:4")()
@@ -676,10 +687,53 @@ class PostingServiceSuite extends FunSuite {
     }
   }
 
+  test("スレ立て人が求められる Lv は自分の Lv までで、それ以上の指定は自分の Lv にする") {
+    val low = Fake(owner = ownedThread, authSource = Some(new AuthSource(member, lv = 2)))
+    val setting = Fake(owner = ownedThread, authSource = Some(new AuthSource(member, lv = 2)))
+    val creator = Fake(authSource = Some(new AuthSource(member, lv = 1)))
+    for {
+      _ <- low.post(reply("MESSAGE" -> "!バルサン")*)()
+      _ <- setting.post(reply("MESSAGE" -> "!SETTING:BBS_PHOEBE:9")*)()
+      _ <- creator.post("MESSAGE" -> "!SETTING:BBS_PHOEBE:5")()
+    } yield {
+      assertEquals(phoebeOf(low), Some(ThreadPhoebeRequest(2, lower = false, 0)))
+      assertEquals(phoebeOf(setting), Some(ThreadPhoebeRequest(2, lower = false, 0)))
+      assertEquals(phoebeOf(creator), Some(ThreadPhoebeRequest(1, lower = false, 0)))
+    }
+  }
+
+  test("Lv の判定条件を Thread DO に渡し、認証を有効にしていない環境には渡さない") {
+    val member3 = Fake(boardSettings = "BBS_PHOEBE=2\n", authSource = Some(new AuthSource(member, lv = 3)))
+    val staff = Fake(authSource = Some(new AuthSource(member, lv = 0, staff = true)))
+    val plain = Fake()
+    for {
+      _ <- member3.post(reply()*)()
+      _ <- staff.post(reply()*)()
+      _ <- plain.post(reply()*)()
+    } yield {
+      assertEquals(member3.postings.head._3.admission, Some(PhoebeAdmission(3, exempt = false, boardLevel = 2)))
+      assertEquals(staff.postings.head._3.admission, Some(PhoebeAdmission(0, exempt = true, boardLevel = 0)))
+      assertEquals(plain.postings.head._3.admission, None)
+    }
+  }
+
+  test("Thread DO が書き込む直前に Lv 不足と判定したら、通常の Lv 不足と同じ拒否にする") {
+    val level = Fake(authSource = Some(new AuthSource(member, lv = 2)), write = _ => Future.successful(ThreadWriteResult.LevelRequired(3)))
+    val login = Fake(authSource = Some(new AuthSource()), write = _ => Future.successful(ThreadWriteResult.LevelRequired(1)))
+    val monazilla: PostingRequest => PostingRequest = _.copy(userAgent = "Monazilla/1.00 Test/1.0")
+    for {
+      byLevel <- level.post(reply()*)()
+      byLogin <- login.post(reply()*)(monazilla)
+    } yield {
+      assertEquals(rejected(byLevel).error, levelRequired)
+      assertEquals(rejected(byLogin).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.LoginRequired))
+    }
+  }
+
   private val phoebeBoard = "BBS_ID_SHIKIBETSU=phoebe\n"
   private val windowsTable: UserAgentTableStore = () => Future.successful(UserAgentTable(
     UserAgentRule.create("\\(Test\\)", "", "Windows 11").toSeq, Nil, UserAgentRule.create("Mozilla", "", "PC").toSeq))
-  private def seed(value: String, axis: String): String = s"$value|${axis}sample19676m(salt)"
+  private def seed(value: String, axis: String): String = s"$value|${axis}sample19676s2(salt)"
   private def nameOf(fake: Fake): String = fake.postings.head._1.split("<>")(0)
 
   test("phoebe 書式の未ログインは UA 解析表と UA・Client Hints・言語から5軸を作り、取れない軸は 000、D は 0") {
@@ -687,11 +741,11 @@ class PostingServiceSuite extends FunSuite {
     fake.post(reply()*)(_.copy(secChUa = "\"Chromium\";v=\"130\"", acceptLanguage = "ja")).map { _ =>
       val axis = "s1("
       assertEquals(nameOf(fake), s"名無しさん＠３ちゃんねる </b>(JP.s1 s1-${axis}000${axis}${axis}${axis}0)<b>")
-      assert(fake.md5Inputs.contains(seed("Windows 11", "E")))
-      assert(fake.md5Inputs.contains(seed("PC", "G")))
-      assert(fake.md5Inputs.contains(seed("Mozilla/5.0 (Test)", "Z")))
-      assert(fake.md5Inputs.contains(seed("\"Chromium\";v=\"130\"|ja", "X")))
-      assert(!fake.md5Inputs.exists(_.contains("|F")))
+      assert(fake.sha256Inputs.contains(seed("Windows 11", "E")))
+      assert(fake.sha256Inputs.contains(seed("PC", "G")))
+      assert(fake.sha256Inputs.contains(seed("Mozilla/5.0 (Test)", "Z")))
+      assert(fake.sha256Inputs.contains(seed("\"Chromium\";v=\"130\"|ja", "X")))
+      assert(!fake.sha256Inputs.exists(_.contains("|F")))
     }
   }
 
@@ -700,7 +754,7 @@ class PostingServiceSuite extends FunSuite {
       authSource = Some(new AuthSource(member, device = "p0123456789abcdef01", lv = 10)))
     fake.post(reply()*)().map { _ =>
       assert(nameOf(fake).endsWith("*)<b>"), nameOf(fake))
-      assertEquals(Seq("0123" -> "E", "456789" -> "F", "abcd" -> "G", "ef" -> "Z", "01" -> "X").count { case (v, a) => fake.md5Inputs.contains(seed(v, a)) }, 5)
+      assertEquals(Seq("0123" -> "E", "456789" -> "F", "abcd" -> "G", "ef" -> "Z", "01" -> "X").count { case (v, a) => fake.sha256Inputs.contains(seed(v, a)) }, 5)
     }
   }
 

@@ -63,7 +63,7 @@ KotlinJSの [生成済み空白表](https://github.com/JetBrains/kotlin/blob/v2.
 | メール欄コマンドの解釈の重複 | common の `MailCommands` に `!#`・キャップのパスワード・`!auth` の読み取りと除去をまとめた。キャップのパスワードは従来の CapHandle と同じ範囲（最初の `#` から次の `#` の手前まで、空白を含む）で、メール欄からも同じ範囲を除く |
 | 層の依存が逆 | Cookie の検証・発行を `PostingCredentials` の口にし、handler の `SessionCredentials` が実装する。投稿の認証と記録は application の `PostingAccountService`、組み立ては handler の Posting。認証結果は domain の `AuthenticatedPoster`。`PostingUserSource` は元の形に戻し、認証を有効にした環境だけ `PostingAccounts` を渡す |
 | 種別を文字列で表す | AuthHandler の拒否理由を `AuthApiError`、本人認証の失敗を `AuthServiceFailure`、AccountRepository の失敗を `AccountStoreException(AccountRejection)` にした |
-| 保存量に上限が無い | キー発行を AuthRate で 1 アカウント 1 日 10 回、無効にしたキーの記録を 20 件、ログイン失敗と接続元ロックを各 100 件までにした。無効になったキーは Account DO が保存の後に token 索引から外す。キー照合の拒否は書き込みログと分けて `rejections` に 20 件まで残す |
+| 保存量に上限が無い | キー発行を AuthRate で 1 アカウント 1 日 10 回、無効にしたキーの記録を 20 件、ログイン失敗は接続元ごとの計数（最大 100 接続元）に、AuthRate の履歴は種類ごと 120 件・端末 20 件までにした。無効になったキーは Account DO が保存の後に token 索引から外す。キー照合の拒否は書き込みログと分けて `rejections` に 20 件まで残す |
 | UI の不一致 | 日時を日本時間（common の `JstTime`）にし、無効化の理由を `TokenRevokeReason` で読む。期限切れの判定はサーバの結果だけを使う。アカウント画面に登録方法・有効期限・この端末の粒度と登録台数・ログアウトを足し、かんたん登録はログアウトで戻せないことを出す。リンク先の無いキャップをメニューから外した。認証画面に「認証の前にお読みください」を足した。Lv の進み具合はデータが無いので出していない |
 | 認証設定なしでも認証モーダルを置く・設定の一部だけで Web 版が書けない | `AUTH_SECRET`（32 文字以上）・`AGREEMENT_VERSION`・`TURNSTILE_SITE_KEY`・`TURNSTILE_SECRET_KEY` が揃ったときだけ認証を有効にする。揃わない環境は `/auth/` も 404 で、モーダルも置かない |
 | log の Device: が空になる | 端末ハッシュの無い認証投稿と匿名投稿は従来の端末情報を記録する |
@@ -86,7 +86,11 @@ KotlinJSの [生成済み空白表](https://github.com/JetBrains/kotlin/blob/v2.
 | --- | --- |
 | DO はインフラのみ | Account DO はロック・読込・PBKDF2 の呼出し・保存だけを持つ。照合前のロック確認、失敗計数への反映、利用開始、パスワード変更、Google の照合は `AccountState` の純粋関数。照合の結果は enum（`PasswordAttempt`・`SignInResult`・`LoginOutcome`・`GoogleOutcome`）で返し、文言は handler で組み立てる |
 | 列挙の防止 | 未登録・不一致・ロック中は同じ 401 と文言。未登録は固定の `Account("dummy")` に同じ RPC を送り、PBKDF2 を 1 回計算する（AccountPasswordSuite で計算回数を数えた）。ログイン ID の書式が不正なときも dummy で照合する。パスワードの書式（長さ等）が不正なときは計算せずに失敗を返すが、これは入力した本人が分かることでアカウントの有無は漏れない |
-| 遅延の偏り | アカウント全体の失敗数による遅延は実在するアカウントにだけ付くので、5 回以上失敗させれば ID の有無が分かる。設計（§3.9）が想定する範囲として残し、接続元ごとの 30 回/時の上限で抑える |
+| 遅延の偏り | 失敗の遅延は Account DO ではなく、存在する ID でも無い ID でも同じ `AuthRate` DO に数える接続元ごとの失敗数（`loginFail`、直近 1 時間）から決める（5 回目から 1 秒ずつ、上限 8 秒）。ID の有無で遅延は変わらない。Account DO の計数（接続元ごとの 10 回ロックとアカウント全体の 100 回ロック）は応答の遅延に使わず、ロック中も失敗と同じ応答にする |
+| ロックの回避 | 接続元ごとに失敗数と窓の開始時刻を持ち、他の接続元の失敗が挟まっても数え損なわない。保持は最大 100 接続元で、捨てるのは期限切れだけ。上限まで埋まったときの新しい接続元はロック扱いにする。接続元を回す総当たりは、アカウント全体の失敗 100 回で全接続元を 1 時間ロックして止める（本人も 1 時間ログインできなくなる。パスワード再設定は E-2）。永続形式は `throttle: {sources: {keyIpHash: {count, since, lockedUntil?}}, account: {count, since, lockedUntil?}}` で、本 PR で導入した形式なので移行は不要 |
+| OAuth state Cookie | `__Host-ch3s_oauth`（Path=/・Secure・HttpOnly・SameSite=Lax・Domain なし）にして、兄弟サブドメインから攻撃者の署名済み Cookie を植えられないようにした。同意は規約の版を state に署名して保存し、callback で現在の版と一致しなければ同意のやり直しにする |
+| 専ブラのキーに結び付いたセッション | `!#` キー由来（binding あり）のセッションは投稿とログアウトにだけ使う。キーの発行・失効・同意の更新・アカウント画面は未ログイン扱い |
+| 登録途中の復旧 | 予約が期限切れでも、他の所有者に取られていなければ同じ aid は uid・索引を確定できる（`resume`）。端末申告の無いかんたん登録は毎回別の端末として数える |
 | dummy の直列化 | 未登録 ID の照合は 1 つの DO に集まり、PBKDF2 を直列に計算する。大量の試行で未登録 ID の応答が遅れうるが、AuthRate の上限の内側に収まる |
 | 登録の確定順 | login → uid → activate の順にし、uid の確定の応答喪失は所有者の確認で続ける。activate の前で止まった登録は本人確認後に再開する（実装メモ §7）。10 分の予約期限は変えていない |
 | 入力の順 | 入力規則は Turnstile の前に確かめる。設計 §3.9 の手順 2 は Turnstile → 突合 → 乱造検知 → 入力規則の順だが、入力の誤りで Turnstile のトークンを使い切らないよう前に出した。使えない ID の判定（R2 を読む）と計数は Turnstile の後 |
@@ -158,3 +162,7 @@ KotlinJSの [生成済み空白表](https://github.com/JetBrains/kotlin/blob/v2.
 | コミットの単位 | メールの認証と、パスワードの変更・再設定は同じコミットにした（索引・トークン・画面を共有するため） |
 
 セルフレビュー（AGENTS.md 3.5）で直したもの: 登録フォームが送信先の無い環境でもメール欄を送っていた（board-islands で検出）、メールの送信回数のテストが並行実行で順序に依存していた、退会テストの意味の無い比較。
+
+## 利用者の決定（2026-11-07）
+
+- 利用者: 名無しの staff の規制免除（設計書 §14-4）を承認。Tor の拒否は staff でも免除しない、自分で発行したキャップは役割をすべて外すと使えない、かんたん登録は確認のチェックだけで退会できる、を決定（設計書 §13-40〜42）。

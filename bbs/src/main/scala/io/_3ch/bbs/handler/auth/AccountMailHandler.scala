@@ -13,7 +13,7 @@ import scala.util.control.NonFatal
 
 /** メールアドレスの登録と確認、パスワードの変更と再設定の API */
 object AccountMailHandler {
-  import AuthHandler.{Refused, current, json, keys, hashing, origin, pause, signed}
+  import AuthHandler.{Refused, json, keys, hashing, managed, origin, signed}
 
   /** 送信先が設定されていれば使える。無ければメール関連の API は「準備中」 */
   def service(env: WorkerEnv, repository: AccountRepository, config: AuthSettings): Option[AccountMail] =
@@ -52,7 +52,7 @@ object AccountMailHandler {
   /** ログイン中の ID・パスワードのアカウントでアドレスを登録・変更し、確認メールを送る */
   def email(request: Request, env: WorkerEnv, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] = {
     val mail = required(env, repository, config)
-    current(request, config.secret, repository, time).flatMap { case (_, account) =>
+    managed(request, config.secret, repository, time).flatMap { case (_, account) =>
       if (account.kind != AccountKind.Password) throw Refused(AuthApiError.Refused(AccountRejection.KindForbidden))
       val address = parse(env, form.get("email")).fold(error => throw Refused(error), _.getOrElse(throw Refused(AuthApiError.Email(EmailRejection.Invalid))))
       for {
@@ -67,7 +67,7 @@ object AccountMailHandler {
     val mail = required(env, repository, config)
     val link = PendingLink.parse(form.getOrElse("token", "")).getOrElse(throw Refused(AuthApiError.LinkInvalid))
     mail.verify(link, time).recover(linkFailure).flatMap { account =>
-      val session = current(request, config.secret, repository, time).map(value => Some(value)).recover { case NonFatal(_) => None }
+      val session = managed(request, config.secret, repository, time).map(value => Some(value)).recover { case NonFatal(_) => None }
       session.flatMap {
         case Some((claims, _)) if claims.aid == account.aid =>
           signed(account, claims.device, request, config.secret, time, claims.binding).map(cookie => json(js.Dynamic.literal(uid = account.uid, lv = account.lv), cookie = Some(cookie)))
@@ -89,7 +89,7 @@ object AccountMailHandler {
 
   /** 現在のパスワードを確かめて変更し、この端末だけ新しい世代の Cookie を発行し直す（ほかの端末はログアウト） */
   def password(request: Request, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] =
-    current(request, config.secret, repository, time).flatMap { case (claims, account) =>
+    managed(request, config.secret, repository, time).flatMap { case (claims, account) =>
       if (account.kind != AccountKind.Password) throw Refused(AuthApiError.Refused(AccountRejection.KindForbidden))
       val id = LoginId.parse(account.uid).getOrElse(throw Refused(AuthApiError.Invalid))
       val next = Password.create(confirmed(form), id, account.roles).fold(reason => throw Refused(AuthApiError.Password(reason)), identity)
@@ -97,7 +97,7 @@ object AccountMailHandler {
         key <- AuthHandler.keyIp(request, config.secret)
         outcome <- new PasswordChange(repository, hashing).changePassword(account, form.getOrElse("current", ""), next, key, time)
         response <- outcome match {
-          case PasswordChangeOutcome.Failed(delay) => pause(delay).flatMap(_ => Future.failed(Refused(AuthApiError.LoginFailed)))
+          case PasswordChangeOutcome.Failed => Future.failed(Refused(AuthApiError.LoginFailed))
           case PasswordChangeOutcome.Changed(changed) => signed(changed, claims.device, request, config.secret, time, claims.binding)
             .map(cookie => json(js.Dynamic.literal(uid = changed.uid, lv = changed.lv), cookie = Some(cookie)))
         }
