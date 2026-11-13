@@ -12,11 +12,14 @@ class ModerationServiceSuite extends FunSuite {
   private val form = PostForm(name = "名前", message = "本文", bbs = "sample")
   private val input = ModerationInput(form, UserInfo("", "192.0.2.1", "", "JP", "", "", "", ""), BypassPoster(), "JP", 2, BbsSettings(ListMap.empty))
 
-  test("saku 板と admin を Tor より先に通し、通常の投稿はルールの評価へ進める") {
+  test("saku 板は Tor より先に通し、Tor はキャップ以外を役割によらず拒否し、通常の投稿はルールの評価へ進める") {
     assertEquals(ModerationService.beforeRules(input), None)
     assertEquals(ModerationService.beforeRules(input.copy(country = "T1")), Some(ModerationDecision.Deny(ModerationDenial.Tor, form)))
     assertEquals(ModerationService.beforeRules(input.copy(poster = BypassPoster(cap = true), country = "T1")), None, "キャップは Tor でも拒否せず、行ごとの段階で評価する")
-    assertEquals(ModerationService.beforeRules(input.copy(poster = BypassPoster(Roles(Set(AccountRole.Admin))), country = "T1")), Some(ModerationDecision.Pass(form)))
+    val admin = BypassPoster(Roles(Set(AccountRole.Admin)))
+    assertEquals(ModerationService.beforeRules(input.copy(poster = admin, country = "T1")), Some(ModerationDecision.Deny(ModerationDenial.Tor, form)), "名無しの admin も Tor は拒否する")
+    assertEquals(ModerationService.beforeRules(input.copy(poster = admin.copy(cap = true), country = "T1")), Some(ModerationDecision.Pass(form)), "キャップ付きの admin は通す")
+    assertEquals(ModerationService.beforeRules(input.copy(poster = admin)), Some(ModerationDecision.Pass(form)))
     val saku = form.copy(bbs = "saku")
     assertEquals(ModerationService.beforeRules(input.copy(form = saku, country = "T1")), Some(ModerationDecision.Pass(saku)))
   }

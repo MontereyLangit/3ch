@@ -43,10 +43,11 @@ object ModerationService {
   private val NamedEntity = new js.RegExp("&(?:amp|lt|gt|quot|apos);", "g")
   private val Entities = Map("&amp;" -> "&", "&lt;" -> "<", "&gt;" -> ">", "&quot;" -> "\"", "&apos;" -> "'")
 
-  /** saku 板と、どの段階でも免除される admin は対象外。キャップ以外の Tor は拒否する。ルールを読む必要があれば None */
+  /** saku 板は対象外。キャップ以外の Tor は役割によらず拒否し、そのあとどの段階でも免除される admin を通す。ルールを読む必要があれば None */
   def beforeRules(input: ModerationInput): Option[ModerationDecision] =
-    if (input.form.bbs == "saku" || BypassLevel.Admin.exempts(input.poster)) Some(ModerationDecision.Pass(input.form))
+    if (input.form.bbs == "saku") Some(ModerationDecision.Pass(input.form))
     else if (input.country == "T1" && !input.poster.cap) Some(ModerationDecision.Deny(ModerationDenial.Tor, input.form))
+    else if (BypassLevel.Admin.exempts(input.poster)) Some(ModerationDecision.Pass(input.form))
     else None
 
   /** ルールが読めなくても通す投稿者か。行ごとの段階が分からないので既定の段階で判定する */

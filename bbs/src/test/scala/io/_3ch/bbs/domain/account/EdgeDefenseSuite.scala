@@ -31,6 +31,13 @@ class EdgeDefenseSuite extends munit.FunSuite {
     assert(!EdgeDefense.check(rules, home.copy(rttMs = Some(900)), browser = false, exempted = false).strict)
   }
 
+  test("試行モードと規則なしでは RTT が閾値を超えても乱造検知を厳しくしない") {
+    val slow = home.copy(rttMs = Some(900))
+    assertEquals(EdgeDefense.check(rules.copy(mode = EdgeMode.Log), slow, browser = true, exempted = false), EdgeDecision(Vector.empty, reject = false, strict = false))
+    assertEquals(EdgeDefense.check(EdgeRules.empty, slow, browser = true, exempted = false), EdgeDecision(Vector.empty, reject = false, strict = false))
+    assertEquals(EdgeDefense.check(rules.copy(mode = EdgeMode.Log), slow.copy(asn = "16509", tlsHelloLength = Some(300)), browser = true, exempted = false).strict, false)
+  }
+
   test("免除は Lv3 以上で作成から7日以上") {
     assert(EdgeDefense.exempt(3, now - 7 * 86400, now))
     assert(!EdgeDefense.exempt(3, now - 7 * 86400 + 1, now))

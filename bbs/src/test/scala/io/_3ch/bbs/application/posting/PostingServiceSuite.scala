@@ -629,6 +629,19 @@ class PostingServiceSuite extends FunSuite {
     }
   }
 
+  test("エッジ防御は役割の保持者とキャップ付きの投稿を免除し、Lv3 の免除は phoebe.cgi の上限をかける前の Lv で判定する") {
+    val old = Now / 1000 - 8 * 86400
+    for {
+      staff <- Fake(authSource = Some(new AuthSource(member, lv = 1, staff = true)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
+      capRole <- Fake(authSource = Some(new AuthSource(member, lv = 1, roles = Set(AccountRole.Cap))), edge = edgeRules(EdgeMode.On)).post(reply()*)()
+      signed <- Fake(caps = Map("pass" -> "管理人"), authSource = Some(new AuthSource(member, lv = 1)), edge = edgeRules(EdgeMode.On)).post(reply("mail" -> "#!pass")*)()
+      beforeCap <- Fake(phoebe = "<>1\n", authSource = Some(new AuthSource(member, lv = 10, createdAt = old)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
+    } yield {
+      assertEquals(rejected(capRole).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.Datacenter), "cap だけの役割は免除しない")
+      Seq(staff, signed, beforeCap).foreach(outcome => assert(!outcome.isInstanceOf[PostingOutcome.Rejected], outcome.toString))
+    }
+  }
+
   test("phoebe.cgi の上限ルールは当てはまる投稿の実効 Lv を抑え、BBS_PHOEBE と識別子の D に使う") {
     for {
       capped <- Fake(boardSettings = "BBS_PHOEBE=3\n", phoebe = "# 上限\nAS2516-<>2\n", authSource = Some(new AuthSource(member, lv = 5))).post(reply()*)()

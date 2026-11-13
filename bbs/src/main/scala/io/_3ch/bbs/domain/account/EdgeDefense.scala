@@ -31,7 +31,7 @@ enum EdgeFinding(val code: String) {
 /** 判定に使う request.cf と UA の値。無い値は None */
 final case class EdgeSignal(asn: String, country: String, rttMs: Option[Double], tlsHelloLength: Option[Int], userAgent: String)
 
-/** 判定の結果。reject は拒否するか（試行モードでは常に偽）、strict は乱造検知の閾値を半分にするか */
+/** 判定の結果。reject は拒否するか、strict は乱造検知の閾値を半分にするか。どちらも試行モード（と規則なし）では常に偽で、記録だけ行う */
 final case class EdgeDecision(findings: Vector[EdgeFinding], reject: Boolean, strict: Boolean) {
   def rejection: Option[EdgeFinding] = findings.headOption.filter(_ => reject)
 }
@@ -50,6 +50,7 @@ object EdgeDefense {
       val datacenter = Option.when(rules.datacenterAsns.contains(signal.asn))(EdgeFinding.Datacenter)
       val tls = Option.when(browser && signal.tlsHelloLength.exists(length => rules.tls.exists(_.contradicts(signal.userAgent, length))))(EdgeFinding.DeclarationMismatch)
       val findings = datacenter.toVector ++ tls
-      EdgeDecision(findings, rules.mode == EdgeMode.On && findings.nonEmpty, browser && signal.country == "JP" && signal.rttMs.exists(_ > rules.rttMs))
+      val enforced = rules.mode == EdgeMode.On
+      EdgeDecision(findings, enforced && findings.nonEmpty, enforced && browser && signal.country == "JP" && signal.rttMs.exists(_ > rules.rttMs))
     }
 }

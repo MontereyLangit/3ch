@@ -40,7 +40,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
       account <- capLevel(authenticated, userInfo)
       bypass = BypassPoster(account.roles, identified.cap.isDefined, user.isDefined, account.lv)
       _ = admit(identified, account, request)
-      _ <- edge(identified, account, request)
+      _ <- edge(identified, account, authenticated.lv, request)
       moderated <- moderate(identified, userInfo, bypass)
       sized = PostFormLimits.check(moderated.form, moderated.settings, moderated.number, moderated.cap.exists(_.strong))
         .fold(reject(_, moderated), form => moderated.copy(form = form))
@@ -95,12 +95,16 @@ final class PostingService(ports: PostingPorts, salt: String) {
     if (!authEnabled || account.user.isEmpty || account.legacyCap) Future.successful(account)
     else ports.phoebe.load().map(rules => account.copy(lv = rules.cap(account.lv, userInfo.text)))
 
-  /** 認証を有効にした環境のエッジ防御。データセンターの AS からの投稿を、Lv3 以上で作成から7日以上の認証済み以外について判定する。旧キャップは対象外 */
-  private def edge(context: PostingContext, account: PostingAccount, request: PostingRequest): Future[Unit] =
+  /**
+    * 認証を有効にした環境のエッジ防御。データセンターの AS からの投稿を判定する。
+    * 役割（admin・delete・regulate）の保持者とキャップ付きの投稿、phoebe.cgi の上限をかける前の Lv が3以上で作成から7日以上の認証済みは免除する。旧キャップは対象外
+    */
+  private def edge(context: PostingContext, account: PostingAccount, accountLv: Int, request: PostingRequest): Future[Unit] =
     if (!authEnabled || account.legacyCap) Future.unit
     else ports.edge.load().map { rules =>
       val signal = EdgeSignal(request.asn.getOrElse(""), request.country.getOrElse(""), None, None, request.userAgent)
-      val exempted = account.user.isDefined && EdgeDefense.exempt(account.lv, account.createdAt, context.unixtime.toDouble)
+      val exempted = account.staff || context.cap.isDefined ||
+        (account.user.isDefined && EdgeDefense.exempt(accountLv, account.createdAt, context.unixtime.toDouble))
       val decision = EdgeDefense.check(rules, signal, browser = false, exempted)
       Try(ports.edge.report("bbs.cgi", signal, decision))
       if (decision.reject) reject(PostingError.Authentication(AuthenticationFailure.Datacenter), context)
