@@ -2,7 +2,7 @@ package io._3ch.bbs.repository
 
 import io._3ch.bbs.application.posting.ports.{ThreadSnapshot, ThreadStore}
 import io._3ch.bbs.domain.posting.{ThreadPosting, ThreadWriteResult}
-import io._3ch.bbs.domain.posting.moderation.ThreadCreationRejection
+import io._3ch.bbs.domain.posting.moderation.{PostRateFinding, PostRateRejection, ThreadCreationRejection}
 import io._3ch.bbs.durable.codec.{PostingCodec, ThreadOwnerCodec}
 import io._3ch.bbs.external.cloudflare.{ThreadDoStub, WorkerEnv}
 import io._3ch.common.domain.{BbsSettings, BoardId}
@@ -20,10 +20,13 @@ object ThreadRepository {
   def getSettings(board: BoardId, key: String, e: WorkerEnv): Future[BbsSettings] =
     stub(board, key, e).getSettings().toFuture.map(BbsSettings.parse(_, "<>"))
 
-  /** dat 行と log 行を追記し、確定したレス番号を返す。スレの状態とスレ立て規制による拒否は結果で返し、それ以外の障害は Future の失敗 */
+  /** dat 行と log 行を追記し、確定したレス番号を返す。スレの状態・スレ立て規制・連投規制による拒否は結果で返し、それ以外の障害は Future の失敗 */
   def addRes(board: BoardId, key: String, datLine: String, logLine: String, posting: ThreadPosting, e: WorkerEnv): Future[ThreadWriteResult] =
     stub(board, key, e).addRes(datLine, logLine, PostingCodec.encode(posting)).toFuture
-      .map(ThreadWriteResult.Written(_))
+      .map { result =>
+        if (result.swallowed) ThreadWriteResult.Swallowed(result.count)
+        else ThreadWriteResult.Written(result.count, result.observed.toSeq.flatMap(PostRateFinding.fromCode))
+      }
       .recover { case Refusal(result) => result }
 
   /** 投稿処理のポート */
@@ -54,6 +57,7 @@ object ThreadRepository {
       val code = text.stripPrefix("Error: ")
       ThreadWriteRejection.fromCode(code).map(ThreadWriteResult.Refused(_))
         .orElse(ThreadCreationRejection.fromCode(code).map(ThreadWriteResult.CreationLimited(_)))
+        .orElse(PostRateRejection.fromCode(code).map(ThreadWriteResult.RateLimited(_)))
     }
   }
 }

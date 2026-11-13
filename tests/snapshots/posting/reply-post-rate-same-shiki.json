@@ -1,0 +1,51 @@
+{
+  "case": "reply-post-rate-same-shiki",
+  "response": {
+    "status": 200,
+    "headers": [
+      [
+        "content-length",
+        "451"
+      ],
+      [
+        "content-type",
+        "text/html;charset=UTF-8"
+      ],
+      [
+        "set-cookie",
+        "PON=q4pXMpiV4D+74CIKl6fd3fkamHI; Max-Age=63072000; path=/; Secure; HttpOnly"
+      ],
+      [
+        "x-resnum",
+        "3"
+      ],
+      [
+        "x-threadkey",
+        "1699990000"
+      ]
+    ],
+    "bodyBase64": "PGh0bWwgbGFuZz0iamEiPjxoZWFkPjx0aXRsZT7mm7jjgY3jgZPjgb/jgb7jgZfjgZ/jgII8L3RpdGxlPjxtZXRhIGh0dHAtZXF1aXY9IkNvbnRlbnQtVHlwZSIgY29udGVudD0idGV4dC9odG1sOyBjaGFyc2V0PVVURi04Ii8+PG1ldGEgY29udGVudD0iNTtVUkw9L3Rlc3QvcmVhZC5jZ2kvc2FtcGxlLzE2OTk5OTAwMDAvIiBodHRwLWVxdWl2PSJyZWZyZXNoIi8+PHNjcmlwdCB0eXBlPSJtb2R1bGUiIHNyYz0iL3N0YXRpYy9jbGllbnQuanMiPjwvc2NyaXB0PjwvaGVhZD48Ym9keT7mm7jjgY3jgZPjgb/jgYzntYLjgo/jgorjgb7jgZfjgZ/jgII8YnIvPjxici8+CueUu+mdouOCkuWIh+OCiuabv+OBiOOCi+OBvuOBp+OBl+OBsOOCieOBj+OBiuW+heOBoeS4i+OBleOBhOOAgjxici8+PGJyLz48YnIvPjxici8+PGJyLz48YnIvPjxici8+PGNlbnRlcj48L2NlbnRlcj48L2JvZHk+PC9odG1sPg==",
+    "bodyText": "<html lang=\"ja\"><head><title>書きこみました。</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/><meta content=\"5;URL=/test/read.cgi/sample/1699990000/\" http-equiv=\"refresh\"/><script type=\"module\" src=\"/static/client.js\"></script></head><body>書きこみが終わりました。<br/><br/>\n画面を切り替えるまでしばらくお待ち下さい。<br/><br/><br/><br/><br/><br/><br/><center></center></body></html>"
+  },
+  "threads": {
+    "sample/1700000000": {
+      "dat": "",
+      "log": "",
+      "settings": ""
+    },
+    "sample/1699990000": {
+      "dat": "名無しさん＠３ちゃんねる </b>(JP.ab.cd ef-0123456789abcdef)<b><><>2023/11/14(火) 19:26:40<> 最初の本文 <>既存スレ\n名無しさん＠３ちゃんねる </b>(JP.Tw.fv wA-4bf50373e5a55843)<b><><>2023/11/15(水) 07:13:17<> 前の本文 <>\n名無しさん＠３ちゃんねる </b>(JP.Tw.fv wA-4bf50373e5a55843)<b><><>2023/11/15(水) 07:13:20<> 返信本文 <>\n",
+      "log": "1<>UID: IP:192.0.2.100 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0\n2<>UID: IP:192.0.2.78 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0 (TestBrowser)\n3<>UID: IP:192.0.2.1 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0 (TestBrowser)\n",
+      "settings": "BBS_TITLE=sample＠3ch掲示板<>BBS_NONAME_NAME=名無しさん＠３ちゃんねる<>BBS_SHIKIBETSU=off<>"
+    }
+  },
+  "boards": {
+    "sample": "1699990000.dat<>既存スレ (3)\n1699980000.dat<>別スレ (5)\n"
+  },
+  "r2": {
+    "sample/thread/1700/subject.txt": null,
+    "sample/thread/1699/subject.txt": null,
+    "sample/thread/subject.txt": null,
+    "headline.txt": "1700000000\nsample<>sample＠3ch掲示板<>1700000000<>1699990000<>返信本文\n"
+  }
+}

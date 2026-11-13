@@ -8,7 +8,7 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 
-/** Thread DO の直列化・一括保存・拒否のコードの返し方。追記できるかの規則は ThreadWriteGuardSuite で確かめる */
+/** Thread DO の直列化・一括保存・拒否のコードの返し方。追記できるかの規則は ThreadWriteGuardSuite、連投規制の判定は PostRateLimitSuite で確かめる */
 class ThreadSuite extends FunSuite {
   import DurableTestKit.{newEnv, seed, rejectionMessage}
 
@@ -104,7 +104,7 @@ class ThreadSuite extends FunSuite {
   }
 
   private val owner = js.Dynamic.literal(ip = "iphash", shikibetsu = "JP.xx", account = "")
-  private def createWith(env: DurableTestKit.Env, name: String, key: String, extra: js.Dynamic): js.Promise[Int] = {
+  private def createWith(env: DurableTestKit.Env, name: String, key: String, extra: js.Dynamic): js.Promise[ThreadAddResult] = {
     val posting = js.Dynamic.literal(bbs = name.takeWhile(_ != '/'), key = key, title = "title", create = true, sage = false, maxThreads = 700d)
     js.Object.assign(posting.asInstanceOf[js.Object], extra.asInstanceOf[js.Object])
     env.thread(name).addRes("name<><>date<> body <>title", "1<>log", posting)
@@ -143,6 +143,22 @@ class ThreadSuite extends FunSuite {
     } yield ()
   }
 
+  test("移動は recentPosts を移動先へ引き継ぎ、無ければキーを作らない") {
+    val env = newEnv()
+    val recent = js.Array(js.Dynamic.literal(t = 1800000000d, ip = "aaaaaaaaaaaa", shiki = "bbbbbbbbbbbb"))
+    for {
+      _ <- createWith(env, "source/1800000000", "1800000000", js.Dynamic.literal()).toFuture
+      _ <- createWith(env, "source/1800000002", "1800000002", js.Dynamic.literal()).toFuture
+      _ <- seed(env.threadInstance("source/1800000000"), "recentPosts" -> recent)
+      _ <- env.thread("source/1800000000").moderate("move", moveInput()).toFuture
+      _ <- env.thread("source/1800000002").moderate("move", moveInput(key = "1800000002", targetKey = "1800000003")).toFuture
+      moved <- env.threadInstance("target/1800000001").state.storage.get[js.Any]("recentPosts").toFuture
+      none <- env.threadInstance("target/1800000003").state.storage.get[js.Any]("recentPosts").toFuture
+      _ = assertEquals(js.JSON.stringify(moved.get), js.JSON.stringify(recent))
+      _ = assert(none.isEmpty)
+    } yield ()
+  }
+
   test("既存スレ同士の相互移動はロック前に拒否し、元データを保持する") {
     val env = newEnv()
     val source = env.thread("source/1800000000")
@@ -171,8 +187,8 @@ class ThreadSuite extends FunSuite {
       // JS版と同じ前提: 2つのaddRes呼び出しをawaitせず同時に発行すると、blockConcurrencyWhileの
       // キュー投入順（=Scalaが引数を評価する順）でロックの取得順が決まり、後続は前段の完了を待つ。
       counts <- Future.sequence(Seq(
-        thread.addRes("second<><><><>", "2<>second").toFuture,
-        thread.addRes("third<><><><>", "2<>third").toFuture
+        thread.addRes("second<><><><>", "2<>second").toFuture.map(_.count),
+        thread.addRes("third<><><><>", "2<>third").toFuture.map(_.count)
       ))
       _ = assertEquals(counts.toList, List(2, 3))
       finalDat <- thread.getDat().toFuture
@@ -190,7 +206,7 @@ class ThreadSuite extends FunSuite {
     env.putR2("source/thread/1700/1700000000.cgi", "legacy title\n\n1<>name<><>1700000000<>ID:one<>text<>IP:192.0.2.1\n")
     val source = env.thread("source/1700000000")
     for {
-      count <- source.addRes("second<><><><>", "2<>log", js.Dynamic.literal(bbs = "source", key = "1700000000", title = "legacy title", create = false)).toFuture
+      count <- source.addRes("second<><><><>", "2<>log", js.Dynamic.literal(bbs = "source", key = "1700000000", title = "legacy title", create = false)).toFuture.map(_.count)
       _ = assertEquals(count, 2)
       newDat <- source.getDat().toFuture
       _ = assertEquals(newDat, "name<><>2023/11/15(水) 07:13:20 ID:one<> text <>legacy title\nsecond<><><><>\n")
@@ -210,7 +226,7 @@ class ThreadSuite extends FunSuite {
     val seeded998 = (1 to 998).map(i => s"$i<>x<><>msg<>\n").mkString
     for {
       _ <- seed(instance998, "dat" -> seeded998, "log" -> "")
-      count <- env.thread("board1/1").addRes("999<>new<><>msg<>", "999<>log").toFuture
+      count <- env.thread("board1/1").addRes("999<>new<><>msg<>", "999<>log").toFuture.map(_.count)
       _ = assertEquals(count, 999)
       dat999 <- env.thread("board1/1").getDat().toFuture
       _ = assertEquals(dat999, seeded998 + "999<>new<><>msg<>\n")
@@ -316,14 +332,14 @@ class ThreadSuite extends FunSuite {
     // Scala側はDO越しに生のnullが来ても同じ結果になるよう、posting.isDefined(=「undefinedでない」)
     // ではなく「nullでもundefinedでもない」ことをチェックする。
     for {
-      countWithNull <- thread.asInstanceOf[js.Dynamic].addRes("1<>a<><>msg<>title", "1<>log", null.asInstanceOf[js.Any]).asInstanceOf[js.Promise[Int]].toFuture
+      countWithNull <- thread.asInstanceOf[js.Dynamic].addRes("1<>a<><>msg<>title", "1<>log", null.asInstanceOf[js.Any]).asInstanceOf[js.Promise[ThreadAddResult]].toFuture.map(_.count)
       _ = assertEquals(countWithNull, 1)
       datWithNull <- thread.getDat().toFuture
       _ = assertEquals(datWithNull, "1<>a<><>msg<>title\n")
 
       instanceOmitted = env.threadInstance("board1/9")
       threadOmitted = env.thread("board1/9")
-      countOmitted <- threadOmitted.addRes("1<>a<><>msg<>title", "1<>log").toFuture
+      countOmitted <- threadOmitted.addRes("1<>a<><>msg<>title", "1<>log").toFuture.map(_.count)
       _ = assertEquals(countOmitted, 1, "posting省略(undefined)時と同じ結果になる")
     } yield ()
   }
@@ -341,10 +357,121 @@ class ThreadSuite extends FunSuite {
       stored <- instance.state.storage.get[String]("dat").toFuture
       _ = assertEquals(stored.toOption.getOrElse(""), "")
       // 予約が残っていれば同じ識別情報の次のスレ立ては狭域規制で拒否される
-      count <- env.thread("board1/11").addRes("d<><><> m <>t", "7<>log", create("11")).toFuture
+      count <- env.thread("board1/11").addRes("d<><><> m <>t", "7<>log", create("11")).toFuture.map(_.count)
       _ = assertEquals(count, 1)
       log <- env.thread("board1/11").getLog().toFuture
       _ = assertEquals(log, "1<>log\n")
+    } yield ()
+  }
+
+  private def rateLimit(level: String = "", ip: String = "ip-a", samba24: Int = 0, threadRentou: Int = 40): js.Dynamic = js.Dynamic.literal(
+    level = level, ip = ip, shiki = s"shiki-$ip", aid = "", timecount = 18, timeclose = 10, samba24 = samba24, fr = 0,
+    threadRentou = threadRentou, threadRentouReset = 3600, keys = "ip,shiki,aid")
+  private def rated(key: String, limit: js.Dynamic, create: Boolean = false): js.Dynamic =
+    js.Dynamic.literal(bbs = "board1", key = key, title = "t", create = create, rateLimit = limit)
+
+  test("rateLimit が無ければ連投規制を判定せず、recentPosts も板の連投履歴も書かない") {
+    val env = newEnv()
+    val instance = env.threadInstance("board1/1800000020")
+    for {
+      _ <- seed(instance, "dat" -> "n<><>d<> 同じ <>t\n", "log" -> "1<>log\n")
+      result <- env.thread("board1/1800000020").addRes("n<><>d<> 同じ <>", "2<>log", js.Dynamic.literal(bbs = "board1", key = "1800000020", create = false)).toFuture
+      _ = assertEquals((result.count, result.swallowed, result.observed.toList), (2, false, Nil))
+      recent <- instance.state.storage.get[js.Any]("recentPosts").toFuture
+      _ = assert(recent.isEmpty)
+      meta <- env.boardInstance("board1").state.storage.get[js.Any]("postRateMeta").toFuture
+      _ = assert(meta.isEmpty)
+    } yield ()
+  }
+
+  test("recentPosts は dat・log と同じ put で保存し、板の連投予約を確定する") {
+    val env = newEnv()
+    val instance = env.threadInstance("board1/1800000021")
+    val storage = instance.state.storage.asInstanceOf[js.Dynamic]
+    val original = storage.put.asInstanceOf[js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]]]
+    var keys = List.empty[List[String]]
+    storage.updateDynamic("put")(((key: js.Any, value: js.UndefOr[js.Any]) => {
+      if !value.isDefined then keys = keys :+ key.asInstanceOf[js.Dictionary[js.Any]].keys.toList.sorted
+      original(key, value)
+    }): js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]])
+    for {
+      result <- env.thread("board1/1800000021").addRes("n<><>d<> 本文 <>t", "1<>log", rated("1800000021", rateLimit(), create = true)).toFuture
+      _ = assertEquals(result.count, 1)
+      _ = assertEquals(keys, List(List("dat", "log", "modifiedAt", "recentPosts", "settings")))
+      recent <- instance.state.storage.get[js.Array[js.Dynamic]]("recentPosts").toFuture
+      _ = assertEquals(recent.get.toList.map(_.ip.asInstanceOf[String]), List("ip-a"))
+      page <- env.boardInstance("board1").state.storage.get[js.Array[js.Dynamic]]("postRateHistory:0").toFuture
+      _ = assertEquals(page.get.toList.map(p => (p.key.asInstanceOf[String].startsWith("1800000021:"), p.status.asInstanceOf[String])), List((true, "completed")))
+    } yield ()
+  }
+
+  test("コピペは on なら dat・log を変えずに吸い込み、log では書き込んで記録だけする") {
+    val env = newEnv()
+    val first = "n<><>d<> 同じ本文 <>t\n"
+    for {
+      _ <- seed(env.threadInstance("board1/1800000022"), "dat" -> first, "log" -> "1<>log\n")
+      swallowed <- env.thread("board1/1800000022").addRes("m<><>e<> 同じ本文 <>", "2<>log", rated("1800000022", rateLimit(ip = "ip-b"))).toFuture
+      _ = assertEquals((swallowed.count, swallowed.swallowed, swallowed.observed.toList), (2, true, Nil))
+      dat <- env.thread("board1/1800000022").getDat().toFuture
+      log <- env.thread("board1/1800000022").getLog().toFuture
+      _ = assertEquals((dat, log), (first, "1<>log\n"))
+      page <- env.boardInstance("board1").state.storage.get[js.Array[js.Dynamic]]("postRateHistory:0").toFuture
+      _ = assertEquals(page.get.toList.map(_.status.asInstanceOf[String]), List("completed"), "吸い込んだ投稿も連投履歴に数える")
+      logged <- env.thread("board1/1800000022").addRes("m<><>e<> 同じ本文 <>", "2<>log", rated("1800000022", rateLimit(level = "log", ip = "ip-c"))).toFuture
+      _ = assertEquals((logged.count, logged.swallowed, logged.observed.toList), (2, false, List("post-rate:thread:copipe")))
+      after <- env.thread("board1/1800000022").getDat().toFuture
+      _ = assertEquals(after, first + "m<><>e<> 同じ本文 <>\n")
+    } yield ()
+  }
+
+  test("スレ単位の連投は on なら板に予約せず拒否し、>>1 には適用しない") {
+    val env = newEnv()
+    for {
+      _ <- env.thread("board1/1800000023").addRes("n<><>d<> 1 <>t", "1<>log", rated("1800000023", rateLimit(threadRentou = 1), create = true)).toFuture
+      rejected <- rejectionMessage(env.thread("board1/1800000023").addRes("n<><>d<> 2 <>", "2<>log", rated("1800000023", rateLimit(threadRentou = 1))).toFuture)
+      _ = assertEquals(rejected, "post-rate:thread:rentou")
+      page <- env.boardInstance("board1").state.storage.get[js.Array[js.Dynamic]]("postRateHistory:0").toFuture
+      _ = assertEquals(page.get.length, 1)
+      logged <- env.thread("board1/1800000023").addRes("n<><>d<> 2 <>", "2<>log", rated("1800000023", rateLimit(level = "log", threadRentou = 1))).toFuture
+      _ = assertEquals(logged.observed.toList, List("post-rate:thread:rentou"))
+      other <- env.thread("board1/1800000023").addRes("n<><>d<> 3 <>", "3<>log", rated("1800000023", rateLimit(ip = "ip-z", threadRentou = 1))).toFuture
+      _ = assertEquals(other.count, 3)
+    } yield ()
+  }
+
+  test("level が 0 なら板に広域連投規制を外して予約し、空の旧形式は既定どおり判定する") {
+    val env = newEnv()
+    def sameShiki(level: String, ip: String): js.Dynamic = {
+      val limit = rateLimit(level = level, ip = ip)
+      limit.shiki = "shiki-ip-a"
+      limit.fr = 10
+      rated("1800000026", limit)
+    }
+    for {
+      _ <- env.thread("board1/1800000026").addRes("n<><>d<> 1 <>t", "1<>log", rated("1800000026", rateLimit(level = "1"), create = true)).toFuture
+      allowed <- env.thread("board1/1800000026").addRes("n<><>d<> 2 <>", "2<>log", sameShiki("0", "ip-b")).toFuture
+      _ = assertEquals(allowed.count, 2)
+      rejected <- rejectionMessage(env.thread("board1/1800000026").addRes("n<><>d<> 3 <>", "3<>log", sameShiki("", "ip-c")).toFuture)
+      _ = assertEquals(rejected, "post-rate:board:fr:10")
+    } yield ()
+  }
+
+  test("板単位で拒否したスレ立てはスレ立て規制の予約を取り消し、dat を書かない") {
+    val env = newEnv()
+    val creation = js.Dynamic.literal(ip = "ip", userAgent = "ua", networkGroup = "net", title = "t", tatesugi = 1, tatesugiResetSeconds = 3600, junban = 0, junbanResetSeconds = 3600)
+    def create(key: String, other: String = "ip-b") = {
+      val posting = rated(key, rateLimit(ip = other, samba24 = 10), create = true)
+      posting.creationLimit = creation
+      posting
+    }
+    for {
+      _ <- env.board("board1").reservePost("x:1", js.Dynamic.literal(ip = "ip-a", shiki = "", aid = ""), js.Dynamic.literal(timecount = 18, timeclose = 10, samba24 = 10, keys = "ip", enforce = true)).toFuture
+      rejected <- rejectionMessage(env.thread("board1/1800000024").addRes("n<><>d<> 1 <>t", "1<>log", create("1800000024", "ip-a")).toFuture)
+      _ = assert(rejected.startsWith("post-rate:board:samba24:"), rejected)
+      dat <- env.thread("board1/1800000024").getDat().toFuture
+      _ = assertEquals(dat, "")
+      created <- env.thread("board1/1800000025").addRes("n<><>d<> 1 <>t", "1<>log", create("1800000025")).toFuture
+      _ = assertEquals(created.count, 1, "取り消したスレ立て予約は残らない")
     } yield ()
   }
 }

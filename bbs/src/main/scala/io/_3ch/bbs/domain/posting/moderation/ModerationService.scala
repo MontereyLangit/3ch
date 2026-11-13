@@ -4,7 +4,6 @@ import io._3ch.bbs.domain.posting.ModerationDenial
 import io._3ch.common.domain.BbsSettings
 import io._3ch.common.domain.posting.{PostForm, UserInfo}
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.scalajs.js
 import scala.scalajs.js.JSStringOps.*
 
@@ -36,7 +35,7 @@ final case class ModerationInput(form: PostForm, userInfo: UserInfo, cap: Boolea
   }
 }
 
-/** deny.cgi、ngwords.cgi の順に規制を評価する */
+/** 投稿者の免除条件と規制ルールを評価する */
 object ModerationService {
   private val MarkName = "</b>[´・ω・｀]<b> "
   private val MarkMessage = " <small>👀 Madakana: Caution</small>"
@@ -44,22 +43,17 @@ object ModerationService {
   private val NamedEntity = new js.RegExp("&(?:amp|lt|gt|quot|apos);", "g")
   private val Entities = Map("&amp;" -> "&", "&lt;" -> "<", "&gt;" -> ">", "&quot;" -> "\"", "&apos;" -> "'")
 
-  /** キャップと saku 板は対象外、Tor は拒否。それ以外はファイルを順に読み、拒否が出たら後のファイルは読まない */
-  def check(input: ModerationInput, load: ModerationRuleFile => Future[ModerationRuleSource])(using ExecutionContext): Future[ModerationDecision] = {
-    def loop(files: List[ModerationRuleFile], form: PostForm): Future[ModerationDecision] = files match {
-      case Nil => Future.successful(ModerationDecision.Pass(form))
-      case file :: rest => load(file).flatMap {
-        case ModerationRuleSource.Missing => loop(rest, form)
-        case ModerationRuleSource.Broken => Future.successful(ModerationDecision.Deny(ModerationDenial.BrokenRules, form))
-        case ModerationRuleSource.Loaded(rules) => evaluate(input, form, rules) match {
-          case ModerationDecision.Pass(next) => loop(rest, next)
-          case denied => Future.successful(denied)
-        }
-      }
-    }
-    if (input.cap || input.form.bbs == "saku") Future.successful(ModerationDecision.Pass(input.form))
-    else if (input.country == "T1") Future.successful(ModerationDecision.Deny(ModerationDenial.Tor, input.form))
-    else loop(ModerationRuleFile.values.toList, input.form)
+  /** キャップと saku 板は対象外、Tor は拒否。ルールを読む必要があれば None */
+  def beforeRules(input: ModerationInput): Option[ModerationDecision] =
+    if (input.cap || input.form.bbs == "saku") Some(ModerationDecision.Pass(input.form))
+    else if (input.country == "T1") Some(ModerationDecision.Deny(ModerationDenial.Tor, input.form))
+    else None
+
+  /** ファイルが無ければ通し、壊れていれば拒否し、読み取れたルールを評価する */
+  def evaluate(input: ModerationInput, form: PostForm, source: ModerationRuleSource): ModerationDecision = source match {
+    case ModerationRuleSource.Missing => ModerationDecision.Pass(form)
+    case ModerationRuleSource.Broken => ModerationDecision.Deny(ModerationDenial.BrokenRules, form)
+    case ModerationRuleSource.Loaded(rules) => evaluate(input, form, rules)
   }
 
   /** 1 つのルール一覧を評価する。照合は規制前の内容で行い、mark は form に重ねる。BBS_NO_MADAKANA なら拒否も mark にする */

@@ -9,6 +9,6 @@ enum PostingOutcome {
 
   case Posted(context: PostingContext, headers: Seq[(String, String)])
   case Rejected(error: PostingError, context: PostingContext, headers: Seq[(String, String)])
-  /** 書けたように見せて捨てた（連投規制の吸い込み。まだ発生しない） */
+  /** 書けたように見せて捨てた（連投規制のコピペ吸い込み）。context.number は採番する予定だった番号 */
   case Swallowed(context: PostingContext, headers: Seq[(String, String)])
 }

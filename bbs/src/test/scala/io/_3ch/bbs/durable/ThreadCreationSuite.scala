@@ -43,9 +43,9 @@ class ThreadCreationSuite extends FunSuite {
   test("a reply bypasses creation regulation while a rejected creation writes no dat") {
     val env = DurableTestKit.newEnv()
     for {
-      first <- env.thread("board/2000000001").addRes("name<><>date<> body <>title", "1<>log", posting("2000000001", "a")).toFuture
+      first <- env.thread("board/2000000001").addRes("name<><>date<> body <>title", "1<>log", posting("2000000001", "a")).toFuture.map(_.count)
       _ = assertEquals(first, 1)
-      reply <- env.thread("board/2000000001").addRes("name<><>date<> reply <>", "1<>log", posting("2000000001", "a", false)).toFuture
+      reply <- env.thread("board/2000000001").addRes("name<><>date<> reply <>", "1<>log", posting("2000000001", "a", false)).toFuture.map(_.count)
       _ = assertEquals(reply, 2)
       error <- DurableTestKit.rejectionMessage(env.thread("board/2000000002").addRes("name<><>date<> body <>title", "1<>log", posting("2000000002", "a")).toFuture)
       _ = assertEquals(error, ordinaryError)
@@ -112,7 +112,7 @@ class ThreadCreationSuite extends FunSuite {
     board.asInstanceOf[js.Dynamic].updateDynamic("completeThreadCreation")(
       ((_: String) => js.Promise.reject(new js.Error("completion failed"))): js.Function1[String, js.Promise[Unit]])
     for {
-      count <- env.thread("board/2000000001").addRes("name<><>date<> body <>title", "1<>log", posting("2000000001", "a")).toFuture
+      count <- env.thread("board/2000000001").addRes("name<><>date<> body <>title", "1<>log", posting("2000000001", "a")).toFuture.map(_.count)
       _ = assertEquals(count, 1)
       dat <- env.thread("board/2000000001").getDat().toFuture
       _ = assert(dat.nonEmpty)

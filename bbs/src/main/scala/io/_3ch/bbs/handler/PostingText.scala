@@ -1,12 +1,13 @@
 package io._3ch.bbs.handler
 
 import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureSite, ModerationDenial, PostField, PostingError, PostingStage}
-import io._3ch.bbs.domain.posting.moderation.{ThreadCreationRejection, ThreadCreationSettingError}
+import io._3ch.bbs.domain.posting.moderation.{PostRateRejection, ThreadCreationRejection, ThreadCreationSettingError}
+import io._3ch.common.domain.BbsSettings
 import io._3ch.common.domain.posting.ThreadWriteRejection
 
 /** 投稿処理の既定の板設定と、拒否理由の文言 */
 object PostingText {
-  val settingTxtDefault: String = "BBS_TITLE=<DIR_NAME>＠3ch掲示板\nBBS_NONAME_NAME=名無しさん＠３ちゃんねる\nBBS_MAX_MENU_THREAD=300\nBBS_FORCE_SAGE=\nBBS_ADD_THREAD=on\nBBS_SHIKIBETSU=checked\nBBS_ID_GROUP=\nBBS_ID_RESET=86400\nBBS_ID_SHIKIBETSU=checked\nBBS_SUBJECT_COUNT=64\nBBS_NAME_COUNT=64\nBBS_MAIL_COUNT=64\nBBS_MESSAGE_COUNT=4096\nBBS_LINE_NUMBER=30\nBBS_THREAD_TATESUGI=1\nBBS_THREAD_TATESUGI_RESET=3600\nBBS_THREAD_JUNBAN=1\nBBS_THREAD_JUNBAN_RESET=3600\nBBS_THREAD_JUNBAN_AS_ONLY=\nBBS_CREATETHREAD_INTERVAL=5\nBBS_COPIPE=3/86400\ntimecount=18\ntimeclose=10\ntimecover=3600\nBBS_COOK82=10\nBBS_COOK82_POST_LIMIT=60\nBBS_LIVE=\nBBS_KISEIOFF=\nBBS_NO_MADAKANA=\nBBS_THREAD_SETTINGS=on\nBBS_DISABLE_NUSI=\nBBS_FORCE_NONAME=\nBBS_ARR=\nBBS_HEISA=\n"
+  val settingTxtDefault: String = BbsSettings.defaultText
 
   val threadCreationNarrow: String = "スレッドを立てすぎです。しばらく待ってから投稿してください。"
   val threadCreationBroad: String = "この接続環境ではスレッドを立てすぎです。しばらく待ってから投稿してください。"
@@ -86,6 +87,10 @@ object PostingText {
     case PostingError.InvalidCreationSettings(reason) => creationSettingsMessage(reason)
     case PostingError.ThreadCreation(ThreadCreationRejection.Broad(_)) => threadCreationBroad
     case PostingError.ThreadCreation(_) => threadCreationNarrow
+    case PostingError.PostRate(PostRateRejection.Gontakure) => "連続投稿ですか？？ しばらく待ってから投稿してください。"
+    case PostingError.PostRate(PostRateRejection.Samba24(seconds)) => s"Samba24 で規制中です。(あと $seconds 秒) しばらく待ってから投稿してください。"
+    case PostingError.PostRate(PostRateRejection.Fr(seconds)) => s"広域連投規制中です。(あと $seconds 秒) しばらく待ってから投稿してください。"
+    case PostingError.PostRate(PostRateRejection.ThreadRentou) => "このスレッドへの連続投稿が多すぎます。しばらく待ってから投稿してください。"
     case PostingError.ArchiveConflict(target, site) =>
       s"updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(${site.clock.label}:${site.time} bbs:${site.bbs} key:${site.key} number:${site.number} errmsg:updateSubback->${target}_update_conflicted!)"
     case PostingError.ThreadRefused(rejection, site) => internal(PostingStage.ThreadWrite, site, "Error: " + threadWriteMessage(rejection))

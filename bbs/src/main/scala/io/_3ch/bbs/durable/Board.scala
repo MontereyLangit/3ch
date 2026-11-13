@@ -7,8 +7,8 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 import io._3ch.bbs.external.web.TextEncoder
-import io._3ch.bbs.domain.posting.moderation.{ThreadCreationHistory, ThreadCreationLimit}
-import io._3ch.bbs.durable.codec.ThreadCreationCodec
+import io._3ch.bbs.domain.posting.moderation.{PostRateHistory, PostRatePage, ThreadCreationHistory, ThreadCreationLimit}
+import io._3ch.bbs.durable.codec.{PostRateCodec, ThreadCreationCodec}
 import io._3ch.bbs.durable.support.DurableLock
 
 /**
@@ -67,6 +67,50 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
   def cancelThreadCreation(key: String): js.Promise[Unit] = DurableLock.serialized(state) {
     val now = nowSeconds()
     creationHistory().flatMap(history => saveCreationHistory(history.cancel(key, now)))
+  }.toJSPromise
+
+  private val postRateMetaKey = "postRateMeta"
+  private def postRatePageKey(number: Int): String = s"postRateHistory:${Math.floorMod(number, PostRateHistory.MaxPages)}"
+
+  /** メタを読み、next が返すページを順に読み足す */
+  private def postRateHistory(next: PostRateHistory => Option[Int]): Future[PostRateHistory] = {
+    def load(history: PostRateHistory): Future[PostRateHistory] = next(history).fold(Future.successful(history)) { number =>
+      state.storage.get[js.Array[js.Dynamic]](postRatePageKey(number)).toFuture.flatMap { page =>
+        load(history.withOlder(PostRatePage(number, page.fold(Vector.empty[js.Dynamic])(_.toVector).map(PostRateCodec.decodeRecord))))
+      }
+    }
+    state.storage.get[js.Dynamic](postRateMetaKey).toFuture
+      .flatMap(meta => load(PostRateHistory(meta.fold(PostRateHistory.InitialMeta)(PostRateCodec.decodeMeta), Vector.empty)))
+  }
+
+  private def postRatePage(page: PostRatePage): (String, js.Any) = postRatePageKey(page.number) -> page.records.map(PostRateCodec.encodeRecord).toJSArray
+
+  /** key の記録を含むページまで新しい方から読む */
+  private def postRateHistoryWith(key: String): Future[PostRateHistory] = postRateHistory(history => if history.pageOf(key).isDefined then None else history.older)
+
+  /**
+   * 連投規制の判定と予約を直列化する。許可は空文字、拒否は [[PostRateRejection.code]] を返す。
+   * settings.enforce が偽なら拒否理由を返しつつ予約する
+   */
+  def reservePost(key: String, entry: js.Dynamic, settings: js.Dynamic): js.Promise[String] = DurableLock.serialized(state) {
+    val now = nowSeconds()
+    val identity = PostRateCodec.decodeIdentity(entry)
+    val (boardSettings, enforce) = PostRateCodec.decodeBoardSettings(settings)
+    postRateHistory(_.nextPage(boardSettings, now)).flatMap { history =>
+      val reservation = history.reserve(key, identity, boardSettings, enforce, now)
+      val saved = reservation.saved.fold(Future.unit) { updated =>
+        state.storage.put(js.Dictionary[js.Any](postRateMetaKey -> PostRateCodec.encodeMeta(updated.meta), postRatePage(updated.pages.head))).toFuture
+      }
+      saved.map(_ => reservation.rejection.fold("")(_.code))
+    }
+  }.toJSPromise
+
+  def completePost(key: String): js.Promise[Unit] = DurableLock.serialized(state) {
+    postRateHistoryWith(key).flatMap(_.complete(key).fold(Future.unit)(page => state.storage.put(js.Dictionary[js.Any](postRatePage(page))).toFuture))
+  }.toJSPromise
+
+  def cancelPost(key: String): js.Promise[Unit] = DurableLock.serialized(state) {
+    postRateHistoryWith(key).flatMap(_.cancel(key).fold(Future.unit)(page => state.storage.put(js.Dictionary[js.Any](postRatePage(page))).toFuture))
   }.toJSPromise
 
   /**

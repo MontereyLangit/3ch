@@ -2,11 +2,17 @@ package io._3ch.bbs.durable
 
 import munit.FunSuite
 import io._3ch.bbs.external.cloudflare.*
+import io._3ch.bbs.domain.posting.moderation.{PostRateCheck, PostRateIdentity, PostRateSettings}
+import io._3ch.bbs.durable.codec.PostRateCodec
+import io._3ch.common.domain.BbsSettings
+import scala.collection.mutable
+import scala.concurrent.Future
 import scala.scalajs.js
+import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.Thenable.Implicits.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
-/** `Board.updateThread` の並び順と打ち切りを subjectList の完全一致で固定する */
+/** `Board.updateThread` の並び順と打ち切りを subjectList の完全一致で固定し、連投履歴の RPC の直列化と保存を確かめる */
 class BoardSuite extends FunSuite {
 
   private def data(key: String, title: js.UndefOr[String], resNum: Int): js.Dynamic =
@@ -115,6 +121,127 @@ class BoardSuite extends FunSuite {
       _ = assertEquals(subject, "")
       removed <- board.getRemoved().toFuture
       _ = assertEquals(removed.toList, Nil)
+    } yield ()
+  }
+
+  private def entry(ip: String): js.Dynamic = js.Dynamic.literal(ip = ip, shiki = s"shiki-$ip", aid = "")
+  private def rate(samba24: Int = 10, timecount: Int = 18, timeclose: Int = 10, fr: Int = 0, enforce: Boolean = true): js.Dynamic =
+    js.Dynamic.literal(timecount = timecount, timeclose = timeclose, samba24 = samba24, fr = fr, keys = "ip,shiki,aid", enforce = enforce)
+
+  /** storage.put に渡されたキーを記録する */
+  private def recordPuts(instance: Board): mutable.Buffer[Set[String]] = {
+    val puts = mutable.Buffer.empty[Set[String]]
+    val storage = instance.state.storage.asInstanceOf[js.Dynamic]
+    val original = storage.put.asInstanceOf[js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]]]
+    storage.updateDynamic("put")(((key: js.Any, value: js.UndefOr[js.Any]) => {
+      puts += (if value.isDefined then Set(key.asInstanceOf[String]) else key.asInstanceOf[js.Dictionary[js.Any]].keys.toSet)
+      original(key, value)
+    }): js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]])
+    puts
+  }
+
+  test("連投の予約は直列化され、同じ投稿者の同時の予約は片方だけ通る") {
+    val board = DurableTestKit.newEnv().board("board1")
+    for {
+      results <- Future.sequence(Seq(board.reservePost("1:a", entry("a"), rate()).toFuture, board.reservePost("2:b", entry("a"), rate()).toFuture))
+      _ = assertEquals(results.count(_.isEmpty), 1)
+      _ = assert(results.exists(_.startsWith("post-rate:board:samba24:")), results.toString)
+      other <- board.reservePost("3:c", entry("b"), rate()).toFuture
+      _ = assertEquals(other, "")
+    } yield ()
+  }
+
+  test("広域連投規制は識別子の一致で拒否し、fr の無い旧形式の設定は既定の 1 秒で判定する") {
+    val board = DurableTestKit.newEnv().board("board1")
+    val sameShiki = js.Dynamic.literal(ip = "other", shiki = "shiki-a", aid = "")
+    val legacy = js.Dynamic.literal(timecount = 18, timeclose = 10, samba24 = 10, keys = "ip,shiki,aid", enforce = true)
+    for {
+      _ <- board.reservePost("1:a", entry("a"), rate(samba24 = 10, fr = 5)).toFuture
+      rejected <- board.reservePost("2:b", sameShiki, rate(samba24 = 10, fr = 5)).toFuture
+      _ = assert(rejected.startsWith("post-rate:board:fr:"), rejected)
+      allowed <- board.reservePost("3:b", sameShiki, rate(samba24 = 10, fr = 0)).toFuture
+      _ = assertEquals(allowed, "", "Samba24 は識別子だけの一致では拒否しない")
+      legacyRejected <- board.reservePost("4:c", js.Dynamic.literal(ip = "third", shiki = "shiki-a", aid = ""), legacy).toFuture
+      _ = assertEquals(legacyRejected, "post-rate:board:fr:1")
+    } yield ()
+  }
+
+  test("BBS_FR_LEVEL が 0 か空の板設定から渡した予約は識別子が一致しても拒否しない") {
+    def settings(text: String): js.Dynamic = {
+      val values = BbsSettings.parse(text, "\n")
+      val rate = PostRateSettings.from(values, values)
+      val check = PostRateCheck(rate.level, PostRateIdentity(), rate.board, rate.thread)
+      PostRateCodec.encodeBoardSettings(check.boardSettings, check.enforce)
+    }
+    val board = DurableTestKit.newEnv().board("board1")
+    def sameShiki(ip: String): js.Dynamic = js.Dynamic.literal(ip = ip, shiki = "shiki-a", aid = "")
+    for {
+      _ <- board.reservePost("1:a", entry("a"), settings("BBS_FR_SECOND=10\n")).toFuture
+      zero <- board.reservePost("2:b", sameShiki("b"), settings("BBS_FR_LEVEL=0\nBBS_FR_SECOND=10\n")).toFuture
+      empty <- board.reservePost("3:c", sameShiki("c"), settings("BBS_FR_LEVEL=\nBBS_FR_SECOND=10\n")).toFuture
+      _ = assertEquals((zero, empty), ("", ""))
+      rejected <- board.reservePost("4:d", sameShiki("d"), settings("BBS_FR_LEVEL=1\nBBS_FR_SECOND=10\n")).toFuture
+      _ = assertEquals(rejected, "post-rate:board:fr:10")
+    } yield ()
+  }
+
+  test("試行モードは拒否コードを返しつつ予約し、拒否する設定では記録しない") {
+    val board = DurableTestKit.newEnv().board("board1")
+    for {
+      _ <- board.reservePost("1:a", entry("a"), rate(samba24 = 0, timeclose = 2)).toFuture
+      logged <- board.reservePost("2:a", entry("a"), rate(samba24 = 0, timeclose = 2, enforce = false)).toFuture
+      _ = assertEquals(logged, "")
+      rejected <- board.reservePost("3:a", entry("a"), rate(samba24 = 0, timeclose = 2)).toFuture
+      _ = assertEquals(rejected, "post-rate:board:gontakure")
+      loggedAgain <- board.reservePost("4:a", entry("a"), rate(samba24 = 0, timeclose = 2, enforce = false)).toFuture
+      _ = assertEquals(loggedAgain, "post-rate:board:gontakure")
+      _ <- board.cancelPost("4:a").toFuture
+      _ <- board.cancelPost("2:a").toFuture
+      allowed <- board.reservePost("5:a", entry("a"), rate(samba24 = 0, timeclose = 2)).toFuture
+      _ = assertEquals(allowed, "", "取り消した予約は数えない")
+    } yield ()
+  }
+
+  test("予約は最新ページとメタだけを書き、確定と取消はその記録を含むページだけを書く") {
+    val instance = DurableTestKit.newEnv().boardInstance("board1")
+    val settings = rate(samba24 = 0, timecount = 100)
+    for {
+      _ <- (1 to 65).foldLeft(Future.unit)((acc, n) => acc.flatMap(_ => instance.reservePost(s"k$n", entry(s"ip$n"), settings).toFuture.map(_ => ())))
+      puts = recordPuts(instance)
+      _ <- instance.reservePost("k66", entry("ip66"), settings).toFuture
+      _ = assertEquals(puts.toList, List(Set("postRateMeta", "postRateHistory:1")))
+      _ <- instance.completePost("k64").toFuture
+      _ <- instance.cancelPost("k66").toFuture
+      _ <- instance.completePost("missing").toFuture
+      _ = assertEquals(puts.toList.drop(1), List(Set("postRateHistory:0"), Set("postRateHistory:1")))
+      meta <- instance.state.storage.get[js.Dynamic]("postRateMeta").toFuture
+      _ = assertEquals(js.JSON.stringify(meta.get), """{"newest":1,"oldest":0}""")
+      page <- instance.state.storage.get[js.Array[js.Dynamic]]("postRateHistory:1").toFuture
+      _ = assertEquals(page.get.toList.map(_.key.asInstanceOf[String]), List("k65"))
+      first <- instance.state.storage.get[js.Array[js.Dynamic]]("postRateHistory:0").toFuture
+      _ = assertEquals(first.get(63).status.asInstanceOf[String], "completed")
+      _ = assertEquals(js.Object.keys(first.get(0).asInstanceOf[js.Object]).toList, List("key", "t", "ip", "shiki", "aid", "status"))
+    } yield ()
+  }
+
+  test("連投履歴の RPC の失敗はロックの外で投げ直す") {
+    var gateRejections = 0
+    val state = js.Dynamic.literal(
+      storage = js.Dynamic.literal(get = ((_: String) => js.Promise.reject(new js.Error("storage failed"))): js.Function1[String, js.Promise[js.Any]]),
+      blockConcurrencyWhile = ((callback: js.Function0[js.Promise[js.Any]]) => {
+        callback().toFuture.recoverWith { case error =>
+          gateRejections += 1
+          Future.failed(error)
+        }.toJSPromise
+      }): js.Function1[js.Function0[js.Promise[js.Any]], js.Promise[js.Any]]
+    ).asInstanceOf[DurableObjectState]
+    val board = new Board(state, js.Dynamic.literal())
+    for {
+      reserve <- DurableTestKit.rejectionMessage(board.reservePost("1", entry("a"), rate()).toFuture)
+      complete <- DurableTestKit.rejectionMessage(board.completePost("1").toFuture)
+      cancel <- DurableTestKit.rejectionMessage(board.cancelPost("1").toFuture)
+      _ = assertEquals(Seq(reserve, complete, cancel), Seq.fill(3)("storage failed"))
+      _ = assertEquals(gateRejections, 0)
     } yield ()
   }
 }

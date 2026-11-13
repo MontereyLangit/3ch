@@ -29,8 +29,8 @@ test('Wrangler: DO RPC の省略引数に本体の既定値が適用される', 
   assert.equal(await thread('getDat'), '1<>name<><>message<>title\n');
   assert.equal(await thread('getDat', 'rbbs', '1800000001'), '1<>name<><>message<>title\n');
 
-  // addRes(datLine, logLine, posting = undefined): posting 省略は板更新なしのレス追加になる。
-  assert.equal(await thread('addRes', '2<>name<><>second<>', '0<>log'), 2);
+  // addRes(datLine, logLine, posting = undefined): posting 省略は板更新なしのレス追加になる。連投規制も判定しない。
+  assert.deepEqual(await thread('addRes', '2<>name<><>second<>', '0<>log'), { count: 2, swallowed: false, observed: [] });
   assert.match(await thread('getDat'), /\n2<>name<><>second<>\n$/);
   assert.equal(await thread('getLog'), '2<>log\n');
 
