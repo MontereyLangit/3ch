@@ -107,12 +107,15 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
 
     const pending = '2'.repeat(64);
     assert.equal(await index('login', 'register', pending, owner, now), '');
-    assert.equal(await index('login', 'confirm', pending, owner, now + 600), 'auth:index:ownership');
     assert.equal(await index('login', 'register', pending, other, now + 600), '');
     assert.equal(await index('login', 'confirm', pending, owner, now + 600), 'auth:index:ownership');
     assert.equal(await index('login', 'confirm', pending, other, now + 600), '');
     assert.equal(await index('login', 'remove', pending, other), '');
     assert.deepEqual(await index('login', 'lookup', pending), { code: 'auth:index:missing' });
+
+    const stalled = '3'.repeat(64);
+    assert.equal(await index('login', 'register', stalled, owner, now), '');
+    assert.equal(await index('login', 'confirm', stalled, owner, now + 600), '');
 
     const token = '3'.repeat(64);
     assert.equal(await index('token', 'register', token, owner, now), 'auth:invalid');
@@ -299,6 +302,7 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
     for (let i = 0; i < 10; i++) {
       assert.equal((await account(aid, 'verifyPassword', 'wrong password', lockedIp, now)).code, 'auth:login:failed');
     }
+    for (let i = 0; i < 8; i++) assert.equal((await rate(lockedIp, 'loginFail', Math.floor(Date.now() / 1000))).code, '');
     const started = Date.now();
     const locked = await attempt('taro_2026', 'correct horse', '192.0.2.60');
     assert.equal(locked.status, 401);
