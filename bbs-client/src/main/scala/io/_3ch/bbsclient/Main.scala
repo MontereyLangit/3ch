@@ -1,6 +1,6 @@
 package io._3ch.bbsclient
 
-import io._3ch.bbsclient.islands.{BoardDetailsIsland, PostingFormIsland, SiteHeaderIsland, ThreadListIsland}
+import io._3ch.bbsclient.islands.*
 import io._3ch.common.routes.islands
 import japgolly.scalajs.react.*
 
@@ -15,7 +15,7 @@ object Main {
 
   @islands("site-header.tsx")
   @JSExportTopLevel("SiteHeaderJs", "client")
-  val siteHeader: js.Any = SiteHeaderIsland.Component.cmapCtorProps[js.Object](_ => ()).toJsComponent.raw
+  val siteHeader: js.Any = SiteHeaderIsland.JsComponent.toJsComponent.raw
 
   @islands("board-details.tsx")
   @JSExportTopLevel("BoardDetailsJs", "client")
@@ -28,4 +28,23 @@ object Main {
   @islands("thread-list.tsx")
   @JSExportTopLevel("ThreadListJs", "client")
   val threadList: js.Any = ThreadListIsland.JsComponent.toJsComponent.raw
+  @islands("auth-form.tsx")
+  @JSExportTopLevel("AuthFormJs", "client")
+  final val authForm: js.Any = AuthFormIsland.Component.toJsComponent.raw
+
+  @islands("auth-modal.tsx")
+  @JSExportTopLevel("AuthModalJs", "client")
+  final val authModal: js.Any = AuthModalIsland.Component.toJsComponent.raw
+
+  @islands("account-nav.tsx")
+  @JSExportTopLevel("AccountNavJs", "client")
+  final val accountNav: js.Any = AccountNavIsland.Component.toJsComponent.raw
+
+  @islands("account-menu.tsx")
+  @JSExportTopLevel("AccountMenuJs", "client")
+  final val accountMenu: js.Any = AccountMenuIsland.Component.toJsComponent.raw
+
+  @islands("account-logout.tsx")
+  @JSExportTopLevel("AccountLogoutJs", "client")
+  final val accountLogout: js.Any = AccountLogoutIsland.Component.toJsComponent.raw
 }

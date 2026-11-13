@@ -1,6 +1,6 @@
 package io._3ch.bbs.application.posting
 
-import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore}
+import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingAccount, PostingAccounts, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore}
 import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureClock, FailureSite, ModerationDenial, PostingError, PostingStage, PostingUser, ThreadOwner, ThreadPosting, ThreadWriteResult}
 import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, PostRateFinding, PostRateIdentity, PostRateLevel, PostRateRejection, ThreadCreationRejection, ThreadCreationRateLimit}
 import io._3ch.bbs.handler.PostingText
@@ -30,6 +30,7 @@ class PostingServiceSuite extends FunSuite {
     rules: Map[ModerationRuleFile, String] = Map.empty,
     caps: Map[String, String] = Map.empty,
     user: Option[PostingUser] = None,
+    authSource: Option[PostingAccounts] = None,
     roll: Double = 0.5,
     write: ThreadPosting => Future[ThreadWriteResult] = posting => Future.successful(ThreadWriteResult.Written(if (posting.create) 1 else 2)),
     indexWritten: Boolean = true,
@@ -79,6 +80,7 @@ class PostingServiceSuite extends FunSuite {
       users = new PostingUserSource {
         def current(): Future[Option[PostingUser]] = called("users")(user)
       },
+      accounts = authSource,
       hasher = new Hasher {
         def sha1Base64(value: String): Future[String] = Future.successful(s"s1($value)")
         def sha256Hex(value: String): Future[String] = { sha256Inputs += value; Future.successful(s"s2($value)") }
@@ -121,6 +123,110 @@ class PostingServiceSuite extends FunSuite {
 
   private val salt = "s2(salt)"
   private val pon = s"PON=s1(s2(192.0.2.1$salt)); Max-Age=63072000; path=/; Secure; HttpOnly"
+
+  private final class AuthSource(user: Option[PostingUser] = None, failRecord: Boolean = false, device: String = "p012345678901234567",
+    refreshed: Option[String] = None) extends PostingAccounts {
+    var records = 0
+    var recordFailures = 0
+    val received: mutable.Buffer[(io._3ch.common.domain.posting.MailCommands, Option[String])] = mutable.Buffer.empty
+    def authenticate(commands: io._3ch.common.domain.posting.MailCommands, capKey: Option[String], request: PostingRequest, now: Double) = {
+      received += (commands -> capKey)
+      Future.successful(Right(PostingAccount(user, 1, device, sessionCookie = Some("auth=present"))))
+    }
+    def posted(context: io._3ch.bbs.domain.posting.PostingContext, request: PostingRequest, account: PostingAccount): Future[Option[String]] = {
+      records += 1
+      if (failRecord) Future.failed(new IllegalStateException("unavailable")) else Future.successful(refreshed)
+    }
+    def recordFailed(error: Throwable): Unit = { recordFailures += 1 }
+  }
+
+  test("認証未設定の既存利用者ポートは UID ログの互換性を保つ") {
+    val fake = Fake(user = Some(PostingUser("account-a", "user_a")))
+    fake.post()().map { _ =>
+      assert(fake.postings.head._2.contains("UID: IP:"))
+      assert(!fake.postings.head._2.contains("UID:user_a"))
+    }
+  }
+
+  test("認証設定済みの Web 投稿は匿名なら書き込む前に拒否する") {
+    val source = new AuthSource()
+    val fake = Fake(authSource = Some(source))
+    fake.post()().map { outcome =>
+      assertEquals(rejected(outcome).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.LoginRequired))
+      assertEquals(fake.postings.size, 0)
+      assertEquals(source.records, 0)
+    }
+  }
+
+  test("専ブラ匿名投稿は !auth が無ければ認証設定後も書き込める") {
+    val source = new AuthSource()
+    val fake = Fake(authSource = Some(source))
+    fake.post()(r => r.copy(userAgent = "Monazilla/1.00 Test")).map(outcome => assert(outcome.isInstanceOf[PostingOutcome.Posted]))
+  }
+
+  test("専ブラの !auth は匿名なら認証を求める") {
+    val fake = Fake(authSource = Some(new AuthSource()))
+    fake.post("mail" -> "sage!auth")(r => r.copy(userAgent = "Monazilla/1.00 Test")).map { outcome =>
+      assertEquals(rejected(outcome).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.LoginRequired))
+      assertEquals(outcome.context.form.mail, "sage")
+    }
+  }
+
+  test("認証設定済みのキャップは空白を含むパスワードを従来どおり読み、メール欄からその部分だけを除く") {
+    val source = new AuthSource(Some(PostingUser("account-a", "user_a")))
+    val fake = Fake(caps = Map("pass word" -> "管理人"), authSource = Some(source))
+    fake.post(reply("mail" -> "!#abcdefghij234567abcd sage#!pass word")*)().map { outcome =>
+      assertEquals(outcome.context.cap, Some(CapHandle("管理人", strong = false)))
+      assertEquals(source.received.map(_._2).toList, List(Option("pass word")))
+      assertEquals(source.received.head._1.token, Some("abcdefghij234567abcd"))
+      assertEquals(outcome.context.form.mail, " sage")
+      assertEquals(outcome.context.sage, true)
+    }
+  }
+
+  test("認証済み投稿は UID と端末を記録し PON と認証 Cookie を併記する") {
+    val source = new AuthSource(Some(PostingUser("account-a", "user_a")))
+    val fake = Fake(authSource = Some(source))
+    fake.post()().map { outcome =>
+      assert(fake.postings.head._2.contains("UID:user_a"))
+      assert(fake.postings.head._2.contains("Device:p012345678901234567"))
+      assertEquals(source.records, 1)
+      assertEquals(outcome.headers.count(_._1 == "Set-Cookie"), 2)
+    }
+  }
+
+  test("投稿後に発行し直した Cookie は認証時の Cookie と差し替え、Set-Cookie を重ねない") {
+    val source = new AuthSource(Some(PostingUser("account-a", "user_a")), refreshed = Some("auth=refreshed"))
+    val fake = Fake(authSource = Some(source))
+    fake.post()().map(outcome => assertEquals(outcome.headers.filter(_._1 == "Set-Cookie").map(_._2), Seq(pon, "auth=refreshed")))
+  }
+
+  test("端末ハッシュの無い認証投稿と匿名投稿は従来の端末情報を記録する") {
+    val source = new AuthSource(device = "")
+    val fake = Fake(authSource = Some(source))
+    fake.post()(r => r.copy(userAgent = "Monazilla/1.00 Test", deviceInformation = "legacy-device")).map { _ =>
+      assert(fake.postings.head._2.contains("Device:legacy-device"), fake.postings.head._2)
+    }
+  }
+
+  test("dat 保存後のアカウント記録失敗でも成功応答と索引更新を続ける") {
+    val source = new AuthSource(Some(PostingUser("account-a", "user_a")), failRecord = true)
+    val fake = Fake(authSource = Some(source))
+    fake.post()().map { outcome =>
+      assert(outcome.isInstanceOf[PostingOutcome.Posted])
+      assertEquals(source.recordFailures, 1)
+      assert(fake.writes.exists(_._1 == "headline"))
+    }
+  }
+
+  test("吸い込み投稿はアカウントの期限と成功件数を更新しない") {
+    val source = new AuthSource(Some(PostingUser("account-a", "user_a")))
+    val fake = Fake(authSource = Some(source), write = _ => Future.successful(ThreadWriteResult.Swallowed(2)))
+    fake.post()().map { outcome =>
+      assert(outcome.isInstanceOf[PostingOutcome.Swallowed])
+      assertEquals(source.records, 0)
+    }
+  }
 
   test("スレ立ては段の順にポートを呼び、確定したレス番号と Set-Cookie を返す") {
     val fake = Fake()

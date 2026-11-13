@@ -41,6 +41,7 @@ class PostingSuite extends FunSuite {
   private def makeRequest(method: String = "POST", headers: Seq[(String, String)] = Nil, cf: Seq[(String, String)] = Nil, body: String = ""): Request = {
     val lowered = headers.map((k, v) => k.toLowerCase -> v).toMap
     js.Dynamic.literal(
+      url = "https://www.3ch.io/test/bbs.cgi",
       method = method,
       cf = js.Dictionary(cf*),
       headers = js.Dynamic.literal(get = ((name: String) => lowered.getOrElse(name.toLowerCase, null)): js.Function1[String, String]),

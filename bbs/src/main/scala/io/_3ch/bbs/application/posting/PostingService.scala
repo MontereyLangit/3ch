@@ -1,18 +1,20 @@
 package io._3ch.bbs.application.posting
 
-import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, PostRateObservation}
+import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, PostRateObservation, PostingAccount}
+import io._3ch.bbs.domain.account.AuthenticationFailure
 import io._3ch.bbs.domain.posting.{ClientIdentity, FailureClock, FailureSite, GlobalThread, KeyIp, NusiMark, PostFormLimits, PostRouting, PostingContext, PostingError, PostingIdentity, PostingStage, PostingUser, ReplyThread, ThreadOwner, ThreadPosting, ThreadWriteResult}
 import io._3ch.bbs.domain.posting.moderation.{ModerationDecision, ModerationInput, PostRateCheck, PostRateIdentity, PostRateSettings, ThreadCreationLimit, ThreadCreationNetwork, ThreadCreationRequest, ThreadCreationSettings}
 import io._3ch.bbs.external.web.URL
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
 import io._3ch.common.domain.identity.{DateSalt, ShikibetsuFormat, ShikibetsuMode, ShikibetsuSeeds}
-import io._3ch.common.domain.posting.{ArchiveIndexText, CapHandle, DatLineFormatter, NameField, PostForm, PostKind, SageRule, UserInfo}
+import io._3ch.common.domain.posting.{ArchiveIndexText, CapHandle, MailCommands, DatLineFormatter, NameField, PostForm, PostKind, SageRule, UserInfo}
 import io._3ch.common.text.JsNumber
 
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 import scala.util.Try
+import scala.util.control.NonFatal
 
 /** bbs.cgi の書き込み。段の並びはこのクラスの post だけで決まる。salt は投稿者の照合値に混ぜる秘密の値 */
 final class PostingService(ports: PostingPorts, salt: String) {
@@ -28,10 +30,13 @@ final class PostingService(ports: PostingPorts, salt: String) {
       _ = GlobalThread.postingError(capped.form.key, capped.form.kind == PostKind.NewThread, capped.cap.isDefined).foreach(reject(_, capped))
       (board, boardRead) <- boardSettings(capped)
       threadRead <- threadSettings(boardRead, board)
-      identified <- identify(threadRead)
-      user <- ports.users.current()
-      userInfo = UserInfo("", identified.identity.host, identified.identity.asn, identified.identity.country, identified.identity.region,
-        identified.identity.city, identified.identity.deviceInfo, identified.identity.userAgent)
+      identifiedRaw <- identify(threadRead)
+      account <- authenticate(identifiedRaw, request)
+      identified = identifiedRaw.copy(sessionCookie = account.sessionCookie)
+      user = account.user
+      _ = admit(identified, account, request)
+      userInfo = UserInfo(if (authEnabled) user.fold("")(_.displayId) else "", identified.identity.host, identified.identity.asn, identified.identity.country, identified.identity.region,
+        identified.identity.city, if (authEnabled && account.device.nonEmpty) account.device else identified.identity.deviceInfo, identified.identity.userAgent)
       moderated <- moderate(identified, userInfo)
       sized = PostFormLimits.check(moderated.form, moderated.settings, moderated.number, moderated.cap.exists(_.strong))
         .fold(reject(_, moderated), form => moderated.copy(form = form))
@@ -41,11 +46,12 @@ final class PostingService(ports: PostingPorts, salt: String) {
       decided = marked.copy(sage = SageRule.sage(marked.number, marked.form.mail, marked.form.key, marked.unixtime, marked.settings, ports.random.next()))
       rateLimit <- postRateCheck(decided, board.settings, user, request)
       (written, swallowed) <- updateThread(decided, board, creationLimit, owner, rateLimit, userInfo)
+      recorded <- if (swallowed) Future.successful(written) else record(written, request, account)
       outcome <- if (swallowed) Future.successful(PostingOutcome.Swallowed(written, headers(written)))
         else for {
-          _ <- updateSubback(written)
-          _ <- updateHeadline(written)
-        } yield PostingOutcome.Posted(written, headers(written))
+          _ <- updateSubback(recorded)
+          _ <- updateHeadline(recorded)
+        } yield PostingOutcome.Posted(recorded, headers(recorded))
     } yield outcome).recover {
       case Rejected(error, context) => PostingOutcome.Rejected(error, context, headers(context))
     }
@@ -57,7 +63,35 @@ final class PostingService(ports: PostingPorts, salt: String) {
     PostingContext(PostForm(), identity, time = now.toString, unixtime = math.floor(now / 1000).toString)
   }
 
-  private def headers(context: PostingContext): Seq[(String, String)] = context.ponCookie.map("Set-Cookie" -> _).toSeq
+  private def headers(context: PostingContext): Seq[(String, String)] = (context.ponCookie.toSeq ++ context.sessionCookie).map("Set-Cookie" -> _)
+
+  private def authEnabled: Boolean = ports.accounts.isDefined
+
+  /** 認証を有効にした環境だけアカウントで投稿者を決める。無効なら従来どおり users から引く */
+  private def authenticate(context: PostingContext, request: PostingRequest): Future[PostingAccount] = ports.accounts match {
+    case None => ports.users.current().map(user => PostingAccount(user))
+    case Some(accounts) => accounts.authenticate(context.mailCommands, context.capKey, request, context.unixtime.toDouble)
+      .map(_.fold(reason => reject(PostingError.Authentication(reason), context), identity))
+  }
+
+  /** 認証を有効にした環境の書き込み条件。Web 版と !auth はログイン必須、BBS_PHOEBE は Lv を求める。旧キャップは対象外 */
+  private def admit(context: PostingContext, account: PostingAccount, request: PostingRequest): Unit = if (authEnabled && !account.legacyCap) {
+    if (account.user.isEmpty && (!request.isMonazilla || context.mailCommands.auth)) reject(PostingError.Authentication(AuthenticationFailure.LoginRequired), context)
+    val required = context.settings.get("BBS_PHOEBE").flatMap(_.toIntOption).getOrElse(0)
+    if (account.lv < required) {
+      if (account.user.isEmpty) reject(PostingError.Authentication(AuthenticationFailure.LoginRequired), context)
+      else reject(PostingError.AuthenticationLevel(required), context)
+    }
+  }
+
+  /** 成功した投稿をアカウントに記録する。記録の失敗は投稿の成否に含めず、発行し直した Cookie だけを差し替える */
+  private def record(context: PostingContext, request: PostingRequest, account: PostingAccount): Future[PostingContext] = ports.accounts match {
+    case None => Future.successful(context)
+    case Some(accounts) =>
+      Future.unit.flatMap(_ => accounts.posted(context, request, account))
+        .recover { case NonFatal(error) => Try(accounts.recordFailed(error)); None }
+        .map(_.fold(context)(cookie => context.copy(sessionCookie = Some(cookie))))
+  }
 
   private def checkRequest(context: PostingContext, request: PostingRequest): Future[PostingContext] = Future {
     request.validate.foreach(reject(_, context))
@@ -66,18 +100,23 @@ final class PostingService(ports: PostingPorts, salt: String) {
 
   private def readForm(context: PostingContext, request: PostingRequest): Future[PostingContext] = request.body().map { bytes =>
     PostingFormDecoder.decode(bytes, request.isMonazilla).flatMap(PostRouting.route(_, context.unixtime)) match {
-      case Left((error, form)) => reject(error, context.copy(form = form))
-      case Right(form) => context.copy(form = form)
+      case Left((error, form)) => reject(error, context.copy(form = if (authEnabled) form.copy(mail = MailCommands.parse(form.mail).plain) else form))
+      case Right(form) =>
+        if (!authEnabled) context.copy(form = form)
+        else {
+          val commands = MailCommands.parse(form.mail)
+          context.copy(form = form.copy(mail = commands.plain), mailCommands = commands)
+        }
     }
   }
 
-  private def processCap(context: PostingContext): Future[PostingContext] = CapHandle.password(context.form.mail) match {
+  private def processCap(context: PostingContext): Future[PostingContext] = (if (authEnabled) context.mailCommands.capPassword else CapHandle.password(context.form.mail)) match {
     case None => Future.successful(context)
     case Some(password) =>
       val hasher = ports.hasher
       val key = if (password.startsWith("!")) Future.successful(password.drop(1)) else hasher.sha256Hex(password + context.identity.salt).flatMap(hasher.sha1Base64)
-      key.flatMap(ports.caps.find).map { cap =>
-        context.copy(cap = cap, form = cap.fold(context.form)(handle => context.form.copy(name = handle.displayName(context.form.name))))
+      key.flatMap(value => ports.caps.find(value).map(cap => (value, cap))).map { case (value, cap) =>
+        context.copy(cap = cap, capKey = Option.when(cap.isDefined)(value), form = cap.fold(context.form)(handle => context.form.copy(name = handle.displayName(context.form.name))))
       }
   }
 

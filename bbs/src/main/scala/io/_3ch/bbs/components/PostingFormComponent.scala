@@ -1,6 +1,7 @@
 package io._3ch.bbs.components
 
 import io._3ch.bbs.generated.IslandComponents
+import io._3ch.common.domain.account.SessionView
 import io._3ch.common.domain.{BoardId, ThreadCommand, ThreadKey}
 import japgolly.scalajs.react.ScalaFnComponent
 
@@ -11,7 +12,11 @@ case class PostingFormProps(
   time: String,
   key: Option[ThreadKey] = None,
   imgurClientId: String = "",
-  commands: Seq[ThreadCommand] = ThreadCommand.all
+  commands: Seq[ThreadCommand] = ThreadCommand.all,
+  authEnabled: Boolean = false,
+  session: Option[SessionView] = None,
+  requiredLevel: Int = 0,
+  returnPath: String = "/"
 )
 
 /**
@@ -24,9 +29,11 @@ object PostingFormComponent {
   /** islandに渡すJSON互換props */
   def islandProps(props: PostingFormProps): js.Object = {
     val result = js.Dynamic.literal(bbs = props.bbs.value, time = props.time, imgurClientId = props.imgurClientId,
+      authEnabled = props.authEnabled, requiredLevel = props.requiredLevel, returnPath = props.returnPath,
       commands = js.Array(props.commands.map(c =>
         js.Dynamic.literal(text = c.text, label = c.label, field = c.field, description = c.description)
       )*))
+    props.session.foreach(s => result.updateDynamic("session")(js.Dynamic.literal(uid = s.uid, lv = s.lv)))
     props.key.foreach(key => result.updateDynamic("threadKey")(key.value.toString))
     result.asInstanceOf[js.Object]
   }

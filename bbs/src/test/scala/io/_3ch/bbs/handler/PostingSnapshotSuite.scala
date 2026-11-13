@@ -88,6 +88,7 @@ class PostingSnapshotSuite extends FunSuite {
     val form = merge(CreateFields, c.fields).map((k, v) => s"$k=${encode(v, c.sjis)}").mkString("&")
     val body = form + c.submit.map(s => s"&submit=${encode(s, c.sjis)}").getOrElse("")
     js.Dynamic.literal(
+      url = "https://www.3ch.io/test/bbs.cgi",
       method = c.method,
       cf = js.Dictionary(c.cf.getOrElse(DefaultCf)*),
       headers = js.Dynamic.literal(get = ((name: String) => lowered.getOrElse(name.toLowerCase, null)): js.Function1[String, String]),

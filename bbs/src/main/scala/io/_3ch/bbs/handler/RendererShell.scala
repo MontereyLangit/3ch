@@ -1,6 +1,7 @@
 package io._3ch.bbs.handler
 
 import io._3ch.bbs.external.web.Response
+import io._3ch.bbs.generated.IslandComponents
 import io._3ch.bbs.util.SjisEncoding
 import japgolly.scalajs.react.facade.React
 
@@ -57,8 +58,8 @@ object RendererShell {
     Responses.plain(html, "html", encoding, modified = modified, since = since, extra = extra)
   }
 
-  /** UTF-8 の通常画面を組み立てる。クライアント JS の URL は TS 側で解決する。 */
-  def render(children: js.Any, title: js.UndefOr[String], clientScriptSrc: String): React.Element = {
+  /** UTF-8 の通常画面を組み立てる。認証を有効にした画面だけ認証モーダルを置く */
+  def render(children: js.Any, title: js.UndefOr[String], clientScriptSrc: String, authModal: Boolean = false): React.Element = {
     val meta = React.createElement("meta", js.Dictionary("charSet" -> "UTF-8").asInstanceOf[js.Object])
     val viewport = React.createElement(
       "meta",
@@ -72,7 +73,8 @@ object RendererShell {
         title.toOption.map(t => React.createElement("title", new js.Object(), t).asInstanceOf[React.Node]).toSeq
 
     val head = React.createElement("head", new js.Object(), headChildren*)
-    val body = React.createElement("body", new js.Object(), children.asInstanceOf[React.Node])
+    val modal = if (authModal) Seq(IslandComponents.AuthModalJs(js.Dynamic.literal()).rawElement.asInstanceOf[React.Node]) else Nil
+    val body = React.createElement("body", new js.Object(), (children.asInstanceOf[React.Node] +: modal)*)
     React.createElement("html", js.Dictionary("lang" -> "ja").asInstanceOf[js.Object], head.asInstanceOf[React.Node], body.asInstanceOf[React.Node])
   }
 }

@@ -1,0 +1,10 @@
+// 固定値によるローカル原子性検証専用。本番クラス・設定・ストレージは参照しない。
+{
+  "name": "ch3s-storage-probe-test",
+  "main": "storage-probe-worker.mjs",
+  "compatibility_date": "2026-08-04",
+  "durable_objects": {
+    "bindings": [{ "name": "TEST_STORAGE_PROBE", "class_name": "TestStorageProbe" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TestStorageProbe"] }]
+}

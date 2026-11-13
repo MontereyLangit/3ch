@@ -30,7 +30,8 @@ final case class PostingRequest(
   country: Option[String],
   region: Option[String],
   city: Option[String],
-  body: () => Future[Uint8Array] = () => Future.successful(new Uint8Array(0))
+  body: () => Future[Uint8Array] = () => Future.successful(new Uint8Array(0)),
+  secure: Boolean = false
 ) {
 
   /** UA に Client Hints（完全版があればそちら）を連結したもの */
@@ -94,7 +95,8 @@ object PostingRequest {
       country = metadata("country"),
       region = metadata("region"),
       city = metadata("city"),
-      body = () => request.arrayBuffer().toFuture.map(new Uint8Array(_))
+      body = () => request.arrayBuffer().toFuture.map(new Uint8Array(_)),
+      secure = new io._3ch.bbs.external.web.URL(request.url).protocol == "https:"
     )
   }
 }

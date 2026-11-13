@@ -16,8 +16,8 @@ const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'https
 const { window } = dom;
 const shared = {
   window, document: window.document, navigator: window.navigator, localStorage: window.localStorage,
-  HTMLElement: window.HTMLElement, HTMLInputElement: window.HTMLInputElement, HTMLTextAreaElement: window.HTMLTextAreaElement,
-  Node: window.Node, Event: window.Event, MouseEvent: window.MouseEvent, FormData: window.FormData, File: window.File, DOMParser: window.DOMParser,
+  HTMLElement: window.HTMLElement, HTMLIFrameElement: window.HTMLIFrameElement, HTMLDivElement: window.HTMLDivElement, HTMLDialogElement: window.HTMLDialogElement, HTMLInputElement: window.HTMLInputElement, HTMLTextAreaElement: window.HTMLTextAreaElement,
+  Node: window.Node, Event: window.Event, CustomEvent: window.CustomEvent, MouseEvent: window.MouseEvent, FormData: window.FormData, File: window.File, DOMParser: window.DOMParser,
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 for (const [key, value] of Object.entries(shared)) {
@@ -273,7 +273,7 @@ const COOKIE_HTML = '<html><head><title>■ 書き込み確認 ■</title></head
 
 function postResponse(html, charset = 'UTF-8') {
   const bytes = Buffer.from(html, 'utf8');
-  return { ok: true, headers: { get: () => `text/html; charset=${charset}` }, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) };
+  return { ok: true, headers: { get: name => name.toLowerCase() === 'content-type' ? `text/html; charset=${charset}` : null }, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) };
 }
 
 const submitForm = async (selector = 'button[type="submit"]') => {
@@ -770,4 +770,333 @@ test('SSR の描画と最初のクライアント描画が一致する（保存�
     mounted.push(reactRoot);
     assert.deepEqual(errors, [], `${Component.name || 'island'} が SSR と一致しません`);
   }
+});
+
+
+test('認証モーダル: iframeの同一origin通知だけを検証し、投稿内容を1回だけ再送する', async () => {
+  window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+  window.HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
+  const posts = [];
+  let sessionReads = 0;
+  globalThis.fetch = async (url, init) => {
+    if (url === '/auth/session') { sessionReads++; return { ok: true, json: async () => ({ uid: 'registered', lv: 1 }) }; }
+    posts.push(init.body.toString());
+    const response = postResponse(ERROR_HTML);
+    response.headers.get = name => name === 'content-type' ? 'text/html; charset=UTF-8' : name === 'x-auth-required' ? 'login' : null;
+    return response;
+  };
+  await mount(client.AuthModalJs, {});
+  await mount(client.AccountNavJs, { returnPath: '/sample/' });
+  await mountForm({ ...formProps, authEnabled: true, returnPath: '/sample/' });
+  await fillForm();
+  await submitForm('form.posting-form button[type="submit"]');
+  assert.equal(posts.length, 1);
+  assert.equal(query('dialog').open, true);
+  await type('[name="MESSAGE"]', '認証中に直した本文');
+  const iframe = query('dialog iframe');
+  const message = { type: 'ch3s-auth', status: 'ok', uid: 'spoofed', lv: 99 };
+  await act(async () => {
+    window.dispatchEvent(new window.MessageEvent('message', { origin: 'https://evil.example', source: iframe.contentWindow, data: message }));
+    window.dispatchEvent(new window.MessageEvent('message', { origin: window.location.origin, source: window, data: message }));
+  });
+  assert.equal(sessionReads, 0, '別originと別windowの通知は破棄する');
+  assert.equal(posts.length, 1);
+  await act(async () => {
+    window.dispatchEvent(new window.MessageEvent('message', { origin: window.location.origin, source: iframe.contentWindow, data: message }));
+    await new Promise(resolve => setTimeout(resolve, 20));
+  });
+  assert.equal(sessionReads, 1);
+  assert.equal(posts.length, 2, '再度loginが返っても再送は1回だけ');
+  assert.equal(posts[1], posts[0], '送信時の内容を変更せず再送する');
+  assert.equal(query('dialog').open, false);
+  assert.match(document.body.textContent, /@registered/);
+  assert.doesNotMatch(document.body.textContent, /@spoofed/);
+  assert.deepEqual(values(), [FILLED[0], FILLED[1], FILLED[2], '認証中に直した本文']);
+  assert.notEqual(window.localStorage.getItem(DRAFT), null);
+});
+
+test('認証モーダル: キャンセル時は再送せず下書きを保持する', async () => {
+  let posts = 0;
+  globalThis.fetch = async () => {
+    posts++;
+    const response = postResponse(ERROR_HTML);
+    response.headers.get = name => name === 'content-type' ? 'text/html; charset=UTF-8' : name === 'x-auth-required' ? 'login' : null;
+    return response;
+  };
+  await mount(client.AuthModalJs, {});
+  await mountForm({ ...formProps, authEnabled: true });
+  await fillForm();
+  await submitForm('form.posting-form button[type="submit"]');
+  await click(query('dialog button'));
+  await flush();
+  assert.equal(posts, 1);
+  assert.equal(query('dialog').open, false);
+  assert.deepEqual(values(), FILLED);
+  assert.notEqual(window.localStorage.getItem(DRAFT), null);
+});
+
+test('認証表示: SSRと最初のhydrationが一致し通知で表示だけを更新する', async () => {
+  const props = { authEnabled: true, session: { uid: 'member', lv: 3 }, returnPath: '/sample/' };
+  const container = document.body.appendChild(document.createElement('div'));
+  container.innerHTML = renderToString(createElement(client.AccountNavJs, props));
+  const before = container.firstChild;
+  const errors = [];
+  let reactRoot;
+  await act(async () => {
+    reactRoot = hydrateRoot(container, createElement(client.AccountNavJs, props), { onRecoverableError: e => errors.push(e.message) });
+    mounted.push(reactRoot);
+  });
+  assert.equal(container.firstChild, before);
+  assert.deepEqual(errors, []);
+  await act(async () => { window.dispatchEvent(new window.CustomEvent('ch3s:auth-changed', { detail: { uid: 'updated', lv: 10 } })); });
+  assert.match(container.textContent, /@updated/);
+  assert.match(container.textContent, /Lv\*/);
+});
+
+test('ログアウト: フォーム形式の空の本文で送り、成功したら未ログイン表示にする', async () => {
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url, init });
+    return { ok: true, json: async () => ({ ok: true }) };
+  };
+  const container = await mount(client.AccountNavJs, { authEnabled: true, session: { uid: 'member', lv: 3 }, returnPath: '/sample/' });
+  await click([...container.querySelectorAll('button')].find(button => button.textContent === 'ログアウト'));
+  await flush();
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, '/auth/logout');
+  assert.equal(requests[0].init.method, 'POST');
+  assert.ok(requests[0].init.body instanceof window.URLSearchParams || requests[0].init.body instanceof URLSearchParams);
+  assert.match(container.textContent, /認証・登録/);
+  assert.doesNotMatch(container.textContent, /@member/);
+});
+
+test('アカウント設定のログアウト: かんたん登録には戻せない注意を出す', async () => {
+  const simple = await mount(client.AccountLogoutJs, { simple: true });
+  assert.match(simple.textContent, /かんたん登録のアカウントは、ログアウトするとこの端末から戻せません/);
+  const other = await mount(client.AccountLogoutJs, { simple: false });
+  assert.doesNotMatch(other.textContent, /戻せません/);
+});
+
+test('専ブラ用キー: 発行したキーはメモリ上にだけ表示し、再マウントすると消える', async () => {
+  let issueCalls = 0;
+  globalThis.fetch = async (url) => {
+    assert.equal(url, '/auth/token/issue');
+    issueCalls++;
+    return { ok: true, json: async () => ({ uid: 'member', lv: 1, token: '!#one-time-secret' }) };
+  };
+  const container = await mount(client.AccountMenuJs, { tokens: [{ id: 'bound-id', label: 'Jane', boundAt: 1800000000 }, { id: 'unused-id', label: '前の未使用キー', issuedAt: 1800000000, expiresAt: 1800086400 }] });
+  assert.doesNotMatch(container.textContent, /one-time-secret/);
+  await click([...container.querySelectorAll('button')].find(button => button.textContent === '新しいキーを発行'));
+  await flush();
+  assert.equal(issueCalls, 1);
+  assert.equal([...container.querySelectorAll('button')].filter(button => button.textContent === '取り消す').length, 0, '前の未使用キーは取り消し対象から外れる');
+  assert.equal([...container.querySelectorAll('button')].filter(button => button.textContent === 'このブラウザのキーを無効にする').length, 1, '紐づいたキーは維持する');
+  assert.match(container.textContent, /新しい未使用キーへ置き換え/);
+  assert.match(container.textContent, /!#one-time-secret/);
+  assert.equal(window.localStorage.length, 0);
+  assert.equal(window.sessionStorage.length, 0);
+  await act(async () => { for (const entry of mounted.splice(0)) entry.unmount(); });
+  const fresh = await mount(client.AccountMenuJs, { tokens: [{ id: 'bound-id', label: 'Jane', boundAt: 1800000000 }, { id: 'unused-id', label: '前の未使用キー', issuedAt: 1800000000, expiresAt: 1800086400 }] });
+  assert.doesNotMatch(fresh.textContent, /one-time-secret/);
+});
+
+test('フォーム送信: 送信後に編集した下書きは成功しても消さない', async () => {
+  let release;
+  globalThis.fetch = () => new Promise(resolve => { release = () => resolve(postResponse(POSTED_HTML)); });
+  await mountForm();
+  await fillForm();
+  await click(query('form.posting-form button[type="submit"]'));
+  await type('[name="MESSAGE"]', '次の書き込みの下書き');
+  await act(async () => { release(); await new Promise(resolve => setTimeout(resolve, 20)); });
+  assert.equal(field('MESSAGE').value, '次の書き込みの下書き');
+  assert.deepEqual(JSON.parse(window.localStorage.getItem(DRAFT)), { subject: FILLED[2], MESSAGE: '次の書き込みの下書き' });
+});
+
+test('かんたん登録: 規約同意とTurnstileが揃ってから端末情報を送り、ウィジェットを片付ける', async () => {
+  let widgetOptions;
+  const removed = [];
+  let resets = 0;
+  const requests = [];
+  const oldContext = window.HTMLCanvasElement.prototype.getContext;
+  window.HTMLCanvasElement.prototype.getContext = () => null;
+  globalThis.turnstile = {
+    render: (_element, options) => { widgetOptions = options; return 'test-widget'; },
+    remove: id => removed.push(id),
+    reset: () => { resets++; },
+  };
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url, body: new URLSearchParams(init.body.toString()) });
+    return { ok: false, json: async () => ({ error: 'もう一度認証してください', code: 'auth:turnstile' }) };
+  };
+  try {
+    const container = await mount(client.AuthFormJs, { turnstileSiteKey: 'public-key', agreementVersion: 'current-v3', returnPath: '/sample/', embed: true });
+    const submit = container.querySelector('button[type="submit"]');
+    assert.equal(widgetOptions.sitekey, 'public-key');
+    assert.equal(submit.disabled, true);
+    await act(async () => { widgetOptions.callback('challenge-proof'); });
+    assert.equal(submit.disabled, true, '確認だけでは登録できない');
+    await click(container.querySelector('input[type="checkbox"]'));
+    assert.equal(submit.disabled, false);
+    await click(submit);
+    await flush();
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, '/auth/verify');
+    assert.equal(requests[0].body.get('agreement'), 'current-v3');
+    assert.equal(requests[0].body.get('cf-turnstile-response'), 'challenge-proof');
+    const device = JSON.parse(requests[0].body.get('device'));
+    assert.equal(device.os, window.navigator.userAgent);
+    assert.equal(device.arch, window.navigator.platform);
+    assert.equal(typeof device.touch, 'boolean');
+    assert.equal(resets, 1);
+    assert.equal(submit.disabled, true);
+    assert.match(container.textContent, /もう一度認証してください/);
+    await act(async () => { for (const entry of mounted.splice(0)) entry.unmount(); });
+    assert.deepEqual(removed, ['test-widget']);
+  } finally {
+    window.HTMLCanvasElement.prototype.getContext = oldContext;
+    delete globalThis.turnstile;
+  }
+});
+
+async function withTurnstile(body) {
+  const widget = { renders: 0, options: null, removed: [] };
+  const oldContext = window.HTMLCanvasElement.prototype.getContext;
+  window.HTMLCanvasElement.prototype.getContext = () => null;
+  globalThis.turnstile = {
+    render: (_element, options) => { widget.renders++; widget.options = options; return 'auth-widget'; },
+    remove: id => widget.removed.push(id),
+    reset: () => {},
+  };
+  try {
+    await body(widget);
+  } finally {
+    window.HTMLCanvasElement.prototype.getContext = oldContext;
+    delete globalThis.turnstile;
+  }
+}
+
+async function typeInto(element, value) {
+  await act(async () => {
+    setValue(element, value);
+    element.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+}
+
+test('ID・パスワード: タブを替えてもTurnstileを作り直さず、ログインと登録をそれぞれの入力で送る', async () => {
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url, body: new URLSearchParams(init.body.toString()) });
+    return { ok: true, json: async () => ({ uid: 'taro_2026', lv: 1, returnPath: '/sample/' }) };
+  };
+  await withTurnstile(async widget => {
+    const container = await mount(client.AuthFormJs, { turnstileSiteKey: 'public-key', agreementVersion: 'current-v3', returnPath: '/sample/', embed: true });
+    const radios = container.querySelectorAll('input[type="radio"]');
+    assert.equal(radios.length, 3);
+    assert.equal(radios[2].disabled, true, 'Googleは未設定なら選べない');
+    assert.match(container.textContent, /Googleで続ける（準備中）/);
+    await act(async () => { widget.options.callback('challenge-proof'); });
+    const tabs = [...container.querySelectorAll('[role="tab"]')];
+    assert.deepEqual(tabs.map(tab => tab.textContent), ['新しく登録する', 'ログイン']);
+    await click(tabs[1]);
+    assert.equal(widget.renders, 1);
+    assert.equal(container.querySelector('input[type="checkbox"]'), null, 'ログインには同意欄を出さない');
+    const submit = () => container.querySelector('button[type="submit"]');
+    assert.equal(submit().disabled, true);
+    await typeInto(container.querySelector('input[autocomplete="username"]'), 'Taro_2026');
+    await typeInto(container.querySelector('input[autocomplete="current-password"]'), 'correct horse');
+    assert.equal(submit().disabled, false);
+    await click(submit());
+    await flush();
+    assert.equal(requests[0].url, '/auth/login');
+    assert.equal(requests[0].body.get('id'), 'Taro_2026');
+    assert.equal(requests[0].body.get('password'), 'correct horse');
+    assert.equal(requests[0].body.get('cf-turnstile-response'), 'challenge-proof');
+    assert.equal(requests[0].body.get('agreement'), null);
+    assert.ok(JSON.parse(requests[0].body.get('device')));
+
+    await click(container.querySelector('[role="tab"]'));
+    assert.equal(widget.renders, 1);
+    await click(container.querySelectorAll('input[type="radio"]')[1]);
+    const passwords = container.querySelectorAll('input[autocomplete="new-password"]');
+    assert.equal(passwords.length, 2);
+    await typeInto(container.querySelector('input[autocomplete="username"]'), 'taro_2026');
+    await typeInto(passwords[0], 'correct horse');
+    await typeInto(passwords[1], 'correct horse');
+    assert.equal(submit().disabled, true, '同意するまで登録できない');
+    await click(container.querySelector('input[type="checkbox"]'));
+    assert.equal(submit().textContent, '認証して登録する');
+    await click(submit());
+    await flush();
+    assert.equal(requests[1].url, '/auth/register');
+    assert.deepEqual(['id', 'password', 'password2', 'agreement', 'cf-turnstile-response', 'return'].map(name => requests[1].body.get(name)),
+      ['taro_2026', 'correct horse', 'correct horse', 'current-v3', 'challenge-proof', '/sample/']);
+    assert.equal(requests[1].body.get('email'), null);
+  });
+});
+
+test('Google: 設定があればユーザーIDと同意を付けてフォームで開始し、埋め込みでは別のウィンドウで開く', async () => {
+  const submitted = [];
+  const original = window.HTMLFormElement.prototype.submit;
+  window.HTMLFormElement.prototype.submit = function () {
+    submitted.push({ action: new URL(this.action).pathname, method: this.method, target: this.target,
+      fields: Object.fromEntries([...this.elements].map(element => [element.name, element.value])) });
+  };
+  globalThis.fetch = async () => { throw new Error('Googleの開始はfetchで送らない'); };
+  try {
+    await withTurnstile(async () => {
+      const container = await mount(client.AuthFormJs, { turnstileSiteKey: 'public-key', agreementVersion: 'current-v3', returnPath: '/sample/', embed: true, googleEnabled: true,
+        notice: 'このGoogleアカウントはまだ登録されていません。' });
+      assert.match(container.textContent, /このGoogleアカウントはまだ登録されていません。/);
+      await click(container.querySelectorAll('input[type="radio"]')[2]);
+      assert.equal(container.querySelector('input[autocomplete="new-password"]'), null);
+      const submit = container.querySelector('button[type="submit"]');
+      assert.equal(submit.textContent, 'Googleで登録する');
+      await typeInto(container.querySelector('input[autocomplete="username"]'), 'hanako');
+      await click(container.querySelector('input[type="checkbox"]'));
+      assert.equal(submit.disabled, false, 'GoogleではTurnstileを待たない');
+      await click(submit);
+      assert.deepEqual(submitted[0], { action: '/auth/google/start', method: 'post', target: '_blank',
+        fields: { uid: 'hanako', return: '/sample/', popup: '1', device: submitted[0].fields.device, agreement: 'current-v3' } });
+      assert.equal(document.querySelectorAll('form').length, 1, '送信用のフォームは残さない');
+      await click(container.querySelectorAll('[role="tab"]')[1]);
+      await click([...container.querySelectorAll('button')].find(button => button.textContent === 'Googleでログイン'));
+      assert.equal(submitted[1].fields.uid, '');
+      assert.equal(submitted[1].fields.agreement, undefined);
+    });
+  } finally {
+    window.HTMLFormElement.prototype.submit = original;
+  }
+});
+
+test('専ブラ用キー: 対象IDで失効し使用枠と失効理由を更新する', async () => {
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url, id: new URLSearchParams(init.body.toString()).get('id') });
+    return { ok: true, json: async () => ({ uid: 'member', lv: 1 }) };
+  };
+  const container = await mount(client.AccountMenuJs, {
+    activeCount: 1, nowSeconds: 1800000100,
+    tokens: [{ id: 'public-token-id', label: 'JaneStyle・Windows', boundAt: 1800000000, issuedAt: 1799999900, expiresAt: 1800086400,
+      recentPosts: [{ t: 1800000001, bbs: 'sample', key: '1800000001', title: '投稿先', resNum: 12, excerpt: '本文', network: '回線・東京都' }] }],
+  });
+  assert.match(container.textContent, /専用ブラウザ 1 \/ 5/);
+  await click([...container.querySelectorAll('button')].find(button => button.textContent === 'このブラウザのキーを無効にする'));
+  await flush();
+  assert.deepEqual(requests, [{ url: '/auth/token/revoke', id: 'public-token-id' }]);
+  assert.match(container.textContent, /専用ブラウザ 0 \/ 5/);
+  assert.match(container.textContent, /手動で無効化/);
+  assert.equal([...container.querySelectorAll('button')].filter(button => button.textContent === 'このブラウザのキーを無効にする').length, 0);
+});
+
+test('専ブラ用キー: 日時は日本時間で出し、無効化の理由はサーバの値から決める', async () => {
+  const container = await mount(client.AccountMenuJs, {
+    activeCount: 0, nowSeconds: 1800000100,
+    tokens: [
+      { id: 'manual', label: '手動の専ブラ', boundAt: 1799990000, issuedAt: 1799980000, expiresAt: 1800066400, revokedAt: 1800000000, revokeReason: 'revoked' },
+      { id: 'expired', label: '期限の専ブラ', issuedAt: 1799900000, expiresAt: 1799986400, revokedAt: 1799986400, revokeReason: 'expired' },
+    ],
+  });
+  assert.match(container.textContent, /手動の専ブラ 2027\/01\/15 17:00 手動で無効化/);
+  assert.match(container.textContent, /期限の専ブラ 2027\/01\/15 13:13 未使用のまま失効/);
+  assert.doesNotMatch(container.textContent, /UTC/);
 });

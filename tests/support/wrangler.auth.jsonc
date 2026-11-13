@@ -1,0 +1,32 @@
+// ローカル認証テスト専用。本番設定や資格情報は読み込まない。
+{
+  "name": "ch3s-auth-test",
+  "main": "auth-worker.mjs",
+  "compatibility_date": "2026-10-02",
+  "vars": {
+    "AUTH_SECRET": "local-auth-integration-secret-0123456789",
+    "AGREEMENT_VERSION": "v1",
+    "TURNSTILE_SITE_KEY": "local-turnstile-site-key",
+    "TURNSTILE_SECRET_KEY": "local-turnstile-secret",
+    "salt": "local-auth-integration-salt",
+    "ENVIRONMENT": "test"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "THREAD_DO", "class_name": "Thread" },
+      { "name": "BOARD_DO", "class_name": "Board" },
+      { "name": "ACCOUNT_DO", "class_name": "Account" },
+      { "name": "ACCOUNT_INDEX_DO", "class_name": "AccountIndex" },
+      { "name": "AUTH_RATE_DO", "class_name": "AuthRate" }
+    ]
+  },
+  "r2_buckets": [{ "binding": "ch3www", "bucket_name": "auth-test" }],
+  "kv_namespaces": [
+    { "binding": "CAP", "id": "11111111111111111111111111111111" },
+    { "binding": "TEST", "id": "22222222222222222222222222222222" }
+  ],
+  "migrations": [
+    { "tag": "v1", "new_classes": ["Thread", "Board"] },
+    { "tag": "v2", "new_sqlite_classes": ["Account", "AccountIndex", "AuthRate"] }
+  ]
+}

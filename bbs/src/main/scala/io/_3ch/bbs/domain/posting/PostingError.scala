@@ -46,6 +46,8 @@ final case class FailureSite(clock: FailureClock, time: String, bbs: String, key
 
 /** 投稿の拒否理由。文言は持たず、code で種別を英小文字の識別子にする */
 enum PostingError {
+  case Authentication(reason: io._3ch.bbs.domain.account.AuthenticationFailure)
+  case AuthenticationLevel(required: Int)
   case MethodNotPost
   case BrokenBody(contentType: String)
   case InvalidReferer(referer: String)
@@ -86,6 +88,8 @@ enum PostingError {
 
   /** 拒否理由の識別子。種別:詳細 の形 */
   def code: String = this match {
+    case Authentication(reason) => reason.code
+    case AuthenticationLevel(_) => "auth:required:level"
     case MethodNotPost => "request:method"
     case BrokenBody(_) => "request:content-type"
     case InvalidReferer(_) => "request:referer"

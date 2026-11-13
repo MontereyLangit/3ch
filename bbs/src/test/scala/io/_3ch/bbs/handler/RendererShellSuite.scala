@@ -74,6 +74,15 @@ class RendererShellSuite extends munit.FunSuite {
     assert(html.contains("<title>題名 &lt;&amp;&gt;</title>"))
     assert(html.contains("<script type=\"module\" src=\"/static/client.js\"></script>"))
     assert(html.contains("<body><main>本文 &lt;test&gt;</main></body>"))
+    assert(!html.contains("auth-modal"))
+  }
+
+  test("renderShellは認証を有効にした画面にだけ認証モーダルを置く") {
+    val html = RenderShellMarkup(Main.renderShell("本文", js.undefined, "/static/client.js", true))
+    assert(html.contains("<body>本文<honox-island"))
+    assert(html.contains("component-name=\"/app/islands/auth-modal.tsx\""))
+    assert(html.contains("<dialog"))
+    assert(!html.contains("<iframe"))
   }
 
   test("renderShellはタイトル省略と開発用スクリプトを受け付ける") {

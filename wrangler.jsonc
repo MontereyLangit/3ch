@@ -26,6 +26,9 @@
     "bindings": [
       { "name": "THREAD_DO", "class_name": "Thread" },
       { "name": "BOARD_DO", "class_name": "Board" },
+      { "name": "ACCOUNT_DO", "class_name": "Account" },
+      { "name": "ACCOUNT_INDEX_DO", "class_name": "AccountIndex" },
+      { "name": "AUTH_RATE_DO", "class_name": "AuthRate" },
     ],
   },
   // R2 Bucket bindings.
@@ -50,6 +53,10 @@
     {
       "tag": "v1",
       "new_classes": ["Thread", "Board"],
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["Account", "AccountIndex", "AuthRate"],
     },
   ],
   // Limits for your Worker.

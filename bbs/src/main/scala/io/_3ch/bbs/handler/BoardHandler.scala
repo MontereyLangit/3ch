@@ -4,6 +4,7 @@ import io._3ch.bbs.components.{BoardIndexComponent, BoardIndexProps}
 import io._3ch.bbs.external.hono.{HonoContextFacade, RenderProps}
 import io._3ch.bbs.external.web.Response
 import io._3ch.bbs.repository.BoardRepository
+import io._3ch.bbs.handler.auth.{AuthEnv, SessionReader}
 import io._3ch.common.domain.BoardId
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -37,16 +38,20 @@ object BoardHandler {
     val boardSettingsF = BoardRepository.getBoardSettings(board, c.env)
     val headTextF = BoardRepository.getHeadText(board, c.env)
     val subjectsF = BoardRepository.getMergedSubjects(board, c.env)
+    val sessionF = SessionReader.fromRequest(c)
+    val authEnabled = AuthEnv.settings(c.env).isDefined
 
     (for {
       boardSettings <- boardSettingsF
       headText <- headTextF
       subjects <- subjectsF
+      session <- sessionF
       res <- {
         val title = boardSettings.value.getOrElse("BBS_TITLE", "???＠3ch掲示板")
 
         val props = new RenderProps {}
         props.title = title
+        props.authModal = authEnabled
 
         val viewType = if c.req.query("type").contains("feed") then "feed" else "subback"
         val sort = c.req.query("sort").filter(Set("new", "speed", "res")).getOrElse("new")
@@ -54,9 +59,16 @@ object BoardHandler {
           BoardIndexComponent.Component(BoardIndexProps(
             title, headText, board, viewType, subjects, boardSettings.value,
             c.req.query("q").getOrElse(""), sort, math.floor(js.Date.now() / 1000).toLong.toString,
-            c.env.IMGUR_CLIENT_ID.getOrElse("")
+            c.env.IMGUR_CLIENT_ID.getOrElse(""),
+            authEnabled = authEnabled, session = session.map(_.view), returnPath = s"/$bbs/"
           )).rawElement, props).toFuture
       }
-    } yield res).toJSPromise
+    } yield {
+      if authEnabled then {
+        res.headers.set("Cache-Control", "private, no-cache")
+        res.headers.append("Vary", "Cookie")
+      }
+      res
+    }).toJSPromise
   }
 }

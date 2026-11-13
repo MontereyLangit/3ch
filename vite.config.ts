@@ -45,7 +45,7 @@ export default defineConfig(({ mode }) => {
   const entryContentAfterHooks = [
     ...(cloudflareWorkersDefaultOptions.entryContentAfterHooks ?? []),
     () =>
-      `export { Board, Thread } from '/app/server.ts'`,
+      `export { Board, Thread, Account, AccountIndex, AuthRate } from '/app/server.ts'`,
   ];
 
   return {
