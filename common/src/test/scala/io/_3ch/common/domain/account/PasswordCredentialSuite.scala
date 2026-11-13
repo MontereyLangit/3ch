@@ -12,16 +12,15 @@ class PasswordCredentialSuite extends FunSuite {
     assertEquals(PasswordAlgorithm.parse("unknown"), None)
     Seq(credential.copy(algo = null), credential.copy(iterations = 0), credential.copy(iterations = 100001), credential.copy(salt = Vector.empty),
       credential.copy(hash = Vector.fill(31)(0.toByte)), credential.copy(updatedAt = Double.NaN),
-      credential.copy(updatedAt = 1.5), credential.copy(throttle = LoginThrottle(locks = Map("raw-ip" -> 2000000000d))))
+      credential.copy(updatedAt = 1.5), credential.copy(throttle = LoginThrottle(sources = Map("raw-ip" -> LoginSource(1, 2000000000d)))))
       .foreach(value => assert(!value.valid))
   }
 
   test("null の保存フィールドは例外を出さず不正と判定する") {
     Seq(credential.copy(salt = null), credential.copy(hash = null), credential.copy(throttle = null),
-      credential.copy(throttle = LoginThrottle(failures = null)), credential.copy(throttle = LoginThrottle(locks = null)),
-      credential.copy(throttle = LoginThrottle(failures = Vector(null))),
-      credential.copy(throttle = LoginThrottle(failures = Vector(LoginFailure(null, 1)))),
-      credential.copy(throttle = LoginThrottle(locks = Map(null.asInstanceOf[String] -> 1d))))
+      credential.copy(throttle = LoginThrottle(sources = null)), credential.copy(throttle = LoginThrottle(account = null)),
+      credential.copy(throttle = LoginThrottle(sources = Map("a" * 64 -> null))),
+      credential.copy(throttle = LoginThrottle(sources = Map(null.asInstanceOf[String] -> LoginSource(1, 1d)))))
       .foreach(value => assert(!value.valid))
     assertEquals(credential.copy(algo = null).toString, "PasswordCredential(invalid,100000,<redacted>)")
   }

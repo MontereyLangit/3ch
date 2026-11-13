@@ -96,12 +96,12 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
         case Right(matched) => (value, checked) match {
           case (Some(account), Right(_)) => account.afterPasswordAttempt(keyIpHash, matched, now) match {
             case Left(rejection) => Future.successful(error(rejection))
-            case Right((next, PasswordAttempt.Failed(delay))) => save(next).map(_ => AccountCodec.loginFailure(delay))
+            case Right((next, PasswordAttempt.Failed)) => save(next).map(_ => AccountCodec.loginFailure())
             case Right((next, PasswordAttempt.Accepted)) => rehash(next, parsed, now).flatMap { saved =>
               save(saved).map(_ => AccountCodec.signIn(saved.usable(now).map(_ => saved.description), saved.profile.uid))
             }
           }
-          case _ => Future.successful(AccountCodec.loginFailure(0))
+          case _ => Future.successful(AccountCodec.loginFailure())
         }
       }
     }

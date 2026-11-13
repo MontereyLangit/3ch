@@ -235,7 +235,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 | パスワード | 8〜128 文字。NFC 正規化後に UTF-8 で数える。ログイン ID と同一・ログイン ID を含むものは拒否。文字種の強制はしない |
 | 保存 | PBKDF2-HMAC-SHA256、反復 100,000、ソルト 16 バイト（`crypto.getRandomValues`）。`credential` に `{algo, iterations, salt, hash}` で持ち、`algo`・`iterations` を保存するので将来の強化（反復増・別アルゴリズム）はログイン成功時に再ハッシュして移行する |
 | 照合 | `Account.verifyPassword(password, keyIpHash, now)` が DO 内で PBKDF2 を計算し定数時間比較する。失敗回数の更新は同じ RPC で直列化する（Worker 側で照合すると失敗計数が競合する）。ロックの規則そのもの（回数・期間・段階的遅延）は `common/domain/account/LoginThrottle` の純粋関数で、DO は記録と呼び出しだけ |
-| ロック | （アカウント, `keyIp`）の組で直近 1 時間に 10 回失敗で 1 時間ロック（第三者が ID だけでアカウント全体を締め出せないようにする）。アカウント全体では失敗 5 回目から応答を 1 秒ずつ遅らせる（上限 8 秒）。`keyIp` 全体は 30 回/時（`AuthRate` DO）。ロック中も応答は失敗時と同じ文言 |
+| ロック | （アカウント, `keyIp`）の組で直近 1 時間に 10 回失敗で 1 時間ロック（第三者が ID だけでアカウント全体を締め出せないようにする）。アカウント全体の失敗が 100 回に達すると全接続元を 1 時間ロックする。応答は接続元ごとの失敗 5 回目から 1 秒ずつ遅らせる（上限 8 秒。`AuthRate` DO の `loginFail`。ID の有無に依存しない）。`keyIp` 全体は 30 回/時（`AuthRate` DO）。ロック中も応答は失敗時と同じ文言 |
 | 所要時間 | 存在しない ID でも固定の `aid="dummy"` の DO に同じ `verifyPassword` を投げ、RPC と PBKDF2 の両方を同じ回数行う。dummy の DO には何も保存しない。失敗の遅延は DO のロックの外（HTTP 層）で待つ |
 | 文言 | 存在しない ID・パスワード不一致・ロック中のいずれも「ID またはパスワードが違います」。ログイン ID はユーザー ID として公開されるので、列挙はロックと所要時間の均一化（上記）で抑える |
 | 反復数 | 設定は100,000回。2026-11-07の実workerd検証では100,001回も受け付け、Nodeの独立した計算値に一致した。プラットフォーム上限は未測定で、100,000回がAPIの上限という従来の想定は採用しない。今回の保存値・発行時の方針は100,000回のままとする |
@@ -301,7 +301,7 @@ Turnstile は要求しない（原案「作成時の認証なし」）が、端�
 1. 入力: 端末申告・法的投稿確認の同意・`return`・`popup`・新規登録で使うユーザー ID（規則はログイン ID と同じ。既存の Google アカウントでログインするときは空でよい）・（移行なら有効なクライアント ID セッション）。
 2. 突合（`declaration_mismatch` / `fingerprint`）。拒否は §3.7 の文言。
 3. `state`（32 バイト乱数）・`nonce`（32 バイト乱数）・PKCE `code_verifier`（43〜128 文字）を生成し、
-   Cookie `ch3s_oauth`＝`{state, nonce, verifier, dev, return, popup, link: aid?, uid?, agreedAt}` を `AUTH_SECRET` で署名して保存
+   Cookie `__Host-ch3s_oauth`＝`{state, nonce, verifier, dev, return, popup, link: aid?, uid?, agreedAt}` を `AUTH_SECRET` で署名して保存
    （`Path=/auth/google; Max-Age=600; HttpOnly; Secure; SameSite=Lax`）。
 4. `https://accounts.google.com/o/oauth2/v2/auth` へ 302:
    `client_id`・`redirect_uri=https://www.3ch.io/auth/google/callback`・`response_type=code`・`scope=openid email`・
@@ -309,7 +309,7 @@ Turnstile は要求しない（原案「作成時の認証なし」）が、端�
 
 **コールバック**（`GET /auth/google/callback?code=&state=`）
 
-1. `ch3s_oauth` の署名・期限を検証し、`state` が一致しなければ拒否（`reason=oauth_state`）。Cookie はここで消す（1 回限り）。
+1. `__Host-ch3s_oauth` の署名・期限を検証し、`state` が一致しなければ拒否（`reason=oauth_state`）。Cookie はここで消す（1 回限り）。
    `error=access_denied` は `/auth/?mode=login&error=google_denied` へ戻す。
 2. `https://oauth2.googleapis.com/token` へ `code`・`client_id`・`client_secret`・`redirect_uri`・`grant_type=authorization_code`・`code_verifier` を POST。
 3. `id_token` を検証する（`bbs/application/auth/GoogleIdToken`。署名以外のクレーム検証は `common` の純粋関数）:
@@ -706,7 +706,7 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | --- | --- |
 | `profile` | `{aid, uid, kind: client\|password\|google, createdAt, expiresAt?, loginId?, email?, emailVerifiedAt?, googleSubHash?, agreedAt, agreementVersion, status, generation}` |
 | `activation` | 登録準備状態の `pending` / `ready`。凍結等のstatusとは別。準備中は認証不可。既存Clientだけはキー欠損をreadyとして読み、PasswordとGoogleは必須。readyのPasswordには有効なcredentialとUIDに一致するloginIdも必要 |
-| `credential` | ID/Password: `{algo: "pbkdf2-sha256", iterations, salt, hash, updatedAt, throttle: {failures: [{keyIpHash, t}…], locks: {keyIpHash: until}}}`。`salt`（16 バイト）と `hash`（32 バイト）は小文字の 16 進数。`failures` は直近 1 時間・最大 100 件、`locks` は接続元ごとのロック期限で最大 100 件。メール認証・パスワード再設定の保留トークンは別キー（`pending:email` / `pending:reset`） |
+| `credential` | ID/Password: `{algo: "pbkdf2-sha256", iterations, salt, hash, updatedAt, throttle: {sources: {keyIpHash: {count, since, lockedUntil?}}, account: {count, since, lockedUntil?}}}`。`salt`（16 バイト）と `hash`（32 バイト）は小文字の 16 進数。`sources` は最大 100 接続元で期限切れだけを捨て、`account` は全接続元の失敗数と全体ロック。メール認証・パスワード再設定の保留トークンは別キー（`pending:email` / `pending:reset`） |
 | `level` | `{lv, lvSince, lvPosts, lvOverride?}` |
 | `roles` | `["admin", ...]` |
 | `adminGen` | 管理者セッションの世代（整数）。管理者のログアウト・役割変更・凍結で進める（改修計画 §3.2） |

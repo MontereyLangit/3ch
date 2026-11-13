@@ -22,7 +22,7 @@ class AccountLocaleSuite extends FunSuite {
     val previous = TimeZone.getDefault
     val ip = "a" * 64
     val now = 2000000000d
-    val state = LoginThrottle(Vector(LoginFailure(ip, now)), Map(ip -> (now + 3600)))
+    val state = LoginThrottle(Map(ip -> LoginSource(10, now, Some(now + 3600))), LoginAccountFailures(10, now))
     try {
       val results = Seq("UTC", "Asia/Tokyo", "America/New_York").map { zone =>
         TimeZone.setDefault(TimeZone.getTimeZone(zone))

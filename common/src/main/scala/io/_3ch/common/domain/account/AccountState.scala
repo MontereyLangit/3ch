@@ -70,10 +70,10 @@ object AccountRejectionLog {
 /** 書き込み時に得た端末の情報。ハッシュの生成はアプリケーション層で行う */
 final case class AccountObservation(deviceHash: String = "", keyIpHash: String = "")
 
-/** パスワード照合の結果。失敗にはアカウント全体の失敗数による応答の遅延を付ける */
+/** パスワード照合の結果 */
 enum PasswordAttempt {
   case Accepted
-  case Failed(delaySeconds: Int)
+  case Failed
 }
 
 /** アカウントの状態遷移。現在時刻は呼び出し元から UNIX 秒で受ける */
@@ -213,7 +213,7 @@ final case class AccountState(
       val updated = if (matched && !before.locked) value.throttle.recordSuccess(keyIpHash, now) else value.throttle.recordFailure(keyIpHash, now)
       updated.left.map(_ => AccountRejection.Invalid).map { update =>
         val next = copy(credential = Some(value.copy(throttle = update.state)))
-        if (matched && !before.locked) (next, PasswordAttempt.Accepted) else (next, PasswordAttempt.Failed(update.decision.delaySeconds))
+        if (matched && !before.locked) (next, PasswordAttempt.Accepted) else (next, PasswordAttempt.Failed)
       }
     }
 
