@@ -91,7 +91,7 @@ UA解析表はR2の `ua-profiles.json`（`{"os": [{"match", "flags"?, "label"}�
 - メール認証: `EmailAddress` で正規化（前後の空白・小文字・punycode、gmail のドットと `+` 以降）、R2 の `disposable-domains.txt` を拒否。保留トークンは Account の `pending:email`（HMAC・24時間）。確認で `email` 索引を予約・確定してから Lv を3にする（下げない）。変更は確認まで前のアドレスを残し、確認後に前の索引を外す。
 - パスワード: `/auth/password` は現在のパスワードを照合して置き換え、この端末だけに新しい世代の Cookie を出す。役割があれば16文字以上。再設定は `/auth/reset/request`（ユーザーIDとTurnstile。結果を区別しない）→ メール → `/auth/reset/?token=` の画面 → `POST /auth/reset`。メール認証済みで役割の無いアカウントだけに送り、接続元ごととアカウントごとに一日三回。
 - 移行: アカウント設定から `/auth/?upgrade=1`。ID・パスワードは `/auth/register` に `upgrade=1`、Googleは認可の Cookie（版2。目的と aid を持つ）で同じアカウントのセッションに限る。aid・Lv・書き込み数・端末・履歴を引き継ぎ、uid は登録したIDに替わり、旧 uid の索引は残る。Google は Lv10。Google から他方式へは移さない。
-- 退会: アカウント設定の「ログアウト・退会」から `POST /auth/account`（`action=delete`）。ID・パスワードはパスワード、Googleは認可のやり直し、かんたん登録は確認の印。deleted にして世代を進め、キャップと専ブラ用キーを失効させ、login・email・google・token の索引とキャップの KV・cap 索引を外す。uid の索引と書き込みは残る。
+- 退会: アカウント設定の「ログアウト・退会」から `POST /auth/account`（`action=delete`）。ID・パスワードはパスワード、Googleは認可のやり直し、かんたん登録は確認の印。deleted にして世代を進め、キャップと専ブラ用キーを失効させ、login・email・google・token の索引とキャップの KV を外す。uid・cap の索引と書き込みは残る。
 - エッジ防御: R2 の `edge-rules.json`（既定は試行モード `log`）。データセンターの AS は認証4経路と投稿、TLS の ClientHello の長さと UA の矛盾は `/auth/*` だけ。免除は Lv3 以上で作成から7日以上。国内で RTT が閾値を超えると乱造検知の閾値を半分にする。
 - 乱造検知: 閾値（1時間10回・24時間5端末、登録は一日5件）を超えたら拒否し、名前が `review` の AuthRate に「要確認」として残す（自動では規制しない）。
 - Lv 上限: R2 の `phoebe.cgi` に当てはまる投稿の実効 Lv を抑える。アカウントの Lv は下げない。

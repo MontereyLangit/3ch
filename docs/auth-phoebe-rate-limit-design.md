@@ -144,7 +144,9 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 | `tlsClientHelloLength` 等の TLS 指紋と UA 系統の矛盾（矛盾表は実測して作る。JA3 / JA4 は Enterprise 専用で使えない） | `/auth/*` のブラウザ向けエンドポイントのみ（専ブラ・bbs.cgi には適用しない） | 拒否 `reason=declaration_mismatch`（§3.7 と同じコード） |
 | `country=T1`（Tor） | 現行どおり全投稿 | 拒否 |
 
-免除: 認証済で**実効 Lv 3 以上かつアカウント作成から 7 日以上**。R2 が読めないときは規則なしとして通す（fail-open。認証系の計数は §3.7 と違い投稿経路に乗るため）。
+免除: 認証済で**Lv 3 以上（phoebe.cgi の上限をかける前の Lv）かつアカウント作成から 7 日以上**、役割（`admin` / `delete` / `regulate`）の保持者、キャップ付きの投稿。R2 が読めないときは規則なしとして通す（fail-open。認証系の計数は §3.7 と違い投稿経路に乗るため）。
+
+`mode` が `on` のときだけ拒否と乱造検知の厳格化（RTT）を行い、`log` と規則なし・壊れたときは記録だけで何も厳しくしない。Tor の拒否は投稿だけに適用し（`/auth/*` には適用しない）、名無しの `admin` も拒否する（キャップ付きだけ免除）。
 
 実装（E-2）: `edge-rules.json` は `{"mode", "datacenterAsns", "rttMs", "tls": [{"ua", "min", "max"}]}`。`tls` は UA が `ua`（正規表現）に一致するブラウザの `tlsClientHelloLength` の範囲で、外れたら矛盾とする。判定は `EdgeDefense`（bbs の domain）。投稿のデータセンター判定は「Lv 2 以下」に限らず、免除に当たらない投稿すべてに当てる。RTT の条件では乱造検知と登録数の閾値を半分にするだけで、Turnstile の再実行はしていない。
 
@@ -278,20 +280,21 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 
 - メールの正規化: 前後空白除去・小文字化・ドメインは IDN を punycode に。`gmail.com` / `googlemail.com` はローカル部のドットと `+` 以降を除く。使い捨てメールのドメイン一覧（R2 `disposable-domains.txt`）に該当すれば拒否（L3 開始の量産を防ぐ）。
 - トークンは 32 バイト乱数の base64url。`Account.issuePending("email", SHA-256(token), now + 24h, email)` に保存し（種別ごとに別キー。再設定と上書きし合わない）、平文はメール本文のリンクにだけ載せる。
+- 保留トークンは発行時の世代（`gen`）を持ち、世代が進むと使えない。パスワードの変更・再設定・メールの確認・方式移行・退会は、保留中のトークン（メール認証・再設定の両方）を全て捨てる。確認リンクの画面（GET）は、確認前に確定させるアドレス（伏せ字）とユーザー ID を示す。
 - リンクを開くと `consumePending`（1 回限り・期限内）→ `profile.email` 確定・`emailVerifiedAt` 記録・`AccountIndex("email")` 更新 → Lv が 3 未満なら 3 へ（§4.2 の `lvSince` も更新）。
-- 変更時は新アドレスで再認証し、認証完了まで旧アドレスを有効のまま残す。Lv は下げない。
+- 変更時は新アドレスで再認証し、認証完了まで旧アドレスを有効のまま残す。Lv は下げない。登録・変更の要求（`POST /auth/email`）は現在のパスワードを要り、パスワードの変更・退会と同じ `verifyPassword` で照合する（失敗計数に含める）。メールを使えるのは ID・パスワードのアカウントだけで、Google とかんたん登録は対象外。
 - 送信は外部 API（§13-12）。本文は固定文面でユーザー入力を含めない。送信失敗は「しばらくして再送」で `POST /auth/email`（再送は 3 回/日）。
 
 **パスワード再設定**（`POST /auth/reset/request` → メール → `GET/POST /auth/reset?token=`）
 
 - 申請は常に「送信しました」を返す（ID・メールの存在を漏らさない）。メール認証済みのアカウントだけに実際に送る（§13-21）。3 回/日。
-- トークンはメール認証と同じ形式で `issuePending("reset", …, now + 1h)`。消費時に `setPassword` → `gen` を進める → ログイン画面へ。
+- トークンはメール認証と同じ形式で `issuePending("reset", …, now + 1h)`。消費時に `setPassword` → `gen` を進める → 専ブラ用キー（`tokens`）を全て無効にして token 索引から外す → ログイン画面へ。ログイン中の通常のパスワード変更は専ブラ用キーを残す。
 - メール未登録のアカウントは再設定できない。登録時にその旨を表示し、管理者による手動対応（本人確認は管理画面の裁量）を案内する。
 - 役割（`admin` / `delete` / `regulate`）を持つアカウントは、メールによる再設定を使えない（申請しても送らない）。手順は改修計画 §3.3。
 
 **退会**（`POST /auth/account?action=delete`。パスワード再入力または Google の再認証が必要）
 
-`status=deleted`、`login` / `email` / `google` / `token` の索引を削除、キャップを失効、`gen` を進める。`uid` の索引は残す（名前欄の `(@ユーザーID)` の再利用防止）。投稿・ログは消さない。
+`status=deleted`、`login` / `email` / `google` / `token` の索引を削除、キャップを失効、`gen` を進める。`uid` と `cap` の索引は残す（`cap` 索引は失効後も所有者を指し、KV に古い写しが残っても旧キャップとして通さず、所有者の失効の記録で拒否する）（名前欄の `(@ユーザーID)` の再利用防止）。投稿・ログは消さない。
 かんたん登録（クライアント ID）のアカウントは、再認証の手段が無いので確認のチェックだけで退会できる（**決定（2026-11-07 利用者）**。§13-42）。
 
 **実装（E-2）**:
@@ -301,7 +304,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 - 再設定の申請はユーザー ID と Turnstile。接続元ごとと送り先のアカウントごとに一日三回。消費時に Cookie は発行せず、ログインし直してもらう。
 - パスワードの変更は現在のパスワードを `verifyPassword` で照合し（失敗計数に含める）、役割のあるアカウントは16文字以上。
 - 移行の入口はアカウント設定から開く `/auth/?upgrade=1`（登録と同じフォームに `upgrade=1`）。索引はログイン用・uid の順に確定してから `Account.convert` する。Google への移行は認可の Cookie に目的と aid を持たせ、callback で同じアカウントのセッションに限る。
-- 退会の再認証は、ID/Password がパスワードの再入力、Google が認可のやり直し（同じ `sub` に限る）、クライアント ID は確認の印だけ。キャップは KV から消せたときだけ cap 索引からも外す。
+- 退会の再認証は、ID/Password がパスワードの再入力、Google が認可のやり直し（同じ `sub` に限る）、クライアント ID は確認の印だけ。cap 索引は外さない（KV の写しの伝播の間も、所有者の失効の記録で拒否するため）。退会は同じセッションの世代なら再実行でき（索引と KV の後始末をやり直す）、後始末が止まって残った login・email・google の索引は、持ち主が退会済み・値を替えた場合に、ログイン・登録・確認で見つけた時点で解放する。
 
 ### 3.10 Google OAuth 方式
 
@@ -382,7 +385,7 @@ PHOEBE.md の「L0〜L1 → 23h、L1〜L2 → 23×(Lv+1)h」は未ログイン�
 
 実装（段 C）: 固定は `AccountState.setLevelOverride` と `Account.setLevel(lvOverride?, now)`（0〜10、未指定で解除）。固定中も `lvPosts` は数える。操作画面は段 D、上限ルール `phoebe.cgi` は §12 のとおり E-2。
 
-実装（E-2）: 上限ルールは `PhoebeCapRules`（2 列。空行と `#` の行は飛ばす。上限は 0〜10）。認証を有効にした環境のログイン中の投稿だけが対象で、旧キャップは対象外。当てはまる行の上限のうち最も低いものを実効 Lv にし、BBS_PHOEBE・回避レベル・識別子の D・エッジ防御の免除に使う。Cookie とアカウント設定の Lv は上限前の値。ファイルが無い・読めない・壊れているときは上限なしで通す。管理画面の編集は M3。
+実装（E-2）: 上限ルールは `PhoebeCapRules`（2 列。空行と `#` の行は飛ばす。上限は 0〜10）。認証を有効にした環境のログイン中の投稿だけが対象で、旧キャップは対象外。当てはまる行の上限のうち最も低いものを実効 Lv にし、BBS_PHOEBE・回避レベル・識別子の D に使う（エッジ防御の Lv3 の免除は上限をかける前の Lv で判定する）。Cookie とアカウント設定の Lv は上限前の値。ファイルが無い・読めない・壊れているときは上限なしで通す。管理画面の編集は M3。
 
 ### 4.4 `BBS_PHOEBE` ゲート
 
@@ -464,7 +467,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 
 - 付与できるのは ID/Password と Google のアカウントのみ。クライアント ID には付けない。
 - 権限者向けの操作は **`/admin/*` に統合**し、Basic 認証をやめて役割で画面と操作を出し分ける（2026-11-02 利用者指示。詳細は [管理画面 改修計画](admin-spa-auth-plan.md)）。入場時にパスワード再入力（Google は再認証）を求め、短命の管理者セッション `__Host-ch3s_admin`（`SameSite=Strict`・無操作 30 分・最長 8 時間）を別に発行する。変更系は `Origin` を検証し、`cache-control: no-store` と CSP を維持する。初回の `admin` は `ADMIN_BOOTSTRAP_TOKEN` で作る。
-- 実装（段 D）: 役割を変えられるのは `admin` だけで、`admin` 以外の staff が操作できるのは staff でない相手だけ（`Roles.manages`）。判定は Account DO の `setRoles` のロック内で行う。`role:admin` 索引への反映と初回の管理者の確保（`claimFirstAdmin`）は RPC と application まで。bootstrap の HTTP は改修計画 M2。
+- 実装（段 D）: 役割を変えられるのは `admin` だけで、`admin` 以外の staff が操作できるのは staff でない相手だけ（`Roles.manages`）。判定は Account DO の `setRoles` のロック内で行い、操作する人の役割は呼び出し元の申告でなく操作する人の Account から読む。`role:admin` 索引への反映と初回の管理者の確保（`claimFirstAdmin`）は RPC と application まで。admin を足すときは索引が先、外すときは役割が先で、最後の有効な admin は外せない（`AccountIndex("role:admin").surrender`）。`Account.grantFirstAdmin` は索引にそのアカウントの確保がある場合だけ通し、確保の途中で止まったら admin の有無を読み直して確定か取り消しを選ぶ。確定前の確保でも admin が付いた所有者は有効な admin に数える。bootstrap の HTTP は改修計画 M2。
 - 画面と権限の対応（段 D で確定）: スレ停止・再開・削除・レス削除・移動 → `delete`。`deny.cgi` / `ngwords.cgi` / `phoebe.cgi` / `edge-rules.json` の編集、端末・アカウント BAN、乱造の要確認一覧 → `regulate`。アカウントの権限・Lv・状態・キャップ紐づけ、板設定（`SETTING.TXT`・`head.txt`）、`bbsmenu.html`、監査ログ → `admin`。
 
 ### 6.2 キャップ
@@ -474,7 +477,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 - 互換: KV `CAP`（hash → 表示名）は現行どおり読み書きし、所有者は `AccountIndex("cap")`（hash → `aid`）で引く。所有者のない既存エントリは「旧キャップ」として動き続ける（ログ無し・Lv 無し）。管理画面から既存キャップをアカウントに紐づけられる。
 - 強キャップ（表示名末尾 `★`、サイズ検証スキップ）は `admin` だけが発行できる。
 - 利用ログ: `Account.log`（§9.1 の書き込み記録）に `via: "cap"` と `capId` 付きで残る。所有者と `admin` が閲覧でき、失効（`revokedAt`）と再発行（新 hash）ができる。失効時は KV `CAP` からも削除する。
-- 実装（段 D）: パスワードはサーバが作る `#` ＋20文字で、発行した応答にだけ出す。表示名は1〜16文字で `<>&"'#＠★☆◆◇` と制御文字を拒否する。再発行は同じ表示名・強さで照合値だけを替え、古いものは失効させる。失効の記録は20件まで残す。自分で発行したキャップは役割を全て外すと使えない（**決定（2026-11-07 利用者）**。§13-41）。クライアント ID には登録しない。発行・再発行は1アカウント1日10回まで（`AuthRate` の `cap`）。本人の操作は `/auth/account` のキャップ欄、他アカウント宛ての発行と旧キャップの紐づけの画面は改修計画 M3。
+- 実装（段 D）: パスワードはサーバが作る `#` ＋20文字で、発行した応答にだけ出す。表示名は1〜16文字で `<>&"'#＠★☆◆◇` と制御文字を拒否する。再発行は同じ表示名・強さで照合値だけを替え、古いものは失効させる。失効の記録は20件まで残す。自分で発行したキャップは役割を全て外すと使えず、自分で発行した強キャップは使う時点で admin が要る（**決定（2026-11-07 利用者）**。§13-41）。cap 索引は確定してから KV に書き、失効・再発行・退会でも外さない（KV の写しが残っても所有者の失効の記録で拒否する。所有者のない旧キャップとして通さない）。クライアント ID には登録しない。発行・再発行は1アカウント1日10回まで（`AuthRate` の `cap`）。本人の操作は `/auth/account` のキャップ欄、他アカウント宛ての発行と旧キャップの紐づけの画面は改修計画 M3。
 - キャップ投稿は所有アカウントとしてログイン扱い（§3.4）。dat 上の表示（`名前＠ハンドル ★` と識別子 `★`）は現行のまま。`(@ユーザーID)` と ` (主)` は付けない。
 
 ### 6.3 専ブラ用認証キー
@@ -758,7 +761,7 @@ RPC: `create`, `describeForPosting(aid, gen)`, `describeForAdmin(aid, gen, admin
 
 **`AccountIndex`**（`idFromName(kind)`。`kind` ∈ `uid` / `login` / `email` / `google` / `cap` / `token` / `role:admin`）
 
-- `role:admin` は `admin` 役割を持つアカウントの一覧で、キーは `HMAC-SHA256(AUTH_SECRET, "role:admin:" + aid)`。初回の管理者の確保 `claimFirstAdmin(aid, now, breakGlass)` を持つ（改修計画 §3.4）。
+- `role:admin` は `admin` 役割を持つアカウントの一覧で、キーは `HMAC-SHA256(AUTH_SECRET, "role:admin:" + aid)`。初回の管理者の確保 `claimFirstAdmin(aid, now, breakGlass)` と、最後の admin を外さないための `surrender`、確定前の予約だけを取り消す `release` を持つ（改修計画 §3.4）。`uid` と確定した `cap` の索引は削除できない。
 
 - キー `=` 正規化した値の `HMAC-SHA256(AUTH_SECRET, 種別 + ":" + 値)`（`wrangler.jsonc` の `salt` は `vars` にあり秘密ではないので、辞書攻撃を防ぐため secret で鍵付きにする）、値 `=` `{aid, state: pending|confirmed, createdAt}`。
 - `register(hash, aid, now)` は既存（`confirmed`、または `pending` で 10 分以内）なら失敗、`confirm(hash)`、`lookup(hash)`、`remove(hash)`。`register` / `confirm` / `remove` は `blockConcurrencyWhile` で直列化し、`lookup` はロックしない。`uid` 種別は `remove` を持たない。
