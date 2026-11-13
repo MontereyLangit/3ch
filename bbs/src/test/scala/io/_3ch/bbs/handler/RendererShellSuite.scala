@@ -29,7 +29,7 @@ class RendererShellSuite extends munit.FunSuite {
 
   test("legacyHtmlは専ブラ向けの生HTMLとShift_JISバイト列を保持する") {
     val html = "<HTML><HEAD><TITLE>日本語</TITLE></HEAD><BODY><!-- 2ch_X:error --><font size=+1 color=#FF0000><b>ERROR: 本文がありません！</b></font>\r\n</BODY></HTML>"
-    val res = RendererShell.legacyHtml(html, extra = js.Dictionary("Cache-Control" -> "no-store", "X-Resnum" -> "1")).asInstanceOf[js.Dynamic]
+    val res = RendererShell.legacyHtml(html, extra = Seq("Cache-Control" -> "no-store", "X-Resnum" -> "1")).asInstanceOf[js.Dynamic]
     bytes(res).map { body =>
       assertEquals(status(res), 200)
       assertEquals(body, sjisBytes(html))
@@ -44,7 +44,7 @@ class RendererShellSuite extends munit.FunSuite {
 
   test("legacyHtmlはUTF-8の投稿応答を新シェルを付けずに返す") {
     val html = "<html><head><meta content=5;URL=/test/read.cgi/sample/1700000000/  http-equiv=refresh></head><body><!-- 2ch_X:true -->書きこみました。</body></html>"
-    val res = RendererShell.legacyHtml(html, encoding = "UTF-8", extra = js.Dictionary("X-Threadkey" -> "1700000000")).asInstanceOf[js.Dynamic]
+    val res = RendererShell.legacyHtml(html, encoding = "UTF-8", extra = Seq("X-Threadkey" -> "1700000000")).asInstanceOf[js.Dynamic]
     bytes(res).map { body =>
       assertEquals(status(res), 200)
       assertEquals(body, utf8Bytes(html))

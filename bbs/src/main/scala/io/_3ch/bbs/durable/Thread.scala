@@ -1,8 +1,10 @@
 package io._3ch.bbs.durable
 
 import io._3ch.bbs.external.cloudflare.*
-import io._3ch.bbs.durable.codec.ThreadOwnerCodec
+import io._3ch.bbs.durable.codec.{PostingCodec, ThreadCreationCodec, ThreadOwnerCodec}
+import io._3ch.bbs.domain.posting.ThreadPosting
 import io._3ch.bbs.durable.support.DurableLock
+import io._3ch.common.domain.posting.{DatLineFormatter, ThreadWriteGuard, ThreadWriteKind}
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -147,47 +149,43 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
   def setSettings(settings: String): js.Promise[Unit] = put("settings" -> settings).toJSPromise
 
   /**
-   * 新しいレスを追加します。
+   * 新しいレスを追加します。追記できないときは ThreadWriteRejection のコードを Error の文言にして失敗します
    * @param datLine - dat形式の新しい行データ
    * @param logLine - log形式の新しい行データ
-   * @param posting
+   * @param posting - 投稿の付帯情報（PostingCodec の形式）。null と省略は付帯情報なし
    * @return 追加後のレス数
    */
   def addRes(datLine: String, logLine: String, posting: js.UndefOr[js.Dynamic] = js.undefined): js.Promise[Int] = locked {
-    // v5 uses `posting?.x` / `if (posting) ...` — plain JS truthiness, so a literal `null` argument
-    // (indistinguishable from omission to any untyped caller across the DO RPC boundary) behaves
-    // exactly like an omitted one. `js.UndefOr#isDefined` only means "not undefined": a `null` here
-    // would pass it, then `p.bbs` etc. would throw on a null receiver instead of degrading gracefully.
-    // `hasPosting` mirrors the JS truthiness check for both nullish cases.
-    val rawPosting = posting.asInstanceOf[js.Any]
-    val hasPosting = rawPosting != null && !js.isUndefined(rawPosting)
-    val p = if hasPosting then posting.get else js.Dynamic.literal()
+    val decoded = PostingCodec.decode(posting)
+    val p = decoded.getOrElse(ThreadPosting())
+    val kind = if decoded.isEmpty then ThreadWriteKind.Raw else if p.create then ThreadWriteKind.Create else ThreadWriteKind.Reply
+    // 板名・key が無ければ従来どおり String(undefined) の名前で Board DO を呼ぶ
+    val boardName = p.bbs.getOrElse("undefined")
+    val keyName = p.key.getOrElse("undefined")
+    val creationLimit = if p.create then p.creationLimit else None
     for {
       hidden <- read("hidden")
       stopped <- if truth(hidden) then Future.successful[js.Any](true) else read("stopped")
       moving <- if truth(stopped) then Future.successful[js.Any](true) else read("movingTo")
-      _ = if truth(moving) then fail("このスレッドは停止・移動または削除されています。")
-      dat <- getDat(if js.isUndefined(p.bbs) then "" else str(p.bbs), if js.isUndefined(p.key) then "0" else str(p.key)).toFuture
-      settings <- text("settings")
-      _ = if new js.RegExp("(?:^|<>)BBS_HEISA=checked(?:<>|$)").test(settings) then fail("このスレッドは停止されています。")
-      _ = if truth(p.create) && dat.nonEmpty then fail("同じkeyのスレッドが存在します。")
-      _ = if hasPosting && !truth(p.create) && dat.isEmpty then fail("スレッドがありません。")
-      count = trimEnd(dat).split("\n", -1).count(_.nonEmpty) + 1
-      _ = if count >= 1000 then fail("このスレッドは1000を超えたのでもう書けません。")
+      unavailable = truth(moving)
+      dat <- if unavailable then Future.successful("") else getDat(p.bbs.getOrElse(""), p.key.getOrElse("0")).toFuture
+      settings <- if unavailable then Future.successful("") else text("settings")
+      count = ThreadWriteGuard.check(unavailable, dat, settings, kind).fold(rejection => fail(rejection.code), identity)
       log <- text("log")
-      update = js.Dictionary[js.Any]("dat" -> (dat + datLine + "\n"), "log" -> (log + logLine.replaceFirst("^\\d+<>", s"$count<>") + "\n"), "modifiedAt" -> js.Date.now())
-      _ = if truth(p.create) then update("settings") = if truth(p.initialSettings) then p.initialSettings else ""
-      _ = if truth(p.create) && truth(p.owner) then update("owner") = ThreadOwnerCodec.encode(ThreadOwnerCodec.decode(p.owner))
-      creationLimit = truth(p.create) && truth(p.creationLimit)
-      _ <- if creationLimit then board(str(p.bbs)).reserveThreadCreation(str(p.key), p.creationLimit).toFuture.map { error =>
-        if error.nonEmpty then fail(error)
-      } else Future.unit
+      update = js.Dictionary[js.Any]("dat" -> (dat + datLine + "\n"), "log" -> (log + DatLineFormatter.renumberLog(logLine, count) + "\n"), "modifiedAt" -> js.Date.now())
+      _ = if p.create then update("settings") = p.initialSettings.getOrElse("")
+      _ = if p.create then p.owner.foreach(owner => update("owner") = ThreadOwnerCodec.encode(owner))
+      _ <- creationLimit.fold(Future.unit) { limit =>
+        board(boardName).reserveThreadCreation(keyName, ThreadCreationCodec.encodeRequest(limit)).toFuture.map { error =>
+          if error.nonEmpty then fail(error)
+        }
+      }
       _ <- state.storage.put(update).toFuture.recoverWith { case error =>
-        if creationLimit then board(str(p.bbs)).cancelThreadCreation(str(p.key)).toFuture.transformWith(_ => Future.failed(error))
+        if creationLimit.isDefined then board(boardName).cancelThreadCreation(keyName).toFuture.transformWith(_ => Future.failed(error))
         else Future.failed(error)
       }
-      _ <- if creationLimit then board(str(p.bbs)).completeThreadCreation(str(p.key)).toFuture.recover { case _ => () } else Future.unit
-      _ <- if hasPosting then board(str(p.bbs)).updateThread(js.Dynamic.literal(key = p.key, title = p.title, resNum = count), p.sage.asInstanceOf[js.UndefOr[Boolean]], p.maxThreads.asInstanceOf[js.UndefOr[Double]]).toFuture else Future.unit
+      _ <- if creationLimit.isDefined then board(boardName).completeThreadCreation(keyName).toFuture.recover { case _ => () } else Future.unit
+      _ <- if kind != ThreadWriteKind.Raw then board(boardName).updateThread(js.Dynamic.literal(key = p.key.orUndefined, title = p.title.orUndefined, resNum = count), p.sage, p.maxThreads.orUndefined).toFuture else Future.unit
     } yield count
   }.toJSPromise
 

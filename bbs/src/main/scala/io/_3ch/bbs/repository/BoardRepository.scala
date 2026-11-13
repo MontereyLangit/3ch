@@ -1,5 +1,6 @@
 package io._3ch.bbs.repository
 
+import io._3ch.bbs.application.posting.ports.SettingsStore
 import io._3ch.bbs.external.cloudflare.{BoardDoStub, WorkerEnv}
 import io._3ch.bbs.domain.posting.GlobalThread
 import io._3ch.bbs.handler.PostingText
@@ -81,4 +82,7 @@ object BoardRepository {
         else o.text().toFuture
       )
   }
+
+  /** 投稿処理のポート */
+  def settingsStore(e: WorkerEnv): SettingsStore = board => getBoardSettings(board, e)
 }

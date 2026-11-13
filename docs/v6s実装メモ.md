@@ -147,6 +147,19 @@ npm ライブラリへの薄い facade に置き換えた。自作実装は v5 �
 
 ## 4. テストスイート（`bbs/src/test/`）
 
+配置は層に合わせる。正規表現を使わない純粋な規則は `common/src/test`（JVM と JS の両方で動く。JavaScript の
+`Number`・`trim`・`Object.keys` と同じ結果になるかは `common/src/test/scala-js` の `*RuntimeSuite` が実行環境と突き合わせる）、
+`js.RegExp` を使う規則と投稿処理のドメインは `bbs/src/test/.../domain`、アプリケーションサービスは
+`application/posting/PostingServiceSuite`、DO は `durable/`、R2・KV の読み書きは `repository/`、HTTP の入出力は `handler/` に置く。
+
+`Test / parallelExecution` は `true` にしている。ハンドラのテストは `HandlerTestKit` で `Date`・`Math.random`・`caches` を
+一時的に差し替えるが、Scala.js のテストアダプタ（`TestAdapter.getRunnerForThread`）は sbt のスレッドごとに別の JS 実行環境
+（Node のプロセス）を起動し、そのスレッドのスイートを 1 つずつ最後まで動かす。差し替えはそのプロセスの中に閉じ、
+並列に動く別のスイートからは見えない。sbt にはスイート単位で並列を切る設定が無いので「差し替えるスイートだけ直列」には
+できないが、その必要も無い。投稿処理のテストは `Clock`・`Random` をポートにしたので、`PostingServiceSuite` と
+ドメインのテストは固定のポートを渡すだけでよい。投稿処理でグローバルを差し替えるのは、HTTP の入出力を固定する
+`PostingSuite`・`PostingSnapshotSuite` だけになった（数値設定の境界を見ていた `PostingNumericSettingsSuite` は `PostingServiceSuite` に移した）。
+
 ### 4.1 `DurableTestKit`
 
 `tests/thread.test.js` の `state()` / `setup()` の Scala 移植。本番の `Thread` / `Board` のコードは変えず、
@@ -166,6 +179,10 @@ npm ライブラリへの薄い facade に置き換えた。自作実装は v5 �
 - replay ハーネスが踏まないコーナーを追加する: 999→1000件目の境界、stop/resume の settings 文字列の
   組み立て、editRes / deleteRes のフィールド単位のエスケープ、standalone `deleteRes(Int)` の
   `resNum < lines.length` 境界。
+
+`addRes` で追記できるかの判定（停止・移動・削除、`BBS_HEISA`、同じ key、スレ不在、1000 件）は
+`common` の `ThreadWriteGuard` に移したので、規則そのものは `ThreadWriteGuardSuite` で確かめる。
+`ThreadSuite` は直列化・一括保存・拒否のコード（`thread-write:*`）の返し方・拒否したときに予約も保存もしないことを見る。
 
 ### 4.3 `BoardSuite`
 
@@ -195,3 +212,15 @@ golden JSON の読み込みに `common` のテスト専用ユーティリティ�
 `sjis-table.json` の `note` に明記された構築順）で走査し、後から出たエントリで上書きする。
 同じ文字に複数のバイト列が対応する場合、JS の `this.e[_] = w` と同じ「後勝ち」になり、CP932 重複符号の
 採用側はこれで決まる。
+
+### 4.6 投稿処理（bbs.cgi）
+
+| スイート | 見るもの |
+| :-- | :-- |
+| `handler/PostingSnapshotSuite` | 固定時刻・固定乱数で、応答のバイト列・ヘッダと dat / log / スレ一覧 / R2 の書き込みを `tests/snapshots/posting/*.json` と完全一致で照合する。振る舞いを変えないリファクタリングの比較基準 |
+| `handler/PostingSuite` | HTTP レベルの特性テスト（旧 `PostingHandlerSuite`）。既知の不具合も含めて現在の動作を固定する |
+| `handler/PostingOwnerCompatibilitySuite` | 壊れたスレ主の保存値を、キャップ・閉鎖・満杯のときに復号しないこと |
+| `handler/PostingTextSuite` | 拒否理由ごとの文言とコード |
+| `application/posting/PostingServiceSuite` | メモリ上のポートで、段の呼び出し順、拒否したときに後段を呼ばないこと、`PostingContext` に copy で埋まる内容、addRes に渡す付帯情報 |
+| `application/posting/PostingRequestSuite`・`PostingFormDecoderSuite` | ヘッダの検査順と本文の復号 |
+| `domain/posting/*`・`common` の `domain/posting/*` | 入力の整形と振り分け、文字数、返信先の検査、キャップ・名前欄・識別子、規制、スレ立て規制、sage、過去ログ目次と headline の本文、Thread DO の追記の判定 |

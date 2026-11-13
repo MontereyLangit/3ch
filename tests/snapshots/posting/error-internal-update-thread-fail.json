@@ -1,0 +1,43 @@
+{
+  "case": "error-internal-update-thread-fail",
+  "response": {
+    "status": 200,
+    "headers": [
+      [
+        "content-length",
+        "1546"
+      ],
+      [
+        "content-type",
+        "text/html;charset=UTF-8"
+      ],
+      [
+        "set-cookie",
+        "PON=q4pXMpiV4D+74CIKl6fd3fkamHI; Max-Age=63072000; path=/; Secure; HttpOnly"
+      ]
+    ],
+    "bodyBase64": "PGh0bWw+PGhlYWQ+PHRpdGxlPu+8pe+8su+8su+8r++8su+8gTwvdGl0bGU+PG1ldGEgaHR0cC1lcXVpdj0iQ29udGVudC1UeXBlIiBjb250ZW50PSJ0ZXh0L2h0bWw7IGNoYXJzZXQ9VVRGLTgiLz48c2NyaXB0IHR5cGU9Im1vZHVsZSIgc3JjPSIvc3RhdGljL2NsaWVudC5qcyI+PC9zY3JpcHQ+PC9oZWFkPjxib2R5IGJnY29sb3I9IiNGRkZGRkYiPjxzcGFuPjwhLS0gMmNoX1g6ZXJyb3IgLS0+PC9zcGFuPjxmb250IHNpemU9IisxIiBjb2xvcj0iI0ZGMDAwMCI+PGI+RVJST1I6IHVwZGF0ZVRocmVhZEZpbGUgZXJyb3IuIOODreOCsOODleOCoeOCpOODq+OBq+abuOOBkeOBvuOBm+OCk+OBp+OBl+OBn+OAgih1bml4dGltZToxNzAwMDAwMDAwMDAwIGJiczpzYW1wbGUga2V5OjE3MDAwMDAwMDAgbnVtYmVyOjEgZXJybXNnOnVwZGF0ZVRocmVhZEZpbGUtPkVycm9yOiBhZGRSZXMgZmFpbGVkKTxicj7jgZPjga7jg6Hjg4Pjgrvjg7zjgrjjgpLjgrPjg5Tjg5rjgZfjgabjgIHpgYvnlKjmg4XloLHmnb/jgafloLHlkYrjgZfjgabjgYTjgZ/jgaDjgZHjgovjgajjgYLjgorjgYzjgZ/jgYTjgafjgZnjgII8L2I+PC9mb250Pjx1bD48YnIvPuODm+OCueODiDxiPjE5Mi4wLjIuMTwvYj48YnIvPjxiPuODhuOCueODiOOCueODrCA8L2I+PGJyLz4K5ZCN5YmN77yaIDxiPuWQjeeEoeOBl+OBleOCk++8oO+8k+OBoeOCg+OCk+OBreOCiyA8L2I+KEpQLlR3LmZ2IHdBLTRiZjUwMzczZTVhNTU4NDMpPGI+IDwvYj4o5Li7KTxiPjwvYj48YnIvPjxzcGFuPkUtbWFpbO+8miA8L3NwYW4+PGJyLz4K5YaF5a6577yaPGJyLz48c3Bhbj7jg4bjgrnjg4jmnKzmloc8L3NwYW4+PGJyLz48YnIvPjwvdWw+PGEgaHJlZj0iaHR0cHM6Ly93aWtpLjNjaGJicy5jb20vaW5kZXgucGhwLyVFMyU4MiVBMiVFMyU4MiVBRiVFMyU4MiVCQiVFMyU4MiVCOSVFOCVBNiU4RiVFNSU4OCVCNiVFNCVCOCVBRCVFMyU4MSVBNyVFMyU4MiU4MiVFNiU5QiVCOCVFMyU4MSU5MSVFMyU4MiU4QiVFNiU5RCVCRiI+4piFIOOCouOCr+OCu+OCueimj+WItuS4reOBp+OCguabuOOBkeOCi+advyDimIU8L2E+PGJyLz48YnIvPjxoci8+CuOBk+OBoeOCieOBp+ODquODreODvOODieOBl+OBpuOBj+OBoOOBleOBhOOAgjxhIGhyZWY9Ii90ZXN0L3JlYWQuY2dpL3NhbXBsZS8xNzAwMDAwMDAwLyI+IEdPISA8L2E+PGJyLz4K6Ieq5YiG44Gn6Kej5rG644GX44Gm44G/44KI44GGISA8YSBocmVmPSJodHRwczovL3dpa2kuM2NoYmJzLmNvbS9pbmRleC5waHAvJUU2JTlCJUI4JUUzJTgxJThEJUU4JUJFJUJDJUUzJTgyJTgxJUUzJTgxJUFBJUUzJTgxJTg0JUU2JTk5JTgyJUUzJTgxJUFFJUU2JTk3JUE5JUU4JUE2JThCJUU4JUExJUE4Ij7mm7jjgY3ovrzjgoHjgarjgYTmmYLjga7ml6nopovooag8L2E+PGJyLz4K5YiG44GL44KJ44Gq44GE44GT44Go44GM44GC44Gj44Gf44KJPGEgaHJlZj0iaHR0cHM6Ly93d3cuM2NoLmlvL2h0bWwvZ3VpZGUvIj7vvJPjgaHjgoPjgpPjga3jgovjgqzjgqTjg4k8L2E+44G444CC44CC44CCPGJyLz48YnIvPjxwPjwvcD48L2JvZHk+PC9odG1sPg==",
+    "bodyText": "<html><head><title>ＥＲＲＯＲ！</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/><script type=\"module\" src=\"/static/client.js\"></script></head><body bgcolor=\"#FFFFFF\"><span><!-- 2ch_X:error --></span><font size=\"+1\" color=\"#FF0000\"><b>ERROR: updateThreadFile error. ログファイルに書けませんでした。(unixtime:1700000000000 bbs:sample key:1700000000 number:1 errmsg:updateThreadFile->Error: addRes failed)<br>このメッセージをコピペして、運用情報板で報告していただけるとありがたいです。</b></font><ul><br/>ホスト<b>192.0.2.1</b><br/><b>テストスレ </b><br/>\n名前： <b>名無しさん＠３ちゃんねる </b>(JP.Tw.fv wA-4bf50373e5a55843)<b> </b>(主)<b></b><br/><span>E-mail： </span><br/>\n内容：<br/><span>テスト本文</span><br/><br/></ul><a href=\"https://wiki.3chbbs.com/index.php/%E3%82%A2%E3%82%AF%E3%82%BB%E3%82%B9%E8%A6%8F%E5%88%B6%E4%B8%AD%E3%81%A7%E3%82%82%E6%9B%B8%E3%81%91%E3%82%8B%E6%9D%BF\">★ アクセス規制中でも書ける板 ★</a><br/><br/><hr/>\nこちらでリロードしてください。<a href=\"/test/read.cgi/sample/1700000000/\"> GO! </a><br/>\n自分で解決してみよう! <a href=\"https://wiki.3chbbs.com/index.php/%E6%9B%B8%E3%81%8D%E8%BE%BC%E3%82%81%E3%81%AA%E3%81%84%E6%99%82%E3%81%AE%E6%97%A9%E8%A6%8B%E8%A1%A8\">書き込めない時の早見表</a><br/>\n分からないことがあったら<a href=\"https://www.3ch.io/html/guide/\">３ちゃんねるガイド</a>へ。。。<br/><br/><p></p></body></html>"
+  },
+  "threads": {
+    "sample/1700000000": {
+      "dat": "",
+      "log": "",
+      "settings": ""
+    },
+    "sample/1699990000": {
+      "dat": "",
+      "log": "",
+      "settings": ""
+    }
+  },
+  "boards": {
+    "sample": ""
+  },
+  "r2": {
+    "sample/thread/1700/subject.txt": null,
+    "sample/thread/1699/subject.txt": null,
+    "sample/thread/subject.txt": null,
+    "headline.txt": null
+  }
+}

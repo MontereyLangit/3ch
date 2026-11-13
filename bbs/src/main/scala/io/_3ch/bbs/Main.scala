@@ -33,16 +33,10 @@ object Main {
   def publicHandler(c: js.Dynamic): js.Promise[Response] = publicFetch(c.req.raw.asInstanceOf[Request], c.env.asInstanceOf[WorkerEnv], c.executionCtx)
 
   @JSExportTopLevel("bbs_entry", "server")
-  def bbsEntry(request: Request, env: WorkerEnv): js.Promise[Response] = handler.PostingHandler.entry(request, env)
+  def bbsEntry(request: Request, env: WorkerEnv): js.Promise[Response] = handler.Posting.entry(request, env)
 
   @JSExportTopLevel("settingTxtDefault", "server")
   val settingTxtDefault: String = handler.PostingText.settingTxtDefault
-
-  @JSExportTopLevel("parseRules", "server")
-  def parseRules(text: String): js.Array[js.Dynamic] = handler.Moderation.parseRules(text)
-
-  @JSExportTopLevel("checkModeration", "server")
-  def checkModeration(gb: js.Dynamic, env: WorkerEnv): js.Promise[Int] = handler.Moderation.check(gb, env)
 
   @route("[bbs]/index.ts")
   @JSExportTopLevel("boardIndexHandler", "server")

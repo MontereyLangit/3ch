@@ -2,10 +2,11 @@ package io._3ch.common.domain
 
 import java.util.regex.Matcher
 
-/** dat / subject に保存済みの文字参照を、React のテキスト描画用に一度だけ戻す。 */
+/** dat / subject に保存済みの文字参照を、React のテキスト描画用に一度だけ戻す */
 object SubjectText {
   private val entity = "&(?:amp|lt|gt|quot|apos|#[0-9]+|#[xX][0-9a-fA-F]+);".r
 
+  /** 名前付きの 5 種と数値文字参照を戻す。範囲外やサロゲートの数値参照はそのまま残す */
   def decode(value: String): String = {
     entity.replaceAllIn(value, matched => {
       val token = matched.matched

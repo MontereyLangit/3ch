@@ -51,6 +51,29 @@ class AdminHandlerSuite extends FunSuite {
     } yield ()
   }
 
+  test("規制ルールの書式の誤りは行番号付きで示し、保存しない") {
+    val env = io._3ch.bbs.durable.DurableTestKit.newEnv()
+    val raw = env.worker.asInstanceOf[js.Dynamic]
+    raw.ADMIN_PASSWORD = "test"
+    env.putR2("deny.cgi", "<><><>deny")
+    def save(path: String, rules: String): Future[(Int, String)] = {
+      val req = request(s"https://example.test$path", Seq("authorization" -> basic("admin:test")), method = "POST", body = s"rules=${js.URIUtils.encodeURIComponent(rules)}")
+      admin(req, raw).flatMap(res => text(res).map(status(res) -> _))
+    }
+    for {
+      format <- save("/admin/access", "# ok\nbad")
+      action <- save("/admin/access", "<><><>unknown")
+      pattern <- save("/admin/ngwords", "<><>[<>deny")
+    } yield {
+      assertEquals(format._1, 400)
+      assert(format._2.contains("2行目: 板&lt;&gt;対象&lt;&gt;NGワード&lt;&gt;動作 の形式で入力してください。"), format._2)
+      assert(action._2.contains("1行目: 動作が不正です。"), action._2)
+      assert(pattern._2.contains("1行目: 正規表現が不正です。"), pattern._2)
+      assertEquals(env.r2Text("deny.cgi"), Some("<><><>deny"))
+      assertEquals(env.r2Text("ngwords.cgi"), None)
+    }
+  }
+
   test("スレ立て規制の専用フォームは読込後に他操作で更新されたSETTING.TXTを上書きしない") {
     val env = io._3ch.bbs.durable.DurableTestKit.newEnv()
     val raw = env.worker.asInstanceOf[js.Dynamic]

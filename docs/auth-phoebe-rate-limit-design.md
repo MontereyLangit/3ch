@@ -6,6 +6,7 @@
 v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の挙動（§3.8）を設計する。
 **状態: 設計案（未実装）。** 実装は §12 の順で行い、各段で本書を実装結果に合わせて訂正する。
 2026-11-02 に Opus 5 によるセルフレビューを行い、採用した指摘を反映した（[auth-phoebe-review.md](auth-phoebe-review.md)）。
+2026-11-05、トリップと日付欄の ID の廃止・`!id`・スレ主表示（[トリップ・ID廃止とスレ主表示](トリップ・ID廃止とスレ主表示.md)。`develop` で実装済み）に合わせて改めた。
 
 既存のスレ立て規制 [thread-creation-regulation.md](thread-creation-regulation.md) の構成（ドメイン純粋関数 ＋ DO はロックと保存のみ ＋
 拒否はコード文字列で返し handler が文言化）をそのまま踏襲する。AGENTS.md 3.5 の DO 規約に従う。
@@ -17,7 +18,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 | 対象 step | 連投規制（§8）は既存 DO へのキー追加のみで先行実装する（`docs/作業用_add_bbs_cgi_regulation_and_auth.md` の順序）。認証・Lv・権限（§3〜§7）は新 DO を伴う step 5 相当 |
 | dat 構造・本文前後の空白・エラーマーカー・Range/304 | 変更しない |
 | Shift_JIS 出力 | 変更しない。認証画面（`/auth/`）は UTF-8 の新規画面 |
-| ID（`ID:xxxx`）・トリップ・キャップの計算 | 変更しない。`BBS_ID_LV=checked` の付加値だけ固定 `10` から実 Lv に直す（KB-15。承認要） |
+| キャップの計算 | 変更しない。日付欄の ID（`ID:xxxx`・`BBS_ID`・`BBS_ID_LV`）とトリップは 2026-11-02 に廃止済みで、本書はそれを前提にする |
 | 名前欄の識別子 | **書式を変える（§5）。** 既存の `BBS_ID_SHIKIBETSU=checked` は残し、新書式は新しい値 `phoebe` で有効化する。既定値の切替は承認を得てから行う |
 | ストレージ | Board / Thread DO の既存キー・形式は変更しない。追加キーと新 DO（`Account`・`AccountIndex`）だけ |
 | 管理画面の防御 | Basic 認証は再認証付きの管理者セッション＋役割＋Origin 検証に置き換え、no-store・CSP は維持する（[管理画面 改修計画](admin-spa-auth-plan.md) §3。AGENTS.md 3.6 の更新は承認後） |
@@ -42,13 +43,16 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 - 名無しでの権限使用（規制回避）: キャップ書き込み以外は利用可能
 - 規制: 管理者のみ回避可能 / 管理者・削除・規制回避可能 / 全権限回避可能 / 全権限＋L10 回避可能 / 全権限＋ログイン済み（認証済）回避可能
 
+> 読み替え（2026-11-05）: `!uid` と `@${id}` は、トリップ・ID 廃止の仕様変更で名前欄の `!id` と ` </b>(@ユーザーID)<b>` になった（§5.3）。
+> 表示するユーザー ID は、クライアント ID は自動採番の ID、ID/Password と Google は登録したユーザー ID（§2 の `uid`）。
+
 ## 2. 用語
 
 | 用語 | 意味 |
 | --- | --- |
 | アカウント | `Account` DO 1 件。公開 ID `uid` を持つ。種別は未ログイン以外の 3 つ（§3.1） |
 | `aid` | 内部 ID。`Account` DO の名前（`idFromName(aid)`）。作成時に 16 文字 `[a-z0-9]` で採番し、以後変えない。Cookie・索引・ログの内部参照はこれを使う |
-| `uid` | 公開 ID。**全種別とも**自動採番 8 文字 `[a-z0-9]`（`AccountIndex("uid")` で一意を確保し、退会後も削除しない）。ログイン ID とは別物で、ログイン ID は画面にもログにも出さない |
+| `uid` | ユーザー ID。名前欄の `!id` で `(@uid)` として出す公開 ID。クライアント ID は自動採番 8 文字 `[a-z0-9]`、ID/Password はログイン ID と同じ値、Google は登録時に決める ID（規則はログイン ID と同じ。§3.9・§3.10）。`AccountIndex("uid")` で全種別を通して一意にし、退会後や移行で使わなくなった値も削除しない（他人の再利用を防ぐ） |
 | Lv | PHOEBE レベル 0〜10。アカウントに 1 つ。板・スレをまたいで共通 |
 | 認証済 | 投稿の主体（§3.4）が未ログイン以外であること。実効 Lv の値（§4.3 の上限で 0 になりうる）とは無関係。未ログインは L0 固定 |
 | 権限 | アカウントに付く役割。`admin`（管理者）/ `delete`（削除）/ `regulate`（規制）/ `cap`（キャップ書き込み） |
@@ -68,7 +72,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 | ID/Password | Turnstile ＋ 法的投稿確認 ＋ ID・パスワード登録 | 1（メール認証済なら 3） | 10 | 可 | なし | クライアント ID からの移行先になれる |
 | Google 連携 | Google OAuth（Turnstile なし） | 10 固定 | 10 | 可 | なし | 1 つの Google アカウント（`sub`）につき 1 アカウント |
 
-- **移行**: クライアント ID → ID/Password または Google へ移行できる。移行しても `aid`（DO）も `uid` も変わらず、Lv・端末履歴・ログを引き継ぐ。手順は §3.9・§3.10。ID/Password・Google からクライアント ID への移行、ID/Password ⇄ Google の相互移行はしない。
+- **移行**: クライアント ID → ID/Password または Google へ移行できる。移行しても `aid`（DO）は変わらず、Lv・端末履歴・ログを引き継ぐ。`uid` は登録したユーザー ID に変わる（自動採番の旧 `uid` は索引に残す）。手順は §3.9・§3.10。ID/Password・Google からクライアント ID への移行、ID/Password ⇄ Google の相互移行はしない。
 - **ID/Password** の詳細は §3.9、**Google 連携**の詳細は §3.10。
 - **法的投稿確認**: 認証画面で利用規約・投稿の法的責任への同意チェックを必須にし、`agreedAt` と同意文書の版を保存する。版を上げたら次回投稿前に再同意させる。
 
@@ -160,6 +164,9 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 
 画面のモックは `docs/ui/auth.html`（`/auth/`）・`auth-modal.html`（板トップ上の認証モーダル）・`account.html`（`/auth/account`）。見た目は板トップに揃えている。
 
+**UI の方針**: 角丸を使わない（`border-radius` を付けず四角にする）。部品（ヘッダー・タブ・入力欄・ボタン・サイドバー）と文言は既存画面（板トップ・スレ画面）に合わせ、
+新しい部品を足すときも既存の配色と余白を使う。文言は全角と半角英数字の間に空白を入れない（例「Lv3から」「Googleで続ける」）。説明は短くし、手順の羅列にしない。
+
 新 UI（板トップ以降）は scalajs-react の SSR コンポーネント（`bbs/.../components/`）と、`bbs-client` の
 `@islands` で hydrate するクライアント部品で構成される。投稿欄は板 top の各スレカードに `details` 方式で置き、
 `fetch` で bbs.cgi へ送って `x-threadkey` / `x-resnum` で成否を見る（上記の方針メモ 2 章）。認証はこの構成に次を足す。
@@ -170,11 +177,12 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
   DO は呼ばない。失効・改竄は未ログインとして描画する。
 - `HeaderComponent` のアカウント領域（現在「準備中」の仮置き）は snapshot で出し分ける。
   - 未ログイン: 「認証・登録」→ `/auth/?return={現在のパス}`、「ログイン」→ `/auth/?mode=login&return={現在のパス}`。
-  - ログイン済: `@uid` と Lv バッジ（`Lv3`、10 以上は `Lv*`）、アカウントメニュー（`AccountNav` island）: アカウント設定 `/auth/account`、
+  - ログイン済: `@{uid}`（ユーザー ID）と Lv バッジ（`Lv3`、10 以上は `Lv*`）、アカウントメニュー（`AccountNav` island）: アカウント設定 `/auth/account`、
     専ブラ用認証キー、キャップ、方式の移行、ログアウト（`POST /auth/logout`）。
 - `PostingFormComponent` は未ログインでも描画する（下書きを書ける）。未ログイン時は送信ボタンの上に
   「書き込みには認証・登録が必要です」と `/auth/?return=...` へのリンクを SSR で出す（JS 無しでも導線がある）。
-  スレ設定・板設定の `BBS_PHOEBE` が snapshot の `lv` を上回るときは「このスレは Lv n 以上」と `/auth/account?upgrade=1` への導線を出す。
+  スレ設定・板設定の `BBS_PHOEBE` が snapshot の `lv` を上回るときは「このスレはLv{n}以上」と `/auth/account?upgrade=1` への導線を出す。
+  ログイン済なら、ユーザー ID を名前欄に出すチェックボックス（フォーム項目 `showid`。名前欄の `!id` と同じ扱い）を出す。
 - props は JSON 化できる JS オブジェクトだけ（`docs/islands-ssr.md`）。`uid`・`lv`・`turnstileSiteKey`・`authUrl` を渡し、Cookie 値や秘密は渡さない。
 - Cookie を読んで出し分けた画面は `Cache-Control: private, no-cache` と `Vary: Cookie` を付け、エッジやブラウザが他人の画面を再利用しないようにする（板 top の共有キャッシュを優先するなら、ヘッダーだけ `GET /auth/session` を island が取りに行く案 — §13-27）。
 
@@ -223,20 +231,20 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 
 | 項目 | 規則 |
 | --- | --- |
-| ログイン ID | `[a-z0-9_]{3,16}`。入力は小文字化してから検証。予約語（`admin`・`root`・`test`・`3ch`・`saku`・`auth`・`mod`・板名と同じ文字列・`noname` 等。R2 `reserved-ids.txt`）は拒否。登録後は変更不可。**`uid` とは別**で、本人以外には見せない（名前欄・ログ・管理画面の一覧にも出さない。管理画面の検索条件にだけ使う） |
+| ログイン ID | `[a-z0-9_]{3,16}`。入力は小文字化してから検証。予約語（`admin`・`root`・`test`・`3ch`・`saku`・`auth`・`mod`・板名と同じ文字列・`noname` 等。R2 `reserved-ids.txt`）は拒否。登録後は変更不可。**ユーザー ID（`uid`）と同じ値で公開される**（名前欄の `!id`・管理画面）。画面ではどちらも「ユーザーID」と呼ぶ |
 | パスワード | 8〜128 文字。NFC 正規化後に UTF-8 で数える。ログイン ID と同一・ログイン ID を含むものは拒否。文字種の強制はしない |
 | 保存 | PBKDF2-HMAC-SHA256、反復 100,000、ソルト 16 バイト（`crypto.getRandomValues`）。`credential` に `{algo, iterations, salt, hash}` で持ち、`algo`・`iterations` を保存するので将来の強化（反復増・別アルゴリズム）はログイン成功時に再ハッシュして移行する |
 | 照合 | `Account.verifyPassword(password, keyIpHash, now)` が DO 内で PBKDF2 を計算し定数時間比較する。失敗回数の更新は同じ RPC で直列化する（Worker 側で照合すると失敗計数が競合する）。ロックの規則そのもの（回数・期間・段階的遅延）は `common/domain/account/LoginThrottle` の純粋関数で、DO は記録と呼び出しだけ |
 | ロック | （アカウント, `keyIp`）の組で直近 1 時間に 10 回失敗で 1 時間ロック（第三者が ID だけでアカウント全体を締め出せないようにする）。アカウント全体では失敗 5 回目から応答を 1 秒ずつ遅らせる（上限 8 秒）。`keyIp` 全体は 30 回/時（`AuthRate` DO）。ロック中も応答は失敗時と同じ文言 |
 | 所要時間 | 存在しない ID でも固定の `aid="dummy"` の DO に同じ `verifyPassword` を投げ、RPC と PBKDF2 の両方を同じ回数行う |
-| 文言 | 存在しない ID・パスワード不一致・ロック中のいずれも「ID またはパスワードが違います」。登録時の「この ID は使えません」は避けられないので、ログイン ID を公開しないこと（上記）で列挙の価値を下げる |
+| 文言 | 存在しない ID・パスワード不一致・ロック中のいずれも「ID またはパスワードが違います」。ログイン ID はユーザー ID として公開されるので、列挙はロックと所要時間の均一化（上記）で抑える |
 | 上限 | Workers の Web Crypto は PBKDF2 の反復上限が 100,000（実機で要確認）。将来の強化は反復増ではなく WASM の Argon2id / scrypt への移行として `algo` で切り替える |
 
 **登録**（`POST /auth/register`。`/auth/?mode=register`）
 
 1. 入力: ログイン ID・パスワード（2 回）・メール（任意）・法的投稿確認の同意・Turnstile トークン・端末申告（§3.7）。
 2. Turnstile 検証 → 突合（`declaration_mismatch` / `fingerprint`）→ 乱造検知 → 入力規則。登録は `keyIp` ごとに 5 件/日。
-3. `aid`・`uid` を Worker 側で採番し、`AccountIndex("uid").register(hash(uid), aid)`（衝突なら採番し直す）→ `AccountIndex("login").register(hash(loginId), aid)`。衝突なら「この ID は使えません」。索引は `pending` 状態で作る（§9.1）。
+3. `aid` を Worker 側で採番し、`uid` をログイン ID として `AccountIndex("uid").register(hash(uid), aid)` → `AccountIndex("login").register(hash(loginId), aid)`。どちらかが衝突したら「この ID は使えません」（自動採番の `uid` とも重ならないようにする）。索引は `pending` 状態で作る（§9.1）。
 4. メールがあれば正規化（下記）して `AccountIndex("email").register(hash(email), aid)`。衝突ならメール欄だけエラーにし、登録を続けない（§13-19）。
 5. `Account.create(profile, credential)` → `bindDevice` → 索引を `confirm`。失敗したら 3・4 の索引を `remove` して戻す。`pending` のまま 10 分過ぎた索引は次の `register` 時に掃除する（確定済みは消さない）。
 6. メールがあれば認証メール送信（下記）。`Set-Cookie`。初期 Lv は 1（メール認証完了で 3）。
@@ -250,8 +258,8 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 
 **クライアント ID からの移行**（`/auth/account?upgrade=1` → `POST /auth/register` に `upgrade=1`）
 
-- 有効なセッション（クライアント ID）がある状態で登録手順 1〜4（`uid` の採番は行わない）を行い、5 の代わりに `Account.convert("password", loginId)` で同じ `aid` の種別を変える。
-  `uid`・Lv・`lvSince`・`lvPosts`・端末履歴・ログはそのまま。`expiresAt` を外す。`gen` を進めて Cookie を発行し直す。
+- 有効なセッション（クライアント ID）がある状態で登録手順 1〜4 を行い、5 の代わりに `Account.convert("password", loginId)` で同じ `aid` の種別を変え、`uid` をログイン ID にする。
+  旧 `uid` の索引は残す。Lv・`lvSince`・`lvPosts`・端末履歴・ログはそのまま。`expiresAt` を外す。`gen` を進めて Cookie を発行し直す。
 - 移行後のクライアント ID としての Cookie は `gen` 不一致で無効になる（他端末を含む）。
 
 **パスワード変更**（`POST /auth/password`。ログイン済）
@@ -275,7 +283,7 @@ v6 へ追加する認証・Lv・連投規制と、新 UI での Web 版認証の
 
 **退会**（`POST /auth/account?action=delete`。パスワード再入力または Google の再認証が必要）
 
-`status=deleted`、`login` / `email` / `google` / `token` の索引を削除、キャップを失効、`gen` を進める。`uid` の索引は残す（名前欄 `@uid` の再利用防止）。投稿・ログは消さない。
+`status=deleted`、`login` / `email` / `google` / `token` の索引を削除、キャップを失効、`gen` を進める。`uid` の索引は残す（名前欄の `(@ユーザーID)` の再利用防止）。投稿・ログは消さない。
 
 ### 3.10 Google OAuth 方式
 
@@ -284,10 +292,10 @@ Turnstile は要求しない（原案「作成時の認証なし」）が、端�
 
 **開始**（`POST /auth/google/start`。`/auth/` の「Google で続ける」ボタン。フォーム POST）
 
-1. 入力: 端末申告・法的投稿確認の同意・`return`・`popup`・（移行なら有効なクライアント ID セッション）。
+1. 入力: 端末申告・法的投稿確認の同意・`return`・`popup`・新規登録で使うユーザー ID（規則はログイン ID と同じ。既存の Google アカウントでログインするときは空でよい）・（移行なら有効なクライアント ID セッション）。
 2. 突合（`declaration_mismatch` / `fingerprint`）。拒否は §3.7 の文言。
 3. `state`（32 バイト乱数）・`nonce`（32 バイト乱数）・PKCE `code_verifier`（43〜128 文字）を生成し、
-   Cookie `ch3s_oauth`＝`{state, nonce, verifier, dev, return, popup, link: aid?, agreedAt}` を `AUTH_SECRET` で署名して保存
+   Cookie `ch3s_oauth`＝`{state, nonce, verifier, dev, return, popup, link: aid?, uid?, agreedAt}` を `AUTH_SECRET` で署名して保存
    （`Path=/auth/google; Max-Age=600; HttpOnly; Secure; SameSite=Lax`）。
 4. `https://accounts.google.com/o/oauth2/v2/auth` へ 302:
    `client_id`・`redirect_uri=https://www.3ch.io/auth/google/callback`・`response_type=code`・`scope=openid email`・
@@ -305,9 +313,10 @@ Turnstile は要求しない（原案「作成時の認証なし」）が、端�
 4. `subHash = HMAC-SHA256(AUTH_SECRET, "google:" + sub)` で `AccountIndex("google").lookup`。
    - **既存**: そのアカウントでログイン。状態が `frozen` / `banned` / `deleted` なら拒否。`bindDevice` → `Set-Cookie`。
    - **未登録かつ `link` あり**（クライアント ID からの移行）: `Account.convert("google")` で同じ `aid` を Google 種別にし、Lv を 10 固定（`lvOverride` ではなく種別の規則として）。
-     `uid` は変えない。`AccountIndex("google").register(subHash, aid)`。`gen` を進める。
-   - **未登録かつ `link` なし**: `aid`・`uid` を採番し `AccountIndex("uid")`・`AccountIndex("google")` に登録 → `Account.create`（`kind=google`、`lv=10`、`email` は参考情報として保存し `emailVerifiedAt=now`。`email` 索引には載せない — §13-19）→ `bindDevice` → `Set-Cookie`。
-   - `link` ありで `sub` が**別のアカウント**に既に紐づく: 拒否「この Google アカウントは既に別のアカウントに連携されています」。移行は行わない。
+     `uid` を入力したユーザー ID にする（旧 `uid` の索引は残す）。`AccountIndex("uid")`・`AccountIndex("google").register(subHash, aid)`。`gen` を進める。
+   - **未登録かつ `link` なし**: `aid` を採番し、入力したユーザー ID を `uid` として `AccountIndex("uid")`・`AccountIndex("google")` に登録 → `Account.create`（`kind=google`、`lv=10`、`email` は参考情報として保存し `emailVerifiedAt=now`。`email` 索引には載せない — §13-19）→ `bindDevice` → `Set-Cookie`。
+   - 未登録でユーザー ID が空・規則違反・使用済み: `/auth/?mode=register&error=uid` へ戻し、ユーザー ID を入れ直してもらう（Google の認可はやり直す）。
+   - `link` ありで `sub` が**別のアカウント**に既に紐づく: 拒否「このGoogleアカウントは既に別のアカウントに連携されています」。移行は行わない。
 5. 応答: `popup=1` なら `window.opener` へ `postMessage({type:"ch3s-auth", status:"ok", uid, lv}, 自オリジン)` し、`BroadcastChannel("ch3s-auth")` にも同じ内容を流してから `window.close()` する最小の HTML（CSP は `script-src 'nonce-…'`）。Google を経由した後は COOP により `opener` が `null` になることがあるため（未確認）、親側は §3.8 の予備経路で拾う。
    そうでなければ `return` へ 302。`return` の検証は §3.8 と同じ。
 
@@ -326,7 +335,7 @@ Turnstile は要求しない（原案「作成時の認証なし」）が、端�
 ### 4.1 意味と表示
 
 - Lv はアカウントの信頼度。0〜10。識別子の末尾 `D` に 未ログイン `0`、認証済 `1`〜`9`、10 は `*` を出す（§5）。
-- `BBS_ID_LV=checked` の ID 末尾付加（KB-15。固定 `10`）は**変えない**。日中に Lv が上がると ID 文字列が変わり、専ブラの ID 抽出・NG が途切れるため。Lv は識別子の `D` だけで出す。
+- Lv は識別子の `D` だけで出す。日付欄の ID は廃止済み（`BBS_ID_LV` も削除。KB-15 は廃止で解消）。
 - `D` は投稿時点の実効 Lv。日中に Lv が上がれば同じ人の `D` が変わる（識別子の他の部分は変わらない。§14）。
 - キャップ投稿は現行どおり識別子 `★` のみで Lv を出さない。
 
@@ -357,7 +366,7 @@ PHOEBE.md の「L0〜L1 → 23h、L1〜L2 → 23×(Lv+1)h」は未ログイン�
 - `n` は「書き込みに必要な最低 Lv」（利用者指示）。旧 3ch の wiki は「レベル n 以下は書き込めない」（＝ n+1 以上が必要）と 1 ずれているので、`!SETTING:BBS_PHOEBE:n` の意味は §13-5 で確認する。
 - **`!バルサン`**: 本文先頭が `!バルサン` ならスレ設定に `BBS_PHOEBE=3` を書く（既に 3 より大きければ変えない）。**`!SETTING:BBS_PHOEBE:n`**: 同様に `n` を書く。使えるのはスレ立て人（Thread DO の `ownerAid` と同じ `aid`。未ログインのスレは `ownerAid` が空で不可）と権限 `admin` / `delete` / `regulate`。**値を下げる操作は `staff` だけ**（権限者が上げた値をスレ立て人が戻せない）。それ以外は無視して通常投稿にする。コマンド行は本文から除かず、そのまま投稿される（2ch 互換）。
 - 処理位置は §8.6。スレ設定への書き込みは `Thread.addRes` の排他区間内で dat と同じ `storage.put` に含める。
-- `BBS_DISABLE_NUSI=checked` の板ではスレ立て人によるコマンドを無効にする（既存キーの流用）。
+- `BBS_DISABLE_NUSI=checked` の板ではスレ立て人によるコマンドを無効にする（既存キーの流用）。同じキーで名前欄のスレ主表示 ` (主)` も止まる（実装済み）。
 
 ## 5. 名前欄の識別子
 
@@ -375,7 +384,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 | `EEE`〜`XXX` | 端末情報 5 軸 × 3 桁 | 軸ごとに `sha1Base64(sha256(axisValue + "|" + axisName + group + date + saltHash)).take(3)`。欠損軸は `000` |
 | `D` | Lv | 未ログイン `0`、1〜9 はその数字、10 以上 `*` |
 
-`group`・`date`・`salt` は現行 `makeId` と同じ（`BBS_ID_GROUP`・`BBS_ID_RESET`・`saltHash`）。全部分が日替わりで変わる点は現行と同じ。
+`group`・`date`・`salt` は現行 `makeShikibetsu` と同じ（`BBS_ID_GROUP`・`BBS_ID_RESET`・`saltHash`）。全部分が日替わりで変わる点は現行と同じ。
 文字集合も現行の 2 桁ハッシュと同じ Base64 文字（`+` `/` を含む）。市区町村ハッシュと 16 桁 UA ハッシュは廃止する。
 
 ### 5.2 5 軸の値
@@ -392,11 +401,15 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 - 認証済の軸値は端末ハッシュ 18 hex を 2 桁ずつ軸に割り当てて連結した文字列。端末ハッシュが空（全欠損）なら 5 軸とも未ログインと同じ UA 解析で埋め、`D` だけ Lv を出す。
 - 端末ハッシュは Cookie の `dev`（§3.3）から取る。キーによる専ブラ認証（§3.4 の 2）では `dev` が無いので UA 解析側を使う。
 
-### 5.3 名前欄の `@uid`
+### 5.3 名前欄の `(@ユーザーID)`
 
-- 名前欄に `!uid` というトークン（前後は空白または端）があれば取り除き、トリップの後・識別子の前に ` </b>@uid<b>` を付ける。利用者は `<` `>` を入力できない（エスケープされる）ので、手入力の `@admin` とは区別でき、偽装できない。
-- 未ログイン・旧キャップ・キャップ投稿では `!uid` を取り除くだけで付けない。`BBS_NAME_COUNT` の検査は付ける前の名前で行う（トリップと同じ）。
-- dat の第 1 フィールドは `名前 </b>◆trip</b> </b>@uid<b> </b>(識別子)<b>` の順。`</b>…<b>` の対で挟む形は識別子と同じで、dat 構造は変わらない。
+`develop` で実装済み（[トリップ・ID廃止とスレ主表示](トリップ・ID廃止とスレ主表示.md) §2.3）。本書の認証で変えるのは認証主体の解決だけ。
+
+- 名前欄の `!id`（直後が英数字・`_` でないもの）を取り除き、投稿者が認証済なら名前の直後・識別子の前に ` </b>(@ユーザーID)<b>` を付ける。ユーザー ID は `uid`（§2）を HTML エスケープしたもの。Web 版はフォーム項目 `showid`（§3.8 のチェックボックス）でも同じ扱い。
+- 利用者は `<` `>` を入力できない（エスケープされる）ので、手入力の `(@admin)` とは区別でき、偽装できない。
+- 未ログイン・旧キャップ・キャップ投稿では `!id` を取り除くだけで付けない。`BBS_NAME_COUNT` の検査は付ける前の名前で行う。
+- dat の第 1 フィールドは `名前 </b>(@ユーザーID)<b> </b>(識別子)<b> (主)` の順。dat 構造は変わらない。
+- 認証主体は `PostingUser`（`accountKey` に `aid`、`displayId` に `uid`）で渡す。段 B で `PostingUserResolver.unresolved` を Cookie・専ブラ用認証キー・キャップ（§3.4）からの解決に差し替えると、`!id` とスレ主表示の `account` 照合が有効になる。
 
 ### 5.4 設定キーと互換
 
@@ -425,7 +438,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 - 互換: KV `CAP`（hash → 表示名）は現行どおり読み書きし、所有者は `AccountIndex("cap")`（hash → `aid`）で引く。所有者のない既存エントリは「旧キャップ」として動き続ける（ログ無し・Lv 無し）。管理画面から既存キャップをアカウントに紐づけられる。
 - 強キャップ（表示名末尾 `★`、サイズ検証スキップ）は `admin` だけが発行できる。
 - 利用ログ: `Account.log`（§9.1 の書き込み記録）に `via: "cap"` と `capId` 付きで残る。所有者と `admin` が閲覧でき、失効（`revokedAt`）と再発行（新 hash）ができる。失効時は KV `CAP` からも削除する。
-- キャップ投稿は所有アカウントとしてログイン扱い（§3.4）。dat 上の表示（`名前＠ハンドル ★`、`ID:???`、識別子 `★`）は現行のまま。
+- キャップ投稿は所有アカウントとしてログイン扱い（§3.4）。dat 上の表示（`名前＠ハンドル ★` と識別子 `★`）は現行のまま。`(@ユーザーID)` と ` (主)` は付けない。
 
 ### 6.3 専ブラ用認証キー
 
@@ -524,8 +537,8 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 ### 8.1 共通
 
 - **適用除外**: `BBS_LIVE` が `checked` または `1` の板・スレ（4 種すべて。既存の強制 sage は `checked` のときだけで変えない）。`BBS_RENTOU_PASS` で免除される投稿者。`saku` 板には適用する。
-- **照合キー**: 板設定 `BBS_RENTOU_KEYS`（§8.8）で選ぶ。候補は `ip`（IPv6 は URL 正規化、スレ立て規制と同じ）、`id`（`ID:` の値。`ID:???` と空は照合しない）、`shiki`（識別子。`D` を除いた `JP.AA CC-EEEFFFGGGZZZXXX`。`★` は照合しない）、`aid`（認証済のアカウント。移行しても変わらない）。選んだキーのいずれか 1 つでも一致すれば「同一」。
-  既定は原案どおり `ip,id,shiki,aid`。**ただし `id` と `shiki` は同じキャリア・同じ地域・同じ機種の別人で一致しうる**（現行の `checked` 識別子は県・市・AS・UA のハッシュ、ID は CGNAT で共有される IPv4 や IPv6 /64 の種から作る。新書式でも iOS は機種クラス粒度）。Samba24 のような秒単位の板全体規制では巻き添えが起きるため、§13-24 で既定を決め、試行モード（下記）で実測してから有効にする。
+- **照合キー**: 板設定 `BBS_RENTOU_KEYS`（§8.8）で選ぶ。候補は `ip`（IPv6 は URL 正規化、スレ立て規制と同じ）、`shiki`（識別子。`D` を除いた `JP.AA CC-EEEFFFGGGZZZXXX`。`★` は照合しない）、`aid`（認証済のアカウント。移行しても変わらない）。選んだキーのいずれか 1 つでも一致すれば「同一」。
+  既定は `ip,shiki,aid`（原案の `id` は日付欄の ID の廃止で使えなくなったので外した）。値に `id` が書かれていれば無視する。**ただし `shiki` は同じキャリア・同じ地域・同じ機種の別人で一致しうる**（現行の `checked` 識別子は県・市・AS・UA のハッシュ。新書式でも iOS は機種クラス粒度）。Samba24 のような秒単位の板全体規制では巻き添えが起きるため、§13-24 で既定を決め、試行モード（下記）で実測してから有効にする。
 - **試行モード**: 板設定 `BBS_RENTOU_MODE`＝`off` / `log` / `on`。`log` は判定と履歴の記録だけ行い、拒否せず Workers Logs に出す。**初回デプロイのコード既定値は `log`** とし、1 週間の観測後に既定値を `on` に変える（§12 段 A を A-1 / A-2 に分ける）。
 - **保存値**: 全てソルト付き SHA-256（`hash(value + ":" + saltHash)`。スレ立て規制と同じ `digest`）。空値は空のまま保存し照合しない。
 - **予約中の扱い**: 有効な予約（§8.7）は確定済みと同じく件数に 1 件として数える（スレ立て規制の「別枠で 1 件ずつ」と違い、ごんたくれの件数窓にも入れる）。
@@ -562,13 +575,13 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 ### 8.6 パイプライン位置
 
 ```
-checkRequest → readForm → processCap → processTrip → boardSettings → threadSettings
-→ identify（認証主体の決定 §3.4、Lv・権限の取得）
+checkRequest → readForm（名前欄の !id・!no を解釈。既存）→ processCap → boardSettings → threadSettings
+→ identify → resolveUser（認証主体の決定 §3.4、Lv・権限の取得。既存の PostingUserResolver を差し替える）
 → Moderation（deny/ngwords。5 列目の回避レベル）
 → checkSizes → 認証要求判定（§3.5）・BBS_PHOEBE ゲート（§4.4）
-→ threadCreationLimit（既存）→ makeId（ID・識別子）
+→ threadCreationLimit（既存）→ makeShikibetsu（識別子と (@ユーザーID)。既存）→ markNusi（スレ主表示。既存）
 → postRateLimit の材料作成（ハッシュ化。§8.1）
-→ 名前欄コマンド（`!uid` §5.3）・本文コマンド（`!バルサン` / `!SETTING:BBS_PHOEBE:n` §4.4）の解釈
+→ 本文コマンド（`!バルサン` / `!SETTING:BBS_PHOEBE:n` §4.4）の解釈
 → updateThread: Thread.addRes
      ├ スレ単位 連投判定（§8.4）        ← 拒否なら終了
      ├ Board.reservePost（§8.2・8.3）    ← 拒否なら終了（`BBS_RENTOU_MODE=log` なら記録だけ）
@@ -579,7 +592,7 @@ checkRequest → readForm → processCap → processTrip → boardSettings → t
 → updateSubback → updateHeadline
 ```
 
-`makeId` の後に置くのは ID と識別子を照合キーに使うため。スレ立て規制の予約（既存）と板の連投予約は同じ `Board` DO の別キーで、
+`makeShikibetsu` の後に置くのは識別子を照合キーに使うため。スレ立て規制の予約（既存）と板の連投予約は同じ `Board` DO の別キーで、
 Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 両方の確定」とする。
 
 ### 8.7 保存・同時実行
@@ -589,7 +602,7 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | キー | 内容 |
 | --- | --- |
 | `postRateMeta` | `{newest: ページ番号, oldest: ページ番号, count}` |
-| `postRateHistory:<n>` | 64 件ごとのページ（追記専用のリングバッファ）。各件 `{key, t, ip, id, shiki, aid, status}`（`key` は予約 ID＝`{threadKey}:{nonce}`、`status` は `pending` / `completed`） |
+| `postRateHistory:<n>` | 64 件ごとのページ（追記専用のリングバッファ）。各件 `{key, t, ip, shiki, aid, status}`（`key` は予約 ID＝`{threadKey}:{nonce}`、`status` は `pending` / `completed`） |
 
 - RPC: `reservePost(key, entry, settings): String`（空＝許可、それ以外＝拒否コード）、`completePost(key)`、`cancelPost(key)`。いずれも `DurableLock.serialized`。
 - 書き込みは**最新ページと `postRateMeta` だけ**（スレ立て規制の全ページ読み書きを踏襲しない。全投稿で呼ばれるため）。読み込みは判定に要る件数分のページだけ（直近 `timecount` 件と `BBS_SAMBA24` 秒以内。最大でも 1,000 件＝16 ページ）。`complete` / `cancel` は `key` を含むページだけ書き換える。
@@ -602,7 +615,7 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | キー | 内容 |
 | --- | --- |
 | `recentPosts` | `{t, ip, shiki, aid}` の配列（新しい順）。`now − BBS_THREAD_RENTOU_RESET ≤ t` の件だけ残し、上限 1,000 件 |
-| `ownerAid` | スレ立て人の `aid`（未ログインなら空）。`!バルサン` 等の権限判定に使う（§4.4） |
+| `ownerAid` | スレ立て人の `aid`（未ログインなら空）。`!バルサン` 等の権限判定に使う（§4.4）。既存の `owner.account`（`SHA-256(accountKey + ":" + md5Salt)`。スレ主表示用）と同じ値で照合できるなら、このキーは足さずにそれを使う |
 
 - `addRes` の排他区間内で判定・追記し、`dat`・`log` と同じ `storage.put` で一括保存する。コピペ判定も同じ区間内で `dat` 末尾 2 行を見る。
 - 既存の `addRes` 引数 `posting` に `rateLimit`（§8.1 の材料と設定）と `commands`（§4.4 のスレ設定変更）を足し、戻り値を `{count, swallowed}` にする。`rateLimit` が無ければ判定しない（管理画面やテストの既存経路を壊さない）。
@@ -617,7 +630,7 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | `BBS_THREAD_RENTOU` | `40` | 0〜1000 | §8.4 の件数。0 で無効 |
 | `BBS_THREAD_RENTOU_RESET` | `3600` | 0〜315360000 | §8.4 の秒数 |
 | `BBS_RENTOU_PASS` | `privileged` | §7 の値 | 連投規制の回避レベル |
-| `BBS_RENTOU_KEYS` | `ip,id,shiki,aid` | カンマ区切り | §8.1 の照合キー。§13-24 |
+| `BBS_RENTOU_KEYS` | `ip,shiki,aid` | カンマ区切り | §8.1 の照合キー。§13-24 |
 | `BBS_RENTOU_MODE` | `log`（観測後 `on`） | `off` / `log` / `on` | §8.1 の試行モード |
 | `BBS_LIVE` | 空 | `checked` / `1` | 連投規制の適用除外（既存の強制 sage 動作は `checked` のまま） |
 | `BBS_PHOEBE` | `0` | 0〜10 | §4.4 |
@@ -670,7 +683,7 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 | `pending:email` / `pending:reset` | §3.9 の保留トークン（種別ごとに別キー） |
 | `devices` | `[{hash, firstSeen, lastSeen, keyIpHash}]` 最大 10 件。超えたら `lastSeen` が最も古いものを捨てる |
 | `log:<n>` | 書き込み記録。1 件は `{t, via: web\|token\|cap, tokenId?, capId?, result, bbs, key, title, resNum, excerpt, asn, asName, country, region, uaLabel, deviceHash?, id, shikibetsu}`。`result` は `posted` か拒否コード（キーの UA 不一致など、アカウントに結びつく拒否だけ）。`excerpt` は本文の先頭 40 文字。64 件ごとのページで、16 ページ（1,024 件）を超えたら最古のページを消す |
-| `seen` | 観測の集計。`as`・`region`・`ua`・`device` は値ごとに `{value, label, count, firstSeen, lastSeen}` を最大 50 件（`lastSeen` が古いものから捨てる）。`ua` の `value` は生の UA（管理画面の詳細でだけ出す。本人の画面には表示名だけ）。`ident` は（日付, 板）ごとに `{date, bbs, id, shikibetsu, count}` を 60 日分 |
+| `seen` | 観測の集計。`as`・`region`・`ua`・`device` は値ごとに `{value, label, count, firstSeen, lastSeen}` を最大 50 件（`lastSeen` が古いものから捨てる）。`ua` の `value` は生の UA（管理画面の詳細でだけ出す。本人の画面には表示名だけ）。`ident` は（日付, 板）ごとに `{date, bbs, shikibetsu, count}` を 60 日分 |
 | `directorySyncedAt` | `AccountDirectory` へ最後に反映した時刻 |
 
 RPC: `create`, `describeForPosting(aid, gen)`, `describeForAdmin(aid, gen, adminGen)`, `bumpAdminGen`, `recordPost(now, post, observation)`, `verifyPassword(password, now)`, `setPassword`, `issuePending(kind, hash, expiresAt, email?)` / `consumePending(kind, hash, now)`, `bindGoogle(subHash)`, `convert(kind, uid)`, `issueCap` / `revokeCap`, `issueToken` / `useToken(tokenId, uaHash, now)` / `revokeToken`, `bindDevice`, `setLevel`, `setRoles`, `setStatus`, `bumpGeneration`, `appendLog`, `inspect`。
@@ -723,6 +736,7 @@ RPC: `create`, `describeForPosting(aid, gen)`, `describeForAdmin(aid, gen, admin
 ルートは板トップと同じ方式（`bbs/Main.scala` のハンドラに `@route` 注釈、codegen が `app/routes/` を生成。
 `IslandRender` は廃止済みで、画面は handler が `c.renderPromise` で描く — `docs/handler-rendering.md`）に従う。
 islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
+画面の見た目と文言は §3.8 の UI の方針（角丸を使わない、既存画面の部品と文言に合わせる）に従う。
 
 | パス | メソッド | 内容 |
 | --- | --- | --- |
@@ -733,7 +747,7 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | `/auth/reset/request` / `/auth/reset` | POST / GET+POST | パスワード再設定の申請とリンク先（§3.9） |
 | `/auth/email` / `/auth/email/verify` | POST / GET | メールアドレスの登録・変更とメール認証リンク（§3.9） |
 | `/auth/google/start` / `/auth/google/callback` | POST / GET | OAuth（§3.10）。`start` が `state`・`nonce`・PKCE を Cookie に保存して Google へ転送、`callback` が検証して Cookie を発行。`popup=1` で callback が `window.opener` へ通知して閉じる |
-| `/auth/account` | GET / POST | アカウントメニュー（SSR ＋ island）: 種別・Lv・`uid`、専ブラキー発行/失効、キャップ発行/失効、利用ログ、方式移行（`upgrade=1`）、ログアウト、退会 |
+| `/auth/account` | GET / POST | アカウントメニュー（SSR ＋ island）: 種別・Lv・ユーザー ID（`uid`）、専ブラキー発行/失効、キャップ発行/失効、利用ログ、方式移行（`upgrade=1`）、ログアウト、退会 |
 | `/auth/session` | GET | 現在のセッションの `{uid, lv}` を JSON で返す（`no-store`。§3.8 の予備経路とヘッダーの client 取得用） |
 | `/admin/*` | GET / POST / PUT | 管理画面（SPA）と `/admin/api/*`（§6.1、[管理画面 改修計画](admin-spa-auth-plan.md) §5・§6）。`__Host-ch3s_admin` と `Origin` 検証 |
 | 全ルート | — | `Accept-CH` 付与ミドルウェア（§3.7）。`app/routes/_middleware.ts` は手動管理（`docs/handler-rendering.md`） |
@@ -745,14 +759,15 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 
 ## 11. 管理画面
 
-画面構成・API・段階は [管理画面 改修計画](admin-spa-auth-plan.md) に従う。本書の認証・Lv・規制に関わる追加項目は次のとおり。
+画面構成・API・段階は [管理画面 改修計画](admin-spa-auth-plan.md) に従う。見た目は改修計画 §4.2 と本書 §3.8 の UI の方針（角丸を使わない、既存画面の部品と文言に合わせる）に従う。
+本書の認証・Lv・規制に関わる追加項目は次のとおり。
 
 | 画面 | 追加内容 |
 | --- | --- |
 | `/admin/boards/:bbs` | `BBS_PHOEBE`・`timecount`・`timeclose`・`BBS_SAMBA24`・`BBS_THREAD_RENTOU(_RESET)`・`BBS_RENTOU_PASS`・`BBS_RENTOU_KEYS`・`BBS_RENTOU_MODE`・`BBS_THREAD_PASS`・`BBS_LIVE` の専用フォーム（既存のスレ立て規制フォームと同じ ETag 条件付き保存） |
 | `/admin/rules/access` / `/admin/rules/ngwords` | 5 列目の回避レベルを検証 |
-| `/admin/accounts` | ユーザー一覧（既定は直近書き込み順）。`uid`・ログイン ID（検索条件にだけ使い一覧には出さない）・メール・AS・UA・端末ハッシュ・識別子・IP ハッシュで検索。モック `docs/ui/admin-users.html` |
-| `/admin/accounts/:uid` | ユーザー詳細。種別・Lv・`lvOverride`・権限・状態、使われた AS・地域・UA・端末情報・識別子と ID の一覧（`seen`）、アカウントの認証キーとキーごとの書き込み一覧、書き込み記録（`log`）。凍結・BAN・Lv 固定・キー無効化・旧キャップの紐づけ。モック `docs/ui/admin-user.html` |
+| `/admin/accounts` | ユーザー一覧（既定は直近書き込み順）。ユーザー ID（`uid`）・メール・AS・UA・端末ハッシュ・識別子・IP ハッシュで検索。モック `docs/ui/admin-users.html` |
+| `/admin/accounts/:uid` | ユーザー詳細。種別・Lv・`lvOverride`・権限・状態、使われた AS・地域・UA・端末情報・日ごとの識別子（`seen`）、アカウントの認証キーとキーごとの書き込み一覧、書き込み記録（`log`）。凍結・BAN・Lv 固定・キー無効化・旧キャップの紐づけ。モック `docs/ui/admin-user.html` |
 | `/admin/phoebe` | Lv 上限ルール（`phoebe.cgi`）、エッジ防御の規則（`edge-rules.json`）、乱造検知の「要確認」一覧 |
 | `/admin/boards/:bbs/threads/:key` | 投稿ログの `UID:` / `Device:` から該当アカウント・端末 BAN（`deny.cgi` へ行を追加）へのリンク |
 
@@ -762,9 +777,9 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 
 | 段 | 内容 | 主なテスト |
 | --- | --- | --- |
-| A | 連投規制（§8）。A-1: `BBS_RENTOU_MODE` の既定 `log` でデプロイし 1 週間観測。A-2: 既定を `on` に。照合キーは現行の IP・ID・識別子（`checked` 書式）。`aid` は空。前提は計画書の段 0〜7（`PostingCodec` を含む段 6） | `PostRateLimitSuite`（純粋判定: 件数窓・24h・Samba24・スレ 1h/40・コピペ末尾 2 行・あぼーん除外）、`BoardSuite`（予約/確定/取消・保持規則・ページ分割・容量）、`ThreadSuite`（`recentPosts` の一括保存・吸い込み時の dat 不変）、`PostingSuite`（パイプライン順序・文言・成功画面での吸い込み・`BBS_LIVE` 除外・設定不正時の既定値）、`AdminSuite`（フォーム検証）、実 workerd 統合 |
-| B | 認証基盤: `Account` / `AccountIndex` DO、Cookie、`/auth/`（クライアント ID・Turnstile・法的確認）、端末ハッシュと突合、`Accept-CH`、専ブラキー、キャップのアカウント紐づけ、`userInfo` の `UID:` / `Device:`、新 UI の `SessionReader`・ヘッダー出し分け・`AuthModal` / `AccountNav`・投稿欄のヘッダ分岐（§3.8）、bbs.cgi の `x-auth-required` / `x-post-error` | `common` の `DeviceFingerprintHasher` / `ClientHints` golden、`CookieCodecSuite`、`AccountSuite`（状態遷移・一意性）、`DedicatedBrowserTokensSuite`（未使用の紐づけ・同じ UA での置き換え・UA 不一致・上限・失効・Cookie の `bind`）、`AuthHandlerSuite`（Turnstile はテスト用サイトキーで成功/失敗を固定）、`PostingSuite`（§3.4 の優先順・`!auth`・Web 版の認証要求とヘッダ）、`SessionReaderSuite`、`BoardIndexSuite`（未ログイン/ログイン済のヘッダーと投稿欄の SSR）、`tests/islands-hydration.test.js` に `AuthModal` の `message` → `ch3s:auth-changed` と再送の jsdom 検証 |
-| C | PHOEBE: Lv 昇格・`BBS_PHOEBE`・`!バルサン` / `!SETTING:BBS_PHOEBE:n`・識別子 `phoebe` 書式・連投規制への `aid` 追加・`!uid` | `PhoebeSuite`（T(lv)/N(lv) 境界・上限・固定）、`IdentifierSuite`（軸ごとの値・欠損 `000`・`D` の `*`）、`UserAgentProfileSuite`（v3 表の golden） |
+| A | 連投規制（§8）。A-1: `BBS_RENTOU_MODE` の既定 `log` でデプロイし 1 週間観測。A-2: 既定を `on` に。照合キーは IP・識別子（`checked` 書式）。`aid` は空。前提は計画書の段 0〜7（`PostingCodec` を含む段 6） | `PostRateLimitSuite`（純粋判定: 件数窓・24h・Samba24・スレ 1h/40・コピペ末尾 2 行・あぼーん除外）、`BoardSuite`（予約/確定/取消・保持規則・ページ分割・容量）、`ThreadSuite`（`recentPosts` の一括保存・吸い込み時の dat 不変）、`PostingSuite`（パイプライン順序・文言・成功画面での吸い込み・`BBS_LIVE` 除外・設定不正時の既定値）、`AdminSuite`（フォーム検証）、実 workerd 統合 |
+| B | 認証基盤: `Account` / `AccountIndex` DO、Cookie、`/auth/`（クライアント ID・Turnstile・法的確認）、端末ハッシュと突合、`Accept-CH`、専ブラキー、キャップのアカウント紐づけ、`userInfo` の `UID:` / `Device:`、`PostingUserResolver` の差し替え（`!id`・スレ主表示の `account`。§5.3）、新 UI の `SessionReader`・ヘッダー出し分け・`AuthModal` / `AccountNav`・投稿欄のヘッダ分岐（§3.8）、bbs.cgi の `x-auth-required` / `x-post-error` | `common` の `DeviceFingerprintHasher` / `ClientHints` golden、`CookieCodecSuite`、`AccountSuite`（状態遷移・一意性）、`DedicatedBrowserTokensSuite`（未使用の紐づけ・同じ UA での置き換え・UA 不一致・上限・失効・Cookie の `bind`）、`AuthHandlerSuite`（Turnstile はテスト用サイトキーで成功/失敗を固定）、`PostingSuite`（§3.4 の優先順・`!auth`・Web 版の認証要求とヘッダ）、`SessionReaderSuite`、`BoardIndexSuite`（未ログイン/ログイン済のヘッダーと投稿欄の SSR）、`tests/islands-hydration.test.js` に `AuthModal` の `message` → `ch3s:auth-changed` と再送の jsdom 検証 |
+| C | PHOEBE: Lv 昇格・`BBS_PHOEBE`・`!バルサン` / `!SETTING:BBS_PHOEBE:n`・識別子 `phoebe` 書式・連投規制への `aid` 追加 | `PhoebeSuite`（T(lv)/N(lv) 境界・上限・固定）、`IdentifierSuite`（軸ごとの値・欠損 `000`・`D` の `*`）、`UserAgentProfileSuite`（v3 表の golden） |
 | D | 権限・回避レベル・管理画面の認証機能画面（§6・§7・§11、改修計画 段 M3）、スレ立て規制の `BBS_THREAD_PASS` 化 | `BypassLevelSuite`、`ModerationSuite`（5 列目）、`AdminSuite` |
 | E-1 | ID/Password の登録・ログイン・ロック、Google ログイン（§3.9・§3.10 の基本部分）。管理画面のアカウント認証（改修計画 段 M2）の前提なので段 B の直後に行う | `PasswordSuite`・`LoginThrottleSuite`・`GoogleIdTokenSuite`、実 workerd |
 | E-2 | メール認証・パスワード再設定・方式移行・退会・エッジ防御・乱造検知・Lv 上限ルール | `AccountSuite`（移行）、`EdgeDefenseSuite`、実 workerd |
@@ -781,7 +796,7 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | 4 | 昇格曲線の読み替え（§4.2） | PHOEBE.md の式を L1 開始に合わせて採用。クライアント ID は L10 まで約 487 日かかる（失効は最後の書き込みから 1 年なので、続けて書き込めば届く） |
 | 5 | `!バルサン` / `!SETTING:BBS_PHOEBE:n` を使える人と、`n` の意味（最低 Lv か「n 以下は不可」か） | スレ立て人（認証済）＋ `staff`。下げるのは `staff` だけ。`n` は最低 Lv（利用者指示） |
 | 6 | `BBS_PHOEBE` ゲートの免除範囲 | `staff` のみ。`cap` 権限者は Lv で判定 |
-| 7 | 連投規制の照合キーにアカウント（`aid`）を加えるか（原案は IP・ID・識別子） | 加える（IP 切替での回避を防ぐ） |
+| 7 | 連投規制の照合キーにアカウント（`aid`）を加えるか（原案は IP・ID・識別子。ID は廃止済み） | 加える（IP 切替での回避を防ぐ） |
 | 8 | ごんたくれの既定値 `timecount=18` / `timeclose=10` と、`timecover` を読まず 24 時間固定にすること | 既定設定の値を踏襲。`timecover` は無視 |
 | 9 | `BBS_SAMBA24` の既定値（既存の SETTING.TXT にはキーが無く、KB-12 により既定値がそのまま効く） | `10` 秒 |
 | 10 | 吸い込まれた投稿を連投履歴に数えるか | 数える |
@@ -798,7 +813,7 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | 21 | パスワード再設定はメール認証済みのアカウントだけ（未登録は管理者対応） | そのとおり |
 | 22 | ロック閾値（（アカウント, keyIp）10 回/時、アカウント全体は段階的遅延、`keyIp` 30 回/時）と再設定申請 3 回/日 | 仮置き |
 | 23 | Google 連携の解除（Google → 他方式）を許さないこと、Google アカウント削除時の扱い | 許さない。退会のみ |
-| 24 | 連投規制の照合キー（`BBS_RENTOU_KEYS`）の既定。原案の `ip,id,shiki` は CGNAT・同一機種で別人が一致し、Samba24 で巻き添えが出る（レビュー #1） | 原案どおり `ip,id,shiki,aid` を既定にし、試行モード `log` の観測で決め直す。推奨は Samba24 を `ip,aid` に限る |
+| 24 | 連投規制の照合キー（`BBS_RENTOU_KEYS`）の既定。原案の `ip,id,shiki` は CGNAT・同一機種で別人が一致し、Samba24 で巻き添えが出る（レビュー #1）。`id` は ID 廃止で使えない | **決定（2026-11-06 利用者）**: `id` を外す。`ip,shiki,aid` を既定にし、試行モード `log` の観測で決め直す。推奨は Samba24 を `ip,aid` に限る |
 | 25 | 吸い込み（§8.5）を同一投稿者（照合キー一致）に限るか | 原案どおり投稿者を問わない。推奨は同一投稿者に限る |
 | 26 | 初回デプロイを `BBS_RENTOU_MODE=log`（記録のみ）で始め、1 週間後に `on` にする手順 | そのとおり |
 | 27 | 板 top 等の Cookie による出し分けを SSR で行う（`private, no-cache`）か、ヘッダーだけ client で `/auth/session` を取る（共有キャッシュを保つ）か | SSR で行う |
@@ -808,17 +823,17 @@ islands は `bbs-client/Main.scala` の `@islands` 注釈で宣言する。
 | 31 | 紐づけられる UA の上限（1 アカウント 5 個）、未使用キーは同時に 1 個・24 時間で失効 | 仮置き |
 | 32 | 専ブラ用キーを専ブラ（`Monazilla/1.00` で始まる UA）以外から使えないようにすること | 使えないようにする |
 | 33 | UA が一致しない使用でキーを止めないこと（止めると、漏れたキーを他人が試すだけで正規の利用者が書けなくなる） | 止めない。記録と通知だけ |
+| 34 | ユーザー ID の決め方（トリップ・ID 廃止の指示「ID/Password・Google は登録したユーザー ID」）。ログイン ID を公開してよいか、Google 登録でユーザー ID を入力させること、移行でユーザー ID が変わること | **決定（2026-11-06 利用者）**: ID/Password はログイン ID をそのままユーザー ID にする。名前欄への表示は既定で出さず、本人が名前欄の !id（Web 版はユーザー ID 表示のチェックボックス）を付けた投稿だけに出す（develop の実装どおり）。Google は登録時に入力させる。移行では登録した ID に変わり、旧 ID は再利用させない |
 
 ## 14. 不変条件への影響（承認が必要な点）
 
 1. **識別子の書式変更**（§5）: `BBS_ID_SHIKIBETSU` の既定値を `phoebe` に切り替えると、全板の名前欄の識別子が変わる。dat の構造は変わらない。切替前の投稿は旧書式のまま残る。
-2. **識別子の `D` が日中に変わる**（§4.1）: 同じ人でも Lv が上がった時点から `D` が変わる。ID（`ID:xxxx`）と識別子の他の部分は同じ日の中で変わらない。専ブラの識別子による NG はその日のうちに途切れうる。
-3. **名前欄の `@uid`**（§5.3）: `!uid` を使った投稿だけに ` </b>@uid<b>` が加わる。dat の構造は変わらない。
+2. **識別子の `D` が日中に変わる**（§4.1）: 同じ人でも Lv が上がった時点から `D` が変わる。識別子の他の部分は同じ日の中で変わらない。専ブラの識別子による NG はその日のうちに途切れうる。
+3. **名前欄の `(@ユーザーID)`**（§5.3）: 認証済で `!id` を使った投稿だけに ` </b>(@ユーザーID)<b>` が加わる（`develop` で実装済み。段 B で有効になる）。dat の構造は変わらない。
 4. **規制スルーの範囲**（§6.4・§7）: ★ 投稿のスルーは現行どおり。加えて `admin` / `delete` / `regulate` の名無し投稿が `deny.cgi` / `ngwords.cgi` / 連投規制 / スレ立て規制を免除される（原案どおりだが現行にはない挙動）。
 5. **連投規制の全板展開**（§8）: コード既定値（`timecount=18` / `timeclose=10` / `BBS_SAMBA24=10` / スレ 40 件/時）は KB-12 により SETTING.TXT に無いキーにもそのまま効く。`BBS_RENTOU_MODE=log` で観測してから `on` にする（§13-26）。
 6. **吸い込み**（§8.5）: 成功画面を返しながら dat に残さない投稿が生じる。専ブラの書き込み履歴と dat が食い違う。
 7. **Web 版のログイン必須**（§3.5）: 現行 `3chiko.html` の利用者は、認証基盤の公開時点から未ログインでは書けなくなる（§13-28）。
 8. **スレ立て時の設定書き写しの変更**（§8.8）: 新キーと `timecount` / `timeclose` を書き写さない。既存キーの書き写しと `Thread.settings` の形式は変えない。
 
-上記以外（Cookie 追加・新 DO・新ルート・bbs.cgi の応答ヘッダ追加・Board/Thread DO への追加キー・`userInfo` の `UID:` / `Device:` の実値化・`Set-Cookie` の複数化）は、専ブラ互換・Shift_JIS・ID 計算・既存キーの形式に影響しない。
-`BBS_ID_LV`（KB-15）は変えない。
+上記以外（Cookie 追加・新 DO・新ルート・bbs.cgi の応答ヘッダ追加・Board/Thread DO への追加キー・`userInfo` の `UID:` / `Device:` の実値化・`Set-Cookie` の複数化）は、専ブラ互換・Shift_JIS・識別子の計算・既存キーの形式に影響しない。

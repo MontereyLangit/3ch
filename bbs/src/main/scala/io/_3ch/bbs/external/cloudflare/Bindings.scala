@@ -109,4 +109,6 @@ trait WorkerEnv extends js.Object {
   val ASSETS: Fetcher = js.native
   /** 板topの画像アップロード用 imgur Client-ID。未設定ならアップロード欄を出さない。 */
   val IMGUR_CLIENT_ID: js.UndefOr[String] = js.native
+  /** 投稿者の照合値に混ぜるソルト（wrangler.jsonc の vars） */
+  val salt: js.Any = js.native
 }

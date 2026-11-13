@@ -61,7 +61,10 @@ bbs/
   src/main/scala/io/_3ch/bbs/
     Main.scala         Worker エントリ（JSExportTopLevel）
     handler/           PublicRoutes（dat, subject.txt, SETTING.TXT, bbsmenu 等）, Posting（投稿パイプライン）,
-                       Moderation, AdminHandler（/admin/*）, Responses
+                       AdminHandler（/admin/*）, Responses
+    application/       アプリケーションサービス。posting/PostingService が投稿の段の並びを持ち、ports/ に外部の読み書きの口を置く
+    domain/            ドメインモデル・ドメインサービス（js.RegExp を使う規則と投稿処理の型。正規表現を使わない規則は common/）
+    repository/        ports の実装。DO スタブ / R2 / KV を包み、js.Dynamic をここで止める
     durable/           Board DO, Thread DO
     external/cloudflare/  Workers / DO / R2 / KV の facade（DO の RPC スタブ `*DoStub` はコンパイル時に codegen が生成。docs/durable-object-stubs.md）
     hash/, util/       Web Crypto ハッシュ（SHA-1 / SHA-256）, Shift_JIS 変換
@@ -187,3 +190,17 @@ npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc
 
 - `wrangler.jsonc` の `salt` や `ADMIN_PASSWORD` 等の秘匿値をログ・コミットメッセージ・外部 CLI への送信内容に含めない。
 
+### 3.5 セルフレビュー
+
+実装・設計のどちらも、コミット前に次の観点でセルフレビューし、指摘があれば直してから渡す。サブエージェントへの指示にもこの節を含める。
+UI を変える作業は、実装だけでなく設計（設計書の画面仕様・`docs/ui/` のモック・CSS）の段階からこの観点でレビューする。
+
+- **規約・既存実装との整合**: 3.3 のコーディング規約と、周辺の既存実装の書き方・命名・置き場所に沿っているか
+- **言語の選択**: Scala で書けるロジックを TypeScript / JavaScript で書いていないか（TS は HonoX の配線など Scala で書けない部分に限る）
+- **DDD・FP の作法**: ドメインの規則が handler / DO に漏れていないか、可変状態（`var`・可変コレクション）や文字列で表した種別を必要以上に使っていないか、副作用が境界に寄っているか
+- **scalajs-react / HonoX の作法**: クラスコンポーネントを使わず関数コンポーネントにする、状態や副作用は適切に Hooks 化する、コンポーネントを持つ変数は `final val` にする
+- **Scala の標準的な書き方**: 標準ライブラリの慣用表現（`Option`・`Either`・`fold`・パターンマッチ等）を使い、JS 由来の書き方を持ち込まない
+- **Scaladoc**: 公開する型・メソッドに不足がないか。文体は既存実装に合わせ、日本語を基本に、末尾に「。」を付けない。バッククォートはやたらと使わない
+- **文章の自然さ**: コメント・文書・画面の文言が説明調の羅列や不自然な言い回し（いわゆる AI 臭さ）になっていないか
+- **UI**: 既存画面に合わせる。角は `border-radius` を使わず四角くする。文言・余白・部品が既存画面から浮いていないか
+- **テストカバレッジ**: 追加・変更したドメインロジックと境界（判定順・異常系・互換性）に単体テストがあるか

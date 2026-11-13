@@ -1,0 +1,25 @@
+{
+  "case": "error-moderation-r2-failure",
+  "failure": "R2 get failed: deny.cgi",
+  "threads": {
+    "sample/1700000000": {
+      "dat": "",
+      "log": "",
+      "settings": ""
+    },
+    "sample/1699990000": {
+      "dat": "",
+      "log": "",
+      "settings": ""
+    }
+  },
+  "boards": {
+    "sample": ""
+  },
+  "r2": {
+    "sample/thread/1700/subject.txt": null,
+    "sample/thread/1699/subject.txt": null,
+    "sample/thread/subject.txt": null,
+    "headline.txt": null
+  }
+}

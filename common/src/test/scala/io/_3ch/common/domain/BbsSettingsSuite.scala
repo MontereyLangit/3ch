@@ -48,4 +48,47 @@ class BbsSettingsSuite extends munit.FunSuite {
     assertEquals(parse(text).value, s.value)
     assertEquals(parse(text).value.keys.toList, s.value.keys.toList)
   }
+
+  test("型付き読み: get / orElse / checked") {
+    val s = parse("A=x\nEMPTY=\nC=checked\nD=Checked\n")
+    assertEquals(s.get("A"), Some("x"))
+    assertEquals(s.get("NONE"), None)
+    assertEquals(s.orElse("A", "d"), "x")
+    assertEquals(s.orElse("EMPTY", "d"), "d")
+    assertEquals(s.orElse("NONE", "d"), "d")
+    assert(s.checked("C"))
+    assert(!s.checked("D"))
+    assert(!s.checked("NONE"))
+  }
+
+  test("型付き読み: number は無ければ既定値、空文字列は 0、数でなければ NaN") {
+    val s = parse("N=12\nEMPTY=\nBAD=abc\nHEX=0x10\nEXP=1e2\n")
+    assertEquals(s.number("N", 64), 12d)
+    assertEquals(s.number("NONE", 64), 64d)
+    assertEquals(s.number("EMPTY", 64), 0d)
+    assert(s.number("BAD", 64).isNaN)
+    assertEquals(s.number("HEX", 64), 16d)
+    assertEquals(s.number("EXP", 64), 100d)
+  }
+
+  test("型付き読み: int は空なら既定値を parseInt で読む") {
+    val s = parse("N=12abc\nEMPTY=\nBAD=abc\n")
+    assertEquals(s.int("N", "700"), 12d)
+    assertEquals(s.int("EMPTY", "700"), 700d)
+    assertEquals(s.int("NONE", "700"), 700d)
+    assert(s.int("BAD", "700").isNaN)
+  }
+
+  test("merged は既存キーの位置を保って上書きし、新しいキーを末尾に足す（既定値とのマージはしない）") {
+    val board = parse("A=1\nB=2\n")
+    val thread = BbsSettings.parse("B=x<>C=y<>", "<>")
+    assertEquals(board.merged(thread).value.toList, List("A" -> "1", "B" -> "x", "C" -> "y"))
+    assertEquals(board.updated("A", "z").value.toList, List("A" -> "z", "B" -> "2"))
+  }
+
+  test("toThreadSettings は配列の添字になるキーを数の順で先に並べ、ほかは元の順") {
+    val settings = BbsSettings(ListMap("B" -> "1", "10" -> "a", "01" -> "b", "2" -> "c", "4294967295" -> "d", "4294967294" -> "e", "-1" -> "f", "0" -> "g"))
+    assertEquals(settings.toThreadSettings, "0=g<>2=c<>10=a<>4294967294=e<>B=1<>01=b<>4294967295=d<>-1=f<>")
+    assertEquals(BbsSettings(ListMap.empty).toThreadSettings, "")
+  }
 }

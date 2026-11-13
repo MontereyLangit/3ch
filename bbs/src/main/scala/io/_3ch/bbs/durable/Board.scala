@@ -7,7 +7,7 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 import io._3ch.bbs.external.web.TextEncoder
-import io._3ch.bbs.domain.posting.moderation.ThreadCreationHistory
+import io._3ch.bbs.domain.posting.moderation.{ThreadCreationHistory, ThreadCreationLimit}
 import io._3ch.bbs.durable.codec.ThreadCreationCodec
 import io._3ch.bbs.durable.support.DurableLock
 
@@ -50,7 +50,7 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
   /** スレ立て履歴の判定と予約を直列化する。成功は空文字、拒否は [[ThreadCreationRejection.code]] を返す。 */
   def reserveThreadCreation(key: String, limit: js.Dynamic): js.Promise[String] = DurableLock.serialized(state) {
     val now = nowSeconds()
-    val (settings, request) = ThreadCreationCodec.decodeRequest(limit)
+    val ThreadCreationLimit(settings, request) = ThreadCreationCodec.decodeRequest(limit)
     creationHistory().flatMap { history =>
       history.reserve(key, request, settings, now, creationHistoryLimit) match {
         case Left(rejection) => Future.successful(rejection.code)

@@ -1,0 +1,56 @@
+{
+  "case": "reply-nusi-board-disabled",
+  "response": {
+    "status": 200,
+    "headers": [
+      [
+        "content-length",
+        "451"
+      ],
+      [
+        "content-type",
+        "text/html;charset=UTF-8"
+      ],
+      [
+        "set-cookie",
+        "PON=q4pXMpiV4D+74CIKl6fd3fkamHI; Max-Age=63072000; path=/; Secure; HttpOnly"
+      ],
+      [
+        "x-resnum",
+        "2"
+      ],
+      [
+        "x-threadkey",
+        "1699990000"
+      ]
+    ],
+    "bodyBase64": "PGh0bWwgbGFuZz0iamEiPjxoZWFkPjx0aXRsZT7mm7jjgY3jgZPjgb/jgb7jgZfjgZ/jgII8L3RpdGxlPjxtZXRhIGh0dHAtZXF1aXY9IkNvbnRlbnQtVHlwZSIgY29udGVudD0idGV4dC9odG1sOyBjaGFyc2V0PVVURi04Ii8+PG1ldGEgY29udGVudD0iNTtVUkw9L3Rlc3QvcmVhZC5jZ2kvc2FtcGxlLzE2OTk5OTAwMDAvIiBodHRwLWVxdWl2PSJyZWZyZXNoIi8+PHNjcmlwdCB0eXBlPSJtb2R1bGUiIHNyYz0iL3N0YXRpYy9jbGllbnQuanMiPjwvc2NyaXB0PjwvaGVhZD48Ym9keT7mm7jjgY3jgZPjgb/jgYzntYLjgo/jgorjgb7jgZfjgZ/jgII8YnIvPjxici8+CueUu+mdouOCkuWIh+OCiuabv+OBiOOCi+OBvuOBp+OBl+OBsOOCieOBj+OBiuW+heOBoeS4i+OBleOBhOOAgjxici8+PGJyLz48YnIvPjxici8+PGJyLz48YnIvPjxici8+PGNlbnRlcj48L2NlbnRlcj48L2JvZHk+PC9odG1sPg==",
+    "bodyText": "<html lang=\"ja\"><head><title>書きこみました。</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/><meta content=\"5;URL=/test/read.cgi/sample/1699990000/\" http-equiv=\"refresh\"/><script type=\"module\" src=\"/static/client.js\"></script></head><body>書きこみが終わりました。<br/><br/>\n画面を切り替えるまでしばらくお待ち下さい。<br/><br/><br/><br/><br/><br/><br/><center></center></body></html>"
+  },
+  "threads": {
+    "sample/1700000000": {
+      "dat": "",
+      "log": "",
+      "settings": ""
+    },
+    "sample/1699990000": {
+      "dat": "名無しさん＠３ちゃんねる </b>(JP.Tw.fv wA-4bf50373e5a55843)<b><><>2023/11/15(水) 04:26:40<> テスト本文 <>テストスレ\n名無しさん＠３ちゃんねる </b>(JP.Tw.fv wA-4bf50373e5a55843)<b><><>2023/11/15(水) 07:13:20<> 返信本文 <>\n",
+      "log": "1<>UID: IP:192.0.2.1 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0 (TestBrowser)\n2<>UID: IP:192.0.2.1 AS2516-JP,Tokyo,ChiyodaDevice: UA:Mozilla/5.0 (TestBrowser)\n",
+      "settings": "BBS_DISABLE_NUSI=checked<>BBS_SHIKIBETSU=off<>",
+      "owner": {
+        "ip": "21d543a447f9bc6f8598190fe7bf8d0b62ed6211fadbc7f91913591ee5f03f9a",
+        "shikibetsu": "JP.Tw.fv wA-4bf50373e5a55843",
+        "account": ""
+      }
+    }
+  },
+  "boards": {
+    "sample": "1699990000.dat<>テストスレ (2)\n"
+  },
+  "r2": {
+    "sample/thread/1700/subject.txt": null,
+    "sample/thread/1699/subject.txt": "1699990000\n1699990000<>テストスレ<>名無しさん＠３ちゃんねる </b>(JP.Tw.fv wA-4bf50373e5a55843)<b><>JP.Tw.fv wA-4bf50373e5a55843<><>テスト本文\n",
+    "sample/thread/subject.txt": "1699990000\n1699<>1699990000\n",
+    "headline.txt": "1700000000\nsample<>undefined<>1700000000<>1699990000<>返信本文\n"
+  }
+}
