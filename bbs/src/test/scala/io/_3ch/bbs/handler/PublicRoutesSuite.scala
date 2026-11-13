@@ -194,7 +194,7 @@ class PublicRoutesSuite extends FunSuite {
     }
   }
 
-  test("KB-23: dat: If-Modified-Sinceに同一値を送るとミリ秒切り捨てにより200になる（modifiedAtのミリ秒が0でない場合）") {
+  test("KB-23: dat: modifiedAtのミリ秒が0でなくても、Last-Modifiedを送り返せば304になる") {
     // modifiedAtのミリ秒を明示的に0でない値に固定する（Date.now() 依存のフレーキーさを避ける）。
     val env = DurableTestKit.newEnv()
     val fixedMs = js.Date.UTC(2024, 0, 1, 0, 0, 30, 500) // ミリ秒=500(≠0)に固定
@@ -205,7 +205,7 @@ class PublicRoutesSuite extends FunSuite {
       lm = header(res1, "last-modified").get
       _ = assertEquals(lm, "Mon, 01 Jan 2024 00:00:30 GMT") // toUTCStringはミリ秒を切り捨てる
       resSame <- get(env, "/board1/dat/1800000007.dat", "if-modified-since" -> lm)
-      _ = assertEquals(status(resSame), 200, "ミリ秒切り捨てにより同一値でも304にならない（実挙動として保存）")
+      _ = assertEquals(status(resSame), 304, "Last-Modifiedを秒に切り捨てて比較するので、同一値でも304になる")
       oneSecondLater = new js.Date(new js.Date(lm).getTime() + 1000).toUTCString()
       res2 <- get(env, "/board1/dat/1800000007.dat", "if-modified-since" -> oneSecondLater)
     } yield {
