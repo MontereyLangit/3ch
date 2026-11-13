@@ -35,6 +35,14 @@ class AccountCapSuite extends FunSuite {
     assert(fromAdmin.describeForCap(aid, "h2", now).isRight)
   }
 
+  test("自分で発行した強キャップは使う時点で admin が要り、降格すると使えず、ほかの admin が発行したものは使える") {
+    val own = owner(AccountRole.Admin).bindCap(cap("s1", "hs", strong = true), issuerIsAdmin = true, now).toOption.get
+    assert(own.describeForCap(aid, "hs", now).isRight)
+    assertEquals(own.setRoles(Roles(Set(AccountRole.Delete))).toOption.get.describeForCap(aid, "hs", now), Left(AccountRejection.CapRevoked))
+    val fromAdmin = owner(AccountRole.Delete).bindCap(cap("s2", "hs2", issuedBy = admin, strong = true), issuerIsAdmin = true, now).toOption.get
+    assert(fromAdmin.describeForCap(aid, "hs2", now).isRight)
+  }
+
   test("再発行は古いキャップを失効させ、同じ名前と強さで照合値だけ新しくする。一個の上限も守る") {
     val bound = owner(AccountRole.Regulate).bindCap(cap("c1", "h1"), issuerIsAdmin = false, now).toOption.get
     val (next, old, fresh) = bound.reissueCap("c1", "c2", "h2", aid, issuerIsAdmin = false, now + 5).toOption.get

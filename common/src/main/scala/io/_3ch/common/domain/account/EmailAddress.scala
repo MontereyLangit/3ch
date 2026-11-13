@@ -13,6 +13,12 @@ final case class EmailAddress private (address: String, canonical: String) {
 
 object EmailAddress {
   val MaxLength: Int = 254
+
+  /** 確認画面に出すための伏せ字。ローカル部は先頭の 1 文字だけ残し、ドメインはそのまま出す */
+  def mask(address: String): String = address.lastIndexOf('@') match {
+    case at if at > 0 => address.take(1) + "***" + address.drop(at)
+    case _ => ""
+  }
   private val Local = "[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*"
   private val Label = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
   private val Gmail = Set("gmail.com", "googlemail.com")
@@ -66,9 +72,9 @@ object PendingKind {
   def parse(code: String): Option[PendingKind] = PendingKind.values.find(_.code == code)
 }
 
-/** 保留中のトークン。hash はトークンの HMAC、email はメール認証で確定させるアドレス */
-final case class PendingToken(hash: String, expiresAt: Double, email: Option[String] = None) {
-  def valid: Boolean = DedicatedBrowserTokens.validHash(hash) && AccountProfile.validTime(expiresAt) && email.forall(_.nonEmpty)
+/** 保留中のトークン。hash はトークンの HMAC、email はメール認証で確定させるアドレス、generation は発行時のアカウントの世代 */
+final case class PendingToken(hash: String, expiresAt: Double, email: Option[String] = None, generation: Int = 0) {
+  def valid: Boolean = DedicatedBrowserTokens.validHash(hash) && AccountProfile.validTime(expiresAt) && email.forall(_.nonEmpty) && generation >= 0
 
   /** ハッシュが一致し、期限内か */
   def accepts(candidate: String, now: Double): Boolean =

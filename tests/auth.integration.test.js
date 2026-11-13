@@ -319,10 +319,10 @@ test('Wrangler: 認証の HTTP と Account・AccountIndex・AuthRate の永続�
     const aid = cookie.split('.')[1];
     const hash = (kind, value) => createHmac('sha256', secret).update(`${kind}:${value}`).digest('hex');
     assert.equal(await index('role:admin', 'claimFirstAdmin', hash('role:admin', aid), aid, now, false), '');
-    assert.equal(await account(aid, 'grantFirstAdmin', now), '');
+    assert.equal(await account(aid, 'grantFirstAdmin', hash('role:admin', aid), now), '');
     assert.equal(await index('role:admin', 'confirm', hash('role:admin', aid), aid, now), '');
     assert.equal(await index('role:admin', 'claimFirstAdmin', hash('role:admin', 'cccccccccccccccc'), 'cccccccccccccccc', now, false), 'auth:forbidden');
-    assert.equal(await account(aid, 'setRoles', ['admin', 'delete'], ['delete'], now), 'auth:forbidden');
+    assert.equal(await account(aid, 'setRoles', ['admin', 'delete'], 'cccccccccccccccc', now), 'auth:forbidden');
 
     const refused = await post('/auth/cap/issue/', { name: '<b>' }, { ...headers, cookie });
     assert.equal(refused.status, 400);

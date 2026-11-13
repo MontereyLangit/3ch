@@ -20,6 +20,8 @@ object AuthTokenIsland {
     } yield {
       val reset = AuthClient.text(raw, "mode") == "reset"
       val token = AuthClient.text(raw, "token")
+      val uid = AuthClient.text(raw, "uid")
+      val address = AuthClient.text(raw, "email")
       def send(path: String, fields: Seq[(String, String)])(success: js.Object => String): Callback =
         busy.setState(true) >> message.setState("") >> Callback {
           AuthClient.post(path, fields :+ ("token" -> token)).map { case (ok, json) =>
@@ -42,8 +44,9 @@ object AuthTokenIsland {
         <.p(^.className := "mt-3", <.a(^.className := "text-[#06f] hover:underline", ^.href := (if reset then "/auth/?mode=login" else "/auth/account/"),
           if reset then "ログインする" else "アカウント設定へ")))
       else <.form(^.className := "border border-[#d6dce3] bg-white p-4", ^.onSubmit ==> submit,
-        if reset then <.div(field("新しいパスワード（8文字以上）", password.value, password.setState), field("新しいパスワード（確認）", confirmation.value, confirmation.setState))
-        else <.p(^.className := "mb-3", "このメールアドレスをアカウントに登録します。"),
+        if reset then <.div(<.p(^.className := "mb-3", s"ユーザーID $uid のパスワードを再設定します。"), field("新しいパスワード（8文字以上）", password.value, password.setState), field("新しいパスワード（確認）", confirmation.value, confirmation.setState))
+        else <.p(^.className := "mb-3", if address.nonEmpty then s"このメールアドレス（$address）を、ユーザーID $uid のアカウントに登録します。心当たりが無ければ、ボタンを押さずに閉じてください。"
+          else "このメールアドレスをアカウントに登録します。"),
         if message.value.nonEmpty then <.p(^.role := "alert", ^.className := "my-2 text-[#f00]", message.value) else EmptyVdom,
         <.button(^.`type` := "submit", ^.className := s"$button border-[#f66]",
           ^.disabled := busy.value || (reset && (password.value.isEmpty || confirmation.value.isEmpty)),

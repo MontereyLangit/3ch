@@ -1,6 +1,6 @@
 package io._3ch.bbs.handler.auth
 
-import io._3ch.bbs.application.auth.{AccountMail, AuthServiceFailure, AuthSettings, PasswordChange, PasswordChangeOutcome}
+import io._3ch.bbs.application.auth.{AccountMail, AuthServiceFailure, AuthSettings, PasswordChange, PasswordChangeOutcome, StaleIndex}
 import io._3ch.bbs.application.auth.ports.AccountStoreException
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.web.{Request, Response}
@@ -41,7 +41,8 @@ object AccountMailHandler {
     _ = if (domains.blocks(email)) throw Refused(AuthApiError.Email(EmailRejection.Disposable))
     hash <- keys(config.secret).index("email", email.canonical).map(_.getOrElse(throw Refused(AuthApiError.Unavailable)))
     owner <- repository.lookup("email", hash)
-  } yield if (owner.exists(_ != aid)) throw Refused(AuthApiError.Service(AuthServiceFailure.EmailTaken))
+    freed <- owner.filter(_ != aid).fold(Future.successful(true))(other => new StaleIndex(repository).reclaim("email", email.canonical, hash, other))
+  } yield if (!freed) throw Refused(AuthApiError.Service(AuthServiceFailure.EmailTaken))
 
   /** 登録直後に確認メールを送る。送れなくても登録は成功のままにし、結果だけを返す */
   def afterRegistration(env: WorkerEnv, repository: AccountRepository, config: AuthSettings, request: Request, account: AccountDescription,
@@ -49,16 +50,24 @@ object AccountMailHandler {
     required(env, repository, config).request(account, address, origin(request.url), time).map(_ => "sent").recover { case NonFatal(_) => "failed" }
   }
 
-  /** ログイン中の ID・パスワードのアカウントでアドレスを登録・変更し、確認メールを送る */
+  /**
+    * ログイン中の ID・パスワードのアカウントでアドレスを登録・変更し、確認メールを送る。現在のパスワードを確かめる（パスワードの変更・退会と同じ照合）。
+    * Google とかんたん登録のアカウントはメールを使えない
+    */
   def email(request: Request, env: WorkerEnv, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] = {
     val mail = required(env, repository, config)
     managed(request, config.secret, repository, time).flatMap { case (_, account) =>
       if (account.kind != AccountKind.Password) throw Refused(AuthApiError.Refused(AccountRejection.KindForbidden))
       val address = parse(env, form.get("email")).fold(error => throw Refused(error), _.getOrElse(throw Refused(AuthApiError.Email(EmailRejection.Invalid))))
       for {
+        key <- AuthHandler.keyIp(request, config.secret)
+        verified <- mail.reauthenticate(account, form.getOrElse("current", ""), key, time)
+        _ = if (!verified) throw Refused(AuthApiError.LoginFailed)
         _ <- check(env, repository, config, account.aid, address)
         _ <- mail.request(account, address, origin(request.url), time)
       } yield json(js.Dynamic.literal(ok = true, email = address.address))
+    }.recover {
+      case AccountStoreException(reason) => throw Refused(AuthApiError.Refused(reason))
     }
   }
 

@@ -13,7 +13,7 @@ final case class IssuedCap(capId: String, password: String)
 final case class CapNameException(reason: CapNameRejection) extends RuntimeException(reason.toString)
 
 /**
-  * キャップの発行・失効・再発行。Account に記録し、KV の CAP と cap 索引（照合キー → 所有者）を揃える。
+  * キャップの発行・失効・再発行。Account に記録し、KV の CAP と cap 索引（照合キー → 所有者。失効後も残す）を揃える。
   * 発行できる人と数の判定は Account DO が行う
   */
 final class CapIssuing(accounts: AccountCapStore, directory: CapDirectory, keys: AuthenticationKeys, capKey: String => Future[String]) {
@@ -36,7 +36,7 @@ final class CapIssuing(accounts: AccountCapStore, directory: CapDirectory, keys:
     } yield (password, key, hash)
   }
 
-  /** 索引を予約してから body を行い、失敗したら予約を外す */
+  /** 索引を予約してから body を行い、失敗したら確定前の予約を外す。確定した cap 索引は外れない */
   private def reserved[A](hash: String, owner: String, now: Double)(body: => Future[A]): Future[A] =
     accounts.reserve(kind, hash, owner, now).recoverWith { case NonFatal(error) =>
       accounts.remove(kind, hash, owner).recover { case NonFatal(_) => () }.flatMap(_ => Future.failed(error))
@@ -47,11 +47,11 @@ final class CapIssuing(accounts: AccountCapStore, directory: CapDirectory, keys:
       }
     }
 
-  /** KV に書いて索引を確定する。失敗したら新しいキャップを失効させて KV から消す */
+  /** 索引を確定してから KV に書く（KV に載った照合キーが所有者のない旧キャップに見えないように）。失敗したら新しいキャップを失効させて KV から消す */
   private def publish(owner: String, capId: String, key: String, hash: String, storedName: String, now: Double): Future[Unit] =
     (for {
-      _ <- directory.put(key, storedName)
       _ <- accounts.confirm(kind, hash, owner, now)
+      _ <- directory.put(key, storedName)
     } yield ()).recoverWith { case NonFatal(error) =>
       for {
         _ <- accounts.revokeCap(owner, capId, now).map(_ => ()).recover { case NonFatal(_) => () }
@@ -60,9 +60,8 @@ final class CapIssuing(accounts: AccountCapStore, directory: CapDirectory, keys:
       } yield result
     }
 
-  /** KV から消せたときだけ索引からも外す。索引が残る間は所有者の失効の記録で照合を拒否する */
-  private def retire(owner: String, key: String): Future[Unit] =
-    directory.delete(key).flatMap(_ => indexHash(key)).flatMap(hash => accounts.remove(kind, hash, owner))
+  /** KV から消す。cap 索引は外さず、KV の写しが残っても所有者の失効の記録で照合を拒否する */
+  private def retire(key: String): Future[Unit] = directory.delete(key)
 
   /** issuer が owner に発行する。強キャップと他人宛ては admin だけ、ほかの役割保持者は自分宛てに一個まで */
   def issue(issuer: AccountDescription, owner: String, rawName: String, strong: Boolean, now: Double): Future[IssuedCap] =
@@ -77,14 +76,14 @@ final class CapIssuing(accounts: AccountCapStore, directory: CapDirectory, keys:
       }
     }
 
-  /** 所有者か admin が失効させ、KV と索引から外す */
+  /** 所有者か admin が失効させ、KV から外す */
   def revoke(actor: AccountDescription, owner: String, capId: String, now: Double): Future[Unit] =
     Future.unit.flatMap { _ =>
       if (actor.aid != owner && !actor.roles.admin) throw AccountStoreException(AccountRejection.Forbidden)
-      accounts.revokeCap(owner, capId, now).flatMap(retire(owner, _))
+      accounts.revokeCap(owner, capId, now).flatMap(retire)
     }
 
-  /** 同じ表示名・強さで新しいパスワードにする。古いキャップは失効させて KV と索引から外す */
+  /** 同じ表示名・強さで新しいパスワードにする。古いキャップは失効させて KV から外す */
   def reissue(actor: AccountDescription, owner: String, capId: String, now: Double): Future[IssuedCap] =
     Future.unit.flatMap { _ =>
       if (actor.aid != owner && !actor.roles.admin) throw AccountStoreException(AccountRejection.Forbidden)
@@ -94,7 +93,7 @@ final class CapIssuing(accounts: AccountCapStore, directory: CapDirectory, keys:
           accounts.reissueCap(owner, capId, nextId, key, actor.aid, actor.roles.admin, now).flatMap { result =>
             publish(owner, nextId, key, hash, result.storedName, now).map(_ => result.previousHash)
           }
-        }.flatMap(previous => retire(owner, previous).recover { case NonFatal(_) => () }).map(_ => IssuedCap(nextId, password))
+        }.flatMap(previous => retire(previous).recover { case NonFatal(_) => () }).map(_ => IssuedCap(nextId, password))
       }
     }
 }

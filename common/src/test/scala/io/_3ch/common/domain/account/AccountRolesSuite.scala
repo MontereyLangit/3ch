@@ -41,12 +41,13 @@ class AccountRolesSuite extends FunSuite {
   }
 
   test("初回の管理者は利用できるアカウントにだけ admin を足し、凍結中は有効な admin に数えない") {
-    val granted = google(AccountRole.Delete).grantFirstAdmin(now).toOption.get
+    val granted = google(AccountRole.Delete).grantFirstAdmin(claimed = true, now).toOption.get
     assertEquals(granted.roles, roles(AccountRole.Admin, AccountRole.Delete))
     assert(granted.activeAdmin(now))
     val frozen = granted.setStatus(AccountStatus.Frozen).toOption.get
     assert(!frozen.activeAdmin(now))
-    assertEquals(frozen.grantFirstAdmin(now), Left(AccountRejection.Frozen))
+    assertEquals(frozen.grantFirstAdmin(claimed = true, now), Left(AccountRejection.Frozen))
+    assertEquals(google(AccountRole.Delete).grantFirstAdmin(claimed = false, now), Left(AccountRejection.Forbidden))
     assert(!google(AccountRole.Delete).activeAdmin(now))
   }
 
@@ -57,6 +58,18 @@ class AccountRolesSuite extends FunSuite {
     assert(!FirstAdminClaim.breakGlass(Some(now), now))
     assert(!FirstAdminClaim.breakGlass(None, now))
     assert(!FirstAdminClaim.breakGlass(Some(Double.PositiveInfinity), now))
+  }
+
+  test("確定前でも役割の付与が済んだ所有者は有効な admin として数え、他に有効な admin が居るかを返す") {
+    val pendingAdmin = AdminSeat("a" * 64, AccountIndexEntry(other, now - 10), activeAdmin = true)
+    val expiredAdmin = AdminSeat("b" * 64, AccountIndexEntry(other, now - 600), activeAdmin = true)
+    assertEquals(FirstAdminClaim.claim(Vector(pendingAdmin), aid, now, breakGlass = false), Left(AccountRejection.Forbidden))
+    assertEquals(FirstAdminClaim.claim(Vector(expiredAdmin), aid, now, breakGlass = false), Left(AccountRejection.Forbidden), "期限切れの予約でも admin なら外さない")
+    assertEquals(FirstAdminClaim.claim(Vector(expiredAdmin), aid, now, breakGlass = true).map(_._1), Right(Vector.empty[String]))
+    val mine = AdminSeat("c" * 64, AccountIndexEntry(aid, now - 100, confirmed = true), activeAdmin = true)
+    assert(!FirstAdminClaim.otherAdminExists(Vector(mine), aid))
+    assert(FirstAdminClaim.otherAdminExists(Vector(mine, pendingAdmin), aid))
+    assert(!FirstAdminClaim.otherAdminExists(Vector(mine, pendingAdmin.copy(activeAdmin = false)), aid))
   }
 
   test("有効な admin か他人の予約があれば拒否し、使えなくなった索引と期限切れの予約は外す") {

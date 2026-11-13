@@ -200,4 +200,60 @@ class AccountStateSuite extends FunSuite {
     assertEquals(deleted.withdraw(1, now + 2), Left(AccountRejection.Deleted))
     assertEquals(state.withdraw(1, now), Left(AccountRejection.Generation))
   }
+
+  private def verifiedAccount: AccountState =
+    passwordAccount.copy(profile = passwordAccount.profile.copy(email = Some("t@example.com"), emailVerifiedAt = Some(now)))
+  private def withBothPending: AccountState =
+    verifiedAccount.issuePending(PendingKind.Email, hash, Some("n@example.com"), now).flatMap(_.issuePending(PendingKind.Reset, "b" * 64, None, now)).toOption.get
+  private val next = credential.copy(hash = Vector.fill(32)(3.toByte), updatedAt = now + 1)
+
+  test("パスワードの変更・再設定・メールの確認・移行は保留中のトークンを全て捨てる") {
+    val both = withBothPending
+    assertEquals(both.setPassword(next, now + 1).map(_.pending), Right(Map.empty))
+    assertEquals(both.resetPassword("b" * 64, next, now + 1).map(_.pending), Right(Map.empty))
+    assertEquals(both.verifyEmail(hash, now + 1).map(_._1.pending), Right(Map.empty))
+    val client = account.copy(pending = Map(PendingKind.Email -> PendingToken(hash, now + 100, Some("t@example.com"))))
+    assertEquals(client.convert(AccountConversion.ToPassword(credential), "taro_2026", 0, now).map(_.pending), Right(Map.empty))
+  }
+
+  test("保留トークンは発行時の世代と違えば受け付けない") {
+    val both = withBothPending
+    assertEquals(both.pending.values.map(_.generation).toSet, Set(0))
+    val bumped = both.bumpGeneration.toOption.get
+    assertEquals(bumped.pendingFor(PendingKind.Email, hash, now), Left(AccountRejection.PendingInvalid))
+    assertEquals(bumped.pendingFor(PendingKind.Reset, "b" * 64, now), Left(AccountRejection.PendingInvalid))
+    assertEquals(bumped.verifyEmail(hash, now), Left(AccountRejection.PendingInvalid))
+    val reissued = bumped.issuePending(PendingKind.Email, hash, Some("n@example.com"), now).toOption.get
+    assertEquals(reissued.pendingFor(PendingKind.Email, hash, now).map(_.generation), Right(1))
+  }
+
+  test("パスワードの再設定は専ブラキーを全て無効にするが、通常の変更は残す") {
+    val token = DedicatedBrowserToken("token1", "a" * 64, now, now + 86400, Some("b" * 64), Some("専ブラ"), Some(now))
+    val state = withBothPending.copy(tokens = Vector(token))
+    val reset = state.resetPassword("b" * 64, next, now + 1).toOption.get
+    assertEquals(reset.tokens.map(t => (t.revokedAt, t.revokeReason)), Vector((Some(now + 1), Some(TokenRevokeReason.Revoked))))
+    assertEquals(reset.useToken("token1", "b" * 64, "専ブラ", now + 2)._2.isLeft, true)
+    assertEquals(state.setPassword(next, now + 1).map(_.tokens), Right(Vector(token)))
+  }
+
+  test("退会は同じセッションの世代なら何度でも同じ結果を返して後始末をやり直せ、ほかの世代は拒否する") {
+    val cap = AccountCap("cap1", "管理人", "kvkey", strong = false, profile.aid, now)
+    val state = passwordAccount.copy(caps = Vector(cap), roles = Roles(Set(AccountRole.Cap)))
+    val (deleted, first) = state.withdraw(0, now + 1).toOption.get
+    assertEquals(deleted.withdraw(0, now + 5), Right((deleted, first)))
+    assertEquals(deleted.withdraw(2, now + 5), Left(AccountRejection.Deleted))
+    assertEquals(deleted.withdraw(0, Double.NaN), Left(AccountRejection.Invalid))
+  }
+
+  test("索引の値を今も持つのは退会していないアカウントだけで、変更前の値は持たない") {
+    val google = AccountState.create(profile.copy(kind = AccountKind.Google, googleSubHash = Some("c" * 64)), now).flatMap(_.activate(now)).toOption.get
+    assert(verifiedAccount.holds(AccountIndexKind.Login, "user1234"))
+    assert(!verifiedAccount.holds(AccountIndexKind.Login, "other"))
+    assert(verifiedAccount.holds(AccountIndexKind.Email, "t@example.com"))
+    assert(!verifiedAccount.holds(AccountIndexKind.Email, "old@example.com"))
+    assert(!passwordAccount.holds(AccountIndexKind.Email, "t@example.com"), "未確認のアドレスは持っていない")
+    assert(google.holds(AccountIndexKind.Google, "c" * 64) && !google.holds(AccountIndexKind.Google, "d" * 64))
+    assert(!verifiedAccount.withdraw(0, now + 1).toOption.get._1.holds(AccountIndexKind.Login, "user1234"))
+    assert(!verifiedAccount.holds(AccountIndexKind.Uid, "user1234"))
+  }
 }

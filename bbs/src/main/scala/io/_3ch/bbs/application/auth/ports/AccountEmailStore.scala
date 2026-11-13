@@ -10,12 +10,11 @@ final case class PendingCheck(uid: String, email: Option[String])
 final case class EmailVerified(account: AccountDescription, previous: Option[String])
 
 /** メール認証・パスワードの変更と再設定に使うアカウント操作。拒否は AccountStoreException の Future の失敗で返す */
-trait AccountEmailStore {
+trait AccountEmailStore extends IndexHoldings {
   def rate(key: String, kind: String, now: Double): Future[AuthRateCounts]
   def lookup(kind: String, hash: String): Future[Option[String]]
   def reserve(kind: String, hash: String, aid: String, now: Double, tokenId: Option[String] = None): Future[Boolean]
   def confirm(kind: String, hash: String, aid: String, now: Double): Future[Unit]
-  def remove(kind: String, hash: String, aid: String): Future[Unit]
   /** 保留トークンを保存する。再設定なら送り先のアドレスを返す */
   def issuePending(aid: String, kind: PendingKind, hash: String, email: Option[String], now: Double): Future[Option[String]]
   def checkPending(aid: String, kind: PendingKind, hash: String, now: Double): Future[PendingCheck]

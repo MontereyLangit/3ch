@@ -77,7 +77,7 @@ class AccountMailHandlerSuite extends munit.FunSuite {
         _ = t.mailFails = false
         cookie = t.cookie(registered, "__Host-ch3s_sid").get
         sends <- (1 to 3).foldLeft(Future.successful(Vector.empty[Int])) { (done, _) =>
-          done.flatMap(list => t.send(t.post("/auth/email", Seq("email" -> "taro@example.com"), cookie = cookie)).map(r => list :+ r.status))
+          done.flatMap(list => t.send(t.post("/auth/email", Seq("email" -> "taro@example.com", "current" -> "correct horse"), cookie = cookie)).map(r => list :+ r.status))
         }
       } yield {
         assertEquals(sends, Vector(200, 200, 429))
@@ -93,7 +93,7 @@ class AccountMailHandlerSuite extends munit.FunSuite {
         registered <- t.send(t.post("/auth/register", register("taro_2026", "old@example.com")))
         cookie = t.cookie(registered, "__Host-ch3s_sid").get
         _ <- t.send(t.post("/auth/email/verify", Seq("token" -> t.mailedToken())))
-        changed <- t.send(t.post("/auth/email", Seq("email" -> "new@example.com"), cookie = cookie))
+        changed <- t.send(t.post("/auth/email", Seq("email" -> "new@example.com", "current" -> "correct horse"), cookie = cookie))
         _ = assertEquals(changed.status, 200)
         aid = t.kit.accountNames.head
         panel <- t.kit.account(aid).inspect().toFuture
@@ -154,7 +154,8 @@ class AccountMailHandlerSuite extends munit.FunSuite {
         _ <- t.send(t.post("/auth/register", register("taro_2026", "taro@example.com")))
         _ <- t.send(t.post("/auth/email/verify", Seq("token" -> t.mailedToken())))
         aid = t.kit.accountNames.head
-        _ <- t.kit.account(aid).setRoles(js.Array(AccountRole.Delete.code), js.Array(AccountRole.Admin.code), now).toFuture
+        actor <- t.admin()
+        _ <- t.kit.account(aid).setRoles(js.Array(AccountRole.Delete.code), actor, now).toFuture
         statuses <- (1 to 4).foldLeft(Future.successful(Vector.empty[Int]))((done, _) => done.flatMap(list => request("taro_2026").map(r => list :+ r.status)))
       } yield {
         assertEquals(statuses, Vector(200, 200, 200, 429))
@@ -177,13 +178,104 @@ class AccountMailHandlerSuite extends munit.FunSuite {
         old <- t.send(t.get("/auth/session", cookie = cookie)).flatMap(t.body)
         current <- t.send(t.get("/auth/session", cookie = next)).flatMap(t.body)
         aid = t.kit.accountNames.find(_ != "dummy").get
-        _ <- t.kit.account(aid).setRoles(js.Array(AccountRole.Delete.code), js.Array(AccountRole.Admin.code), now).toFuture
+        actor <- t.admin()
+        _ <- t.kit.account(aid).setRoles(js.Array(AccountRole.Delete.code), actor, now).toFuture
         short <- t.send(t.post("/auth/password", Seq("current" -> "brand new pass", "password" -> "fifteen chars!!", "password2" -> "fifteen chars!!"), cookie = next))
         shortBody <- t.body(short)
       } yield {
         assertEquals(old, null)
         assertEquals(current.uid.asInstanceOf[String], "taro_2026")
         assertEquals((short.status, shortBody.error.asInstanceOf[String]), (400, "権限のあるアカウントのパスワードは16文字以上にしてください。"))
+      }
+    }
+  }
+
+  test("メールの登録・変更は現在のパスワードを確かめ、無い・違うパスワードでは確認メールを送らない") {
+    val t = new AuthSignInTestKit(mail = true)
+    t.run {
+      for {
+        registered <- t.send(t.post("/auth/register", register("taro_2026")))
+        cookie = t.cookie(registered, "__Host-ch3s_sid").get
+        missing <- t.send(t.post("/auth/email", Seq("email" -> "taro@example.com"), cookie = cookie))
+        wrong <- t.send(t.post("/auth/email", Seq("email" -> "taro@example.com", "current" -> "wrong password"), cookie = cookie))
+        _ = assertEquals((missing.status, wrong.status, t.outbox.size), (401, 401, 0))
+        sent <- t.send(t.post("/auth/email", Seq("email" -> "taro@example.com", "current" -> "correct horse"), cookie = cookie))
+      } yield assertEquals((sent.status, t.outbox.size), (200, 1))
+    }
+  }
+
+  test("パスワードの変更は、それ以前に出した確認と再設定のリンクを使えなくする") {
+    val t = new AuthSignInTestKit(mail = true)
+    t.run {
+      for {
+        registered <- t.send(t.post("/auth/register", register("taro_2026", "taro@example.com")))
+        cookie = t.cookie(registered, "__Host-ch3s_sid").get
+        _ <- t.send(t.post("/auth/email/verify", Seq("token" -> t.mailedToken())))
+        _ <- t.send(t.post("/auth/email", Seq("email" -> "new@example.com", "current" -> "correct horse"), cookie = cookie))
+        change = t.mailedToken()
+        _ <- t.send(t.post("/auth/reset/request", Seq("id" -> "taro_2026", "cf-turnstile-response" -> "accepted"), ip = "192.0.2.70"))
+        reset = t.mailedToken()
+        changed <- t.send(t.post("/auth/password", Seq("current" -> "correct horse", "password" -> "brand new pass", "password2" -> "brand new pass"), cookie = cookie))
+        _ = assertEquals(changed.status, 200)
+        staleChange <- t.send(t.post("/auth/email/verify", Seq("token" -> change)))
+        staleReset <- t.send(t.post("/auth/reset", Seq("token" -> reset, "password" -> "another pass1", "password2" -> "another pass1")))
+      } yield assertEquals((staleChange.status, staleReset.status), (400, 400))
+    }
+  }
+
+  test("メールの確認は、それ以前に出した再設定のリンクも捨てる") {
+    val t = new AuthSignInTestKit(mail = true)
+    t.run {
+      for {
+        registered <- t.send(t.post("/auth/register", register("taro_2026", "taro@example.com")))
+        cookie = t.cookie(registered, "__Host-ch3s_sid").get
+        _ <- t.send(t.post("/auth/email/verify", Seq("token" -> t.mailedToken())))
+        _ <- t.send(t.post("/auth/email", Seq("email" -> "new@example.com", "current" -> "correct horse"), cookie = cookie))
+        change = t.mailedToken()
+        _ <- t.send(t.post("/auth/reset/request", Seq("id" -> "taro_2026", "cf-turnstile-response" -> "accepted"), ip = "192.0.2.71"))
+        reset = t.mailedToken()
+        verified <- t.send(t.post("/auth/email/verify", Seq("token" -> change)))
+        stale <- t.send(t.post("/auth/reset", Seq("token" -> reset, "password" -> "another pass1", "password2" -> "another pass1")))
+      } yield assertEquals((verified.status, stale.status), (200, 400))
+    }
+  }
+
+  test("パスワードの再設定は専ブラキーを全て無効にし、通常のパスワード変更は残す") {
+    val t = new AuthSignInTestKit(mail = true)
+    t.run {
+      for {
+        registered <- t.send(t.post("/auth/register", register("taro_2026", "taro@example.com")))
+        cookie = t.cookie(registered, "__Host-ch3s_sid").get
+        _ <- t.send(t.post("/auth/email/verify", Seq("token" -> t.mailedToken())))
+        _ <- t.send(t.post("/auth/token/issue", Nil, cookie = cookie))
+        aid = t.kit.accountNames.find(_ != "dummy").get
+        changed <- t.send(t.post("/auth/password", Seq("current" -> "correct horse", "password" -> "brand new pass", "password2" -> "brand new pass"), cookie = cookie))
+        afterChange <- t.kit.account(aid).inspect().toFuture
+        _ <- t.send(t.post("/auth/reset/request", Seq("id" -> "taro_2026", "cf-turnstile-response" -> "accepted"), ip = "192.0.2.72"))
+        reset <- t.send(t.post("/auth/reset", Seq("token" -> t.mailedToken(), "password" -> "another pass1", "password2" -> "another pass1")))
+        afterReset <- t.kit.account(aid).inspect().toFuture
+      } yield {
+        assertEquals((changed.status, reset.status), (200, 200))
+        def revoked(panel: js.Dynamic) = panel.tokens.asInstanceOf[js.Array[js.Dynamic]].toVector.map(token => !js.isUndefined(token.revokedAt))
+        assertEquals(revoked(afterChange), Vector(false))
+        assertEquals(revoked(afterReset), Vector(true))
+      }
+    }
+  }
+
+  test("確認画面に出す対象はリンクの持ち主のユーザー ID と確定させるアドレスで、再設定のリンクはユーザー ID だけ") {
+    val t = new AuthSignInTestKit(mail = true)
+    val repository = new io._3ch.bbs.repository.AccountRepository(t.env)
+    t.run {
+      for {
+        _ <- t.send(t.post("/auth/register", register("taro_2026", "taro@example.com")))
+        link = io._3ch.common.domain.account.PendingLink.parse(t.mailedToken()).get
+        service = AccountMailHandler.service(t.env, repository, AuthEnv.settings(t.env).get).get
+        target <- service.emailTarget(link, now)
+        gone <- service.emailTarget(link.copy(secret = "x" * 43), now).failed
+      } yield {
+        assertEquals((target.uid, target.email.map(io._3ch.common.domain.account.EmailAddress.mask)), ("taro_2026", Some("t***@example.com")))
+        assert(gone.isInstanceOf[io._3ch.bbs.application.auth.ports.AccountStoreException])
       }
     }
   }

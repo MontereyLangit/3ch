@@ -5,6 +5,12 @@ import munit.FunSuite
 class EmailAddressSuite extends FunSuite {
   private def parse(raw: String) = EmailAddress.parse(raw).toOption.get
 
+  test("確認画面用の伏せ字はローカル部の先頭 1 文字とドメインだけを出す") {
+    assertEquals(EmailAddress.mask("taro.yamada@example.com"), "t***@example.com")
+    assertEquals(EmailAddress.mask("a@b.jp"), "a***@b.jp")
+    assertEquals(EmailAddress.mask("no-at-sign"), "")
+  }
+
   test("前後の空白を除いて小文字にし、送信先と照合値を分ける") {
     val email = parse("  Taro.Yamada+bbs@Example.COM ")
     assertEquals((email.address, email.canonical, email.domain), ("taro.yamada+bbs@example.com", "taro.yamada+bbs@example.com", "example.com"))

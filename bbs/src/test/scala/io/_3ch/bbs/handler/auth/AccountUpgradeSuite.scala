@@ -1,7 +1,10 @@
 package io._3ch.bbs.handler.auth
 
 import io._3ch.bbs.external.web.{Response, URL}
-import io._3ch.common.domain.account.AccountKind
+import io._3ch.bbs.application.auth.{AccountUpgrade, UpgradeOutcome}
+import io._3ch.bbs.application.auth.ports.AccountStoreException
+import io._3ch.bbs.repository.AccountRepository
+import io._3ch.common.domain.account.{AccountKind, AccountRejection, LoginId, Password}
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
@@ -103,6 +106,44 @@ class AccountUpgradeSuite extends munit.FunSuite {
         assertEquals(panel.account.kind.asInstanceOf[String], AccountKind.Google.code)
         assertEquals(noSession.headers.get("Location"), "/auth/?upgrade=1&error=session&return=%2F")
       }
+    }
+  }
+
+  test("同じクライアント ID の移行が重なって後から失敗しても、先に確定したログイン・uid の索引を外さない") {
+    val t = new AuthSignInTestKit()
+    val repository = new AccountRepository(t.env)
+    val upgrade = new AccountUpgrade(repository, AuthHandler.keys(AuthTestEnv.secret))
+    val id = LoginId.parse("taro_2026").toOption.get
+    val password = Password.parse("correct horse").toOption.get
+    t.run {
+      for {
+        (_, aid, _) <- client(t)
+        before <- repository.inspect(aid).map(_.account)
+        keyIp <- t.keyIp("192.0.2.84")
+        first <- upgrade.toPassword(before, id, password, AuthHandler.hashing, "", keyIp, now)
+        loser <- upgrade.toPassword(before, id, password, AuthHandler.hashing, "", keyIp, now + 1).failed
+        loginHash <- t.index("login", "taro_2026")
+        uidHash <- t.index("uid", "taro_2026")
+        login <- repository.lookup("login", loginHash)
+        uid <- repository.lookup("uid", uidHash)
+        signedIn <- t.send(t.post("/auth/login", Seq("id" -> "taro_2026", "password" -> "correct horse", "cf-turnstile-response" -> "accepted"), ip = "192.0.2.85"))
+      } yield {
+        assert(first.isInstanceOf[UpgradeOutcome.Converted])
+        assertEquals(loser, AccountStoreException(AccountRejection.Generation))
+        assertEquals((login, uid, signedIn.status), (Some(aid), Some(aid), 200))
+      }
+    }
+  }
+
+  test("移行も登録と同じ接続元ごとの一日の上限を数え、超えたら拒否する") {
+    val t = new AuthSignInTestKit()
+    t.run {
+      for {
+        clients <- Future.traverse((1 to 6).toList)(i => client(t, ip = s"192.0.2.${100 + i}"))
+        statuses <- clients.zipWithIndex.foldLeft(Future.successful(Vector.empty[Int])) { case (done, ((cookie, _, _), i)) =>
+          done.flatMap(list => t.send(t.post("/auth/register", upgrade(s"user_000$i"), cookie = cookie, ip = "192.0.2.99")).map(r => list :+ r.status))
+        }
+      } yield assertEquals(statuses, Vector(200, 200, 200, 200, 200, 429))
     }
   }
 }

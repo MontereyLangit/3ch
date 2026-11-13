@@ -112,6 +112,11 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
     }
   def confirm(kind: String, hash: String, aid: String, now: Double): Future[Unit] = raw(index(kind).confirm(hash, aid, now)).map(checked)
   def remove(kind: String, hash: String, aid: String): Future[Unit] = raw(index(kind).remove(hash, aid)).map(checked)
+  def releaseReservation(kind: String, hash: String, aid: String): Future[Unit] = raw(index(kind).release(hash, aid)).map { value =>
+    val code = string(value)
+    if (code != AccountRejection.IndexPermanent.code) checked(code)
+  }
+  def holds(aid: String, kind: String, value: String): Future[Boolean] = account(aid).holds(kind, value).toFuture
   def create(profile: AccountProfile, now: Double): Future[AccountDescription] = create(profile, now, None)
   def create(profile: AccountProfile, now: Double, credential: Option[PasswordCredential]): Future[AccountDescription] =
     account(profile.aid).create(AccountCodec.encodeProfile(profile), now, credential.map(PasswordCredentialCodec.encode).orUndefined).toFuture.map(v =>
@@ -194,8 +199,10 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
       CapReissue(text(v, "hash"), text(v, "name") + (if (strong.asInstanceOf[Boolean]) "★" else ""))
     }
   private def codes(roles: Roles): js.Array[String] = roles.values.toVector.map(_.code).sorted.toJSArray
-  def setRoles(aid: String, roles: Roles, actor: Roles, now: Double): Future[Unit] = raw(account(aid).setRoles(codes(roles), codes(actor), now)).map(checked)
-  def grantFirstAdmin(aid: String, now: Double): Future[Unit] = raw(account(aid).grantFirstAdmin(now)).map(checked)
+  def setRoles(aid: String, roles: Roles, actorAid: String, now: Double): Future[Unit] = raw(account(aid).setRoles(codes(roles), actorAid, now)).map(checked)
+  def grantFirstAdmin(hash: String, aid: String, now: Double): Future[Unit] = raw(account(aid).grantFirstAdmin(hash, now)).map(checked)
+  def isAdmin(aid: String, now: Double): Future[Boolean] = account(aid).adminStatus(now).toFuture
+  def surrender(hash: String, aid: String, now: Double): Future[Unit] = raw(index(AccountIndexKind.Admin.code).surrender(hash, aid, now)).map(checked)
   def claimFirstAdmin(hash: String, aid: String, now: Double, breakGlass: Boolean): Future[Unit] =
     raw(index(AccountIndexKind.Admin.code).claimFirstAdmin(hash, aid, now, breakGlass)).map(checked)
   def recordPost(aid: String, post: AccountPost, observation: AccountObservation): Future[AccountDescription] =

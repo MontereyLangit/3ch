@@ -158,12 +158,12 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** 再設定のトークンを消費してパスワードを置き換え、世代を進める */
+  /** 再設定のトークンを消費してパスワードを置き換え、世代を進める。専ブラキーは全て無効にして token 索引から外す */
   def resetPassword(hash: String, credential: js.Dynamic, now: Double): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
     current(error(AccountRejection.Missing)) { account =>
       account.resetPassword(hash, PasswordCredentialCodec.decode(credential), now) match {
         case Left(rejection) => Future.successful(error(rejection))
-        case Right(next) => save(next).map(_ => AccountCodec.description(next.description))
+        case Right(next) => save(next).flatMap(_ => release(account, next)).map(_ => AccountCodec.description(next.description))
       }
     }
   }.toJSPromise
@@ -276,15 +276,31 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
       }
     }.toJSPromise
 
-  /** actor の役割で役割を置き換える。admin 以外の操作と上位の役割を持つ相手への操作は拒否する */
-  def setRoles(roles: js.Array[String], actorRoles: js.Array[String], now: Double): js.Promise[String] =
-    Roles.parse(roles.toSeq).zip(Roles.parse(actorRoles.toSeq)) match {
-      case Some((next, actor)) => update(_.assignRoles(next, actor, now))
-      case None => js.Promise.resolve[String](AccountRejection.Invalid.code)
+  /** 操作する人（actorAid）の今の役割で役割を置き換える。呼び出し元の申告は使わず、admin 以外と上位の役割を持つ相手への操作は拒否する */
+  def setRoles(roles: js.Array[String], actorAid: String, now: Double): js.Promise[String] =
+    Roles.parse(roles.toSeq) match {
+      case Some(next) if actorAid.matches("[a-z0-9]{16}") =>
+        val accounts = env.asInstanceOf[WorkerEnv].ACCOUNT_DO
+        accounts.get(accounts.idFromName(actorAid)).activeRoles(now).toFuture.flatMap { actor =>
+          Roles.parse(actor.toSeq).fold(Future.successful(AccountRejection.Invalid.code))(value => update(_.assignRoles(next, value, now)).toFuture)
+        }.toJSPromise
+      case _ => js.Promise.resolve[String](AccountRejection.Invalid.code)
     }
 
-  /** role:admin 索引で確保した初回の管理者に admin を足す */
-  def grantFirstAdmin(now: Double): js.Promise[String] = update(_.grantFirstAdmin(now))
+  /** role:admin 索引（hash）にこのアカウントの確保がある場合に限り、初回の管理者として admin を足す */
+  def grantFirstAdmin(hash: String, now: Double): js.Promise[String] = {
+    val index = env.asInstanceOf[WorkerEnv].ACCOUNT_INDEX_DO
+    val aid = state.id.name.toOption.getOrElse("")
+    index.get(index.idFromName(AccountIndexKind.Admin.code)).seat(hash, aid, now).toFuture.flatMap(claimed => update(_.grantFirstAdmin(claimed, now)).toFuture).toJSPromise
+  }
+
+  /** 利用できるアカウントの今の役割。凍結・退会・未登録は空 */
+  def activeRoles(now: Double): js.Promise[js.Array[String]] =
+    read().map(_.fold(Roles())(_.activeRoles(now)).values.toVector.map(_.code).sorted.toJSArray).toJSPromise
+
+  /** 退会していないアカウントが、索引の値を今も持っているか。値はログイン ID・Google の sub の HMAC・メールの正規形 */
+  def holds(kind: String, value: String): js.Promise[Boolean] =
+    read().map(account => AccountIndexKind.parse(kind).exists(k => account.exists(_.holds(k, value)))).toJSPromise
 
   /** 利用できる admin か。凍結・退会や役割を外したアカウントは偽 */
   def adminStatus(now: Double): js.Promise[Boolean] = read().map(_.exists(_.activeAdmin(now))).toJSPromise

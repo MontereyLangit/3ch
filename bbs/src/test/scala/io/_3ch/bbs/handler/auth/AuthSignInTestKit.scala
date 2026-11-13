@@ -1,11 +1,14 @@
 package io._3ch.bbs.handler.auth
 
+import io._3ch.bbs.application.auth.AccountRoles
 import io._3ch.bbs.durable.DurableTestKit
 import io._3ch.bbs.domain.posting.KeyIp
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.handler.HandlerTestKit
 import io._3ch.bbs.hash.AuthHmac
+import io._3ch.bbs.repository.AccountRepository
+import io._3ch.common.domain.account.{AccountKind, AccountProfile}
 import scala.collection.mutable
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -46,6 +49,20 @@ final class AuthSignInTestKit(google: Boolean = false, mail: Boolean = false) {
   val external = mutable.ArrayBuffer.empty[String]
   /** 応答の遅延として要求された秒数 */
   val delays = mutable.ArrayBuffer.empty[Double]
+
+  private var adminActor: Option[Future[String]] = None
+
+  /** admin の役割を持つ別のアカウントを一つだけ作り、操作する人（actor）の aid を返す */
+  def admin(): Future[String] = adminActor.getOrElse {
+    val repository = new AccountRepository(env)
+    val aid = "adminactor000000"
+    val now = math.floor(js.Date.now() / 1000)
+    val created = repository.create(AccountProfile(aid, "admin_actor", AccountKind.Google, now, None, now, "v1", googleSubHash = Some("a" * 64)), now)
+      .flatMap(_ => repository.activate(aid, now)).flatMap(_ => new AccountRoles(repository, AuthHandler.keys(AuthTestEnv.secret)).claimFirstAdmin(aid, now, breakGlass = false))
+      .map(_ => aid)
+    adminActor = Some(created)
+    created
+  }
 
   def keyIp(ip: String): Future[String] = AuthHmac.indexKey(AuthTestEnv.secret, "key-ip", KeyIp.of(ip)).map(_.get)
   def index(kind: String, value: String): Future[String] = AuthHmac.indexKey(AuthTestEnv.secret, kind, value).map(_.get)

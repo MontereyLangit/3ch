@@ -14,7 +14,7 @@ class AccountWithdrawSuite extends munit.FunSuite {
   private val register = Seq("id" -> "taro_2026", "password" -> "correct horse", "password2" -> "correct horse", "agreement" -> "v1",
     "cf-turnstile-response" -> "accepted", "email" -> "taro@example.com")
 
-  test("ID・パスワードの退会はパスワードを確かめ、login・email 索引とキャップを外して uid の索引と記録を残す") {
+  test("ID・パスワードの退会はパスワードを確かめ、login・email 索引とキャップの KV を外して uid・cap の索引と記録を残す") {
     val t = new AuthSignInTestKit(mail = true)
     t.run {
       for {
@@ -22,7 +22,8 @@ class AccountWithdrawSuite extends munit.FunSuite {
         cookie = t.cookie(registered, "__Host-ch3s_sid").get
         _ <- t.send(t.post("/auth/email/verify", Seq("token" -> t.mailedToken())))
         aid = t.kit.accountNames.head
-        _ <- new AccountRepository(t.env).setRoles(aid, Roles(Set(AccountRole.Cap)), Roles(Set(AccountRole.Admin)), now)
+        actor <- t.admin()
+        _ <- new AccountRepository(t.env).setRoles(aid, Roles(Set(AccountRole.Cap)), actor, now)
         issued <- t.send(t.post("/auth/cap/issue", Seq("name" -> "管理人"), cookie = cookie)).flatMap(t.body)
         saltHash <- WebHasher.sha256Hex(String.valueOf(t.env.salt))
         capKey <- CapKey.of(WebHasher, issued.password.asInstanceOf[String].stripPrefix("#"), saltHash)
@@ -44,7 +45,7 @@ class AccountWithdrawSuite extends munit.FunSuite {
         again <- t.send(t.post("/auth/register", register.filterNot(_._1 == "email"), ip = "192.0.2.91"))
       } yield {
         assertEquals(lookups, Vector(("", Some(aid)), ("auth:index:missing", None), ("auth:index:missing", None)))
-        assertEquals(capOwner.code.asInstanceOf[String], "auth:index:missing")
+        assertEquals((capOwner.code.asInstanceOf[String], capOwner.aid.asInstanceOf[String]), ("", aid), "cap 索引は退会後も所有者を指す（古い KV の写しを旧キャップにしない）")
         assertEquals(t.kit.capValue(capKey), None)
         assertEquals(session, null)
         assertEquals(login.status, 401)
@@ -103,6 +104,43 @@ class AccountWithdrawSuite extends munit.FunSuite {
         assertEquals(t.cookie(deleted, "__Host-ch3s_sid"), Some("__Host-ch3s_sid="))
         assertEquals(owner.code.asInstanceOf[String], "auth:index:missing")
         assertEquals(described.code.asInstanceOf[String], "auth:deleted")
+      }
+    }
+  }
+
+  /** 退会後も残ってしまった索引を、確定済みの状態で作り直す */
+  private def leak(t: AuthSignInTestKit, kind: String, hash: String, aid: String): Future[Unit] =
+    t.kit.index(kind).register(hash, aid, now).toFuture.flatMap(_ => t.kit.index(kind).confirm(hash, aid, now).toFuture).map(_ => ())
+
+  test("退会は同じ世代なら後始末をやり直せ、放置された email 索引は持ち主が退会済みなら解放して別のアカウントが使える") {
+    val t = new AuthSignInTestKit(mail = true)
+    val repository = new AccountRepository(t.env)
+    t.run {
+      for {
+        registered <- t.send(t.post("/auth/register", register))
+        cookie = t.cookie(registered, "__Host-ch3s_sid").get
+        _ <- t.send(t.post("/auth/email/verify", Seq("token" -> t.mailedToken())))
+        aid = t.kit.accountNames.head
+        before <- repository.inspect(aid).map(_.account)
+        config = AuthEnv.settings(t.env).get
+        _ <- AuthHandler.withdrawal(t.env, repository, config).withdraw(before, now)
+        loginHash <- t.index("login", "taro_2026")
+        emailHash <- t.index("email", "taro@example.com")
+        _ <- leak(t, "login", loginHash, aid)
+        _ <- leak(t, "email", emailHash, aid)
+        _ <- AuthHandler.withdrawal(t.env, repository, config).withdraw(before, now + 1)
+        loginAfter <- repository.lookup("login", loginHash)
+        emailAfter <- repository.lookup("email", emailHash)
+        _ <- leak(t, "email", emailHash, aid)
+        other <- t.send(t.post("/auth/register", register.map { case ("id", _) => "id" -> "jiro_2026"; case field => field }, ip = "192.0.2.92"))
+        _ = assertEquals(other.status, 200)
+        verified <- t.send(t.post("/auth/email/verify", Seq("token" -> t.mailedToken())))
+        otherAid = t.kit.accountNames.find(name => name != aid && name != "dummy").get
+        owner <- repository.lookup("email", emailHash)
+      } yield {
+        assertEquals((loginAfter, emailAfter), (None, None))
+        assertEquals(verified.status, 200)
+        assertEquals(owner, Some(otherAid))
       }
     }
   }

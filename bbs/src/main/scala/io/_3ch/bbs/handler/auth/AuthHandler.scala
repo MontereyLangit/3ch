@@ -256,12 +256,21 @@ object AuthHandler {
     val request = c.req.raw
     AuthEnv.settings(c.env) match {
       case None => js.Promise.resolve[Response](notFound(request))
-      case Some(_) =>
+      case Some(config) =>
         val props = new RenderProps {}
         props.title = if (reset) "パスワードの再設定" else "メールアドレスの確認"
-        val token = c.req.query("token").filter(value => PendingLink.parse(value).isDefined).getOrElse("")
-        c.renderPromise(AuthTokenComponent.Component(AuthTokenProps(reset, token, MailSenders.from(c.env).isDefined)).rawElement, props)
-          .toFuture.map(secure).recover { case error => failure(error) }.toJSPromise
+        val link = c.req.query("token").toOption.flatMap(PendingLink.parse)
+        val target: Future[Option[(String, String)]] = (for {
+          value <- link
+          mail <- AccountMailHandler.service(c.env, new AccountRepository(c.env), config)
+        } yield (if (reset) mail.resetTarget(value, now).map(uid => (uid, ""))
+          else mail.emailTarget(value, now).map(check => (check.uid, check.email.map(EmailAddress.mask).getOrElse("")))).map(Option(_)))
+          .getOrElse(Future.successful(None)).recover { case NonFatal(_) => None }
+        target.flatMap { found =>
+          val token = if (found.isDefined || MailSenders.from(c.env).isEmpty) link.map(_.text).getOrElse("") else ""
+          c.renderPromise(AuthTokenComponent.Component(AuthTokenProps(reset, token, MailSenders.from(c.env).isDefined,
+            found.fold("")(_._1), found.fold("")(_._2))).rawElement, props).toFuture
+        }.map(secure).recover { case error => failure(error) }.toJSPromise
     }
   }
 
@@ -489,7 +498,7 @@ object AuthHandler {
         _ <- email.fold(Future.unit)(AccountMailHandler.check(env, repository, config, upgrading.fold("")(_.aid), _))
         account <- upgrading match {
           case None => new PasswordAuthentication(repository, keys(config.secret), hashing, config.agreementVersion, new AbuseReviewRepository(env)).register(id, password, evidence.deviceHash, key, time, strict)
-          case Some(client) => new AccountUpgrade(repository, keys(config.secret)).toPassword(client, id, password, hashing, evidence.deviceHash, key, time).map {
+          case Some(client) => new AccountUpgrade(repository, keys(config.secret), new AbuseReviewRepository(env)).toPassword(client, id, password, hashing, evidence.deviceHash, key, time, strict).map {
             case UpgradeOutcome.Converted(converted) => converted
             case _ => throw Refused(AuthApiError.Service(AuthServiceFailure.Taken))
           }

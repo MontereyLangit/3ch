@@ -85,8 +85,8 @@ object AccountCodec {
   def decodeCap(v: js.Dynamic): AccountCap = AccountCap(string(v, "capId"), string(v, "name"), string(v, "hash"), bool(v, "strong"), string(v, "issuedBy"), decimal(v, "issuedAt"), optionalNumber(v, "revokedAt"))
   def encodeCap(v: AccountCap): js.Dynamic = js.Dynamic.literal(capId = v.capId, name = v.name, hash = v.hash, strong = v.strong, issuedBy = v.issuedBy, issuedAt = v.issuedAt, revokedAt = v.revokedAt.orUndefined)
 
-  private def decodePending(v: js.Dynamic): PendingToken = PendingToken(string(v, "hash"), requiredTime(v, "expiresAt"), optionalText(v, "email"))
-  private def encodePending(v: PendingToken): js.Dynamic = js.Dynamic.literal(hash = v.hash, expiresAt = v.expiresAt, email = v.email.orUndefined)
+  private def decodePending(v: js.Dynamic): PendingToken = PendingToken(string(v, "hash"), requiredTime(v, "expiresAt"), optionalText(v, "email"), integer(v, "generation"))
+  private def encodePending(v: PendingToken): js.Dynamic = js.Dynamic.literal(hash = v.hash, expiresAt = v.expiresAt, email = v.email.orUndefined, generation = v.generation)
 
   def decodeState(values: js.Map[String, js.Any]): Option[AccountState] = values.get("profile").filterNot(missing).map { profile =>
     val decodedProfile = decodeProfile(profile.asInstanceOf[js.Dynamic])

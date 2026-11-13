@@ -1,6 +1,6 @@
 package io._3ch.bbs.application.auth
 
-import io._3ch.bbs.application.auth.ports.{AccountStoreException, AuthenticationKeys}
+import io._3ch.bbs.application.auth.ports.{AccountRoleStore, AccountStoreException, AuthenticationKeys}
 import io._3ch.bbs.durable.DurableTestKit
 import io._3ch.bbs.hash.AuthHmac
 import io._3ch.bbs.repository.AccountRepository
@@ -43,6 +43,7 @@ class AccountRolesSuite extends FunSuite {
   test("admin が役割を付け外しし、admin の付与と剥奪を role:admin 索引に反映する") {
     for {
       (_, repository, roles) <- setup(first, second)
+      _ <- roles.claimFirstAdmin(first, now, breakGlass = false)
       _ <- roles.assign(admin(first), second, Roles(Set(AccountRole.Admin, AccountRole.Cap)), now)
       granted <- rolesOf(repository, second)
       listed <- adminIndex(repository, second)
@@ -59,13 +60,14 @@ class AccountRolesSuite extends FunSuite {
   }
 
   test("admin 以外の役割の変更は Account DO が拒否し、索引も変えない") {
-    val regulate = admin(first).copy(roles = Roles(Set(AccountRole.Regulate)))
     for {
-      (_, repository, roles) <- setup(first, second)
-      refused <- roles.assign(regulate, second, Roles(Set(AccountRole.Admin)), now).failed
+      (_, repository, roles) <- setup(first, second, third)
+      _ <- roles.claimFirstAdmin(third, now, breakGlass = false)
+      _ <- roles.assign(admin(third), first, Roles(Set(AccountRole.Regulate)), now)
+      refused <- roles.assign(admin(first), second, Roles(Set(AccountRole.Admin)), now).failed
       unchanged <- rolesOf(repository, second)
       unlisted <- adminIndex(repository, second)
-      invalid <- repository.setRoles(second, Roles(), Roles(Set(AccountRole.Admin)), Double.NaN).failed
+      invalid <- repository.setRoles(second, Roles(), third, Double.NaN).failed
     } yield {
       assertEquals(refused, AccountStoreException(AccountRejection.Forbidden))
       assertEquals((unchanged, unlisted), (Set.empty[AccountRole], None))
@@ -90,7 +92,7 @@ class AccountRolesSuite extends FunSuite {
     for {
       (_, repository, roles) <- setup(first, second, third)
       _ <- roles.claimFirstAdmin(first, now, breakGlass = false)
-      _ <- repository.setRoles(first, Roles(), Roles(Set(AccountRole.Admin)), now)
+      _ <- repository.setRoles(first, Roles(), first, now)
       _ <- roles.claimFirstAdmin(second, now + 1, breakGlass = false)
       _ <- roles.claimFirstAdmin(third, now + 2, breakGlass = true)
       firstIndex <- adminIndex(repository, first)
@@ -110,6 +112,108 @@ class AccountRolesSuite extends FunSuite {
     } yield {
       assertEquals(missing, AccountStoreException(AccountRejection.Missing))
       assert(admins.contains(AccountRole.Admin))
+    }
+  }
+
+  /** 実 DO を呼び、指定した操作だけ失敗や応答の喪失を起こす */
+  private final class Flaky(repository: AccountRepository) extends AccountRoleStore {
+    var lostGrant = false
+    var failIsAdmin = false
+    var failConfirms = 0
+    def setRoles(aid: String, roles: Roles, actorAid: String, now: Double) = repository.setRoles(aid, roles, actorAid, now)
+    def grantFirstAdmin(hash: String, aid: String, now: Double) =
+      repository.grantFirstAdmin(hash, aid, now).flatMap(_ => if (lostGrant) Future.failed(new IllegalStateException("lost")) else Future.unit)
+    def isAdmin(aid: String, now: Double) = if (failIsAdmin) Future.failed(new IllegalStateException("down")) else repository.isAdmin(aid, now)
+    def surrender(hash: String, aid: String, now: Double) = repository.surrender(hash, aid, now)
+    def claimFirstAdmin(hash: String, aid: String, now: Double, breakGlass: Boolean) = repository.claimFirstAdmin(hash, aid, now, breakGlass)
+    def reserve(kind: String, hash: String, aid: String, now: Double, tokenId: Option[String]) = repository.reserve(kind, hash, aid, now, tokenId)
+    def confirm(kind: String, hash: String, aid: String, now: Double) =
+      if (failConfirms > 0) { failConfirms -= 1; Future.failed(new IllegalStateException("confirm lost")) } else repository.confirm(kind, hash, aid, now)
+    def remove(kind: String, hash: String, aid: String) = repository.remove(kind, hash, aid)
+  }
+
+  test("最後の有効な admin は外せず、ほかに admin が居れば外せる") {
+    for {
+      (_, repository, roles) <- setup(first, second)
+      _ <- roles.claimFirstAdmin(first, now, breakGlass = false)
+      last <- roles.assign(admin(first), first, Roles(), now).failed
+      stillAdmin <- rolesOf(repository, first)
+      stillListed <- adminIndex(repository, first)
+      _ <- roles.assign(admin(first), second, Roles(Set(AccountRole.Admin)), now)
+      _ <- roles.assign(admin(second), first, Roles(Set(AccountRole.Cap)), now)
+      stripped <- rolesOf(repository, first)
+      firstIndex <- adminIndex(repository, first)
+      lastAgain <- roles.assign(admin(second), second, Roles(), now).failed
+    } yield {
+      assertEquals(last, AccountStoreException(AccountRejection.Forbidden))
+      assertEquals((stillAdmin, stillListed), (Set(AccountRole.Admin), Some(first)))
+      assertEquals((stripped, firstIndex), (Set(AccountRole.Cap), None))
+      assertEquals(lastAgain, AccountStoreException(AccountRejection.Forbidden))
+    }
+  }
+
+  test("役割の変更は呼び出し元の申告でなく操作する人の Account の今の役割で判定する") {
+    for {
+      (_, repository, roles) <- setup(first, second, third)
+      _ <- roles.claimFirstAdmin(first, now, breakGlass = false)
+      _ <- roles.assign(admin(first), second, Roles(Set(AccountRole.Cap)), now)
+      forged <- roles.assign(admin(second), third, Roles(Set(AccountRole.Delete)), now).failed
+      unknown <- roles.assign(admin("zzzzzzzzzzzzzzzz"), third, Roles(Set(AccountRole.Delete)), now).failed
+      unchanged <- rolesOf(repository, third)
+    } yield {
+      assertEquals(forged, AccountStoreException(AccountRejection.Forbidden))
+      assertEquals(unknown, AccountStoreException(AccountRejection.Forbidden))
+      assertEquals(unchanged, Set.empty[AccountRole])
+    }
+  }
+
+  test("索引に確保が無いアカウントには初回の管理者として admin を足さない") {
+    for {
+      (_, repository, _) <- setup(first)
+      hash <- keys.index(AccountIndexKind.Admin.code, first).map(_.get)
+      refused <- repository.grantFirstAdmin(hash, first, now).failed
+      roles <- rolesOf(repository, first)
+    } yield {
+      assertEquals(refused, AccountStoreException(AccountRejection.Forbidden))
+      assertEquals(roles, Set.empty[AccountRole])
+    }
+  }
+
+  test("確保の途中で止まったら admin の有無を読み直し、admin なら確保を確定して残す") {
+    for {
+      (_, repository, _) <- setup(first, second)
+      flaky = new Flaky(repository)
+      lost = new AccountRoles(flaky, keys)
+      _ = { flaky.lostGrant = true }
+      _ <- lost.claimFirstAdmin(first, now, breakGlass = false)
+      admins <- rolesOf(repository, first)
+      listed <- adminIndex(repository, first)
+      later <- new AccountRoles(repository, keys).claimFirstAdmin(second, now + 1000, breakGlass = false).failed
+    } yield {
+      assert(admins.contains(AccountRole.Admin))
+      assertEquals(listed, Some(first))
+      assertEquals(later, AccountStoreException(AccountRejection.Forbidden))
+    }
+  }
+
+  test("確定が失敗しても admin なら確定し直し、読み直せないときは確保を外さず、期限が切れても admin の確保は取られない") {
+    for {
+      (_, repository, _) <- setup(first, second)
+      flaky = new Flaky(repository)
+      _ = { flaky.failConfirms = 1 }
+      _ <- new AccountRoles(flaky, keys).claimFirstAdmin(first, now, breakGlass = false)
+      listed <- adminIndex(repository, first)
+      (_, other, _) <- setup(first, second)
+      down = new Flaky(other)
+      _ = { down.lostGrant = true; down.failIsAdmin = true }
+      failed <- new AccountRoles(down, keys).claimFirstAdmin(first, now, breakGlass = false).failed
+      pending <- adminIndex(other, first)
+      expired <- new AccountRoles(other, keys).claimFirstAdmin(second, now + 1000, breakGlass = false).failed
+    } yield {
+      assertEquals(listed, Some(first))
+      assert(failed.isInstanceOf[IllegalStateException])
+      assertEquals(pending, None, "確定前の確保は lookup に出ない")
+      assertEquals(expired, AccountStoreException(AccountRejection.Forbidden), "admin が付いた所有者の確保は期限が切れても取れない")
     }
   }
 }

@@ -17,6 +17,7 @@ enum LoginOutcome {
 final class PasswordAuthentication(accounts: AccountManagementStore & AccountSignInStore, keys: AuthenticationKeys, hashing: PasswordHashing,
   agreementVersion: String, review: AbuseReviewLog = AbuseReviewLog.none) {
   private val registration = new AccountRegistration(accounts, keys)
+  private val stale = new StaleIndex(accounts)
 
   private def counted(keyIp: String, kind: String, now: Double)(allowed: AuthRateCounts => Boolean): Future[Unit] =
     accounts.rate(keyIp, kind, now).map(counts => if (!allowed(counts)) throw AuthServiceException(AuthServiceFailure.RateLimited))
@@ -24,10 +25,7 @@ final class PasswordAuthentication(accounts: AccountManagementStore & AccountSig
   /** 接続元ごとに一日五件まで（strict なら半分）。ユーザー ID とログイン ID は同じ値で登録する */
   def register(loginId: LoginId, password: Password, deviceHash: String, keyIp: String, now: Double, strict: Boolean = false): Future[AccountDescription] =
     for {
-      counts <- accounts.rate(keyIp, "register", now)
-      _ <- if (AbuseThresholds.registration(counts, strict)) Future.unit
-        else review.flag(keyIp, AbuseReason.RegisterBurst, counts, now).recover { case NonFatal(_) => () }
-          .flatMap(_ => Future.failed(AuthServiceException(AuthServiceFailure.RateLimited)))
+      _ <- RegistrationRate.check(accounts.rate, review, keyIp, now, strict)
       credential <- hashing.create(password, now).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
       loginHash <- keys.index("login", loginId.value).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
       aid = keys.aid()
@@ -55,6 +53,9 @@ final class PasswordAuthentication(accounts: AccountManagementStore & AccountSig
         case (Some(aid), SignInResult.Unfinished(uid)) if loginId.exists(_.value == uid) =>
           registration.resume(aid, uid, now).flatMap(account => bind(account, deviceHash, keyIp, now).map(_ => LoginOutcome.Success(account)))
             .recoverWith { case AuthServiceException(AuthServiceFailure.Invalid) => failed(keyIp, now) }
+        case (Some(aid), SignInResult.Refused(AccountRejection.Deleted)) =>
+          loginId.fold(Future.unit)(id => keys.index("login", id.value).flatMap(_.fold(Future.unit)(stale.reclaim("login", id.value, _, aid).map(_ => ()))))
+            .recover { case NonFatal(_) => () }.flatMap(_ => failed(keyIp, now))
         case (Some(_), SignInResult.Refused(reason)) => Future.successful(LoginOutcome.Refused(reason))
         case _ => failed(keyIp, now)
       }

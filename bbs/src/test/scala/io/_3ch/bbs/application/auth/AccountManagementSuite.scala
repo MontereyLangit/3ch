@@ -71,6 +71,10 @@ class AccountManagementSuite extends FunSuite {
           entry.remove(AccountIndexKind.parse(kind).get, aid).fold(reason => throw new IllegalStateException(reason.code), _ => entries.remove(kind -> hash))
         }
       }
+      def holds(aid: String, kind: String, value: String): Future[Boolean] = Future.successful(true)
+      def releaseReservation(kind: String, hash: String, aid: String): Future[Unit] = result("release:" + kind) {
+        entries.get(kind -> hash).filter(entry => entry.aid == aid && !entry.confirmed).foreach(_ => entries.remove(kind -> hash))
+      }
       def create(profile: AccountProfile, now: Double): Future[AccountDescription] = result("create") {
         val state = AccountState.create(profile, now).toOption.get
         states.update(profile.aid, state)

@@ -6,7 +6,6 @@ import scala.concurrent.Future
 final case class WithdrawnAccount(loginId: Option[String], email: Option[String], googleSubHash: Option[String], caps: Vector[String])
 
 /** 退会に使うアカウント操作。拒否は AccountStoreException の Future の失敗で返す */
-trait AccountWithdrawalStore {
+trait AccountWithdrawalStore extends IndexHoldings {
   def withdraw(aid: String, generation: Int, now: Double): Future[WithdrawnAccount]
-  def remove(kind: String, hash: String, aid: String): Future[Unit]
 }

@@ -35,6 +35,8 @@ class AccountRegistrationSuite extends FunSuite {
     def reserve(kind: String, hash: String, aid: String, now: Double, tokenId: Option[String]) = step("reserve:" + kind)(repository.reserve(kind, hash, aid, now, tokenId))
     def confirm(kind: String, hash: String, aid: String, now: Double) = step("confirm:" + kind)(repository.confirm(kind, hash, aid, now))
     def remove(kind: String, hash: String, aid: String) = step("remove:" + kind)(repository.remove(kind, hash, aid))
+    def holds(aid: String, kind: String, value: String) = repository.holds(aid, kind, value)
+    def releaseReservation(kind: String, hash: String, aid: String) = repository.releaseReservation(kind, hash, aid)
     def create(profile: AccountProfile, now: Double) = repository.create(profile, now)
     def create(profile: AccountProfile, now: Double, credential: Option[PasswordCredential]) = step("create")(repository.create(profile, now, credential))
     def bindDevice(aid: String, device: String, keyIp: String, now: Double) = step("bind")(repository.bindDevice(aid, device, keyIp, now))

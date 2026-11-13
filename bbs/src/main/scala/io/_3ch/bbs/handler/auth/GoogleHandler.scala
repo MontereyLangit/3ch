@@ -6,7 +6,7 @@ import io._3ch.bbs.external.web.{Request, Response, URL}
 import io._3ch.bbs.handler.Responses
 import io._3ch.bbs.hash.{AuthHmac, JwtRs256}
 import io._3ch.bbs.application.auth.ports.SignInResult
-import io._3ch.bbs.repository.AccountRepository
+import io._3ch.bbs.repository.{AbuseReviewRepository, AccountRepository}
 import io._3ch.common.domain.account.*
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -147,7 +147,7 @@ object GoogleHandler {
                       }
                     case OAuthPurpose.Link => sessionOwner(request, repository, config, state, time).flatMap {
                       case None => fail("session")
-                      case Some(account) => new AccountUpgrade(repository, AuthHandler.keys(config.secret))
+                      case Some(account) => new AccountUpgrade(repository, AuthHandler.keys(config.secret), new AbuseReviewRepository(env))
                         .toGoogle(account, uid.getOrElse(throw Refused(AuthApiError.Invalid)), value, state.device, key, time).flatMap {
                           case UpgradeOutcome.Converted(converted) => signedIn(converted)
                           case UpgradeOutcome.Taken => fail("uid_taken")

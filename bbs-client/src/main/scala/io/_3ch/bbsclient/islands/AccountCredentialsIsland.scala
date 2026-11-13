@@ -15,6 +15,7 @@ object AccountCredentialsIsland {
     for {
       email <- useState("")
       pending <- useState(AuthClient.text(raw, "pendingEmail"))
+      mailCurrent <- useState("")
       current <- useState("")
       password <- useState("")
       confirmation <- useState("")
@@ -31,8 +32,8 @@ object AccountCredentialsIsland {
             (if ok then success(json) else report(AuthClient.error(json))).runNow()
           }.recover { case _ => busy.setState(false).runNow(); report("通信できませんでした").runNow() }
         }
-      val requestMail = send("/auth/email", Seq("email" -> email.value.trim), mailMessage.setState) { json =>
-        pending.setState(AuthClient.text(json, "email")) >> email.setState("") >> mailMessage.setState("確認メールを送りました。メールのリンクを開くと登録が完了します。")
+      val requestMail = send("/auth/email", Seq("email" -> email.value.trim, "current" -> mailCurrent.value), mailMessage.setState) { json =>
+        pending.setState(AuthClient.text(json, "email")) >> email.setState("") >> mailCurrent.setState("") >> mailMessage.setState("確認メールを送りました。メールのリンクを開くと登録が完了します。")
       }
       val changePassword = send("/auth/password", Seq("current" -> current.value, "password" -> password.value, "password2" -> confirmation.value),
         passwordMessage.setState) { _ =>
@@ -51,7 +52,8 @@ object AccountCredentialsIsland {
             <.div(^.className := "flex flex-wrap items-end gap-2",
               <.label(^.className := "block", "新しいメールアドレス", <.input(^.className := input, ^.`type` := "email", ^.autoComplete := "email",
                 ^.value := email.value, ^.onChange ==> ((e: ReactEventFromInput) => email.setState(e.target.value)))),
-              <.button(^.`type` := "button", ^.className := button, ^.disabled := busy.value || email.value.trim.isEmpty, ^.onClick --> requestMail, "確認メールを送る"))),
+              field("いまのパスワード", mailCurrent.value, mailCurrent.setState, "password", "current-password"),
+              <.button(^.`type` := "button", ^.className := button, ^.disabled := busy.value || email.value.trim.isEmpty || mailCurrent.value.isEmpty, ^.onClick --> requestMail, "確認メールを送る"))),
           if mailMessage.value.nonEmpty then <.p(^.role := "status", ^.className := "mt-2", mailMessage.value) else EmptyVdom),
         <.section(^.id := "password", ^.className := section, <.h2(^.className := "mb-2 font-bold", "■ パスワードの変更"),
           field("いまのパスワード", current.value, current.setState, "password", "current-password"),
