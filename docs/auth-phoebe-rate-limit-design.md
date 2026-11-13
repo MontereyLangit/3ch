@@ -625,14 +625,14 @@ Thread.addRes 内の順序は「スレ立て予約 → 連投予約 → put → 
 - RPC: `reservePost(key, entry, settings): String`（空＝許可、それ以外＝拒否コード）、`completePost(key)`、`cancelPost(key)`。いずれも `DurableLock.serialized`。
 - 書き込みは**最新ページと `postRateMeta` だけ**（スレ立て規制の全ページ読み書きを踏襲しない。全投稿で呼ばれるため）。読み込みは判定に要る件数分のページだけ（直近 `timecount` 件と `BBS_SAMBA24`・`BBS_FR_SECOND` の大きい方の秒数以内。最大でも 1,000 件＝16 ページ）。`complete` / `cancel` は `key` を含むページだけ書き換える。
 - 判定は確定済みと有効な予約を合わせて件数窓で行う（§8.1）。予約の有効期限は 120 秒。期限切れの予約は確定済みと同じ扱い（保守的）。
-- 保持規則: **直近 `max(timecount, 1)` 件 ∪ `now − BBS_SAMBA24 ≤ t` の件 ∪ `now − BBS_FR_SECOND ≤ t` の件 ∪ 有効な予約**（秒数の 2 つは大きい方で足りる）。24 時間分を残さない（§8.2 は直近 `timecount` 件しか見ない）。上限 1,024 件（16 ページ）。超えたら古いページから捨てる。**容量で拒否しない**（板全体の投稿停止や意図的な埋め立てを防ぐ）。
+- 保持規則: **確定済みの直近 `max(timecount, 1)` 件 ∪ `now − BBS_SAMBA24 ≤ t` の件 ∪ `now − BBS_FR_SECOND ≤ t` の件 ∪ 有効な予約**（秒数の 2 つは大きい方で足りる。板設定だけで決め、予約中は数えず、追記前の履歴で見直すので取消で範囲が戻る。スレ設定の `BBS_FR_LEVEL` で縮めない）。24 時間分を残さない（§8.2 は直近 `timecount` 件しか見ない）。上限 1,024 件（16 ページ）。超えたら古いページから捨てる。**容量で拒否しない**（板全体の投稿停止や意図的な埋め立てを防ぐ）。
 - 集約 `PostRateHistory`（純粋）が `reserve` / `complete` / `cancel` / `retained` を持ち、DO は `PostRateCodec` で変換して読み書きするだけ。
 
 **Thread DO**
 
 | キー | 内容 |
 | --- | --- |
-| `recentPosts` | `{t, ip, shiki, aid}` の配列（新しい順）。`now − BBS_THREAD_RENTOU_RESET ≤ t` の件だけ残し、上限 1,000 件 |
+| `recentPosts` | `{t, ip, shiki, aid}` の配列（新しい順）。`now − BBS_THREAD_RENTOU_RESET ≤ t` の件だけ残し、上限 1,000 件。照合値は先頭 12 文字に短縮（DO の値の上限 128 KiB のため）し、スレの移動で引き継ぐ |
 | `ownerAid` | スレ立て人の `aid`（未ログインなら空）。`!バルサン` 等の権限判定に使う（§4.4）。既存の `owner.account`（`SHA-256(accountKey + ":" + saltHash)`。スレ主表示用）と同じ値で照合できるなら、このキーは足さずにそれを使う |
 
 - `addRes` の排他区間内で判定・追記し、`dat`・`log` と同じ `storage.put` で一括保存する。コピペ判定も同じ区間内で `dat` 末尾 2 行を見る。

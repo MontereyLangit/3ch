@@ -61,6 +61,13 @@ class PostRateLimitSuite extends FunSuite {
     assertEquals(check(t0, PostRateIdentity("ip", "other", "aid")), None, "識別子以外の一致は見ない")
   }
 
+  test("checksFr が偽なら fr が有効でも広域連投規制を判定しない") {
+    val history = Seq(Entry(t0, PostRateIdentity("other", "shiki-a")))
+    val settings = board(fr = 10)
+    assertEquals(PostRateLimit.checkBoard(settings, history, who("a"), t0), Some(PostRateRejection.Fr(10)))
+    assertEquals(PostRateLimit.checkBoard(settings.copy(checksFr = false), history, who("a"), t0), None)
+  }
+
   test("BBS_FR_LEVEL が 0 か空なら識別子が一致しても広域連投規制で拒否しない") {
     val history = Seq(Entry(t0, PostRateIdentity("other", "shiki-a")))
     def check(text: String): Option[PostRateRejection] = {
@@ -147,6 +154,19 @@ class PostRateLimitSuite extends FunSuite {
     assertEquals(recent.appended(entry("c"), settings, t0).posts, Vector(entry("c"), entry("a", t0 - 5)))
     val full = ThreadRecentPosts(Vector.fill(ThreadRecentPosts.MaxPosts)(entry("a")))
     assertEquals(full.appended(entry("b"), settings, t0).posts.size, ThreadRecentPosts.MaxPosts)
-    assertEquals(full.appended(entry("b"), settings, t0).posts.head, entry("b"))
+    assertEquals(full.appended(entry("b"), settings, t0).posts.head, entry("b").copy(identity = entry("b").identity.shortened))
+  }
+
+  test("スレの直近の投稿は照合値を短縮して持ち、全長の照合値とも短縮した値とも照合できる") {
+    val full = PostRateIdentity("a" * 64, "b" * 64, "c" * 64)
+    val settings = ThreadSettings(1, 3600, keys)
+    val recent = ThreadRecentPosts.empty.appended(Entry(t0, full), settings, t0)
+    assertEquals(recent.posts.head.identity, PostRateIdentity("a" * 12, "b" * 12, "c" * 12))
+    assertEquals(recent.check(settings, full, t0), Some(PostRateRejection.ThreadRentou))
+    assertEquals(recent.check(settings, full.shortened, t0), Some(PostRateRejection.ThreadRentou))
+    assertEquals(recent.check(settings, PostRateIdentity("a" * 11 + "x" + "a" * 52), t0), None, "短縮した範囲が違えば別人")
+    val legacy = ThreadRecentPosts(Vector(Entry(t0, full)))
+    assertEquals(legacy.check(settings, full, t0), None, "短縮前の値のままでは照合しない")
+    assertEquals(legacy.normalized.check(settings, full, t0), Some(PostRateRejection.ThreadRentou), "読み込み時に短縮すれば保存済みの全長の値とも照合できる")
   }
 }

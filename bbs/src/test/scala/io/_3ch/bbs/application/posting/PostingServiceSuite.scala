@@ -362,16 +362,23 @@ class PostingServiceSuite extends FunSuite {
     }
   }
 
-  test("BBS_FR_LEVEL が 0 か空なら規制したまま、板には広域連投規制を外して渡す") {
-    val cases = Seq("BBS_FR_LEVEL=0\n" -> (PostRateLevel.Enforce(None), 0), "BBS_FR_LEVEL=\n" -> (PostRateLevel.Enforce(None), 0),
-      "" -> (PostRateLevel.Enforce(Some(1)), 4), "BBS_FR_LEVEL=30\n" -> (PostRateLevel.Enforce(Some(30)), 4))
+  test("BBS_FR_LEVEL が 0 か空なら規制したまま、板には広域連投規制を判定しない印を付けて渡す（fr は保持のため板設定のまま）") {
+    val cases = Seq("BBS_FR_LEVEL=0\n" -> (PostRateLevel.Enforce(None), (4, false)), "BBS_FR_LEVEL=\n" -> (PostRateLevel.Enforce(None), (4, false)),
+      "" -> (PostRateLevel.Enforce(Some(1)), (4, true)), "BBS_FR_LEVEL=30\n" -> (PostRateLevel.Enforce(Some(30)), (4, true)))
     Future.traverse(cases) { case (text, _) =>
       val fake = Fake(boardSettings = text + "BBS_FR_SECOND=4\n")
       fake.post(reply()*)().map { _ =>
         val check = fake.postings.head._3.rateLimit.get
-        (check.level, check.boardSettings.fr)
+        (check.level, (check.boardSettings.fr, check.boardSettings.checksFr))
       }
     }.map(results => assertEquals(results, cases.map(_._2)))
+  }
+
+  test("識別子が checked 以外の板では shiki を照合値にしない（県・市・AS 単位で別人が一致するため）") {
+    Future.traverse(Seq("checked", "raw", "ken", "city", "as", "hidden")) { mode =>
+      val fake = Fake(boardSettings = s"BBS_ID_SHIKIBETSU=$mode\n")
+      fake.post(reply()*)().map(_ => mode -> fake.postings.head._3.rateLimit.map(_.identity.shiki.nonEmpty))
+    }.map(results => assertEquals(results, Seq("checked" -> Some(true), "raw" -> Some(false), "ken" -> Some(false), "city" -> Some(false), "as" -> Some(false), "hidden" -> Some(false))))
   }
 
   test("キャップを判定するときは識別子（★）を照合値にしない") {

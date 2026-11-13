@@ -177,7 +177,8 @@ final class PostingService(ports: PostingPorts, salt: String) {
     if (!settings.applies(context.cap.isDefined, user.isDefined)) Future.successful(None)
     else for {
       ip <- digest(context, canonicalIp(request.connectingIp.getOrElse("")))
-      shiki <- digest(context, if (context.cap.isDefined) "" else context.shikibetsu)
+      mode = ShikibetsuMode.parse(context.settings.orElse("BBS_ID_SHIKIBETSU", "checked"))
+      shiki <- digest(context, PostRateSettings.shikiSource(mode, context.cap.isDefined, context.shikibetsu))
       aid <- digest(context, user.fold("")(_.accountKey))
     } yield Some(PostRateCheck(settings.level, PostRateIdentity(ip, shiki, aid), settings.board, settings.thread))
   }

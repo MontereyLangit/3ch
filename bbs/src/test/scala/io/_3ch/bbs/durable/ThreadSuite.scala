@@ -143,6 +143,22 @@ class ThreadSuite extends FunSuite {
     } yield ()
   }
 
+  test("移動は recentPosts を移動先へ引き継ぎ、無ければキーを作らない") {
+    val env = newEnv()
+    val recent = js.Array(js.Dynamic.literal(t = 1800000000d, ip = "aaaaaaaaaaaa", shiki = "bbbbbbbbbbbb"))
+    for {
+      _ <- createWith(env, "source/1800000000", "1800000000", js.Dynamic.literal()).toFuture
+      _ <- createWith(env, "source/1800000002", "1800000002", js.Dynamic.literal()).toFuture
+      _ <- seed(env.threadInstance("source/1800000000"), "recentPosts" -> recent)
+      _ <- env.thread("source/1800000000").moderate("move", moveInput()).toFuture
+      _ <- env.thread("source/1800000002").moderate("move", moveInput(key = "1800000002", targetKey = "1800000003")).toFuture
+      moved <- env.threadInstance("target/1800000001").state.storage.get[js.Any]("recentPosts").toFuture
+      none <- env.threadInstance("target/1800000003").state.storage.get[js.Any]("recentPosts").toFuture
+      _ = assertEquals(js.JSON.stringify(moved.get), js.JSON.stringify(recent))
+      _ = assert(none.isEmpty)
+    } yield ()
+  }
+
   test("既存スレ同士の相互移動はロック前に拒否し、元データを保持する") {
     val env = newEnv()
     val source = env.thread("source/1800000000")
