@@ -98,6 +98,7 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 | `docs/auth-implementation-review.md` | 認証・PHOEBE 実装のレビュー記録（段A・段B・E-1途中の指摘と対応） |
 | `docs/auth-password-implementation-notes.md` | ID・パスワード方式（E-1）の実装メモ。入力規則・PBKDF2・登録回復方式の候補 |
 | `docs/bbs-cgi-ddd-refactoring-plan.md`                                                 | bbs.cgi 投稿処理の DDD 化リファクタリング計画（段0〜9は完了。段10以降が認証・規制の実装）                                                                                                            |
+| `docs/bbs-cgi-fp-refactoring-plan.md`                                                  | bbs.cgi の FP 化リファクタリング計画（FP > OOP > DDD、`service/` 層。2026-11-16、段1〜2完了）                                                                                                       |
 | `docs/auth-phoebe-review.md`                                                           | 上記 2 文書の Opus 5 セルフレビュー記録（2026-11-02）                                                                                                                                |
 | `docs/admin-spa-auth-plan.md`                                                          | 管理画面の改修計画（アカウント認証化・新 UI・scalajs-react SPA。2026-11-02、未着手）                                                                                                            |
 | `docs/admin-spa-auth-review.md`                                                        | 管理画面改修計画の Opus 5 セルフレビュー記録（2026-11-02）                                                                                                                               |
@@ -178,6 +179,10 @@ npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc
   経緯・却下した代案・実測値・性能上の理由・元コードの逐語引用などの**背景情報は `docs/` 配下に書く**。
   - 理由: 長い doc コメントはコードを読む妨げになり、方針変更のたびに文書と食い違う
     （`SjisEncoding.scala` の冒頭 48 行の Scaladoc が実例。背景は `docs/sjis差異一覧.md` へ移した）。
+- **設計思想は FP > OOP > DDD の順で優先する**（2026-11-15 ユーザー指示）: 層は
+  `(Router) -> Handler -> Service -> Domain Model (Value Object / Entity) -> Repository -> Durable Object / DB / Data Storage`。
+  `application/` パッケージは作らず `service/` を使う。下の層は上の層を import しない。
+  業務上の拒否は例外ではなく値（`Either` / enum）で返し、純粋な計算と I/O を分ける。移行計画は `docs/bbs-cgi-fp-refactoring-plan.md`。
 - **Durable Object はインフラ操作だけを持つ**: DO（`bbs/.../durable/`）に書いてよいのは
   ストレージの読み書き（キー設計・ページ分割・一括保存）、`blockConcurrencyWhile` による直列化、他 DO / R2 / KV の呼び出し、
   RPC の引数・戻り値と保存形式の変換（コーデック）だけとする。DO の外で書けるロジックは
