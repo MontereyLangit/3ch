@@ -1,17 +1,7 @@
 package io._3ch.bbs.application.posting.ports
 
+import io._3ch.bbs.domain.posting.{StoredIndex, ArchiveIndexFile}
 import scala.concurrent.Future
-
-/** 保存済みの本文と ETag */
-final case class StoredIndex(text: String, etag: Option[String])
-
-/** 過去ログ目次のファイル */
-enum ArchiveIndexFile {
-  /** key の上 4 桁ごとのスレ一覧 */
-  case ThreadIndex(bbs: String, key: String)
-  /** 板のスレ帯の一覧 */
-  case BandList(bbs: String)
-}
 
 /** 過去ログ目次と headline.txt（R2）。書き込みは ETag 条件付き */
 trait ArchiveIndexStore {

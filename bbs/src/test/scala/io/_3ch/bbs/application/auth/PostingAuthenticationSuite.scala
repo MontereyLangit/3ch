@@ -1,5 +1,6 @@
 package io._3ch.bbs.application.auth
 
+import io._3ch.bbs.domain.account.{TokenReference, TokenProof, TokenAuthentication, CapAuthentication}
 import io._3ch.bbs.application.auth.ports.*
 import io._3ch.bbs.domain.account.AuthenticationFailure
 import io._3ch.common.domain.account.*

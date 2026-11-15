@@ -1,5 +1,6 @@
 package io._3ch.bbs.application.auth
 
+import io._3ch.bbs.domain.account.{TokenReference, TokenProof}
 import io._3ch.bbs.application.auth.ports.*
 import io._3ch.bbs.application.posting.PostingRequest
 import io._3ch.bbs.application.posting.ports.PostingAccount

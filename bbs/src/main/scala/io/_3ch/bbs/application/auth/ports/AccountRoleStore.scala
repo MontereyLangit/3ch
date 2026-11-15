@@ -1,5 +1,6 @@
 package io._3ch.bbs.application.auth.ports
 
+import io._3ch.bbs.domain.account.AccountStoreException
 import io._3ch.common.domain.account.Roles
 import scala.concurrent.Future
 

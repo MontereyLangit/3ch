@@ -3,7 +3,6 @@ package io._3ch.bbs.repository
 import io._3ch.bbs.application.posting.ports.SettingsStore
 import io._3ch.bbs.external.cloudflare.{BoardDoStub, WorkerEnv}
 import io._3ch.bbs.domain.posting.GlobalThread
-import io._3ch.bbs.handler.PostingText
 import io._3ch.common.domain.{BbsSettings, BbsSubjects, BoardId}
 
 import scala.concurrent.Future
@@ -50,7 +49,7 @@ object BoardRepository {
 
   /**
     * R2から該当板のSETTING.TXTを取得する
-    * 無い場合は[[PostingText.settingTxtDefault]]を使う
+    * 無い場合は[[BbsSettings.defaultText]]を使う
     *
     * @param board 板ID
     * @param e WorkerEnv
@@ -60,7 +59,7 @@ object BoardRepository {
     e.ch3www.get(board.value + "/SETTING.TXT")
       .toFuture
       .flatMap(o =>
-        if o == null then Future.successful(PostingText.settingTxtDefault)
+        if o == null then Future.successful(BbsSettings.defaultText)
         else o.text().toFuture
       )
       .map(BbsSettings.create(_, board))

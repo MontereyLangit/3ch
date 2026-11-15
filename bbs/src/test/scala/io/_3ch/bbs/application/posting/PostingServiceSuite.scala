@@ -1,6 +1,7 @@
 package io._3ch.bbs.application.posting
 
-import io._3ch.bbs.application.posting.ports.{EdgeRuleStore, PhoebeRuleStore, ArchiveIndexFile, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostRateObservation, PostingAccount, PostingAccounts, PostingUserSource, Random, RuleStore, SettingsStore, StoredIndex, ThreadSnapshot, ThreadStore, UserAgentTableStore}
+import io._3ch.bbs.domain.posting.{StoredIndex, ArchiveIndexFile, PostRateObservation, ThreadSnapshot}
+import io._3ch.bbs.application.posting.ports.{EdgeRuleStore, PhoebeRuleStore, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostingAccount, PostingAccounts, PostingUserSource, Random, RuleStore, SettingsStore, ThreadStore, UserAgentTableStore}
 import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureClock, FailureSite, ModerationDenial, PostingError, PostingStage, PostingUser, ThreadOwner, ThreadPosting, ThreadWriteResult, UserAgentRule, UserAgentTable}
 import io._3ch.bbs.domain.posting.moderation.{PhoebeCapRules, ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, PostRateFinding, PostRateIdentity, PostRateLevel, PostRateRejection, ThreadCreationRejection, ThreadCreationRateLimit}
 import io._3ch.bbs.handler.PostingText

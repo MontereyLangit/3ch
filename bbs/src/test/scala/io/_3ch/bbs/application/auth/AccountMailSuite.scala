@@ -1,6 +1,7 @@
 package io._3ch.bbs.application.auth
 
-import io._3ch.bbs.application.auth.ports.{AccountEmailStore, AuthenticationKeys, EmailVerified, MailSender, OutgoingMail, PasswordHashing, PendingCheck, SignInResult}
+import io._3ch.bbs.domain.account.{PendingCheck, EmailVerified, SignInResult, OutgoingMail}
+import io._3ch.bbs.application.auth.ports.{AccountEmailStore, AuthenticationKeys, MailSender, PasswordHashing}
 import io._3ch.bbs.durable.DurableTestKit
 import io._3ch.bbs.hash.{AuthHmac, PasswordHasher}
 import io._3ch.bbs.repository.AccountRepository

@@ -1,6 +1,7 @@
 package io._3ch.bbs.application.posting
 
-import io._3ch.bbs.application.posting.ports.{ArchiveIndexFile, PostRateObservation, PostingAccount}
+import io._3ch.bbs.domain.posting.{ArchiveIndexFile, PostRateObservation}
+import io._3ch.bbs.application.posting.ports.PostingAccount
 import io._3ch.bbs.domain.account.{AuthenticationFailure, EdgeDefense, EdgeSignal}
 import io._3ch.bbs.domain.posting.{ClientIdentity, FailureClock, FailureSite, GlobalThread, KeyIp, NusiMark, PostFormLimits, PostRouting, PostingContext, PostingError, PostingIdentity, PostingStage, PostingUser, ReplyThread, ThreadOwner, ThreadPosting, ThreadWriteResult}
 import io._3ch.bbs.domain.posting.moderation.{BypassPoster, ModerationDecision, ModerationInput, PostRateCheck, PostRateIdentity, PostRateSettings, ThreadCreationLimit, ThreadCreationNetwork, ThreadCreationRequest, ThreadCreationSettings}

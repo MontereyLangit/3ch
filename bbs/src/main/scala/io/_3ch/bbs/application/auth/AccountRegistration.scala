@@ -1,6 +1,7 @@
 package io._3ch.bbs.application.auth
 
-import io._3ch.bbs.application.auth.ports.{AccountManagementStore, AccountSignInStore, AccountStoreException, AuthenticationKeys}
+import io._3ch.bbs.domain.account.AccountStoreException
+import io._3ch.bbs.application.auth.ports.{AccountManagementStore, AccountSignInStore, AuthenticationKeys}
 import io._3ch.common.domain.account.*
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue

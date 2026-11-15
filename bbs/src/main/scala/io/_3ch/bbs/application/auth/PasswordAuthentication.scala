@@ -1,6 +1,7 @@
 package io._3ch.bbs.application.auth
 
-import io._3ch.bbs.application.auth.ports.{AbuseReviewLog, AccountManagementStore, AccountSignInStore, AuthenticationKeys, PasswordHashing, SignInResult}
+import io._3ch.bbs.domain.account.SignInResult
+import io._3ch.bbs.application.auth.ports.{AbuseReviewLog, AccountManagementStore, AccountSignInStore, AuthenticationKeys, PasswordHashing}
 import io._3ch.common.domain.account.*
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue

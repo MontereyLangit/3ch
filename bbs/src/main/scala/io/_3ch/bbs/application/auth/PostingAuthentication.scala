@@ -1,6 +1,7 @@
 package io._3ch.bbs.application.auth
 
-import io._3ch.bbs.application.auth.ports.{AccountStore, PostingCredentials, TokenProof}
+import io._3ch.bbs.domain.account.TokenProof
+import io._3ch.bbs.application.auth.ports.{AccountStore, PostingCredentials}
 import io._3ch.bbs.domain.account.{AuthenticatedPoster, AuthenticationFailure}
 import io._3ch.common.domain.account.{AccountDescription, AccountRejection, AccountVia, DedicatedBrowserLabel, SessionBinding, SessionClaims}
 

@@ -1,5 +1,6 @@
 package io._3ch.bbs.application.auth
 
+import io._3ch.bbs.domain.account.AccountStoreException
 import io._3ch.bbs.application.auth.ports.*
 import io._3ch.bbs.durable.DurableTestKit
 import io._3ch.bbs.hash.{AuthHmac, PasswordHasher}

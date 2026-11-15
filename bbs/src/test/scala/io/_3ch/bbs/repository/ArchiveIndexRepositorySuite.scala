@@ -1,6 +1,6 @@
 package io._3ch.bbs.repository
 
-import io._3ch.bbs.application.posting.ports.StoredIndex
+import io._3ch.bbs.domain.posting.StoredIndex
 import io._3ch.bbs.durable.DurableTestKit
 import munit.FunSuite
 

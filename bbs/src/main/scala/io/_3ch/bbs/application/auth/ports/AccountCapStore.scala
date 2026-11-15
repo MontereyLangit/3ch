@@ -1,10 +1,8 @@
 package io._3ch.bbs.application.auth.ports
 
+import io._3ch.bbs.domain.account.{CapReissue, AccountStoreException}
 import io._3ch.common.domain.account.{AccountCap, AuthRateCounts}
 import scala.concurrent.Future
-
-/** 再発行で失効させたキャップの照合値と、新しいキャップの KV に書く表示名 */
-final case class CapReissue(previousHash: String, storedName: String)
 
 /** キャップの登録・失効と cap 索引。拒否は AccountStoreException の Future の失敗で返す */
 trait AccountCapStore {

@@ -1,6 +1,7 @@
 package io._3ch.bbs.application.auth
 
-import io._3ch.bbs.application.auth.ports.{AccountEmailStore, PendingCheck, AccountStoreException, AuthenticationKeys, MailSender, OutgoingMail, PasswordHashing, SignInResult}
+import io._3ch.bbs.domain.account.{PendingCheck, SignInResult, AccountStoreException, OutgoingMail}
+import io._3ch.bbs.application.auth.ports.{AccountEmailStore, AuthenticationKeys, MailSender, PasswordHashing}
 import io._3ch.common.domain.account.*
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
