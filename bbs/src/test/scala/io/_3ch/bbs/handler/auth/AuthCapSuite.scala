@@ -1,8 +1,9 @@
 package io._3ch.bbs.handler.auth
 
-import io._3ch.bbs.application.auth.{AuthServiceException, AuthServiceFailure, CapIssuing}
-import io._3ch.bbs.application.auth.ports.{AccountStoreException, CapDirectory}
-import io._3ch.bbs.application.posting.CapKey
+import io._3ch.bbs.domain.account.AccountStoreException
+import io._3ch.bbs.service.auth.{AuthServiceException, AuthServiceFailure, CapIssuing}
+import io._3ch.bbs.service.auth.ports.CapDirectory
+import io._3ch.bbs.service.posting.CapKey
 import io._3ch.bbs.hash.WebHasher
 import io._3ch.bbs.repository.{AccountRepository, CapRepository}
 import io._3ch.common.domain.account.{AccountDescription, AccountKind, AccountRejection, AccountRole, Roles}

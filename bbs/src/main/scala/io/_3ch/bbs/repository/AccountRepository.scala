@@ -1,6 +1,7 @@
 package io._3ch.bbs.repository
 
-import io._3ch.bbs.application.auth.ports.*
+import io._3ch.bbs.domain.account.{CapReissue, PendingCheck, EmailVerified, SignInResult, TokenReference, TokenProof, TokenAuthentication, CapAuthentication, AccountStoreException, WithdrawnAccount}
+import io._3ch.bbs.service.auth.ports.*
 import io._3ch.bbs.durable.codec.{AccountCodec, PasswordCredentialCodec}
 import io._3ch.bbs.external.cloudflare.{AccountDoStub, AccountIndexDoStub, WorkerEnv}
 import io._3ch.common.domain.account.*

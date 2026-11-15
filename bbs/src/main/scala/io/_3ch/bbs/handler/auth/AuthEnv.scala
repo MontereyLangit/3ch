@@ -1,6 +1,6 @@
 package io._3ch.bbs.handler.auth
 
-import io._3ch.bbs.application.auth.AuthSettings
+import io._3ch.bbs.service.auth.AuthSettings
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 
 /** Google ログインのクライアント設定 */

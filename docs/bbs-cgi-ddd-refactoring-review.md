@@ -116,7 +116,7 @@
 
 | 項目 | 内容 |
 | --- | --- |
-| 実施 | common/domain/posting/DatLineFormatter（最初の <br> の前後の空白、dat 行、log 行）、application/posting/ports/Clock（現在時刻と Intl.DateTimeFormat による dat の日付欄。段 7 のポートの先行分）、bbs/domain/posting/ThreadPosting（addRes の付帯情報）、durable/codec/PostingCodec、ThreadRepository.addRes、repository/ArchiveIndexRepository（過去ログ目次と headline.txt の読込と ETag 条件付き書き込み）を追加。ThreadCreationCodec に encodeRequest と ThreadCreationLimit を足し、Thread DO の addRes は PostingCodec.decode で case class にしてから使う。g.headers・g.path・g.logPath・g.logFile・g.logData を削除した |
+| 実施 | common/domain/posting/DatLineFormatter（最初の <br> の前後の空白、dat 行、log 行）、service/posting/ports/Clock（現在時刻と Intl.DateTimeFormat による dat の日付欄。段 7 のポートの先行分）、bbs/domain/posting/ThreadPosting（addRes の付帯情報）、durable/codec/PostingCodec、ThreadRepository.addRes、repository/ArchiveIndexRepository（過去ログ目次と headline.txt の読込と ETag 条件付き書き込み）を追加。ThreadCreationCodec に encodeRequest と ThreadCreationLimit を足し、Thread DO の addRes は PostingCodec.decode で case class にしてから使う。g.headers・g.path・g.logPath・g.logFile・g.logData を削除した |
 | 応答ヘッダ | Responses.plain と RendererShell の extra を Seq[(String, String)] にした。名前ごとに既存の値を消してから append するので、1 本なら従来の set と同じで、同名を並べれば Set-Cookie も複数出る |
 | 振る舞いの保存 | RPC の外形（プレーンオブジェクトと同じ項目名）は変えず、DO スタブの署名も変わらないので codegen の生成物はそのまま。旧形式は従来の読み方に合わせ、null と省略は付帯情報なし、真偽は JavaScript の真偽判定、板名・key が無ければ String(undefined) の名前で Board DO を呼ぶ。初期スレ設定・スレ立て規制・スレ主は create が真で値が真のときだけ読む。subject.txt の空 ETag と未作成時の doesNotExist（KB-25）、headline の条件と結果を見ない扱いも維持。スナップショット差分なし |
 | テスト | DatLineFormatterSuite（JVM / JS）、PostingCodecSuite（往復、外形、旧形式・真偽判定・create でない場合）、ArchiveIndexRepositorySuite（ETag 競合、空 ETag と KB-25、headline）、ResponsesSuite（Set-Cookie の複数と 1 本のときの出力）。ThreadSuite・ThreadCreationSuite は変更なしで通る |
@@ -139,7 +139,7 @@ bbs/domain と common/domain の公開型・公開メソッドで doc が無か�
 
 | 項目 | 内容 |
 | --- | --- |
-| 実施 | application/posting/PostingService.post(request) に段の並びを集めた。PostingRequest と PostingFormDecoder を handler から application/posting に移し、PostingRequest に本文を読む body を足した（ヘッダの検査の後に読む順は従来どおり）。ポートは ports/ の ThreadStore・SettingsStore・RuleStore・CapStore・ArchiveIndexStore・PostingUserSource・Hasher・Clock・Random で、PostingPorts にまとめる。実装は既存のリポジトリ（ThreadRepository.store など）と hash/WebHasher。handler/PostingHandler は handler/Posting に改名し、PostingRequest 化 → サービス → PostingPages.render だけにした |
+| 実施 | service/posting/PostingService.post(request) に段の並びを集めた。PostingRequest と PostingFormDecoder を handler から service/posting に移し、PostingRequest に本文を読む body を足した（ヘッダの検査の後に読む順は従来どおり）。ポートは ports/ の ThreadStore・SettingsStore・RuleStore・CapStore・ArchiveIndexStore・PostingUserSource・Hasher・Clock・Random で、PostingPorts にまとめる。実装は既存のリポジトリ（ThreadRepository.store など）と hash/WebHasher。handler/PostingHandler は handler/Posting に改名し、PostingRequest 化 → サービス → PostingPages.render だけにした |
 | 状態 | g と Draft を削除し、PostingContext（form・identity・受付時刻・合成した settings・number・title・cap・shikibetsu・スレ主・sage・PON）を段ごとに copy で埋める。拒否はサービス内部の例外 Rejected(error, その時点の context) で、PostingOutcome.Rejected にして返す。段 3 で保留した settings は PostingContext.settings に置いた。板設定だけを読む箇所（スレ立て規制・板の BBS_DISABLE_NUSI）はサービス内の PostingBoard で渡す |
 | ドメインへ移したもの | subject.txt・スレ帯一覧・headline.txt の本文（common の ArchiveIndexText。headline の trim は JavaScript と同じ空白を除く JsText）、sage 判定（common の SageRule。BBS_LIVE の乱数は Random ポートから by-name で渡し、判定に進んだときだけ読む）、返信先の dat の検査（ReplyThread）、文字数と行数の検査（PostFormLimits）、広域スレ立て規制のネットワークグループ（ThreadCreationNetwork）、初期スレ設定の保存形式（BbsSettings.toThreadSettings。JavaScript のオブジェクトと同じキー順を js.Object.keys を使わずに並べる）。ThreadCreationSettings は handler から domain/posting/moderation へ移した |
 | 振る舞いの保存 | スナップショット 204 件・PostingSuite（改名のみ）・golden は差分なし。返信先の dat・スレ設定・スレ主は従来どおり同時に読み始め、スレ主は名前欄の (主) の判定で初めて復号する（キャップ・閉鎖・満杯では触れない）。内部エラーの時刻は段ごとの従来の規則（KB-39 の undefined を含む）をサービスの guarded に移した |
@@ -161,7 +161,7 @@ bbs/domain と common/domain の公開型・公開メソッドで doc が無か�
 
 | 項目 | 内容 |
 | --- | --- |
-| 配置 | 段 7・8 でドメインは common/src/test（JVM / JS）と bbs/src/test/.../domain、サービスは application/posting/PostingServiceSuite、ヘッダと本文の復号は application/posting の PostingRequestSuite・PostingFormDecoderSuite、DO は durable/、HTTP は handler/ に揃った。PostingSuite（旧 PostingHandlerSuite）とスナップショットは縮退させずに残した |
+| 配置 | 段 7・8 でドメインは common/src/test（JVM / JS）と bbs/src/test/.../domain、サービスは service/posting/PostingServiceSuite、ヘッダと本文の復号は service/posting の PostingRequestSuite・PostingFormDecoderSuite、DO は durable/、HTTP は handler/ に揃った。PostingSuite（旧 PostingHandlerSuite）とスナップショットは縮退させずに残した |
 | 固定時刻への依存 | 数値設定の境界（巨大な指数の文字数上限、BBS_ID_RESET の負のゼロ）を HTTP と withFixedTime で見ていた PostingNumericSettingsSuite を、PostingServiceSuite の固定の Clock を使うテストに移して削除した。投稿処理で Date・Math.random を差し替えるのは PostingSuite と PostingSnapshotSuite だけになった。どちらも HTTP の入出力をバイト単位で固定するためのもので、ポートでは置き換えない |
 | 並列実行 | sbt にはスイート単位で並列を切る設定が無く、HandlerTestKit を使うスイートだけを直列にすることはできない。一方、Scala.js のテストアダプタは sbt のスレッドごとに別の JS 実行環境を起動し、その中ではスイートを 1 つずつ最後まで動かすので、グローバルの差し替えはスイートをまたいで見えない（scalajs-sbt-test-adapter 1.22 の TestAdapter.getRunnerForThread）。そこで Test / parallelExecution を true にした。並列で bbs/test を 3 回続けて実行し、3 回とも全件成功した（直列 12 秒、並列 10 秒） |
 | 文書 | docs/v6s実装メモ.md 4 章に、テストの置き場所、並列実行してよい理由、投稿処理のスイートの分担（4.6）を書いた。ThreadSuite の説明（4.2）を段 8 の分担に合わせた。AGENTS.md 1.4 に application/・domain/・repository/ を足し、handler から消えた Moderation を外した |

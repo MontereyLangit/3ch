@@ -1,11 +1,11 @@
 package io._3ch.bbs.handler.auth
 
-import io._3ch.bbs.application.posting.PostingRequest
+import io._3ch.bbs.service.posting.PostingRequest
 import io._3ch.bbs.durable.codec.AccountCodec
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.handler.HandlerTestKit
 import io._3ch.bbs.hash.AuthHmac
-import io._3ch.bbs.application.auth.PostingAccountService
+import io._3ch.bbs.service.auth.PostingAccountService
 import io._3ch.bbs.repository.AccountRepository
 import io._3ch.common.domain.account.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue

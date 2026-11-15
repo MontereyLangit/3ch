@@ -1,5 +1,6 @@
 package io._3ch.bbs.handler.auth
 
+import io._3ch.bbs.domain.account.AccountStoreException
 import io._3ch.common.domain.account.{AccountRole, Roles}
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
@@ -275,7 +276,7 @@ class AccountMailHandlerSuite extends munit.FunSuite {
         gone <- service.emailTarget(link.copy(secret = "x" * 43), now).failed
       } yield {
         assertEquals((target.uid, target.email.map(io._3ch.common.domain.account.EmailAddress.mask)), ("taro_2026", Some("t***@example.com")))
-        assert(gone.isInstanceOf[io._3ch.bbs.application.auth.ports.AccountStoreException])
+        assert(gone.isInstanceOf[io._3ch.bbs.domain.account.AccountStoreException])
       }
     }
   }

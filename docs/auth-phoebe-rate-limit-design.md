@@ -327,7 +327,7 @@ Turnstile は要求しない（原案「作成時の認証なし」）が、端�
 1. `__Host-ch3s_oauth` の署名・期限を検証し、`state` が一致しなければ拒否（`reason=oauth_state`）。Cookie はここで消す（1 回限り）。
    `error=access_denied` は `/auth/?mode=login&error=google_denied` へ戻す。
 2. `https://oauth2.googleapis.com/token` へ `code`・`client_id`・`client_secret`・`redirect_uri`・`grant_type=authorization_code`・`code_verifier` を POST。
-3. `id_token` を検証する（`bbs/application/auth/GoogleIdToken`。署名以外のクレーム検証は `common` の純粋関数）:
+3. `id_token` を検証する（`bbs/service/auth/GoogleIdToken`。署名以外のクレーム検証は `common` の純粋関数）:
    - 署名: `https://www.googleapis.com/oauth2/v3/certs` の JWKS（`kid` で選ぶ RS256）。JWKS は応答の `Cache-Control` に従い `caches.default` に保存し、`kid` 不明なら 1 回だけ再取得。
    - `iss` ∈ {`https://accounts.google.com`, `accounts.google.com`}、`aud` = `GOOGLE_CLIENT_ID`、`exp` > now、`iat` ≤ now + 300s、`nonce` = Cookie の `nonce`。
    - `email_verified` が `true` でなければ拒否（`reason=google_email`）。`hd` は見ない。
@@ -467,7 +467,7 @@ JP.AA CC-EEEFFFGGGZZZXXXD
 
 - 付与できるのは ID/Password と Google のアカウントのみ。クライアント ID には付けない。
 - 権限者向けの操作は **`/admin/*` に統合**し、Basic 認証をやめて役割で画面と操作を出し分ける（2026-11-02 利用者指示。詳細は [管理画面 改修計画](admin-spa-auth-plan.md)）。入場時にパスワード再入力（Google は再認証）を求め、短命の管理者セッション `__Host-ch3s_admin`（`SameSite=Strict`・無操作 30 分・最長 8 時間）を別に発行する。変更系は `Origin` を検証し、`cache-control: no-store` と CSP を維持する。初回の `admin` は `ADMIN_BOOTSTRAP_TOKEN` で作る。
-- 実装（段 D）: 役割を変えられるのは `admin` だけで、`admin` 以外の staff が操作できるのは staff でない相手だけ（`Roles.manages`）。判定は Account DO の `setRoles` のロック内で行い、操作する人の役割は呼び出し元の申告でなく操作する人の Account から読む。`role:admin` 索引への反映と初回の管理者の確保（`claimFirstAdmin`）は RPC と application まで。admin を足すときは索引が先、外すときは役割が先で、最後の有効な admin は外せない（`AccountIndex("role:admin").surrender`）。`Account.grantFirstAdmin` は索引にそのアカウントの確保がある場合だけ通し、確保の途中で止まったら admin の有無を読み直して確定か取り消しを選ぶ。確定前の確保でも admin が付いた所有者は有効な admin に数える。bootstrap の HTTP は改修計画 M2。
+- 実装（段 D）: 役割を変えられるのは `admin` だけで、`admin` 以外の staff が操作できるのは staff でない相手だけ（`Roles.manages`）。判定は Account DO の `setRoles` のロック内で行い、操作する人の役割は呼び出し元の申告でなく操作する人の Account から読む。`role:admin` 索引への反映と初回の管理者の確保（`claimFirstAdmin`）は RPC と service まで。admin を足すときは索引が先、外すときは役割が先で、最後の有効な admin は外せない（`AccountIndex("role:admin").surrender`）。`Account.grantFirstAdmin` は索引にそのアカウントの確保がある場合だけ通し、確保の途中で止まったら admin の有無を読み直して確定か取り消しを選ぶ。確定前の確保でも admin が付いた所有者は有効な admin に数える。bootstrap の HTTP は改修計画 M2。
 - 画面と権限の対応（段 D で確定）: スレ停止・再開・削除・レス削除・移動 → `delete`。`deny.cgi` / `ngwords.cgi` / `phoebe.cgi` / `edge-rules.json` の編集、端末・アカウント BAN、乱造の要確認一覧 → `regulate`。アカウントの権限・Lv・状態・キャップ紐づけ、板設定（`SETTING.TXT`・`head.txt`）、`bbsmenu.html`、監査ログ → `admin`。
 
 ### 6.2 キャップ

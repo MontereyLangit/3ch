@@ -1,6 +1,6 @@
 package io._3ch.bbs.hash
 
-import io._3ch.bbs.application.posting.ports.Hasher
+import io._3ch.bbs.service.posting.ports.Hasher
 
 import scala.concurrent.Future
 

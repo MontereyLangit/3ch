@@ -1,6 +1,6 @@
 package io._3ch.bbs.repository
 
-import io._3ch.bbs.application.posting.ports.EdgeRuleStore
+import io._3ch.bbs.service.posting.ports.EdgeRuleStore
 import io._3ch.bbs.domain.account.{EdgeDecision, EdgeMode, EdgeRules, EdgeSignal, TlsRule}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.web.Request

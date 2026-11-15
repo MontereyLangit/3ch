@@ -1,8 +1,8 @@
 package io._3ch.bbs.handler.auth
 
+import io._3ch.bbs.domain.account.AccountStoreException
 import io._3ch.bbs.external.web.{Response, URL}
-import io._3ch.bbs.application.auth.{AccountUpgrade, UpgradeOutcome}
-import io._3ch.bbs.application.auth.ports.AccountStoreException
+import io._3ch.bbs.service.auth.{AccountUpgrade, UpgradeOutcome}
 import io._3ch.bbs.repository.AccountRepository
 import io._3ch.common.domain.account.{AccountKind, AccountRejection, LoginId, Password}
 import scala.concurrent.Future

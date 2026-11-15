@@ -1,6 +1,6 @@
 package io._3ch.bbs.handler.auth
 
-import io._3ch.bbs.application.auth.ports.PostingCredentials
+import io._3ch.bbs.service.auth.ports.PostingCredentials
 import io._3ch.bbs.hash.AuthHmac
 import io._3ch.common.domain.account.SessionClaims
 import scala.concurrent.Future

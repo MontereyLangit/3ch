@@ -1,6 +1,7 @@
 package io._3ch.bbs.repository
 
-import io._3ch.bbs.application.auth.ports.{AbuseReviewLog, AccountStoreException}
+import io._3ch.bbs.domain.account.AccountStoreException
+import io._3ch.bbs.service.auth.ports.AbuseReviewLog
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.common.domain.account.{AbuseReason, AbuseReview, AccountRejection, AuthRateCounts}
 import scala.concurrent.Future

@@ -1,6 +1,6 @@
 package io._3ch.bbs.handler.auth
 
-import io._3ch.bbs.application.auth.AccountRoles
+import io._3ch.bbs.service.auth.AccountRoles
 import io._3ch.bbs.durable.DurableTestKit
 import io._3ch.bbs.domain.posting.KeyIp
 import io._3ch.bbs.external.cloudflare.WorkerEnv

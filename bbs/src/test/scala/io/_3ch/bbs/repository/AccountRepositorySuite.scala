@@ -1,6 +1,6 @@
 package io._3ch.bbs.repository
 
-import io._3ch.bbs.application.auth.ports.TokenReference
+import io._3ch.bbs.domain.account.TokenReference
 import io._3ch.bbs.durable.codec.AccountCodec
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.common.domain.account.*

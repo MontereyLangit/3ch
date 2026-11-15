@@ -1,6 +1,6 @@
 package io._3ch.bbs.handler
 
-import io._3ch.bbs.application.posting.PostingOutcome
+import io._3ch.bbs.service.posting.PostingOutcome
 import io._3ch.common.domain.posting.PostForm
 import japgolly.scalajs.react.facade.React
 import scala.scalajs.js

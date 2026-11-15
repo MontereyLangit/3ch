@@ -238,7 +238,7 @@ bbs/src/main/scala/io/_3ch/bbs/
   handler/admin/AdminAuth.scala     管理者セッション・再認証・役割検査・Origin 検査
   handler/admin/AdminApi.scala      JSON の入出力とルーティング
   handler/admin/AdminAssets.scala   起動ページと資産の配信
-  application/admin/AdminService.scala  板設定・スレ操作・ルール・メニュー・アカウント操作（リポジトリ経由）
+  service/admin/AdminService.scala  板設定・スレ操作・ルール・メニュー・アカウント操作（リポジトリ経由）
   durable/AdminAudit.scala、domain/admin/AuditLog.scala   監査ログ
 ```
 

@@ -75,7 +75,7 @@ UA解析表はR2の `ua-profiles.json`（`{"os": [{"match", "flags"?, "label"}�
 
 設計書§6.1・§6.2・§6.4・§7のうち、管理画面を除く部分。管理画面の作り直し（SPA・アカウント認証への切替・操作画面）は改修計画 M0〜M4 として残す。レビューと設計からの差分は [レビュー記録](auth-implementation-review.md) の「段 D」にまとめた。
 
-権限は Account の `roles`（admin / delete / regulate / cap）。`Roles.staff` は cap 以外の役割を持つこと、`Roles.manages` は「admin は誰でも、ほかの staff は staff でない相手だけ」を操作できる規則。役割を変えられるのは admin だけで（`AccountState.assignRoles`）、Account DO の `setRoles(roles, actorRoles, now)` がロック内で判定する。admin の付け外しは application の `AccountRoles` が `AccountIndex("role:admin")` に反映する。初回の管理者は `AccountIndex("role:admin").claimFirstAdmin(hash, aid, now, breakGlass)` が有効な admin（確定済みで、Account の `adminStatus` が真）と他人の期限内の予約を数え、居なければ（非常用期間なら居ても）予約する。続く `Account.grantFirstAdmin` → `confirm` と失敗時の予約の取り消しは `AccountRoles.claimFirstAdmin`。非常用期間の判定は `FirstAdminClaim.breakGlass`（現在より先で24時間以内）。bootstrap の HTTP・トークンの照合・監査ログは M2。
+権限は Account の `roles`（admin / delete / regulate / cap）。`Roles.staff` は cap 以外の役割を持つこと、`Roles.manages` は「admin は誰でも、ほかの staff は staff でない相手だけ」を操作できる規則。役割を変えられるのは admin だけで（`AccountState.assignRoles`）、Account DO の `setRoles(roles, actorRoles, now)` がロック内で判定する。admin の付け外しは service の `AccountRoles` が `AccountIndex("role:admin")` に反映する。初回の管理者は `AccountIndex("role:admin").claimFirstAdmin(hash, aid, now, breakGlass)` が有効な admin（確定済みで、Account の `adminStatus` が真）と他人の期限内の予約を数え、居なければ（非常用期間なら居ても）予約する。続く `Account.grantFirstAdmin` → `confirm` と失敗時の予約の取り消しは `AccountRoles.claimFirstAdmin`。非常用期間の判定は `FirstAdminClaim.breakGlass`（現在より先で24時間以内）。bootstrap の HTTP・トークンの照合・監査ログは M2。
 
 投稿では `PostingAccount.roles` を認証結果の役割から埋め、`staff`（BBS_PHOEBE の免除と `!SETTING` で下げる権限）は役割から決まる。回避レベル `BypassLevel` は `BypassPoster`（役割・★・認証済・実効 Lv）で判定する。適用先は deny.cgi / ngwords.cgi の5列目（省略・空欄は privileged、不正な値は書式の誤り）、`BBS_RENTOU_PASS`、`BBS_THREAD_PASS`（キャップ除外を置き換え。スレ設定に書き写さない）。admin の投稿はルールファイルを読まない。既定の段階（privileged）で免除される投稿者は、ルールファイルが壊れている・読めないときも通す（キャップの従来の挙動を保つため）。Tor の拒否はキャップだけを免除する（staff は免除しない）。saku 板は従来どおり deny.cgi / ngwords.cgi をスルーする。
 
@@ -87,7 +87,7 @@ UA解析表はR2の `ua-profiles.json`（`{"os": [{"match", "flags"?, "label"}�
 
 設計書§3.6・§3.7（乱造検知の「要確認」）・§3.9・§3.10（移行と退会）・§4.3（上限ルール）。レビューと設計からの差分は [レビュー記録](auth-implementation-review.md) の「段 E-2」にまとめた。
 
-- メール: 送信は application の `MailSender` ポート。送信先は service binding `MAIL_SENDER`（`send({to, subject, text})`）だけを読み、提供元の実装（secret `MAIL_API_KEY`）は未選定。送信先が無い間は登録のメール欄・アカウント設定のメールアドレス・パスワードの再設定を「準備中」にし、API は503。
+- メール: 送信は service の `MailSender` ポート。送信先は service binding `MAIL_SENDER`（`send({to, subject, text})`）だけを読み、提供元の実装（secret `MAIL_API_KEY`）は未選定。送信先が無い間は登録のメール欄・アカウント設定のメールアドレス・パスワードの再設定を「準備中」にし、API は503。
 - メール認証: `EmailAddress` で正規化（前後の空白・小文字・punycode、gmail のドットと `+` 以降）、R2 の `disposable-domains.txt` を拒否。保留トークンは Account の `pending:email`（HMAC・24時間）。確認で `email` 索引を予約・確定してから Lv を3にする（下げない）。変更は確認まで前のアドレスを残し、確認後に前の索引を外す。
 - パスワード: `/auth/password` は現在のパスワードを照合して置き換え、この端末だけに新しい世代の Cookie を出す。役割があれば16文字以上。再設定は `/auth/reset/request`（ユーザーIDとTurnstile。結果を区別しない）→ メール → `/auth/reset/?token=` の画面 → `POST /auth/reset`。メール認証済みで役割の無いアカウントだけに送り、接続元ごととアカウントごとに一日三回。
 - 移行: アカウント設定から `/auth/?upgrade=1`。ID・パスワードは `/auth/register` に `upgrade=1`、Googleは認可の Cookie（版2。目的と aid を持つ）で同じアカウントのセッションに限る。aid・Lv・書き込み数・端末・履歴を引き継ぎ、uid は登録したIDに替わり、旧 uid の索引は残る。Google は Lv10。Google から他方式へは移さない。
