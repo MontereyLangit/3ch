@@ -149,7 +149,7 @@ npm ライブラリへの薄い facade に置き換えた。自作実装は v5 �
 
 配置は層に合わせる。正規表現を使わない純粋な規則は `common/src/test`（JVM と JS の両方で動く。JavaScript の
 `Number`・`trim`・`Object.keys` と同じ結果になるかは `common/src/test/scala-js` の `*RuntimeSuite` が実行環境と突き合わせる）、
-`js.RegExp` を使う規則と投稿処理のドメインは `bbs/src/test/.../domain`、アプリケーションサービスは
+`js.RegExp` を使う規則と投稿処理のドメインは `bbs/src/test/.../domain`、サービスは
 `service/posting/PostingServiceSuite`、DO は `durable/`、R2・KV の読み書きは `repository/`、HTTP の入出力は `handler/` に置く。
 
 `Test / parallelExecution` は `true` にしている。ハンドラのテストは `HandlerTestKit` で `Date`・`Math.random`・`caches` を

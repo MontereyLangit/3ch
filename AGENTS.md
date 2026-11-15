@@ -181,7 +181,7 @@ npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc
     （`SjisEncoding.scala` の冒頭 48 行の Scaladoc が実例。背景は `docs/sjis差異一覧.md` へ移した）。
 - **設計思想は FP > OOP > DDD の順で優先する**（2026-11-15 ユーザー指示）: 層は
   `(Router) -> Handler -> Service -> Domain Model (Value Object / Entity) -> Repository -> Durable Object / DB / Data Storage`。
-  `application/` パッケージは作らず `service/` を使う。下の層は上の層を import しない。
+  `application/` パッケージは作らず `service/` を使う。下の層は上の層を import しない（例外: repository が実装する `service/*/ports` の trait。関数レコード化で解消する）。
   業務上の拒否は例外ではなく値（`Either` / enum）で返し、純粋な計算と I/O を分ける。移行計画は `docs/bbs-cgi-fp-refactoring-plan.md`。
 - **Durable Object はインフラ操作だけを持つ**: DO（`bbs/.../durable/`）に書いてよいのは
   ストレージの読み書き（キー設計・ページ分割・一括保存）、`blockConcurrencyWhile` による直列化、他 DO / R2 / KV の呼び出し、

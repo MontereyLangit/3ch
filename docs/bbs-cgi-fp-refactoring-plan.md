@@ -7,7 +7,7 @@
 (Router) -> Handler -> Service -> Domain Model (Value Object / Entity) -> Repository -> Durable Object / DB / Data Storage
 ```
 
-`application/` パッケージは置かず `service/` を使う。下の層は上の層を import しない。
+`application/` パッケージは置かず `service/` を使う。下の層は上の層を import しない（例外: repository が実装する `service/*/ports` の trait。段 8 で解消する）。
 
 ## 0. 不変条件
 
@@ -30,7 +30,7 @@
 | F7 | 過去ログ目次の ETag 比較交換の手順を Service が知っている | `ArchiveIndexRepository.modify` へ |
 | F8 | DO に純粋ロジックが残る（subject.txt の並べ替え、`convertLegacy` の `var` と可変コレクション、`addRes` の判定）。業務上の拒否も例外 | `SubjectList.bumped`、`LegacyThreadLog.toDat`、`ThreadAppend.plan` に出し、拒否は値で返す |
 | F9 | 判定の途中で副作用としてログを書く（`Try` で握りつぶす） | `events` を値で返し、Handler が書き出す |
-| F10 | 細かい層の問題（`BoardRepository` → `handler.PostingText` など）、`common` と `bbs/domain` の線引きが曖昧、弱い型 | 段 1・14 |
+| F10 | 細かい層の問題（`BoardRepository` → `handler.PostingText` など。これは段 1 で解消）、`common` と `bbs/domain` の線引きが曖昧、弱い型 | 段 1・14 |
 
 ## 2. 段階
 
@@ -49,7 +49,7 @@
 | 11 | 比較交換を Repository へ（F7） | |
 | 12 | DO から純粋ロジックを出す（F8） | |
 | 13 | （任意）`addRes` の拒否を RPC の戻り値で返す | |
-| 14 | （任意）`PostingError` を拒否と障害に分け、`common` / `bbs/domain` を整理（F10） | |
+| 14 | （任意）`PostingError` を拒否と障害に分け、`common` / `bbs/domain` を整理（F10）。段 1 で `domain/account` へ移した `AccountStoreException`（DO 応答の障害を `Future` の失敗で運ぶ）もここで扱いを決める | |
 
 効果の大半は段 5・6 にある。
 
