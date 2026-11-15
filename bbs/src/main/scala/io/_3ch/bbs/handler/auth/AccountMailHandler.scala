@@ -1,7 +1,7 @@
 package io._3ch.bbs.handler.auth
 
 import io._3ch.bbs.domain.account.AccountStoreException
-import io._3ch.bbs.application.auth.{AccountMail, AuthServiceFailure, AuthSettings, PasswordChange, PasswordChangeOutcome, StaleIndex}
+import io._3ch.bbs.service.auth.{AccountMail, AuthServiceFailure, AuthSettings, PasswordChange, PasswordChangeOutcome, StaleIndex}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.repository.{AccountRepository, MailSenders}

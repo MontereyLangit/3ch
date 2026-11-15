@@ -1,6 +1,6 @@
 package io._3ch.bbs.repository
 
-import io._3ch.bbs.application.posting.ports.RuleStore
+import io._3ch.bbs.service.posting.ports.RuleStore
 import io._3ch.bbs.domain.posting.moderation.{ModerationRuleFile, ModerationRuleSet, ModerationRuleSource}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 

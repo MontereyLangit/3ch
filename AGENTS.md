@@ -63,7 +63,7 @@ bbs/
     Main.scala         Worker エントリ（JSExportTopLevel）
     handler/           PublicRoutes（dat, subject.txt, SETTING.TXT, bbsmenu 等）, Posting（投稿パイプライン）,
                        AdminHandler（/admin/*）, Responses。auth/ は /auth/* の画面と API、セッション Cookie、認証設定の読み取り
-    application/       アプリケーションサービス。posting/PostingService が投稿の段の並びを持ち、ports/ に外部の読み書きの口を置く。
+    service/           サービス層。posting/PostingService が投稿の段の並びを持ち、ports/ に外部の読み書きの口を置く。
                        auth/ はクライアント認証・専ブラキー発行・投稿の認証と記録（ports/ にアカウント・Cookie の口）
     domain/            ドメインモデル・ドメインサービス（js.RegExp を使う規則と投稿処理の型。正規表現を使わない規則は common/）
     repository/        ports の実装。DO スタブ / R2 / KV を包み、js.Dynamic をここで止める

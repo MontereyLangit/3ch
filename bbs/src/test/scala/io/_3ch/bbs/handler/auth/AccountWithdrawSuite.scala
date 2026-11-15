@@ -1,6 +1,6 @@
 package io._3ch.bbs.handler.auth
 
-import io._3ch.bbs.application.posting.CapKey
+import io._3ch.bbs.service.posting.CapKey
 import io._3ch.bbs.external.web.{Response, URL}
 import io._3ch.bbs.hash.WebHasher
 import io._3ch.bbs.repository.AccountRepository

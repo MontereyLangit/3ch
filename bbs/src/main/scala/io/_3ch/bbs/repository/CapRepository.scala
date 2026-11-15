@@ -1,7 +1,7 @@
 package io._3ch.bbs.repository
 
-import io._3ch.bbs.application.auth.ports.CapDirectory
-import io._3ch.bbs.application.posting.ports.CapStore
+import io._3ch.bbs.service.auth.ports.CapDirectory
+import io._3ch.bbs.service.posting.ports.CapStore
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.common.domain.posting.CapHandle
 

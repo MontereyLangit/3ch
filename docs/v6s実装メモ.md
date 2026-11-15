@@ -150,7 +150,7 @@ npm ライブラリへの薄い facade に置き換えた。自作実装は v5 �
 配置は層に合わせる。正規表現を使わない純粋な規則は `common/src/test`（JVM と JS の両方で動く。JavaScript の
 `Number`・`trim`・`Object.keys` と同じ結果になるかは `common/src/test/scala-js` の `*RuntimeSuite` が実行環境と突き合わせる）、
 `js.RegExp` を使う規則と投稿処理のドメインは `bbs/src/test/.../domain`、アプリケーションサービスは
-`application/posting/PostingServiceSuite`、DO は `durable/`、R2・KV の読み書きは `repository/`、HTTP の入出力は `handler/` に置く。
+`service/posting/PostingServiceSuite`、DO は `durable/`、R2・KV の読み書きは `repository/`、HTTP の入出力は `handler/` に置く。
 
 `Test / parallelExecution` は `true` にしている。ハンドラのテストは `HandlerTestKit` で `Date`・`Math.random`・`caches` を
 一時的に差し替えるが、Scala.js のテストアダプタ（`TestAdapter.getRunnerForThread`）は sbt のスレッドごとに別の JS 実行環境
@@ -221,6 +221,6 @@ golden JSON の読み込みに `common` のテスト専用ユーティリティ�
 | `handler/PostingSuite` | HTTP レベルの特性テスト（旧 `PostingHandlerSuite`）。既知の不具合も含めて現在の動作を固定する |
 | `handler/PostingOwnerCompatibilitySuite` | 壊れたスレ主の保存値を、キャップ・閉鎖・満杯のときに復号しないこと |
 | `handler/PostingTextSuite` | 拒否理由ごとの文言とコード |
-| `application/posting/PostingServiceSuite` | メモリ上のポートで、段の呼び出し順、拒否したときに後段を呼ばないこと、`PostingContext` に copy で埋まる内容、addRes に渡す付帯情報 |
-| `application/posting/PostingRequestSuite`・`PostingFormDecoderSuite` | ヘッダの検査順と本文の復号 |
+| `service/posting/PostingServiceSuite` | メモリ上のポートで、段の呼び出し順、拒否したときに後段を呼ばないこと、`PostingContext` に copy で埋まる内容、addRes に渡す付帯情報 |
+| `service/posting/PostingRequestSuite`・`PostingFormDecoderSuite` | ヘッダの検査順と本文の復号 |
 | `domain/posting/*`・`common` の `domain/posting/*` | 入力の整形と振り分け、文字数、返信先の検査、キャップ・名前欄・識別子、規制、スレ立て規制、sage、過去ログ目次と headline の本文、Thread DO の追記の判定 |

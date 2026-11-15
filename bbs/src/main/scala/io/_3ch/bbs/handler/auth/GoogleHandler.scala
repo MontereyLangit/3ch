@@ -1,7 +1,7 @@
 package io._3ch.bbs.handler.auth
 
 import io._3ch.bbs.domain.account.SignInResult
-import io._3ch.bbs.application.auth.{AccountUpgrade, AuthSettings, GoogleAuthentication, GoogleOutcome, UpgradeOutcome}
+import io._3ch.bbs.service.auth.{AccountUpgrade, AuthSettings, GoogleAuthentication, GoogleOutcome, UpgradeOutcome}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.web.{Request, Response, URL}
 import io._3ch.bbs.handler.Responses

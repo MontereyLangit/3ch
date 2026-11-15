@@ -1,7 +1,7 @@
 package io._3ch.bbs.repository
 
 import io._3ch.bbs.domain.account.OutgoingMail
-import io._3ch.bbs.application.auth.ports.MailSender
+import io._3ch.bbs.service.auth.ports.MailSender
 import io._3ch.bbs.external.cloudflare.{MailBinding, WorkerEnv}
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue

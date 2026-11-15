@@ -1,6 +1,6 @@
 package io._3ch.bbs.repository
 
-import io._3ch.bbs.application.posting.ports.UserAgentTableStore
+import io._3ch.bbs.service.posting.ports.UserAgentTableStore
 import io._3ch.bbs.domain.posting.{UserAgentRule, UserAgentTable}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 

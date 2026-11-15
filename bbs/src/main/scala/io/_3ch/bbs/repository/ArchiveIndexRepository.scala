@@ -1,7 +1,7 @@
 package io._3ch.bbs.repository
 
 import io._3ch.bbs.domain.posting.{StoredIndex, ArchiveIndexFile}
-import io._3ch.bbs.application.posting.ports.ArchiveIndexStore
+import io._3ch.bbs.service.posting.ports.ArchiveIndexStore
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 
 import scala.concurrent.Future

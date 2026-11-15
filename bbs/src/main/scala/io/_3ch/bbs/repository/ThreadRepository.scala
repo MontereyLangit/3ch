@@ -1,7 +1,7 @@
 package io._3ch.bbs.repository
 
 import io._3ch.bbs.domain.posting.ThreadSnapshot
-import io._3ch.bbs.application.posting.ports.ThreadStore
+import io._3ch.bbs.service.posting.ports.ThreadStore
 import io._3ch.bbs.domain.posting.{ThreadPosting, ThreadWriteResult}
 import io._3ch.bbs.domain.posting.moderation.{PostRateFinding, PostRateRejection, ThreadCreationRejection}
 import io._3ch.bbs.durable.codec.{PostingCodec, ThreadOwnerCodec}

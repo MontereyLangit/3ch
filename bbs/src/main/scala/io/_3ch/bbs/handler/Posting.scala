@@ -1,8 +1,8 @@
 package io._3ch.bbs.handler
 
-import io._3ch.bbs.application.auth.PostingAccountService
-import io._3ch.bbs.application.posting.{PostingOutcome, PostingPorts, PostingRequest, PostingService}
-import io._3ch.bbs.application.posting.ports.{Clock, PostRateLog, Random}
+import io._3ch.bbs.service.auth.PostingAccountService
+import io._3ch.bbs.service.posting.{PostingOutcome, PostingPorts, PostingRequest, PostingService}
+import io._3ch.bbs.service.posting.ports.{Clock, PostRateLog, Random}
 import io._3ch.bbs.domain.account.AuthenticationFailure
 import io._3ch.bbs.domain.posting.PostingError
 import io._3ch.bbs.external.cloudflare.WorkerEnv

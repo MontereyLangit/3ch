@@ -327,7 +327,7 @@ Turnstile は要求しない（原案「作成時の認証なし」）が、端�
 1. `__Host-ch3s_oauth` の署名・期限を検証し、`state` が一致しなければ拒否（`reason=oauth_state`）。Cookie はここで消す（1 回限り）。
    `error=access_denied` は `/auth/?mode=login&error=google_denied` へ戻す。
 2. `https://oauth2.googleapis.com/token` へ `code`・`client_id`・`client_secret`・`redirect_uri`・`grant_type=authorization_code`・`code_verifier` を POST。
-3. `id_token` を検証する（`bbs/application/auth/GoogleIdToken`。署名以外のクレーム検証は `common` の純粋関数）:
+3. `id_token` を検証する（`bbs/service/auth/GoogleIdToken`。署名以外のクレーム検証は `common` の純粋関数）:
    - 署名: `https://www.googleapis.com/oauth2/v3/certs` の JWKS（`kid` で選ぶ RS256）。JWKS は応答の `Cache-Control` に従い `caches.default` に保存し、`kid` 不明なら 1 回だけ再取得。
    - `iss` ∈ {`https://accounts.google.com`, `accounts.google.com`}、`aud` = `GOOGLE_CLIENT_ID`、`exp` > now、`iat` ≤ now + 300s、`nonce` = Cookie の `nonce`。
    - `email_verified` が `true` でなければ拒否（`reason=google_email`）。`hd` は見ない。
