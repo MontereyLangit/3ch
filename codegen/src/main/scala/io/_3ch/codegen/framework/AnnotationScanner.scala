@@ -30,7 +30,7 @@ object AnnotationScanner {
       })
     }
 
-  /** client 側のソース群から island を読む */
+  /** client 側のソース群から island を読む。export 名はメンバごとに一意で、1 メンバの @islands は 1 つまでなので island ごとにも一意 */
   def islands(sources: List[(String, String)], config: CodegenConfig): Result[List[IslandEntry]] =
     scanAll(sources, config.clientModule, config).flatMap { scanned =>
       val found = scanned.flatMap(s => s.found.collect { case i: Found.Island => s.source -> i })
@@ -77,6 +77,7 @@ object AnnotationScanner {
     }
     val markers = annotations.filter(a => named(a, "route") || named(a, "islands"))
     if (markers.isEmpty) Right((Nil, Nil))
+    else if (markers.count(named(_, "islands")) > 1) Left(List(at(path, member, "a member can have at most one @islands")))
     else exportName(path, member, annotations, module).flatMap { name =>
       CodegenError.sequence(markers.map { marker =>
         if (named(marker, "route")) route(path, marker, name, module, config) else island(path, marker, name, module, config)
@@ -106,11 +107,34 @@ object AnnotationScanner {
       args <- literalArgs(path, marker, List("filePath", "method"))
       _ <- check(args.nonEmpty && args.size <= 2, at(path, marker, "@route needs filePath and an optional method"))
       file <- outputPath(path, marker, args.head, ".ts")
-      basename = file.split("/").last
-      _ <- check(!basename.startsWith("_"), at(path, marker, s"route basename $basename is reserved by HonoX (leading _)"))
-      method <- HttpMethod.parse(args.lift(1).getOrElse("GET")).toRight(List(at(path, marker, s"unsupported HTTP method ${args(1)}")))
+      _ <- routeFileProblem(file).toLeft(()).left.map(reason => List(at(path, marker, reason)))
+      method <- routeMethod(path, marker, args.lift(1).getOrElse("GET"))
     } yield Found.Route(file, method, name, marker)
   }
+
+  /** HonoX の createApp が登録しないメソッドは黙って無視されるので拒否する */
+  private def routeMethod(path: String, marker: Mod.Annot, name: String): Result[HttpMethod] = name match {
+    case "HEAD" => Left(List(at(path, marker, "HEAD is not registered by HonoX createApp (GET handlers also answer HEAD)")))
+    case other => HttpMethod.parse(other).toRight(List(at(path, marker, s"unsupported HTTP method $other")))
+  }
+
+  /** HonoX の既定の route の glob（with-defaults.js）と Vite の import.meta.glob が拾わないファイル名なら理由を返す */
+  private def routeFileProblem(file: String): Option[String] = {
+    val segments = file.split("/").toList
+    val basename = segments.last
+    if (basename.startsWith("_")) Some(s"route basename $basename is reserved by HonoX (leading _)")
+    else if (basename.startsWith("-") || basename.startsWith("$")) Some(s"route basename $basename is ignored by HonoX (leading - or $$)")
+    else if (basename.endsWith(".test.ts") || basename.endsWith(".spec.ts")) Some(s"route basename $basename is ignored by HonoX as a test file")
+    else if (segments.init.exists(_.startsWith("-"))) Some(s"route path $file is ignored by HonoX (directory with leading -)")
+    else hiddenSegment(segments, allowWellKnown = true).map(segment => s"route path $file is not discovered by import.meta.glob ($segment)")
+  }
+
+  /** import.meta.glob は既定でドットで始まる名前と node_modules を拾わない。route の先頭の .well-known だけは HonoX が別に拾う */
+  private def hiddenSegment(segments: List[String], allowWellKnown: Boolean): Option[String] =
+    segments.zipWithIndex.collectFirst {
+      case (segment, index) if segment == "node_modules" ||
+        (segment.startsWith(".") && !(allowWellKnown && index == 0 && segment == ".well-known" && segments.size > 1)) => segment
+    }
 
   private def island(path: String, marker: Mod.Annot, name: String, module: String, config: CodegenConfig): Result[Found] = {
     for {
@@ -119,6 +143,8 @@ object AnnotationScanner {
       _ <- check(args.size == 1, at(path, marker, "@islands needs filePath"))
       file <- outputPath(path, marker, args.head, ".tsx")
       _ <- check(file.split("/").last.matches(IslandBasename), at(path, marker, s"island basename of $file must match $IslandBasename for HonoX discovery"))
+      _ <- hiddenSegment(file.split("/").toList, allowWellKnown = false).toLeft(()).left.map(segment =>
+        List(at(path, marker, s"island path $file is not discovered by import.meta.glob ($segment)")))
       propsType <- islandPropsType(path, marker)
     } yield Found.Island(IslandEntry(file, name, s"$module.js", propsType), marker)
   }

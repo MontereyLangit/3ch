@@ -132,6 +132,32 @@ class AnnotationScannerSuite extends FunSuite {
     }
   }
 
+  test("HonoX の createApp が登録しない HEAD は理由付きで拒否する") {
+    val found = errors(routes("""@route("x.ts", "HEAD") @JSExportTopLevel("x", "server") def x() = 1"""))
+    assertEquals(found.map(_.message), List("HEAD is not registered by HonoX createApp (GET handlers also answer HEAD)"))
+  }
+
+  test("HonoX の route の glob と import.meta.glob が拾わないファイル名は拒否し、先頭の .well-known は許す") {
+    def route(path: String) = routes("@route(\"" + path + "\") @JSExportTopLevel(\"x\", \"server\") def x() = 1")
+    List("-draft.ts", "$param.ts", "a/-x.ts", "page.test.ts", "a/page.spec.ts", "-private/page.ts", "a/-private/page.ts",
+      ".hidden/page.ts", "a/.hidden/page.ts", ".page.ts", "node_modules/page.ts", "a/.well-known/x.ts", ".well-known.ts").foreach { path =>
+      assert(route(path).isLeft, path)
+    }
+    assert(errors(route("-draft.ts")).head.message.contains("ignored by HonoX"))
+    assertEquals(route(".well-known/security.txt.ts").map(_.map(_.filePath)), Right(List(".well-known/security.txt.ts")))
+    List(".hidden/view.tsx", "node_modules/view.tsx").foreach { path =>
+      assert(islands("@islands(\"" + path + "\") @JSExportTopLevel(\"X\", \"client\") val x = 1").isLeft, path)
+    }
+  }
+
+  test("1 つのメンバに @islands を複数付けると、生成する前に拒否する") {
+    val found = errors(islands("""
+      @islands("first.tsx") @islands("second.tsx") @JSExportTopLevel("Widget", "client") val widget = 1
+    """))
+    assertEquals(found.map(_.message), List("a member can have at most one @islands"))
+    assertEquals(found.map(_.line), List(Some(3)))
+  }
+
   test("ルートメソッド・island パス・export 名の重複は拒否される") {
     assert(routes("""
       @route("x.ts") @JSExportTopLevel("x", "server") def x() = 1

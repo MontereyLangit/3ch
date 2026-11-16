@@ -1,8 +1,8 @@
 package io._3ch.codegen.framework
 
-/** route ファイルに出せる HTTP メソッド。ファイル内の export はこの順に並べる */
+/** route ファイルに出せる HTTP メソッド（HonoX の createApp が登録するもの）。ファイル内の export はこの順に並べる */
 enum HttpMethod {
-  case GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD
+  case GET, POST, PUT, DELETE, PATCH, OPTIONS
 }
 
 object HttpMethod {
