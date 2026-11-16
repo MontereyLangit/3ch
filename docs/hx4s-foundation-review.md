@@ -188,3 +188,70 @@ hx4s は直さず、3ch 側にも回避の実装は足していない。
 | DDD・FP | ドメインには触れていない。`asInstanceOf` は Fetch の型の境界 2 か所だけ |
 | テスト | 消したテストは hx4s に同等のものがある。3ch 固有の挙動（板top の hydration、古い props の island を残す、11 個の export の検証関数）にテストを足した |
 | 不変条件（3.2） | dat / subject.txt / Shift_JIS / bbs.cgi / DO・R2・KV の形式は変えていない（上の「挙動の変化」の比較と統合テスト） |
+
+### Codex（CLI 0.163.0）のレビューと対応
+
+対象は `fa757fb..38bfbce`。3ch 側の指摘は 5 件（中 4・低 1）で、すべて直した。
+
+| 重大度 | 指摘 | 対応 |
+| --- | --- | --- |
+| 中 | `scripts/setup-hx4s.mjs` が Windows で `shell: true` を使い、tgz のパスに空白や `&` があると分割・解釈される | 外部コマンドをシェルなしで起動する形にした。npm は実行中の Node で `npm-cli.js` を、publish-local は `process.execPath` で直接起動する。hx4s のパスを空白と `&` を含む junction（`path with space & amp/hx4s co`）にして通ることを確かめた |
+| 中 | `--skip-publish` が固定 commit の成果物であることを保証しない（版・tgz・ディレクトリの存在しか見ない） | 自前の存在確認と `--skip-publish` を捨て、hx4s の `publish-local.mjs --verify --version <版> --commit <SHA>` で公開記録・HEAD・全 Maven 成果物・tgz の SHA-256 を照合する。通らなければ公開し直してもう一度照合する |
+| 中 | hx4s 側の `node_modules` があると `npm ci` を省き、lockfile どおりにならない | hx4s 側の `npm ci` は publish-local に任せた。`--reuse-node-modules` は前回の `npm ci` と hx4s の `package-lock.json` の SHA-256 が同じときだけ省く |
+| 中 | 3ch の設定での生成結果とコミット済みの `app/` の照合（旧 `GenerateAppFilesSuite`）まで消えた | `npm test` に戻した。pretest の最後の sbt コマンド `generatedAppCheck` が 3ch の設定のまま出力先だけを `target/generated-app-check/` に変えて生成し、`tests/generated-app.test.js` が生成マーカーのあるファイルの過不足と内容、手書きの route 5 件が生成対象でないことを確かめる。`app/` は書き換えない。ファイルを書き足した場合・余分な生成ファイルを置いた場合に失敗することを確かめた |
+| 低 | `docs/admin.md`・`docs/auth-integration.md` の起動手順が `npm ci` のままで、hx4s-vite が消える | `npm run hx4s:setup` に直した（`docs/claude-handoff.md` の検証手順も） |
+
+lock ファイルは hx4s の推奨形（hx4s の `docs/hx4s/local-dependency.md` 3 章）に合わせ、`hx4s.lock.json` から `hx4s.lock`（`commit=` と `version=`）に替えた。
+`project/plugins.sbt` も文書の例どおり `java.util.Properties` で読む。版は手で上げる `0.1.0-local.N` をやめ、hx4s の既定の `<版>-local.g<commit 10 桁>` にした。
+セットアップは lock の版が commit の先頭 10 桁で終わることを確かめるので、commit だけを書き換えた lock は公開の前に止まる（理由は `docs/development.md`）。
+
+Codex が問題なしとした点:
+
+- `IslandExport` への置き換えで 3 つの `Props.fromJs` による変換は残っており、描画処理は変わらない（DevTools 上の表示名だけが変わる）
+- `Request` / `Response` の `asInstanceOf` は同じ JS オブジェクトを別の native facade で読むだけで、利用箇所に食い違いは無い
+- DO の再 export、server / client の別リンク、client へのサーバ処理の混入を確かめるテストは残っている
+- dat・subject.txt・Shift_JIS・bbs.cgi・保存形式（3.2 の不変条件）に差分は無い
+
+hx4s 側への指摘（部分公開でも全体の版の記録を書き直す）は、hx4s の `9fe8472` で sbt と npm の公開記録が分かれ、両方そろったときだけ完了の記録と
+`hx4s-version.txt` を書く形になっていた。3ch は `hx4s-version.txt` を読まなくなった。
+
+### IntelliJ inspect（Phase 4 の変更ファイル）
+
+IntelliJ IDEA の CLI inspect（プロファイル scala）を Phase 4 で変えたファイルに流した。1 回目は IDE のキャッシュが古く、削除済みのファイルを解析していたので結果を捨て、
+system ディレクトリを新しくして実行し直した。判断が要る指摘は 11 件で、今回の作業に関係するのは `bbs.Main` の相対 import 2 件（`import external.web.Request`・
+`import external.cloudflare.WorkerEnv`）。完全な名前の import に直した。残り 9 件は Phase 4 で触れていない既存の行なので対象外とした。
+
+### hx4s の更新（`95d77c2`）と追従
+
+hx4s を `d133d7c1f1` から `95d77c2af9`（`0.1.0-local.g95d77c2af9`）に上げた。CHANGELOG のうち 3ch に関わるもの:
+
+| hx4s の変更 | 3ch の対応 |
+| --- | --- |
+| `Context` に `executionCtx`（`hx4s.hono.ExecutionContext`）・`executionCtxOption`・`ContextVariable` などが入った（上の「hx4s 側に必要と分かったこと」1 の解消） | `publicHandler` は `HonoContextFacade` を受け取り、`c.request`・`c.env`・`c.executionCtx` を渡す。`publicFetch` と `PublicRoutes.fetch` の ctx も `ExecutionContext` にした。`waitUntil` の呼び出しは同じで、`executionCtx` が無い基盤で例外になるのも従来どおり。`c.set` / `c.get` は使っていないので `ContextVariable` は不要 |
+| Node 用 loader を並べる方法が build-integration.md 2.3 に書かれた（2 の解消） | `bbs/test-stubs/register.mjs` はすでに文書の形 |
+| publish-local が lockfile どおりに `npm ci` し、公開記録と `--verify` を持つ（3 の解消）。`hx4s-version.txt` は完了の記録があるときだけ書かれる | セットアップを `--verify` 中心に書き直した（上の表） |
+| lock ファイルとセットアップスクリプトの推奨形（5 の解消） | `hx4s.lock` に替えた |
+| codegen の誤りを `[hx4s-codegen] error: …` でまとめて返す、`hx4s({ client: false })` | 3ch の宣言に誤りは無く、`hx4s()` の呼び方も変わらない（`v6:typecheck` が通る） |
+
+生成物は変わらなかった（`wrote 0, unchanged 17, deleted 0`）。
+
+### 修正後の検証
+
+`~/.ivy2/local/io.github.montereylangit`、hx4s の `target/local`、3ch の `node_modules`・各 `target`（`project/target`・`project/project` を含む）・`dist` を消してから実行した。
+
+| コマンド | 結果 |
+| --- | --- |
+| `npm run hx4s:setup`（1 回目） | `--verify` が「`hx4s-publish.json` が無い」で失敗 → `0.1.0-local.g95d77c2af9` を公開 → `--verify` が通る → `npm ci` → tgz を `--no-save` |
+| `npm run hx4s:setup`（2 回目） | `--verify` が通り、公開を省いた |
+| lock の commit だけを変える | `hx4s.lock: version must be <X.Y.Z>-local.gd133d7c1f1 for commit …` で止まる |
+| lock の commit と版を別の commit に変える | `C:\project\hx4s is at 95d77c2…, but hx4s.lock pins d133d7c…. Run: git -C "…" checkout d133d7c…` で止まる（確認後に戻した） |
+| `HX4S_DIR` を空白と `&` を含むパスにする | 成功（照合、`npm ci`、そのパスの tgz の `--no-save`） |
+| `npm run v6:build` | 成功。`route / island files: wrote 0, unchanged 17, deleted 0` |
+| `npm run v6:typecheck` | 成功 |
+| `sbt test` | 成功。commonJVM 218 件、commonJS 227 件、bbsClient 2 件、codegen 14 件、bbs 950 件 |
+| `npm test` | 77 件すべて成功（skip なし。workerd の統合テストを含む。生成物の照合 3 件を足した） |
+| `sbt 'set ThisBuild / scalacOptions += "-no-indent"' Test/compile` | 成功 |
+| `sbt bbs/hx4sGenerate codegen/run` を 2 回 | 2 回とも `wrote 0, unchanged 17, deleted 0` |
+| 修正の前後の比較（Phase 4 と同じ 7 画面の SSR HTML と、本番設定のエンドポイントの応答） | 7 画面とその他 9 パスはバイト単位で一致。本番設定の 14 パスはステータス・Content-Type・本文のハッシュが一致。`/test/bbs.cgi` への POST の本文はポート番号を伏せると一致 |
+| `wrangler dev`（本番設定、使い捨てのローカルストレージ）とアプリ内ブラウザ | `/test/` の 3 つの island が hydrate され、4 つのパネルの開閉が動き、コンソールにエラーは無かった |
+| 作業後の `git status --porcelain --untracked-files=all` | 空（コミット後） |
