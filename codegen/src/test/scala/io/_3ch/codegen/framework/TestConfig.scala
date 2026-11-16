@@ -1,6 +1,7 @@
 package io._3ch.codegen.framework
 
-import java.nio.file.{Files, Path, Paths}
+import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.{Files, LinkOption, Path, Paths}
 import scala.jdk.CollectionConverters.*
 import scala.util.Using
 
@@ -28,8 +29,14 @@ object TestConfig {
   def withTempDir[A](test: Path => A): A = {
     val root = Files.createTempDirectory("codegen-framework-test-")
     try { test(root) }
-    finally {
-      Using.resource(Files.walk(root)) { paths => paths.iterator().asScala.toList.sortBy(_.getNameCount).reverse.foreach(Files.delete) }
-    }
+    finally { delete(root) }
+  }
+
+  /** リンクとジャンクションは辿らずにリンク自体を消す */
+  private def delete(path: Path): Unit = {
+    val attributes = Files.readAttributes(path, classOf[BasicFileAttributes], LinkOption.NOFOLLOW_LINKS)
+    if (attributes.isDirectory && !attributes.isOther) Using.resource(Files.list(path))(_.iterator().asScala.toList).foreach(delete)
+    path.toFile.setWritable(true)
+    Files.delete(path)
   }
 }

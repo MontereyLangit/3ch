@@ -95,4 +95,115 @@ class OutputWriterSuite extends FunSuite {
       assertEquals(Files.readString(root.resolve("legacy.ts")), generated)
     }
   }
+
+  test("空・空白・コメント記号だけの生成マーカーは拒否し、手書きファイルを消さない") {
+    withTempDir { root =>
+      Files.writeString(root.resolve("manual.ts"), "export default manual;\n")
+      List("", "   ", "//", " // ", "// generated\nsecond").foreach { blank =>
+        val result = OutputWriter.write(List(GeneratedFile(root, "fresh.ts", s"$blank\n")), List(root), blank)
+        assert(result.left.exists(_.exists(_.message.contains("generatedMarker"))), s"$blank: $result")
+      }
+      assertEquals(names(root), List("manual.ts"))
+    }
+  }
+
+  test("ファイルとディレクトリの衝突は書き込みの前に拒否し、古い生成ファイルも消さない") {
+    withTempDir { root =>
+      Files.writeString(root.resolve("stale.ts"), generated)
+      Files.writeString(root.resolve("plain"), "not a directory")
+      Files.createDirectories(root.resolve("dir.ts"))
+      val cases = List(
+        List("a.ts" -> generated, "a.ts/b.ts" -> generated) -> "is also used as a directory",
+        List("plain/b.ts" -> generated) -> "is not a directory",
+        List("dir.ts" -> generated) -> "existing directory"
+      )
+      cases.foreach { case (files, message) =>
+        val result = write(root, files*)
+        assert(result.left.exists(_.exists(_.message.contains(message))), s"$files: $result")
+      }
+      assertEquals(names(root), List("dir.ts", "plain", "stale.ts"))
+    }
+  }
+
+  test("書き込みに失敗したら誤りを返して古い生成ファイルを残し、直してから再実行すると収束する") {
+    withTempDir { root =>
+      Files.writeString(root.resolve("stale.ts"), generated)
+      val locked = root.resolve("locked.ts")
+      Files.writeString(locked, s"$marker\nold\n")
+      locked.toFile.setWritable(false)
+      assume(!Files.isWritable(locked), "cannot make a file read-only here")
+      val failed = write(root, "locked.ts" -> generated)
+      locked.toFile.setWritable(true)
+      assert(failed.left.exists(_.exists(_.message.startsWith("cannot write file"))), failed)
+      assert(Files.exists(root.resolve("stale.ts")), "書き込みが済むまで古い生成ファイルは消さない")
+      assertEquals(write(root, "locked.ts" -> generated).map(_.render), Right("wrote 1, unchanged 0, deleted 1"))
+      assertEquals(write(root, "locked.ts" -> generated).map(_.render), Right("wrote 0, unchanged 1, deleted 0"))
+    }
+  }
+
+  private def symlink(link: Path, target: Path): Unit =
+    try { Files.createSymbolicLink(link, target) }
+    catch {
+      case e @ (_: java.io.IOException | _: UnsupportedOperationException | _: SecurityException) =>
+        assume(false, s"symbolic links are not available here: ${e.getMessage}")
+    }
+
+  private def junction(link: Path, target: Path): Unit = {
+    assume(System.getProperty("os.name").toLowerCase.contains("windows"), "junctions exist only on Windows")
+    val process = new ProcessBuilder("cmd", "/c", "mklink", "/J", link.toString, target.toString).redirectErrorStream(true).start()
+    process.getInputStream.readAllBytes()
+    assertEquals(process.waitFor(), 0, "mklink /J failed")
+  }
+
+  /** root と、その外のディレクトリ outside（生成マーカー付きのファイルを 1 つ置く）を用意する */
+  private def withOutside(test: (Path, Path) => Unit): Unit =
+    withTempDir { tmp =>
+      val root = Files.createDirectories(tmp.resolve("root"))
+      val outside = Files.createDirectories(tmp.resolve("outside"))
+      Files.writeString(outside.resolve("target.ts"), generated)
+      test(root, outside)
+    }
+
+  private def assertRefusesLink(result: CodegenError.Result[WriteSummary]): Unit =
+    assert(result.left.exists(_.exists(_.message.contains("symbolic link or junction"))), result)
+
+  test("親ディレクトリ・出力先・出力ルートがシンボリックリンクなら辿らずに拒否する") {
+    withOutside { (root, outside) =>
+      symlink(root.resolve("parent"), outside)
+      assertRefusesLink(write(root, "parent/new.ts" -> generated))
+      Files.delete(root.resolve("parent"))
+      symlink(root.resolve("leaf.ts"), outside.resolve("target.ts"))
+      assertRefusesLink(write(root, "leaf.ts" -> s"$marker\nreplaced\n"))
+      Files.delete(root.resolve("leaf.ts"))
+      symlink(root.resolve("dangling.ts"), outside.resolve("missing.ts"))
+      assertRefusesLink(write(root, "dangling.ts" -> generated))
+      val linkedRoot = root.getParent.resolve("linked-root")
+      symlink(linkedRoot, outside)
+      assertRefusesLink(OutputWriter.write(List(GeneratedFile(linkedRoot, "new.ts", generated)), Nil, marker))
+      assertEquals(names(outside), List("target.ts"))
+      assertEquals(Files.readString(outside.resolve("target.ts")), generated)
+    }
+  }
+
+  test("出力ディレクトリの中にシンボリックリンクがあれば、古い生成ファイルを探すときも辿らずに拒否する") {
+    withOutside { (root, outside) =>
+      symlink(root.resolve("linked"), outside)
+      assertRefusesLink(write(root, "fresh.ts" -> generated))
+      assertEquals(names(outside), List("target.ts"))
+      assertEquals(names(root), List("linked"))
+    }
+  }
+
+  test("Windows のジャンクションも親ディレクトリ・出力ルート・古い生成ファイルの探索で拒否する") {
+    withOutside { (root, outside) =>
+      junction(root.resolve("joined"), outside)
+      assertRefusesLink(write(root, "joined/new.ts" -> generated))
+      assertRefusesLink(write(root, "fresh.ts" -> generated))
+      val joinedRoot = root.getParent.resolve("joined-root")
+      junction(joinedRoot, outside)
+      assertRefusesLink(OutputWriter.write(List(GeneratedFile(joinedRoot, "new.ts", generated)), List(joinedRoot), marker))
+      assertEquals(names(outside), List("target.ts"))
+      assertEquals(names(root), List("joined"))
+    }
+  }
 }

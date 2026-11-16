@@ -33,10 +33,12 @@ object Codegen {
       summary <- OutputWriter.write(List(file), Nil, config.generatedMarker)
     } yield summary
 
-  private def validate(config: CodegenConfig): Result[Unit] = {
+  /** 設定の値を確かめる。誤りはまとめて返す */
+  def validate(config: CodegenConfig): Result[Unit] = {
     val identifier = "[A-Za-z_][A-Za-z0-9_]*"
     val qualified = s"$identifier(\\.$identifier)*"
     CodegenError.sequence(List(
+      OutputWriter.markerProblem(config.generatedMarker).toLeft(()).left.map(reason => List(CodegenError("<config>", None, reason))),
       CodegenError.check(config.banner.headOption.exists(_.startsWith(config.generatedMarker)),
         CodegenError("<config>", None, "the first banner line must start with generatedMarker")),
       CodegenError.check(config.banner.forall(line => line.startsWith("//") && !line.contains('\n')),
