@@ -127,7 +127,7 @@ object AnnotationScanner {
     case Nil => Right(None)
     case List(tpe: Type.Select) => Right(Some(if (tpe.syntax.startsWith("_root_.")) tpe.syntax else s"_root_.${tpe.syntax}"))
     case List(tpe) => Left(List(at(path, tpe,
-      s"props type ${tpe.syntax} must be a fully qualified class name (for example _root_.pkg.${tpe.syntax}Props)")))
+      s"props type ${tpe.syntax} must be a fully qualified class name (for example _root_.pkg.${tpe.syntax})")))
     case _ => Left(List(at(path, marker, "@islands takes at most one type argument")))
   }
 

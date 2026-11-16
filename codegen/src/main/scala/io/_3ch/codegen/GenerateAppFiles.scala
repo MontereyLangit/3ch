@@ -7,8 +7,8 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 
 /**
- * 3ch の設定で配線を生成する。`--project-root` を省くとカレントディレクトリ。それ以外の引数なしなら route / island の TS ファイルと DO の TS 型（`sbt codegen/run`）
- * `--island-components <出力ファイル>` なら SSR 用 Scala API だけ（bbs の sourceGenerators から呼ぶ）
+ * 3ch の設定で配線を生成する。引数が無ければ route / island の TS ファイルと DO の TS 型（sbt codegen/run）
+ * `--island-components <出力ファイル>` なら SSR 用 Scala API だけ（bbs の sourceGenerators）。`--project-root` を省くとカレントディレクトリ
  */
 object GenerateAppFiles {
 

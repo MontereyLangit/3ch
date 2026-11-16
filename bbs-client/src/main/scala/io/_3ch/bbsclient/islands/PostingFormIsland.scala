@@ -7,7 +7,6 @@ import io._3ch.common.validation.JsShape
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 
-import scala.scalajs.js
 import scala.scalajs.js.URIUtils
 
 /**
