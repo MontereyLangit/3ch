@@ -7,44 +7,69 @@ SSR 側は `app/islands/*.tsx` を import せず、生成 API が raw な client
 ## 宣言と利用
 
 `bbs-client/.../Main.scala` で、JS props を受け取る React コンポーネントを export する。
-次は JS 向け React コンポーネント値を `ThreadView.component` とした利用例。
+props の形は `common/src/main/scala-js/io/_3ch/common/islands/` に非ネイティブ JS trait として置き、
+`@islands` の型引数に完全修飾名で書く。サーバーとクライアントが同じ型を参照するので、キー名や型の食い違いはコンパイルエラーになる。
 ScalaComponent の builder / Scala 側ラッパー自体ではなく、JS props から React 要素を返す JS 関数などを export する。
 
 ```scala
+// common/src/main/scala-js/io/_3ch/common/islands/ThreadViewProps.scala
+trait ThreadViewProps extends js.Object {
+  val threadId: String
+  val title: js.UndefOr[String]
+}
+
+// bbs-client/.../Main.scala
 import io._3ch.common.routes.islands
 import scala.scalajs.js.annotation.JSExportTopLevel
 
-@islands("thread-view.tsx")
+@islands[io._3ch.common.islands.ThreadViewProps]("thread-view.tsx")
 @JSExportTopLevel("ThreadViewJs", "client")
-val threadView = ThreadView.component
+val threadView = ThreadView.component   // ScalaFnComponent[ThreadViewProps] など
 ```
 
-`npm run v6:generate` または `npm run v6:build` で次を生成する。
+型引数を省いた `@islands("x.tsx")` は従来どおり props を `js.Object` として扱う（props の無い island 向け）。
+型引数は完全修飾名（`_root_.` 付きも可）に限る。単純名や型エイリアスは codegen が解決できないのでエラーにする。
 
-| 生成先 | 内容 |
-| --- | --- |
-| `app/islands/thread-view.tsx` | `scalajs:client.js` の `ThreadViewJs` を default export。ブラウザ側の探索・読み込み入口。 |
-| `bbs/src/main/scala/io/_3ch/bbs/generated/IslandComponents.scala` | `IslandComponents.ThreadViewJs(props)`。raw な `ThreadViewJs` と `/app/islands/thread-view.tsx` を結び付ける。 |
+生成するものは次のとおり。
+
+| 生成先 | 生成のきっかけ | 内容 |
+| --- | --- | --- |
+| `app/islands/thread-view.tsx` | `npm run v6:generate`（`npm run v6:build` も含む） | `scalajs:client.js` の `ThreadViewJs` を default export。ブラウザ側の探索・読み込み入口。 |
+| `bbs/target/.../src_managed/main/io/_3ch/bbs/generated/IslandComponents.scala` | bbs のコンパイル（sbt の sourceGenerators） | `IslandComponents.ThreadViewJs(props: ThreadViewProps)`。raw な `ThreadViewJs` と `/app/islands/thread-view.tsx` を結び付ける。 |
 
 サーバーの Scala ページでは次のように使う。
 
 ```scala
 import io._3ch.bbs.generated.IslandComponents
-import scala.scalajs.js
+import io._3ch.common.islands
 
-val props = js.Dictionary[js.Any]("threadId" -> "123")
-val island = IslandComponents.ThreadViewJs(props)
+val island = IslandComponents.ThreadViewJs(new islands.ThreadViewProps {
+  val threadId = "123"
+  val title = js.undefined
+})
 context.renderPromise(island.rawElement)
 ```
 
 戻り値は `VdomElement` なので、scalajs-react のページの子要素にもできる。
-`props` は JS オブジェクトとして渡し、通常の Scala case class やコレクションを直接渡さない。
-普通のデータ props は JSON で受け渡せる値にする。React 要素や要素配列の props は HonoX が別扱いする。
+props の trait に使ってよい型は `String`・`Double`・`Int`・`Boolean`・`js.UndefOr[...]`・`js.Array[...]`・他の props trait。
+`Option`・Scala のコレクション・関数は HonoX のシリアライズで失われるので使わない。値が無いときは `js.undefined` にする（JSON ではキーごと省かれる）。
+React 要素や要素配列の props は HonoX が別扱いする。
+
+## クライアントの入口での検証
+
+trait はシリアライズ後の値の欠落を検出できないので、必須の値がある island は入口で
+`io._3ch.common.validation.JsShape` を使って確かめる（`PostingFormJs`・`BoardDetailsJs`・`ThreadListJs`）。
+各 props の companion に `fields`（キー名・種類・省略可否）と `validate` を置く。
+失敗したら `console.error` に island 名と誤りのあるキーを出し、例外にせず何も描画しない。
+`JsShape` は 3ch の型に依存しない汎用の補助で、後で hx4s へ移す。
+
+検証しない island（アカウント設定・認証画面）では、以前クライアントが既定値で補っていたキーを `js.UndefOr` にしている。
+サーバー側は trait の抽象メンバをすべて定義しないとコンパイルできないので、送り忘れは起きない。
 イベントハンドラはクライアントコンポーネント内部で定義し、サーバーから関数を props として送らない。
 
 export 名と生成メソッド名は同じ。ファイル名を変更した場合は再生成すれば SSR 側の識別子も追従する。
 同じ export 名を異なる island ファイルへ割り当てる宣言は、SSR API が曖昧になるため生成時に拒否する。
-生成 Scala は現在 Islands の宣言がない場合も空の `IslandComponents` として出力する。
+生成 Scala は Islands の宣言がない場合も空の `IslandComponents` として出力する。生成の規則・設定・エラーの形式は `docs/codegen.md`。
 
 ## 描画と hydration
 
@@ -68,6 +93,9 @@ SSR 用 Scala は `scalajs:client.js` を直接 import し、既存の Vite alia
 
 `tests/islands-hydration.test.js` は Vite で実際の Scala facade と HonoX を接続し、jsdom 上で
 React の hydration を実行する。通常の Island・通常の入れ子・React 要素配列を含む props を確認する。
+日本語・絵文字・U+2028・`</script>`・`<!--`・引用符を含む文字列、配列や入れ子の props、同じ island の複数インスタンスが
+安全にシリアライズされ（HTML の構造として出ない）、hydration 後も同じ値で読めることも確かめる。
+React が属性値を `&quot;` などに置き換え、HonoX の `createClient` が `JSON.parse` で戻すので、独自のエスケープは足していない。
 クライアントのコンポーネント探索は HonoX の `import.meta.glob` を使い、識別子の対応も検証する。
 SSR DOM の再利用、hydration エラーがないこと、クリックによる状態更新を確認する。
 レイアウトや実ブラウザ固有の挙動を検証するテストではない。

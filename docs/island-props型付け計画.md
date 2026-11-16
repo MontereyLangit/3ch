@@ -138,3 +138,26 @@ trait では、シリアライズ後に値が欠けていても検出できな�
 - 型名の書き方: 完全修飾名に限定するか、`io._3ch.common.islands` の単純名を許すか（推奨は完全修飾名）。
 - 検証に失敗したときの描画: 「JS 無し相当」で十分か、画面上にエラーを出すか。
 - 今後 read.cgi など他画面の island を足すときも、同じく `io._3ch.common.islands` に props を置くか（画面ごとにサブパッケージを切るか）。
+
+## 7. 実施状況（2026-11-16）
+
+計画の手順 1〜6 を実施した。
+
+- 基盤: `common/src/main/scala-js` は既に JS 側のソースに入っていたので、build.sbt は変えていない。
+- codegen: `final class islands[P](val filePath: String)`。型引数は完全修飾名（`_root_.` 付きも可）に限り、単純名は行番号付きのエラーにする（6 章の未決事項は完全修飾名に決めた）。
+  生成 API は `IslandComponents.XxxJs(props: _root_.<P>)`、型引数が無ければ `_root_.scala.scalajs.js.Object`。生成の詳細は `docs/codegen.md`。
+- props: 12 個すべての island を置き換えた。`AuthModalJs` だけ props が無いので型引数なし。
+  trait は `common/src/main/scala-js/io/_3ch/common/islands/` の `BoardIslandProps.scala`（板top・ヘッダー）と `AccountIslandProps.scala`（認証・アカウント設定）。
+  サーバーの island props 経路から `js.Dynamic.literal` / `updateDynamic` を、クライアントから `selectDynamic` を無くした。
+  `AuthClient.text` は認証 API の応答（island props ではない）を読むために残し、`js.Dictionary` で読む形にした。
+- `BoardDetailsProps` は書き込みフォームの props を `postingForm` に入れ子で持つ。`data-serialized-props` の形が変わるのはここだけ。
+  ほかの island はサーバーで組み立てる trait のメンバの順を以前の `js.Dynamic.literal` と揃え、JSON（キーの並びを含む）を変えていない。
+- 検証: 汎用の `io._3ch.common.validation.JsShape`（必須キーの存在・`js.typeOf`・入れ子と配列）を作り、各 props の companion に `fields` と `validate` を置いた。
+  `PostingFormJs`・`BoardDetailsJs`・`ThreadListJs` の入口で使い、失敗は `console.error` に出して何も描画しない（6 章の「描画」は「JS 無し相当」のままとした）。
+  ほかの island は検証せず、以前既定値で補っていたキーを `js.UndefOr` にした（`docs/islands-ssr.md`）。
+- `SessionProps.lv` は JSON の数値として `Double` で受け、クライアントで `Int` にする。
+- 6 章の「他画面の island の props の置き場所」は未決のまま。今は `io._3ch.common.islands` 直下に画面ごとのファイルで置いている。
+
+テストは 4 章のとおり追加した（`JsShapeSuite`・`IslandPropsSuite`・`BoardIndexSuite` の入れ子の確認・
+`tests/board-islands.test.js` の必須キー欠落・`AnnotationScannerSuite` / `AppFileRendererSuite` の型引数あり・なし）。
+型の食い違いがコンパイルエラーになることは、`PostingFormProps` のメンバ名を一時的に変えて bbs と bbs-client の両方がコンパイルエラーになることを手で確かめた。

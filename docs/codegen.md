@@ -1,0 +1,110 @@
+# codegen（`@route` / `@islands` の配線生成）
+
+`codegen/` は Scala のソースを scalameta で構文として読み、HonoX の route / island ファイルと、SSR 用の Scala API を生成する。
+DO の TS 型と RPC スタブの生成（`GenerateDurableObject*`）は 3ch 固有で、`docs/durable-object-stubs.md` を参照。
+
+後で独立フレームワーク hx4s へ移すため、汎用部分と 3ch 固有部分を分けてある。
+
+| 置き場所 | 内容 |
+| --- | --- |
+| `codegen/.../codegen/framework/` | 汎用部分。アノテーション解析（`AnnotationScanner`）、モデル（`AppEntries`）、レンダラ（`AppFileRenderer`）、書き出し（`OutputWriter`・`OutputPath`）、設定（`CodegenConfig`）、引数で設定を受け取る入口（`CodegenMain`） |
+| `codegen/.../codegen/GenerateAppFiles.scala` | 3ch の設定値と入口。DO の TS 型の生成もここから呼ぶ |
+| `codegen/.../codegen/GenerateDurableObject*.scala`, `DurableObjectSources.scala` | 3ch / Cloudflare 固有の DO 用生成器 |
+
+framework パッケージは `io._3ch.common.*` や bbs の型を import しない。アノテーションも型ではなく名前（設定した
+パッケージ名＋`route` / `islands`）で見分けるので、codegen は common に依存しない。
+
+## 生成物と実行のきっかけ
+
+| 生成物 | きっかけ | 備考 |
+| --- | --- | --- |
+| `app/routes/**/*.ts`, `app/islands/**/*.tsx` | `npm run v6:generate`（`sbt codegen/run`） | Git 管理する。内容が同じなら書き直さない |
+| `app/scalajs-durable-objects.generated.d.ts` | 同上 | DO の TS 型 |
+| `bbs/target/scala-3.3.8/src_managed/main/io/_3ch/bbs/generated/IslandComponents.scala` | bbs のコンパイル（`Compile / sourceGenerators`） | クリーンな checkout でも `sbt test` だけで通る |
+
+`IslandComponents.scala` の生成タスクの入力は `bbs-client/.../Main.scala` のソースファイルだけで、`bbsClient` のコンパイルには依存しない。
+bbs → codegen（JVM）→ ソースファイルの読み取り、という向きなのでタスクグラフは循環しない。
+以前は `bbs/src/main/scala/io/_3ch/bbs/generated/` に出していた。古い生成ファイルが残っていると重複定義になるため、
+`GenerateAppFiles` は起動時に生成マーカー付きの古いファイルを消す（`npm run v6:generate` か bbs のコンパイルで消える）。
+
+## 宣言の規則
+
+- 設定したソースファイルの、トップレベル object（パッケージ内を含む。入れ子の object は対象外）の `def` / `val` に付いたアノテーションを読む。
+  object の名前は問わない。3ch の既定は `bbs/.../Main.scala` と `bbs-client/.../Main.scala`。
+- `@route` / `@islands` を付けたメンバには、リテラルの名前と moduleID を持つ `@JSExportTopLevel` がちょうど 1 つ必要。
+  `@route` は server の moduleID、`@islands` は client の moduleID でなければならない。
+- `@route("x.ts")` は GET、`@route("x.ts", "POST")` は named export。同じメンバに複数の `@route` を付けられ、
+  同じパスのメソッドは 1 ファイルにまとまる。メソッドは GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD（`ALL` は無い）。
+- `@islands[P]("x.tsx")` の P は props の型の完全修飾名。省くと `js.Object`。
+- 引数はすべて文字列リテラル。名前付き引数は宣言の順に限る。
+
+検出して拒否するもの:
+
+- 出力パスの誤り: 空の区切り、`.` / `..`、絶対パス・ドライブレター・バックスラッシュ（使える文字は `A-Za-z0-9_.$[]-` だけ）、
+  末尾のドット・空白、Windows の予約名（`CON`, `PRN`, `AUX`, `NUL`, `COM1`〜`COM9`, `LPT1`〜`LPT9`。拡張子付きも）
+- HonoX の規則違反: route の basename が `_` で始まる（`_renderer` 等の予約）、island の basename が `[A-Za-z0-9-]+\.tsx` でない
+- 重複: 同じ export 名を複数のメンバに付ける、同じ route のメソッドを 2 回、大文字小文字だけ違う route / island のパス
+
+## 出力の規則
+
+- 出力順は入力の並びに依存しない。route ファイルはパス順、ファイル内のメソッドは上の固定順（GET が先頭）、
+  island と `IslandComponents` のメソッドはファイルパス順に並べる。
+- 内容が同じなら書き直さず、更新時刻も変えない。改行コードの違い（Windows の checkout の CRLF）は同じ内容とみなす。
+- 出力先を正規化し、出力ルートの配下であることを確かめる。
+- 生成マーカー（設定の `generatedMarker` で始まる先頭行）の無い既存ファイルは上書きも削除もしない。
+- route / island の出力ディレクトリにある生成ファイル（`.ts` / `.tsx` / `.scala`）のうち今回出力しないものは消す。
+- 大文字小文字だけ違うパスは、出力どうしでも、既存の手書きファイル・ディレクトリとの間でも拒否する。
+  大文字小文字だけ違う古い生成ファイルは消してから新しい名前で書く。
+- 書いた・据え置いた・消した件数をログに出す（`[codegen] route / island files: wrote 0, unchanged 17, deleted 0`）。
+- 誤りはすべて書き込みの前に集める。1 件でもあれば何も書かない。
+
+## エラーの形式
+
+解析と書き出しは例外を投げず、`Either[List[CodegenError], A]` を返す。`CodegenError` はソースのパス・行番号（1 始まり。
+分からなければ無し）・メッセージを持ち、誤りはまとめて全部返す。入口（`GenerateAppFiles` / `CodegenMain`）だけが
+次の形で標準エラーに出す。
+
+```
+[codegen] error: bbs-client/src/main/scala/io/_3ch/bbsclient/Main.scala:15: props type PostingFormProps must be a fully qualified class name (for example _root_.pkg.PostingFormProps)
+```
+
+その後 `CodegenFailure` を投げて非ゼロ終了にする。sbt の `run` / `runMain` は sbt と同じ JVM で動くので、
+`System.exit` を呼ぶと sbt ごと終了してしまう。例外ならタスクの失敗になり、バッチ実行の sbt は非ゼロで終わる。
+
+## 設定
+
+`CodegenConfig` の項目。相対パスはプロジェクトルートから解決する。
+
+| 項目 | `CodegenMain` のキー | 3ch の値 |
+| --- | --- | --- |
+| プロジェクトルート | `--project-root`（省くとカレントディレクトリ） | sbt の起動ディレクトリ |
+| server の走査ソース | `--server-sources`（カンマ区切りか繰り返し） | `bbs/src/main/scala/io/_3ch/bbs/Main.scala` |
+| client の走査ソース | `--client-sources` | `bbs-client/src/main/scala/io/_3ch/bbsclient/Main.scala` |
+| server / client の moduleID | `--server-module` / `--client-module`（既定 `server` / `client`） | `server` / `client` |
+| route の出力ディレクトリ | `--route-dir` | `app/routes` |
+| island の出力ディレクトリ | `--island-dir` | `app/islands` |
+| SSR の island 識別子の接頭辞 | `--island-id-prefix` | `/app/islands/` |
+| SSR 用 Scala API の出力先 | `--scala-output`（`island-components` で必須） | sbt が src_managed のパスを渡す |
+| そのパッケージ名・object 名 | `--scala-package` / `--scala-object` | `io._3ch.bbs.generated` / `IslandComponents` |
+| Island ブリッジの完全修飾名 | `--island-bridge` | `io._3ch.bbs.external.honox.Island` |
+| アノテーションのパッケージ | `--annotation-package` | `io._3ch.common.routes` |
+| 仮想モジュールの接頭辞 | `--virtual-module-prefix`（既定 `scalajs:`） | `scalajs:` |
+| 生成バナー | `--banner`（1 行ずつ繰り返す。`//` で始める） | `GenerateAppFiles.config` を参照 |
+| 生成マーカー | `--generated-marker`（バナーの 1 行目はこれで始める） | `// This file is generated by codegen` |
+
+汎用の入口は `CodegenMain app ...`（route / island の TS）と `CodegenMain island-components ...`（SSR 用 Scala API）。
+
+```
+sbt "codegen/runMain io._3ch.codegen.framework.CodegenMain app --server-sources server/App.scala --client-sources client/App.scala \
+  --route-dir app/routes --island-dir app/islands --island-id-prefix /app/islands/ --scala-package example.generated \
+  --scala-object Islands --island-bridge example.Island --annotation-package example.annotations \
+  --banner '// This file is generated by codegen' --generated-marker '// This file is generated by codegen'"
+```
+
+3ch の値は `GenerateAppFiles.config` にだけ書く。`GenerateAppFiles` は引数なしで TS の配線と DO の型を、
+`--project-root <dir> --island-components <出力ファイル>` で SSR 用 Scala API だけを生成する。
+
+## Vite
+
+`vite/scalajs-honox.ts` が汎用部分（`scalaProject`、server / client の Scala.js プロジェクト ID・alias・HonoX の React 設定・
+client ビルドの出力設定を返す関数）を持つ。`vite.config.ts` には DO の再 export、Tailwind、エントリなど 3ch 固有の設定だけを置く。

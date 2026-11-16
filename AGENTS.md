@@ -58,6 +58,7 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 ```
 common/                Scala (JVM/JS cross)。純粋ロジック（ルート表 RouteTable.scala, BoardId / ThreadKey / BbsSettings 等）。
                        domain/account/ はアカウント・Cookie・専ブラキー・ログイン失敗の規則、domain/device/ は端末ハッシュと Client Hints
+                       src/main/scala-js/ は JS 専用: islands/ は island の props の trait、validation/ は境界の値の汎用検証（JsShape）
 bbs/
   src/main/scala/io/_3ch/bbs/
     Main.scala         Worker エントリ（JSExportTopLevel）
@@ -73,7 +74,9 @@ bbs/
   src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
   test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ
 bbs-client/            クライアント側（hydration）Scala
-codegen/               Main の @route / @islands から app/routes/・app/islands/・bbs の IslandComponents を、DO から TS 型と Scala RPC スタブを生成
+codegen/               @route / @islands から app/routes/・app/islands/・bbs の IslandComponents（src_managed）を、DO から TS 型と Scala RPC スタブを生成。
+                       framework/ が汎用部分（hx4s へ移す予定）、GenerateAppFiles が 3ch の設定（docs/codegen.md）
+vite/                  Scala.js × HonoX の汎用 Vite 設定（vite.config.ts は 3ch 固有の設定だけを持つ）
 app/                   HonoX（server.ts がエントリ。routes/index.ts と _renderer.tsx は手書き）
 public/
   3chiko.html          3chiko.html本体。Vite の publicDir として dist/ へコピーされ Workers Static Assets で配信
