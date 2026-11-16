@@ -255,3 +255,8 @@ hx4s を `d133d7c1f1` から `95d77c2af9`（`0.1.0-local.g95d77c2af9`）に上�
 | 修正の前後の比較（Phase 4 と同じ 7 画面の SSR HTML と、本番設定のエンドポイントの応答） | 7 画面とその他 9 パスはバイト単位で一致。本番設定の 14 パスはステータス・Content-Type・本文のハッシュが一致。`/test/bbs.cgi` への POST の本文はポート番号を伏せると一致 |
 | `wrangler dev`（本番設定、使い捨てのローカルストレージ）とアプリ内ブラウザ | `/test/` の 3 つの island が hydrate され、4 つのパネルの開閉が動き、コンソールにエラーは無かった |
 | 作業後の `git status --porcelain --untracked-files=all` | 空（コミット後） |
+
+### hx4s の最終レビュー後の更新（lock を 73eb735 に）
+
+`hx4s.lock` を hx4s の最終レビュー（Codex・inspect の指摘 Q1〜Q8 の対応。hx4s の `docs/hx4s/reviews/final-review.md`）の commit `73eb735b970d6b327f0d3725ec9cf0b11fee2f2d`・版 `0.1.0-local.g73eb735b97` に上げた。公開記録に ivy の実体の SHA-256 と hx4s の lockfile が入ったが、`setup-hx4s.mjs` は `--verify` に任せているので変更は要らず、`docs/development.md` の照合の説明だけを直した。
+上と同じく依存キャッシュを消してから、`npm run hx4s:setup`（1 回目は公開、2 回目は照合が通って省略）→ `v6:build`（`wrote 0, unchanged 17`）→ `v6:typecheck` → `sbt test`（commonJVM 218、commonJS 227、bbsClient 2、codegen 14、bbs 950）→ `npm test`（77 件すべて成功）→ `-no-indent` の `Test/compile` → 再生成（`wrote 0, unchanged 17`）がすべて通り、`git status` の差分は lock と文書だけだった。

@@ -26,8 +26,8 @@ npm run v6:build
 `scripts/setup-hx4s.mjs` は次を順に行う。どれかが失敗したら止まる。
 
 1. lock の版が commit と対応していること、hx4s の checkout の HEAD が lock の commit と一致し、作業ツリーに未コミットの変更・未追跡のファイルが無いことを確かめる
-2. hx4s の `node scripts/publish-local.mjs --verify --version <版> --commit <commit>` で公開記録を照合する。記録・HEAD・`~/.ivy2/local` の全成果物・tgz の SHA-256 が
-   一致すれば公開を省く。合わなければ `publish-local.mjs --version <版> --reuse-node-modules` で公開し直し、もう一度照合する。
+2. hx4s の `node scripts/publish-local.mjs --verify --version <版> --commit <commit>` で公開記録を照合する。記録の項目、HEAD と hx4s の公開対象のソース（hx4s の `package-lock.json` を含む）、
+   `~/.ivy2/local` の全成果物（`ivy.xml`・jar・sources・javadoc・pom）と tgz の SHA-256 が一致すれば公開を省く。合わなければ `publish-local.mjs --version <版> --reuse-node-modules` で公開し直し、もう一度照合する。
    hx4s 側の `npm ci` は publish-local が行い、前回の `npm ci` から hx4s の `package-lock.json` が変わっていないときだけ省く（SHA-256 で比べる）。
    sbt の成果物（`sbt-hx4s`・`hx4s-core`・`hx4s-react`・`hx4s-codegen`）は `~/.ivy2/local/io.github.montereylangit/` に、
    `hx4s-vite` は hx4s の `target/local/hx4s-vite.tgz` に置かれる
