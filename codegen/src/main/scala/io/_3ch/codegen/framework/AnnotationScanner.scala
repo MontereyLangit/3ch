@@ -105,7 +105,7 @@ object AnnotationScanner {
       _ <- check(module == config.serverModule, at(path, marker, s"@route belongs to members exported to ${config.serverModule}"))
       _ <- check(typeArgs(marker).isEmpty, at(path, marker, "@route takes no type argument"))
       args <- literalArgs(path, marker, List("filePath", "method"))
-      _ <- check(args.nonEmpty && args.size <= 2, at(path, marker, "@route needs filePath and an optional method"))
+      _ <- check(args.nonEmpty && args.sizeIs <= 2, at(path, marker, "@route needs filePath and an optional method"))
       file <- outputPath(path, marker, args.head, ".ts")
       _ <- routeFileProblem(file).toLeft(()).left.map(reason => List(at(path, marker, reason)))
       method <- routeMethod(path, marker, args.lift(1).getOrElse("GET"))
@@ -133,14 +133,14 @@ object AnnotationScanner {
   private def hiddenSegment(segments: List[String], allowWellKnown: Boolean): Option[String] =
     segments.zipWithIndex.collectFirst {
       case (segment, index) if segment == "node_modules" ||
-        (segment.startsWith(".") && !(allowWellKnown && index == 0 && segment == ".well-known" && segments.size > 1)) => segment
+        (segment.startsWith(".") && !(allowWellKnown && index == 0 && segment == ".well-known" && segments.sizeIs > 1)) => segment
     }
 
   private def island(path: String, marker: Mod.Annot, name: String, module: String, config: CodegenConfig): Result[Found] = {
     for {
       _ <- check(module == config.clientModule, at(path, marker, s"@islands belongs to members exported to ${config.clientModule}"))
       args <- literalArgs(path, marker, List("filePath"))
-      _ <- check(args.size == 1, at(path, marker, "@islands needs filePath"))
+      _ <- check(args.sizeIs == 1, at(path, marker, "@islands needs filePath"))
       file <- outputPath(path, marker, args.head, ".tsx")
       _ <- check(file.split("/").last.matches(IslandBasename), at(path, marker, s"island basename of $file must match $IslandBasename for HonoX discovery"))
       _ <- hiddenSegment(file.split("/").toList, allowWellKnown = false).toLeft(()).left.map(segment =>
@@ -188,7 +188,7 @@ object AnnotationScanner {
   private def routeConflicts(found: List[(String, Found.Route)]): List[CodegenError] = {
     val byPath = found.groupBy(_._2.file.toLowerCase(Locale.ROOT)).values.toList.flatMap { group =>
       val spellings = group.map(_._2.file).distinct.sorted
-      if (spellings.size > 1) group.map { case (source, r) => at(source, r.tree, s"route paths differ only by case: ${spellings.mkString(", ")}") }
+      if (spellings.sizeIs > 1) group.map { case (source, r) => at(source, r.tree, s"route paths differ only by case: ${spellings.mkString(", ")}") }
       else Nil
     }
     byPath ++ duplicates(found.map { case (source, r) => (source, r.tree, s"${r.method} ${r.file}") }, key => s"duplicate route method $key")
@@ -196,6 +196,6 @@ object AnnotationScanner {
 
   private def duplicates(items: List[(String, Tree, String)], message: String => String): List[CodegenError] =
     items.groupBy(_._3).toList.sortBy(_._1).flatMap { case (key, group) =>
-      if (group.size > 1) group.map { case (source, tree, _) => at(source, tree, message(key)) } else Nil
+      if (group.sizeIs > 1) group.map { case (source, tree, _) => at(source, tree, message(key)) } else Nil
     }
 }

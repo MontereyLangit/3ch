@@ -35,7 +35,7 @@ object AppFileRenderer {
   def islandComponents(entries: List[IslandEntry], config: CodegenConfig): String = {
     val sorted = entries.sortBy(_.filePath)
     val header = lines(config.banner :+ s"package ${config.scalaPackage}")
-    if (sorted.isEmpty) header + s"\nobject ${config.scalaObject} {}\n"
+    if (sorted.isEmpty) s"$header\nobject ${config.scalaObject} {}\n"
     else {
       val imports =
         """
@@ -60,7 +60,7 @@ object AppFileRenderer {
            |
            |""".stripMargin
       }.mkString
-      header + imports + components + s"\nobject ${config.scalaObject} {\n" + methods + "}\n"
+      s"$header$imports$components\nobject ${config.scalaObject} {\n$methods}\n"
     }
   }
 }

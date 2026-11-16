@@ -144,7 +144,7 @@ object PostingFormIsland {
             <.label(" E-mail：", textInput("mail", fields.mail, 24, fields.setField))),
           props.threadKey.fold[VdomNode](
             <.label("タイトル：", textInput("subject", fields.subject, 80, fields.setField, ^.required := true)))(_ => EmptyVdom),
-          if props.authEnabled && session.isEmpty then <.p(^.className := "my-2 text-sm", "書き込みには認証・登録が必要です。", <.a(^.className := "text-[#06f]", ^.href := ("/auth/?return=" + URIUtils.encodeURIComponent(props.returnPath)), "認証・登録へ")) else EmptyVdom,
+          if props.authEnabled && session.isEmpty then <.p(^.className := "my-2 text-sm", "書き込みには認証・登録が必要です。", <.a(^.className := "text-[#06f]", ^.href := s"/auth/?return=${URIUtils.encodeURIComponent(props.returnPath)}", "認証・登録へ")) else EmptyVdom,
           if props.authEnabled && session.exists(_.lv < props.requiredLevel) then <.p(^.className := "my-2 text-sm", s"このスレはLv${props.requiredLevel}以上", " ", <.a(^.className := "text-[#06f]", ^.href := "/auth/account?upgrade=1", "アカウント設定へ")) else EmptyVdom,
           if props.authEnabled && session.isDefined then <.label(^.className := "my-2 block! text-sm", <.input(^.`type` := "checkbox", ^.name := "showid", ^.value := "1", ^.checked := showId.value,
             ^.onChange ==> ((e: ReactEventFromInput) => showId.setState(e.target.checked))), " ユーザーIDを名前欄に出す") else EmptyVdom,

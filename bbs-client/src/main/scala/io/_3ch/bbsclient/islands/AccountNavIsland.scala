@@ -14,7 +14,7 @@ object AccountNavIsland {
     for {
       session <- AuthClient.useSession(raw.session.toOption.flatMap(AuthClient.session(_)))
     } yield {
-      val authUrl = "/auth/?return=" + URIUtils.encodeURIComponent(raw.returnPath)
+      val authUrl = s"/auth/?return=${URIUtils.encodeURIComponent(raw.returnPath)}"
       session match {
         case None => <.span(<.a(^.href := authUrl, "認証・登録"), <.span(" | "), <.a(^.href := s"$authUrl&mode=login", "ログイン"))
         case Some(s) => <.details(^.className := "relative",

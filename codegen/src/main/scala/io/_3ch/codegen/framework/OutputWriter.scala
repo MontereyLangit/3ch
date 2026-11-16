@@ -98,7 +98,7 @@ object OutputWriter {
     val nested = for {
       (parent, parentKey) <- keys
       (child, childKey) <- keys
-      if childKey.startsWith(parentKey + java.io.File.separator)
+      if childKey.startsWith(s"$parentKey${java.io.File.separator}")
     } yield CodegenError(child.toString, None, s"output $parent is also used as a directory")
     val errors = (links ++ types ++ nested).distinct
     if (errors.nonEmpty) Left(errors) else Right(())
@@ -107,7 +107,7 @@ object OutputWriter {
   private def contents(outputs: List[(GeneratedFile, Path)], walked: List[Path], managed: List[Path], marker: String): Result[Plan] = {
     val outputKeys = outputs.map(_._2.toString).toSet
     val sameKey = outputs.groupBy(_._2.toString.toLowerCase(Locale.ROOT)).values.toList.collect {
-      case group if group.size > 1 =>
+      case group if group.sizeIs > 1 =>
         CodegenError(group.head._2.toString, None, s"outputs collide (case-insensitive): ${group.map(_._2).mkString(", ")}")
     }
     val existing = outputs.flatMap { case (file, path) =>
@@ -149,7 +149,7 @@ object OutputWriter {
         siblingName != name && siblingName.equalsIgnoreCase(name)
       }.filterNot { sibling =>
         val isLeaf = depth == names.size - 1
-        isLeaf && !outputKeys(sibling.toString) && managed.exists(sibling.startsWith(_)) && Files.isRegularFile(sibling) && isGenerated(sibling, marker)
+        isLeaf && !outputKeys(sibling.toString) && managed.exists(sibling.startsWith) && Files.isRegularFile(sibling) && isGenerated(sibling, marker)
       }.map(sibling => CodegenError(path.toString, None, s"differs only by case from existing $sibling"))
     }
   }

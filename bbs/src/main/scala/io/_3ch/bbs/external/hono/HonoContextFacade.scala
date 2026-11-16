@@ -14,5 +14,5 @@ trait RenderProps extends js.Object {
 type HonoContextFacade = HonoContext[WorkerEnv, RenderProps]
 
 object HonoContextFacade {
-  export HonoContext.renderPromise
+  export io._3ch.bbs.external.hono.HonoContext.renderPromise
 }

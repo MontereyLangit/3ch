@@ -9,7 +9,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
 /** ID・パスワードのアカウントのメールアドレスとパスワードの変更 */
 object AccountCredentialsIsland {
-  import AccountPostView.button
+  import io._3ch.bbsclient.islands.AccountPostView.button
   private val input = "mt-1 block w-full max-w-sm border border-[#d6dce3] p-1"
   private val section = "my-4 border border-[#d6dce3] bg-white p-4"
 

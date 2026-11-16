@@ -11,7 +11,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
 /** アカウント設定画面のキャップ。発行・再発行したパスワードはその場だけで表示する */
 object AccountCapIsland {
-  import AccountPostView.{button, number}
+  import io._3ch.bbsclient.islands.AccountPostView.{button, number}
 
   private final case class CapRow(id: String, name: String, strong: Boolean, issuedAt: Double, revokedAt: Option[Double], posts: List[AccountPostItemProps]) {
     def active: Boolean = revokedAt.isEmpty
@@ -77,7 +77,7 @@ object AccountCapIsland {
                 <.button(^.`type` := "button", ^.className := button, ^.disabled := busy.value, ^.onClick --> reissue(row), "パスワードを再発行"),
                 <.button(^.`type` := "button", ^.className := button, ^.disabled := busy.value, ^.onClick --> revoke(row), "無効にする"))),
             row.posts.headOption.fold[VdomNode](<.p(^.className := "mt-2 text-xs text-[#697785]", "まだ使われていません"))(AccountPostView(_)),
-            if row.posts.size > 1 then <.details(^.className := "mt-2", <.summary(^.className := "cursor-pointer text-xs", s"最近の書き込み（${row.posts.size}件）"),
+            if row.posts.sizeIs > 1 then <.details(^.className := "mt-2", <.summary(^.className := "cursor-pointer text-xs", s"最近の書き込み（${row.posts.size}件）"),
               row.posts.zipWithIndex.toVdomArray { case (p, index) => <.div(^.key := index, AccountPostView(p)) }) else EmptyVdom)
         },
         if active.nonEmpty then <.p(^.className := "text-xs text-[#697785]", "心当たりの無い書き込みがあれば、パスワードを再発行するか、キャップを無効にしてください。") else EmptyVdom,

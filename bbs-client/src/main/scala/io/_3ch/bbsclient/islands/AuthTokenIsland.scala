@@ -9,7 +9,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
 /** メールのリンクの先。確認と再設定はボタンを押してから送り、リンクの先読みでトークンを使わない */
 object AuthTokenIsland {
-  import AccountPostView.button
+  import io._3ch.bbsclient.islands.AccountPostView.button
   private val input = "mt-1 block w-full max-w-sm border border-[#d6dce3] p-1"
 
   final val Component = ScalaFnComponent[AuthTokenProps] { raw =>

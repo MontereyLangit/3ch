@@ -11,7 +11,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
 /** 専ブラ用キーを発行し、その場だけで表示する */
 object AccountMenuIsland {
-  import AccountPostView.{button, number, time}
+  import io._3ch.bbsclient.islands.AccountPostView.{button, number, time}
   private def revokedReason(raw: AccountTokenItemProps): String = TokenRevokeReason.parse(raw.revokeReason.getOrElse("")) match {
     case Some(TokenRevokeReason.Superseded) => "新しいキーへ置き換え"
     case Some(TokenRevokeReason.Revoked) => "手動で無効化"

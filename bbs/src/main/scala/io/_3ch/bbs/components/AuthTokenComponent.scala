@@ -13,7 +13,7 @@ final case class AuthTokenProps(reset: Boolean, token: String, enabled: Boolean,
 object AuthTokenComponent {
   final val Component = ScalaFnComponent[AuthTokenProps] { props =>
     <.div(^.className := "min-h-screen bg-[#fafafa] text-sm text-[#333]",
-      HeaderComponent.AuthComponent(HeaderProps(authEnabled = true, returnPath = "/")),
+      HeaderComponent.AuthComponent(HeaderProps(authEnabled = true)),
       <.main(^.className := "mx-auto max-w-3xl p-4",
         <.h1(^.className := "mb-3 text-lg font-bold", if props.reset then "パスワードの再設定" else "メールアドレスの確認"),
         IslandComponents.AuthTokenJs(new islands.AuthTokenProps {

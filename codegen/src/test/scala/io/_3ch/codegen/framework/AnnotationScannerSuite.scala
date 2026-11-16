@@ -138,7 +138,7 @@ class AnnotationScannerSuite extends FunSuite {
   }
 
   test("HonoX の route の glob と import.meta.glob が拾わないファイル名は拒否し、先頭の .well-known は許す") {
-    def route(path: String) = routes("@route(\"" + path + "\") @JSExportTopLevel(\"x\", \"server\") def x() = 1")
+    def route(path: String) = routes(s"""@route("$path") @JSExportTopLevel("x", "server") def x() = 1""")
     List("-draft.ts", "$param.ts", "a/-x.ts", "page.test.ts", "a/page.spec.ts", "-private/page.ts", "a/-private/page.ts",
       ".hidden/page.ts", "a/.hidden/page.ts", ".page.ts", "node_modules/page.ts", "a/.well-known/x.ts", ".well-known.ts").foreach { path =>
       assert(route(path).isLeft, path)
@@ -146,7 +146,7 @@ class AnnotationScannerSuite extends FunSuite {
     assert(errors(route("-draft.ts")).head.message.contains("ignored by HonoX"))
     assertEquals(route(".well-known/security.txt.ts").map(_.map(_.filePath)), Right(List(".well-known/security.txt.ts")))
     List(".hidden/view.tsx", "node_modules/view.tsx").foreach { path =>
-      assert(islands("@islands(\"" + path + "\") @JSExportTopLevel(\"X\", \"client\") val x = 1").isLeft, path)
+      assert(islands(s"""@islands("$path") @JSExportTopLevel("X", "client") val x = 1""").isLeft, path)
     }
   }
 

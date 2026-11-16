@@ -57,7 +57,7 @@ object CodegenMain {
 
   private def toConfig(command: Command, values: Map[String, List[String]], workingDirectory: Path): Result[(Command, CodegenConfig)] = {
     def error(message: String) = CodegenError("<args>", None, message)
-    val repeated = values.collect { case (key, list) if list.size > 1 && !Repeatable(key) => error(s"option --$key is given more than once") }.toList
+    val repeated = values.collect { case (key, list) if list.sizeIs > 1 && !Repeatable(key) => error(s"option --$key is given more than once") }.toList
     def single(key: String): Option[String] = values.get(key).flatMap(_.headOption)
     def many(key: String): List[String] = values.getOrElse(key, Nil).flatMap(_.split(",")).map(_.trim).filter(_.nonEmpty)
     val projectRoot = single("project-root").fold(workingDirectory)(Paths.get(_)).toAbsolutePath.normalize()
