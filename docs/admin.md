@@ -6,7 +6,7 @@
 
 ローカル起動:
 
-1. `npm ci`
+1. `npm run hx4s:setup`（依存の導入。hx4s の checkout の準備は [development.md](development.md) の「hx4s」）
 2. `.dev.vars` に `ADMIN_PASSWORD="任意の長いパスワード"` を設定（Git 管理対象外）。
 3. `npm run dev`
 4. `http://127.0.0.1:8787/admin/` を開く。

@@ -52,7 +52,7 @@ Lv の上限は R2 の `phoebe.cgi`（`対象 userInfo の正規表現<>上限 L
 ## ローカルで確認する
 
 ```bash
-npm ci
+npm run hx4s:setup   # 依存の導入（hx4s の checkout の準備は development.md の「hx4s」）
 npm run v6:build
 npm run dev
 ```
