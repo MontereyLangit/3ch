@@ -3,9 +3,10 @@ package io._3ch.bbs.components
 import io._3ch.bbs.generated.IslandComponents
 import io._3ch.common.domain.account.SessionView
 import io._3ch.common.domain.{BoardId, ThreadCommand, ThreadKey}
+import io._3ch.common.islands
 import japgolly.scalajs.react.ScalaFnComponent
 
-import scala.scalajs.js
+import scala.scalajs.js.JSConverters.*
 
 case class PostingFormProps(
   bbs: BoardId,
@@ -27,15 +28,29 @@ case class PostingFormProps(
 object PostingFormComponent {
 
   /** islandに渡すJSON互換props */
-  def islandProps(props: PostingFormProps): js.Object = {
-    val result = js.Dynamic.literal(bbs = props.bbs.value, time = props.time, imgurClientId = props.imgurClientId,
-      authEnabled = props.authEnabled, requiredLevel = props.requiredLevel, returnPath = props.returnPath,
-      commands = js.Array(props.commands.map(c =>
-        js.Dynamic.literal(text = c.text, label = c.label, field = c.field, description = c.description)
-      )*))
-    props.session.foreach(s => result.updateDynamic("session")(js.Dynamic.literal(uid = s.uid, lv = s.lv)))
-    props.key.foreach(key => result.updateDynamic("threadKey")(key.value.toString))
-    result.asInstanceOf[js.Object]
+  def islandProps(props: PostingFormProps): islands.PostingFormProps = new islands.PostingFormProps {
+    val bbs = props.bbs.value
+    val time = props.time
+    val imgurClientId = props.imgurClientId
+    val authEnabled = props.authEnabled
+    val requiredLevel = props.requiredLevel
+    val returnPath = props.returnPath
+    val commands = props.commands.map(threadCommand).toJSArray
+    val session = props.session.map(sessionProps).orUndefined
+    val threadKey = props.key.map(_.value.toString).orUndefined
+  }
+
+  private def threadCommand(c: ThreadCommand): islands.ThreadCommandProps = new islands.ThreadCommandProps {
+    val text = c.text
+    val label = c.label
+    val field = c.field
+    val description = c.description
+  }
+
+  /** ログイン中のユーザーを island へ渡す形にする */
+  def sessionProps(s: SessionView): islands.SessionProps = new islands.SessionProps {
+    val uid = s.uid
+    val lv = s.lv.toDouble
   }
 
   final val Component = ScalaFnComponent[PostingFormProps] { props =>

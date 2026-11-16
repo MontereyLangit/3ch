@@ -1,5 +1,6 @@
 package io._3ch.bbsclient.islands
 
+import io._3ch.common.islands.AccountCredentialsProps
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import scala.scalajs.js
@@ -11,10 +12,10 @@ object AccountCredentialsIsland {
   private val input = "mt-1 block w-full max-w-sm border border-[#d6dce3] p-1"
   private val section = "my-4 border border-[#d6dce3] bg-white p-4"
 
-  final val Component = ScalaFnComponent[js.Object] { raw =>
+  final val Component = ScalaFnComponent[AccountCredentialsProps] { raw =>
     for {
       email <- useState("")
-      pending <- useState(AuthClient.text(raw, "pendingEmail"))
+      pending <- useState(raw.pendingEmail)
       mailCurrent <- useState("")
       current <- useState("")
       password <- useState("")
@@ -23,8 +24,8 @@ object AccountCredentialsIsland {
       mailMessage <- useState("")
       passwordMessage <- useState("")
     } yield {
-      val enabled = AuthClient.flag(raw, "mailEnabled")
-      val verified = AuthClient.text(raw, "email")
+      val enabled = raw.mailEnabled
+      val verified = raw.email
       def send(path: String, fields: Seq[(String, String)], report: String => Callback)(success: js.Object => Callback): Callback =
         busy.setState(true) >> report("") >> Callback {
           AuthClient.post(path, fields).map { case (ok, json) =>

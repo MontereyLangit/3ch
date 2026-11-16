@@ -231,7 +231,8 @@ test('ヘッダーの検索リンクは入力欄へフォーカスを移して�
 
 // ---------------------------------------------------------------- 板の開閉パネル（BoardDetailsJs）
 
-const detailsProps = { bbs: 'sample', headText: '<b>ルール</b>', settingsText: 'BBS_TITLE=テスト\nBBS_NONAME_NAME=名無し', time: '1', imgurClientId: '', commands: [] };
+const detailsProps = { bbs: 'sample', headText: '<b>ルール</b>', settingsText: 'BBS_TITLE=テスト\nBBS_NONAME_NAME=名無し',
+  postingForm: { bbs: 'sample', time: '1', imgurClientId: '', commands: [] } };
 
 test('パネルのボタンは開閉と aria-expanded・矢印を切り替える', async () => {
   await mount(client.BoardDetailsJs, detailsProps);
@@ -586,11 +587,39 @@ test('不正な板名・スレキーの props では何も描画しない（例�
     [client.PostingFormJs, { ...formProps, bbs: 'bad-name' }],
     [client.PostingFormJs, { ...formProps, threadKey: 'abc' }],
     [client.BoardDetailsJs, { ...detailsProps, bbs: '' }],
+    [client.BoardDetailsJs, { ...detailsProps, postingForm: { ...detailsProps.postingForm, bbs: 'bad-name' } }],
     [client.ThreadListJs, { ...listProps, bbs: 'a'.repeat(17) }],
   ];
   for (const [Component, props] of cases) {
     const container = await mount(Component, props);
     assert.equal(container.innerHTML, '');
+  }
+});
+
+test('必須キーが欠けた・型が違う props では console.error に出して何も描画しない（例外にしない）', async () => {
+  const { commands, ...withoutCommands } = formProps;
+  const { now, ...withoutNow } = listProps;
+  const cases = [
+    [client.PostingFormJs, withoutCommands, /PostingFormJs.*props\.commands: missing/],
+    [client.PostingFormJs, { ...formProps, session: { uid: 'member' } }, /props\.session\.lv: missing/],
+    [client.BoardDetailsJs, { ...detailsProps, postingForm: { ...detailsProps.postingForm, time: 1 } },
+      /BoardDetailsJs.*props\.postingForm\.time: expected string, got number/],
+    [client.BoardDetailsJs, { bbs: 'sample', headText: '', settingsText: '', time: '1', imgurClientId: '', commands: [] },
+      /props\.postingForm: missing/],
+    [client.ThreadListJs, withoutNow, /ThreadListJs.*props\.now: missing/],
+    [client.ThreadListJs, { ...listProps, subjectText: null }, /props\.subjectText: expected string, got null/],
+  ];
+  const originalError = console.error;
+  try {
+    for (const [Component, props, pattern] of cases) {
+      const errors = [];
+      console.error = (...args) => { errors.push(args.map(String).join(' ')); };
+      const container = await mount(Component, props);
+      assert.equal(container.innerHTML, '');
+      assert.ok(errors.some(message => pattern.test(message)), `${pattern}: ${errors.join('\n')}`);
+    }
+  } finally {
+    console.error = originalError;
   }
 });
 

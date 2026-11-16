@@ -4,10 +4,12 @@ import io._3ch.bbs.components.layout.{FooterComponent, HeaderComponent, HeaderPr
 import io._3ch.bbs.generated.IslandComponents
 import io._3ch.common.domain.account.{AccountKind, Roles, SessionView}
 import io._3ch.common.domain.device.DeviceGranularity
+import io._3ch.common.islands
 import io._3ch.common.text.JstTime
 import japgolly.scalajs.react.ScalaFnComponent
 import japgolly.scalajs.react.vdom.html_<^.*
 import scala.scalajs.js
+import scala.scalajs.js.JSConverters.*
 
 final case class AccountPostProps(t: Double, bbs: String, key: String, title: String, resNum: Int, excerpt: String, network: String)
 final case class AccountTokenWarningProps(t: Double, uaLabel: String)
@@ -25,20 +27,39 @@ final case class AccountProps(uid: String, lv: Int, tokens: Seq[AccountTokenProp
 
 /** アカウントの表示情報と専ブラ用キー・ログアウトの操作画面 */
 object AccountComponent {
-  private def postProps(p: AccountPostProps): js.Object =
-    js.Dynamic.literal(t = p.t, bbs = p.bbs, key = p.key, title = p.title, resNum = p.resNum, excerpt = p.excerpt, network = p.network)
-  private def capProps(cap: AccountCapProps): js.Object = {
-    val raw = js.Dynamic.literal(id = cap.id, name = cap.name, strong = cap.strong, issuedAt = cap.issuedAt, recentPosts = js.Array(cap.recentPosts.map(postProps)*))
-    cap.revokedAt.foreach(v => raw.updateDynamic("revokedAt")(v))
-    raw
+  private def postProps(p: AccountPostProps): islands.AccountPostItemProps = new islands.AccountPostItemProps {
+    val t = p.t
+    val bbs = p.bbs
+    val key = p.key
+    val title = p.title
+    val resNum = p.resNum
+    val excerpt = p.excerpt
+    val network = p.network
   }
-  private def tokenProps(token: AccountTokenProps): js.Object = {
-    val raw = js.Dynamic.literal(id = token.id, label = token.label, issuedAt = token.issuedAt, expiresAt = token.expiresAt,
-      recentPosts = js.Array(token.recentPosts.map(postProps)*),
-      warnings = js.Array(token.warnings.map(w => js.Dynamic.literal(t = w.t, uaLabel = w.uaLabel))*))
-    Seq("boundAt" -> token.boundAt, "lastUsedAt" -> token.lastUsedAt, "revokedAt" -> token.revokedAt, "replacedTokenAt" -> token.replacedTokenAt).foreach { case (name, value) => value.foreach(v => raw.updateDynamic(name)(v)) }
-    token.revokeReason.foreach(v => raw.updateDynamic("revokeReason")(v))
-    raw
+  private def capProps(cap: AccountCapProps): islands.AccountCapItemProps = new islands.AccountCapItemProps {
+    val id = cap.id
+    val name = cap.name
+    val strong = cap.strong
+    val issuedAt = cap.issuedAt
+    val recentPosts = cap.recentPosts.map(postProps).toJSArray
+    val revokedAt = cap.revokedAt.orUndefined
+  }
+  private def warningProps(w: AccountTokenWarningProps): islands.AccountTokenWarningProps = new islands.AccountTokenWarningProps {
+    val t = w.t
+    val uaLabel = w.uaLabel
+  }
+  private def tokenProps(token: AccountTokenProps): islands.AccountTokenItemProps = new islands.AccountTokenItemProps {
+    val id = token.id
+    val label = token.label
+    val issuedAt = token.issuedAt
+    val expiresAt = token.expiresAt
+    val recentPosts = token.recentPosts.map(postProps).toJSArray
+    val warnings = token.warnings.map(warningProps).toJSArray
+    val boundAt = token.boundAt.orUndefined
+    val lastUsedAt = token.lastUsedAt.orUndefined
+    val revokedAt = token.revokedAt.orUndefined
+    val replacedTokenAt = token.replacedTokenAt.orUndefined
+    val revokeReason = token.revokeReason.orUndefined
   }
   private def kindLabel(kind: AccountKind): String = kind match {
     case AccountKind.Client => "かんたん登録（クライアントID）"
@@ -70,12 +91,26 @@ object AccountComponent {
           <.p(^.className := "mb-2", "ID・パスワードかGoogleに切り替えると、ほかの端末からもログインでき、失効しなくなります。Lvと書き込み履歴は引き継ぎます。ユーザーIDは登録したIDに変わります。"),
           <.a(^.className := "inline-block border border-[#d6dce3] bg-white px-3 py-1 text-[#333]", ^.href := "/auth/?upgrade=1&return=/auth/account/", "ID・パスワードかGoogleに切り替える"),
           <.p(^.className := "mt-2 text-xs text-[#697785]", "切り替えると、ほかの端末のかんたん登録はログアウトされます。元には戻せません。")) else EmptyVdom,
-        if props.kind == AccountKind.Password then IslandComponents.AccountCredentialsJs(js.Dynamic.literal(email = props.email.getOrElse(""),
-          pendingEmail = props.pendingEmail.getOrElse(""), mailEnabled = props.mailEnabled)) else EmptyVdom,
-        IslandComponents.AccountMenuJs(js.Dynamic.literal(tokens = js.Array(props.tokens.map(tokenProps)*), activeCount = props.activeCount, nowSeconds = props.nowSeconds)),
-        IslandComponents.AccountCapJs(js.Dynamic.literal(caps = js.Array(props.caps.map(capProps)*), admin = props.roles.admin,
-          canIssue = props.roles.values.nonEmpty)),
-        IslandComponents.AccountLogoutJs(js.Dynamic.literal(simple = props.kind == AccountKind.Client, kind = props.kind.code, google = props.google))),
+        if props.kind == AccountKind.Password then IslandComponents.AccountCredentialsJs(new islands.AccountCredentialsProps {
+          val email = props.email.getOrElse("")
+          val pendingEmail = props.pendingEmail.getOrElse("")
+          val mailEnabled = props.mailEnabled
+        }) else EmptyVdom,
+        IslandComponents.AccountMenuJs(new islands.AccountMenuProps {
+          val tokens = props.tokens.map(tokenProps).toJSArray
+          val activeCount = props.activeCount
+          val nowSeconds = props.nowSeconds
+        }),
+        IslandComponents.AccountCapJs(new islands.AccountCapProps {
+          val caps = props.caps.map(capProps).toJSArray
+          val admin = props.roles.admin
+          val canIssue = props.roles.values.nonEmpty
+        }),
+        IslandComponents.AccountLogoutJs(new islands.AccountLogoutProps {
+          val simple = props.kind == AccountKind.Client
+          val kind = props.kind.code
+          val google = props.google
+        })),
       FooterComponent.Component())
   }
 }

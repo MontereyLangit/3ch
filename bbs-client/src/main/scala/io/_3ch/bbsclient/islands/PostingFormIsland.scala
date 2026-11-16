@@ -2,6 +2,8 @@ package io._3ch.bbsclient.islands
 
 import io._3ch.common.domain.account.SessionView
 import io._3ch.common.domain.{BoardId, ThreadCommand, ThreadKey}
+import io._3ch.common.islands.PostingFormProps
+import io._3ch.common.validation.JsShape
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 
@@ -22,22 +24,14 @@ object PostingFormIsland {
 
   object Props {
     /** 板名・スレキーが不正なら None */
-    def fromJs(raw: js.Object): Option[Props] = {
-      val o = raw.asInstanceOf[js.Dynamic]
-
-      def text(name: String): String = o.selectDynamic(name).asInstanceOf[js.UndefOr[String]].getOrElse("")
-
-      val commands = o.selectDynamic("commands").asInstanceOf[js.UndefOr[js.Array[js.Dynamic]]].toList.flatMap(_.toList).map { c =>
-        def field(name: String): String = c.selectDynamic(name).asInstanceOf[js.UndefOr[String]].getOrElse("")
-
-        ThreadCommand(field("text"), field("label"), field("field"), field("description"))
-      }
-      val threadKey = o.selectDynamic("threadKey").asInstanceOf[js.UndefOr[String]].toOption.map(ThreadKey.parse(_).toOption)
+    def fromJs(raw: PostingFormProps): Option[Props] = {
+      val threadKey = raw.threadKey.toOption.map(ThreadKey.parse(_).toOption)
+      val commands = raw.commands.toList.map(c => ThreadCommand(c.text, c.label, c.field, c.description))
       for {
-        bbs <- BoardId.create(text("bbs")).toOption
+        bbs <- BoardId.create(raw.bbs).toOption
         key <- threadKey.fold[Option[Option[ThreadKey]]](Option(None))(_.map(Option(_)))
-      } yield Props(bbs, text("time"), key, text("imgurClientId"), commands, AuthClient.flag(raw, "authEnabled"), AuthClient.initial(raw),
-        o.selectDynamic("requiredLevel").asInstanceOf[js.UndefOr[Int]].getOrElse(0), text("returnPath"))
+      } yield Props(bbs, raw.time, key, raw.imgurClientId, commands, raw.authEnabled.getOrElse(false),
+        raw.session.toOption.map(AuthClient.sessionView), raw.requiredLevel.getOrElse(0), raw.returnPath.getOrElse(""))
     }
   }
 
@@ -170,10 +164,10 @@ object PostingFormIsland {
   }
 
   /**
-   * jsから渡されるpropsを [[Props]] へ変換して描画
-   * 不正なpropsのときは何も描画しない
+   * jsから渡されるpropsを検証して [[Props]] へ変換して描画
+   * 不正なpropsのときは何も描画しない（形の誤りは console.error に出す）
    */
-  final val JsComponent = ScalaFnComponent[js.Object] { raw =>
-    Props.fromJs(raw).fold[VdomNode](EmptyVdom)(Component(_))
+  final val JsComponent = ScalaFnComponent[PostingFormProps] { raw =>
+    JsShape.read[PostingFormProps]("PostingFormJs", raw, PostingFormProps.fields).flatMap(Props.fromJs).fold[VdomNode](EmptyVdom)(Component(_))
   }
 }

@@ -73,7 +73,7 @@ object RendererShell {
         title.toOption.map(t => React.createElement("title", new js.Object(), t).asInstanceOf[React.Node]).toSeq
 
     val head = React.createElement("head", new js.Object(), headChildren*)
-    val modal = if (authModal) Seq(IslandComponents.AuthModalJs(js.Dynamic.literal()).rawElement.asInstanceOf[React.Node]) else Nil
+    val modal = if (authModal) Seq(IslandComponents.AuthModalJs(new js.Object).rawElement.asInstanceOf[React.Node]) else Nil
     val body = React.createElement("body", new js.Object(), (children.asInstanceOf[React.Node] +: modal)*)
     React.createElement("html", js.Dictionary("lang" -> "ja").asInstanceOf[js.Object], head.asInstanceOf[React.Node], body.asInstanceOf[React.Node])
   }

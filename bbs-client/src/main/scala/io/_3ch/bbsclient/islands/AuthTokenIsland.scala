@@ -1,5 +1,6 @@
 package io._3ch.bbsclient.islands
 
+import io._3ch.common.islands.AuthTokenProps
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import scala.scalajs.js
@@ -10,7 +11,7 @@ object AuthTokenIsland {
   import AccountPostView.button
   private val input = "mt-1 block w-full max-w-sm border border-[#d6dce3] p-1"
 
-  final val Component = ScalaFnComponent[js.Object] { raw =>
+  final val Component = ScalaFnComponent[AuthTokenProps] { raw =>
     for {
       password <- useState("")
       confirmation <- useState("")
@@ -18,10 +19,10 @@ object AuthTokenIsland {
       done <- useState("")
       message <- useState("")
     } yield {
-      val reset = AuthClient.text(raw, "mode") == "reset"
-      val token = AuthClient.text(raw, "token")
-      val uid = AuthClient.text(raw, "uid")
-      val address = AuthClient.text(raw, "email")
+      val reset = raw.mode == "reset"
+      val token = raw.token
+      val uid = raw.uid
+      val address = raw.email
       def send(path: String, fields: Seq[(String, String)])(success: js.Object => String): Callback =
         busy.setState(true) >> message.setState("") >> Callback {
           AuthClient.post(path, fields :+ ("token" -> token)).map { case (ok, json) =>
@@ -38,7 +39,7 @@ object AuthTokenIsland {
         <.label(^.className := "mb-3 block", label,
           <.input(^.className := input, ^.`type` := "password", ^.autoComplete := "new-password", ^.value := value,
             ^.onChange ==> ((e: ReactEventFromInput) => set(e.target.value))))
-      if !AuthClient.flag(raw, "enabled") then <.p(^.className := "border border-[#d6dce3] bg-white p-4", "メールによる認証は準備中です。")
+      if !raw.enabled then <.p(^.className := "border border-[#d6dce3] bg-white p-4", "メールによる認証は準備中です。")
       else if token.isEmpty then <.p(^.role := "alert", ^.className := "border border-[#d6dce3] bg-white p-4 text-[#f00]", "リンクが無効か、期限が切れています。")
       else if done.value.nonEmpty then <.div(^.className := "border border-[#d6dce3] bg-white p-4", <.p(^.role := "status", done.value),
         <.p(^.className := "mt-3", <.a(^.className := "text-[#06f] hover:underline", ^.href := (if reset then "/auth/?mode=login" else "/auth/account/"),

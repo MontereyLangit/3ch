@@ -2,7 +2,6 @@ package io._3ch.bbsclient
 
 import io._3ch.bbsclient.islands.*
 import io._3ch.common.routes.islands
-import japgolly.scalajs.react.*
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSExportTopLevel
@@ -13,22 +12,23 @@ import scala.scalajs.js.annotation.JSExportTopLevel
  */
 object Main {
 
-  @islands("site-header.tsx")
+  @islands[io._3ch.common.islands.SiteHeaderProps]("site-header.tsx")
   @JSExportTopLevel("SiteHeaderJs", "client")
   val siteHeader: js.Any = SiteHeaderIsland.JsComponent.toJsComponent.raw
 
-  @islands("board-details.tsx")
+  @islands[io._3ch.common.islands.BoardDetailsProps]("board-details.tsx")
   @JSExportTopLevel("BoardDetailsJs", "client")
   val boardDetails: js.Any = BoardDetailsIsland.JsComponent.toJsComponent.raw
 
-  @islands("posting-form.tsx")
+  @islands[io._3ch.common.islands.PostingFormProps]("posting-form.tsx")
   @JSExportTopLevel("PostingFormJs", "client")
   val postingForm: js.Any = PostingFormIsland.JsComponent.toJsComponent.raw
 
-  @islands("thread-list.tsx")
+  @islands[io._3ch.common.islands.ThreadListProps]("thread-list.tsx")
   @JSExportTopLevel("ThreadListJs", "client")
   val threadList: js.Any = ThreadListIsland.JsComponent.toJsComponent.raw
-  @islands("auth-form.tsx")
+
+  @islands[io._3ch.common.islands.AuthFormProps]("auth-form.tsx")
   @JSExportTopLevel("AuthFormJs", "client")
   final val authForm: js.Any = AuthFormIsland.Component.toJsComponent.raw
 
@@ -36,27 +36,27 @@ object Main {
   @JSExportTopLevel("AuthModalJs", "client")
   final val authModal: js.Any = AuthModalIsland.Component.toJsComponent.raw
 
-  @islands("account-nav.tsx")
+  @islands[io._3ch.common.islands.AccountNavProps]("account-nav.tsx")
   @JSExportTopLevel("AccountNavJs", "client")
   final val accountNav: js.Any = AccountNavIsland.Component.toJsComponent.raw
 
-  @islands("account-menu.tsx")
+  @islands[io._3ch.common.islands.AccountMenuProps]("account-menu.tsx")
   @JSExportTopLevel("AccountMenuJs", "client")
   final val accountMenu: js.Any = AccountMenuIsland.Component.toJsComponent.raw
 
-  @islands("account-cap.tsx")
+  @islands[io._3ch.common.islands.AccountCapProps]("account-cap.tsx")
   @JSExportTopLevel("AccountCapJs", "client")
   final val accountCap: js.Any = AccountCapIsland.Component.toJsComponent.raw
 
-  @islands("account-logout.tsx")
+  @islands[io._3ch.common.islands.AccountLogoutProps]("account-logout.tsx")
   @JSExportTopLevel("AccountLogoutJs", "client")
   final val accountLogout: js.Any = AccountLogoutIsland.Component.toJsComponent.raw
 
-  @islands("auth-token.tsx")
+  @islands[io._3ch.common.islands.AuthTokenProps]("auth-token.tsx")
   @JSExportTopLevel("AuthTokenJs", "client")
   final val authToken: js.Any = AuthTokenIsland.Component.toJsComponent.raw
 
-  @islands("account-credentials.tsx")
+  @islands[io._3ch.common.islands.AccountCredentialsProps]("account-credentials.tsx")
   @JSExportTopLevel("AccountCredentialsJs", "client")
   final val accountCredentials: js.Any = AccountCredentialsIsland.Component.toJsComponent.raw
 }

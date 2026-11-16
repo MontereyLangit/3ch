@@ -140,3 +140,101 @@ export function hydrate() {
     else process.env.NODE_ENV = previousNodeEnv;
   }
 });
+
+test('Scala Island の props は危険な文字列・配列・同じ island の複数インスタンスでも安全に往復する', async () => {
+  await access(bridge);
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'development';
+  const fixture = await mkdtemp(path.join(root, 'tests/.islands-props-'));
+  let dom;
+  const previous = new Map();
+  let client;
+  try {
+    await mkdir(path.join(fixture, 'app/islands'), { recursive: true });
+    await writeFile(path.join(fixture, 'components.js'), `
+import { createElement } from 'react';
+export const received = [];
+export function Echo(props) {
+  received.push(JSON.parse(JSON.stringify(props)));
+  return createElement('ul', { 'data-label': props.label }, props.items.map(item => createElement('li', { key: item.id }, item.text)));
+}
+`);
+    await writeFile(path.join(fixture, 'app/islands/echo.tsx'), "import { Echo } from '../../components.js';\nexport default Echo;\n");
+    await writeFile(path.join(fixture, 'server.js'), `
+import { createElement } from 'react';
+import { renderToString } from 'react-dom/server';
+import { renderIslandTest } from 'scala-island-test';
+import { Echo } from './components.js';
+export function render(first, second) {
+  return renderToString(createElement('main', null,
+    renderIslandTest(Echo, first, '/app/islands/echo.tsx'),
+    renderIslandTest(Echo, second, '/app/islands/echo.tsx')));
+}
+`);
+    await writeFile(path.join(fixture, 'client.js'), `
+import { createClient } from 'honox/client';
+import { createElement } from 'react';
+import { hydrateRoot } from 'react-dom/client';
+export { received } from './components.js';
+export const roots = [];
+export const errors = [];
+export function hydrate() {
+  return createClient({
+    createElement,
+    hydrate: (element, root) => roots.push(hydrateRoot(root, element, { onRecoverableError: error => errors.push(error.message) }))
+  });
+}
+`);
+    const config = {
+      configFile: false, root: fixture, logLevel: 'silent',
+      resolve: { alias: {
+        'scala-island-test': bridge,
+        'scalajs:client.js': clientModule,
+        'cloudflare:workers': path.join(root, 'bbs/test-stubs/cloudflare-workers-stub.mjs'),
+      } },
+      ssr: { noExternal: ['honox'] },
+    };
+    await build({ ...config, plugins: [islandComponents({ reactApiImportSource: 'react' })],
+      build: { ssr: path.join(fixture, 'server.js'), outDir: path.join(fixture, 'server-out'), rollupOptions: { output: { entryFileNames: 'entry.mjs' } } } });
+    await build({ ...config,
+      build: { ssr: path.join(fixture, 'client.js'), outDir: path.join(fixture, 'client-out'),
+        rollupOptions: { output: { entryFileNames: 'entry.mjs', chunkFileNames: '[name]-[hash].mjs' } } } });
+    const tricky = '日本語😀 改行</script><script>alert(1)</script><!-- "引用" \'single\' &amp; \ ';
+    const first = { label: tricky, items: [{ id: 'a', text: tricky }, { id: 'b', text: '</SCRIPT>' }], nested: { list: [1, 2.5, true, null] } };
+    const second = { label: '2つ目', items: [], nested: { list: [] } };
+    const server = await import(pathToFileURL(path.join(fixture, 'server-out/entry.mjs')).href);
+    const html = server.render(first, second);
+    assert.doesNotMatch(html, /<\/script>|<script>|<!--/i, 'props の文字列が HTML の構造として出ない');
+
+    dom = new JSDOM(`<!DOCTYPE html><html><body>${html}</body></html>`);
+    const globals = { window: dom.window, document: dom.window.document, Node: dom.window.Node, IS_REACT_ACT_ENVIRONMENT: true };
+    for (const key of Object.keys(globals)) previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+    const document = dom.window.document;
+    const boundaries = [...document.querySelectorAll('honox-island')];
+    assert.equal(boundaries.length, 2);
+    assert.deepEqual(boundaries.map(el => JSON.parse(el.getAttribute('data-serialized-props'))), [first, second]);
+    assert.equal(document.querySelectorAll('script').length, 0);
+
+    client = await import(pathToFileURL(path.join(fixture, 'client-out/entry.mjs')).href);
+    client.received.length = 0;
+    const lists = [...document.querySelectorAll('ul')];
+    await act(async () => { await client.hydrate(); });
+    assert.deepEqual(client.errors, [], 'hydration must match the SSR markup');
+    assert.equal(client.roots.length, 2, '同じ island の各インスタンスがそれぞれ hydrate される');
+    assert.deepEqual(client.received, [first, second], 'hydration 後も同じ値で読める');
+    assert.deepEqual([...document.querySelectorAll('ul')], lists);
+    assert.equal(lists[0].getAttribute('data-label'), tricky);
+    assert.equal(lists[0].querySelector('li').textContent, tricky);
+  } finally {
+    await act(async () => { for (const reactRoot of (client?.roots ?? []).splice(0)) reactRoot.unmount(); });
+    dom?.window.close();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else delete globalThis[key];
+    }
+    await rm(fixture, { recursive: true, force: true });
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  }
+});

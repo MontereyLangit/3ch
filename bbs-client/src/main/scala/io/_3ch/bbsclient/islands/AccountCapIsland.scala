@@ -1,5 +1,6 @@
 package io._3ch.bbsclient.islands
 
+import io._3ch.common.islands.{AccountCapProps, AccountPostItemProps}
 import io._3ch.common.domain.account.CapName
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
@@ -9,21 +10,20 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
 /** アカウント設定画面のキャップ。発行・再発行したパスワードはその場だけで表示する */
 object AccountCapIsland {
-  import AccountPostView.{button, number, objects}
+  import AccountPostView.{button, list, number}
 
-  private final case class CapRow(id: String, name: String, strong: Boolean, issuedAt: Double, revokedAt: Option[Double], posts: List[js.Object]) {
+  private final case class CapRow(id: String, name: String, strong: Boolean, issuedAt: Double, revokedAt: Option[Double], posts: List[AccountPostItemProps]) {
     def active: Boolean = revokedAt.isEmpty
     def label: String = if strong then s"$name ★（強キャップ）" else s"$name ★"
   }
   private final case class Issued(name: String, password: String)
 
-  private def rows(raw: js.Object): List[CapRow] = objects(raw, "caps").map { cap =>
-    CapRow(AuthClient.text(cap, "id"), AuthClient.text(cap, "name"), AuthClient.flag(cap, "strong"), number(cap, "issuedAt").getOrElse(0d),
-      number(cap, "revokedAt"), objects(cap, "recentPosts").take(5))
+  private def rows(raw: AccountCapProps): List[CapRow] = raw.caps.toList.map { cap =>
+    CapRow(cap.id, cap.name, cap.strong, number(cap.issuedAt).getOrElse(0d), number(cap.revokedAt), list(cap.recentPosts).take(5))
   }
   private def dateTime(seconds: Double): String = if seconds > 0 then io._3ch.common.text.JstTime.dateTime(seconds) else ""
 
-  final val Component = ScalaFnComponent[js.Object] { raw =>
+  final val Component = ScalaFnComponent[AccountCapProps] { raw =>
     for {
       caps <- useState(rows(raw))
       name <- useState("")
@@ -32,8 +32,8 @@ object AccountCapIsland {
       message <- useState("")
       busy <- useState(false)
     } yield {
-      val admin = AuthClient.flag(raw, "admin")
-      val allowed = admin || AuthClient.flag(raw, "canIssue")
+      val admin = raw.admin
+      val allowed = admin || raw.canIssue
       def now: Double = math.floor(js.Date.now() / 1000)
       def send(path: String, fields: Seq[(String, String)])(done: js.Object => Unit): Callback =
         issued.setState(None) >> busy.setState(true) >> message.setState("") >> Callback {

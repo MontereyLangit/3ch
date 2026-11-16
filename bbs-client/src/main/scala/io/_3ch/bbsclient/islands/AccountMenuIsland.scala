@@ -1,5 +1,6 @@
 package io._3ch.bbsclient.islands
 
+import io._3ch.common.islands.{AccountMenuProps, AccountPostItemProps, AccountTokenItemProps}
 import io._3ch.common.domain.account.TokenRevokeReason
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
@@ -9,15 +10,15 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
 /** 専ブラ用キーを発行し、その場だけで表示する */
 object AccountMenuIsland {
-  import AccountPostView.{button, number, objects, time}
-  private def revokedReason(raw: js.Object): String = TokenRevokeReason.parse(AuthClient.text(raw, "revokeReason")) match {
+  import AccountPostView.{button, list, number, time}
+  private def revokedReason(raw: AccountTokenItemProps): String = TokenRevokeReason.parse(raw.revokeReason.getOrElse("")) match {
     case Some(TokenRevokeReason.Superseded) => "新しいキーへ置き換え"
     case Some(TokenRevokeReason.Revoked) => "手動で無効化"
     case Some(TokenRevokeReason.Expired) => "未使用のまま失効"
     case None => "無効化済み"
   }
-  private def postView(raw: js.Object): VdomElement = AccountPostView(raw)
-  final val Component = ScalaFnComponent[js.Object] { raw =>
+  private def postView(raw: AccountPostItemProps): VdomElement = AccountPostView(raw)
+  final val Component = ScalaFnComponent[AccountMenuProps] { raw =>
     for {
       issued <- useState(Option.empty[String])
       message <- useState("")
@@ -33,7 +34,7 @@ object AccountMenuIsland {
             busy.setState(false).runNow()
             if ok then {
               if path.endsWith("issue") then {
-                val unusedIds = objects(raw, "tokens").filter(t => number(t, "boundAt").isEmpty && number(t, "revokedAt").isEmpty).map(t => AuthClient.text(t, "id")).toSet
+                val unusedIds = raw.tokens.toList.filter(t => number(t.boundAt).isEmpty && number(t.revokedAt).isEmpty).map(_.id).toSet
                 removed.modState(_ ++ unusedIds).runNow()
                 replaced.modState(_ ++ unusedIds).runNow()
                 issued.setState(Some(AuthClient.text(json.asInstanceOf[js.Object], "token"))).runNow()
@@ -42,45 +43,45 @@ object AccountMenuIsland {
             } else message.setState(AuthClient.text(json.asInstanceOf[js.Object], "error", "操作できませんでした")).runNow()
           }.recover { case _ => busy.setState(false).runNow(); message.setState("通信できませんでした").runNow() }
       }
-      val tokens = objects(raw, "tokens")
-      val now = number(raw, "nowSeconds").getOrElse(0d)
-      def dead(token: js.Object): Boolean = number(token, "revokedAt").isDefined || removed.value.contains(AuthClient.text(token, "id"))
-      val active = tokens.filter(token => !dead(token) && number(token, "boundAt").isDefined)
-      val unused = tokens.filter(token => !dead(token) && number(token, "boundAt").isEmpty)
-      val activeCount = number(raw, "activeCount").fold(active.size)(_.toInt) - tokens.count(t => removed.value.contains(AuthClient.text(t, "id")) && number(t, "boundAt").isDefined && number(t, "revokedAt").isEmpty)
+      val tokens = raw.tokens.toList
+      val now = number(raw.nowSeconds).getOrElse(0d)
+      def dead(token: AccountTokenItemProps): Boolean = number(token.revokedAt).isDefined || removed.value.contains(token.id)
+      val active = tokens.filter(token => !dead(token) && number(token.boundAt).isDefined)
+      val unused = tokens.filter(token => !dead(token) && number(token.boundAt).isEmpty)
+      val activeCount = raw.activeCount.getOrElse(active.size) - tokens.count(t => removed.value.contains(t.id) && number(t.boundAt).isDefined && number(t.revokedAt).isEmpty)
       <.section(^.id := "key", ^.className := "my-4 border border-[#d6dce3] bg-white p-4",
         <.h2(^.className := "mb-2 font-bold", "■ 専ブラ用認証キー"),
         <.p(^.className := "mb-3", "キーは最初に使った専用ブラウザだけで使えます。キーは発行したときにしか表示されません。"),
-        tokens.flatMap(t => objects(t, "warnings").zipWithIndex.map { case (warning, index) =>
-          <.p(^.key := s"${AuthClient.text(t, "id")}:$index", ^.role := "alert", ^.className := "my-2 border border-[#e2c17a] bg-[#fff8e7] p-3",
-            s"${time(warning, "t")}に、別の専用ブラウザ（${AuthClient.text(warning, "uaLabel")}）から、${AuthClient.text(t, "label")}のキーが使われそうになりました（拒否済み）。心当たりが無ければキーを無効にしてください。")
+        tokens.flatMap(t => list(t.warnings).zipWithIndex.map { case (warning, index) =>
+          <.p(^.key := s"${t.id}:$index", ^.role := "alert", ^.className := "my-2 border border-[#e2c17a] bg-[#fff8e7] p-3",
+            s"${time(warning.t)}に、別の専用ブラウザ（${warning.uaLabel}）から、${t.label}のキーが使われそうになりました（拒否済み）。心当たりが無ければキーを無効にしてください。")
         }).toVdomArray,
         <.h3(^.className := "my-2 font-bold", s"キーを使っている専用ブラウザ ${math.max(0, activeCount)} / 5"),
         <.p(^.className := "text-xs text-[#697785]", "身に覚えのない書き込みがあれば、そのブラウザのキーを無効にしてください。"),
         active.toVdomArray { t =>
-          val id = AuthClient.text(t, "id")
-          val posts = objects(t, "recentPosts").take(5)
+          val id = t.id
+          val posts = list(t.recentPosts).take(5)
           <.div(^.key := id, ^.className := "my-2 border-b border-[#d6dce3] py-3",
             <.div(^.className := "flex flex-wrap items-center justify-between gap-2",
-              <.div(<.b(AuthClient.text(t, "label")), <.small(^.className := "ml-2 text-[#697785]", s"${time(t, "boundAt")}から使用",
-                if number(t, "replacedTokenAt").isDefined then "（前のキーを置き換え）" else "")),
+              <.div(<.b(t.label), <.small(^.className := "ml-2 text-[#697785]", s"${time(t.boundAt)}から使用",
+                if number(t.replacedTokenAt).isDefined then "（前のキーを置き換え）" else "")),
               <.button(^.`type` := "button", ^.className := button, ^.disabled := busy.value, ^.onClick --> post("/auth/token/revoke", Some(id)), "このブラウザのキーを無効にする")),
-            posts.headOption.fold[VdomNode](<.p(^.className := "mt-2 text-xs", s"最終利用 ${time(t, "lastUsedAt")}"))(postView),
+            posts.headOption.fold[VdomNode](<.p(^.className := "mt-2 text-xs", s"最終利用 ${time(t.lastUsedAt)}"))(postView),
             if posts.nonEmpty then <.details(^.className := "mt-2", <.summary(^.className := "cursor-pointer text-xs", s"最近の書き込み（${posts.size}件）"),
               posts.zipWithIndex.toVdomArray { case (p, index) => <.div(^.key := index, postView(p)) }) else EmptyVdom)
         },
         unused.toVdomArray { t =>
-          val id = AuthClient.text(t, "id")
-          val remaining = number(t, "expiresAt").filter(_ > now).filter(_ => now > 0).map(at => s"（あと${math.ceil((at - now) / 3600).toInt}時間）").getOrElse("")
-          <.div(^.key := id, ^.className := "my-3 border-t border-[#d6dce3] pt-3 text-xs", <.b("未使用のキー"), " ", AuthClient.text(t, "label"),
-            s" 発行 ${time(t, "issuedAt")}・${time(t, "expiresAt")}まで有効$remaining ",
+          val id = t.id
+          val remaining = number(t.expiresAt).filter(_ > now).filter(_ => now > 0).map(at => s"（あと${math.ceil((at - now) / 3600).toInt}時間）").getOrElse("")
+          <.div(^.key := id, ^.className := "my-3 border-t border-[#d6dce3] pt-3 text-xs", <.b("未使用のキー"), " ", t.label,
+            s" 発行 ${time(t.issuedAt)}・${time(t.expiresAt)}まで有効$remaining ",
             <.button(^.`type` := "button", ^.className := button, ^.disabled := busy.value, ^.onClick --> post("/auth/token/revoke", Some(id)), "取り消す"))
         },
         <.details(^.className := "my-3 text-xs", <.summary(^.className := "cursor-pointer", "キーを無効にした専用ブラウザ（30日間表示）"),
-          tokens.filter(dead).toVdomArray { t => <.div(^.key := AuthClient.text(t, "id"), ^.className := "my-2 border-t border-[#d6dce3] pt-2",
-            <.b(AuthClient.text(t, "label")), " ", time(t, "revokedAt"), " ",
-            if replaced.value.contains(AuthClient.text(t, "id")) then "新しい未使用キーへ置き換え" else if removed.value.contains(AuthClient.text(t, "id")) then "手動で無効化" else revokedReason(t),
-            objects(t, "recentPosts").headOption.fold[VdomNode](EmptyVdom)(postView)) }),
+          tokens.filter(dead).toVdomArray { t => <.div(^.key := t.id, ^.className := "my-2 border-t border-[#d6dce3] pt-2",
+            <.b(t.label), " ", time(t.revokedAt), " ",
+            if replaced.value.contains(t.id) then "新しい未使用キーへ置き換え" else if removed.value.contains(t.id) then "手動で無効化" else revokedReason(t),
+            list(t.recentPosts).headOption.fold[VdomNode](EmptyVdom)(postView)) }),
         <.button(^.`type` := "button", ^.className := button, ^.disabled := busy.value, ^.onClick --> post("/auth/token/issue", None), "新しいキーを発行"),
         <.p(^.className := "my-2 text-xs text-[#697785]", "未使用のキーは1個だけ持てます。発行すると、いまの未使用キーは無効になります。"),
         issued.value.toVdomArray { key => <.div(^.key := "issued", ^.className := "mt-3 border border-[#f66] bg-[#fff7f3] p-3",

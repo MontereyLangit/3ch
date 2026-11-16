@@ -1,19 +1,19 @@
 package io._3ch.bbsclient.islands
 
+import io._3ch.common.islands.AccountNavProps
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
-import scala.scalajs.js
 import scala.scalajs.js.URIUtils
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
 /** ヘッダーの認証状態とアカウントメニュー */
 object AccountNavIsland {
-  final val Component = ScalaFnComponent[js.Object] { raw =>
+  final val Component = ScalaFnComponent[AccountNavProps] { raw =>
     for {
-      session <- AuthClient.useSession(AuthClient.initial(raw))
+      session <- AuthClient.useSession(raw.session.toOption.flatMap(AuthClient.session(_)))
     } yield {
-      val authUrl = "/auth/?return=" + URIUtils.encodeURIComponent(AuthClient.text(raw, "returnPath", "/"))
+      val authUrl = "/auth/?return=" + URIUtils.encodeURIComponent(raw.returnPath.getOrElse("/"))
       session match {
         case None => <.span(<.a(^.href := authUrl, "認証・登録"), <.span(" | "), <.a(^.href := s"$authUrl&mode=login", "ログイン"))
         case Some(s) => <.details(^.className := "relative",
