@@ -2,6 +2,7 @@
   "name": "3ch",
   "type": "module",
   "scripts": {
+    "hx4s:setup": "node scripts/setup-hx4s.mjs",
     "dev": "npm run v6:build && wrangler dev --config wrangler.jsonc",
     "deploy": "npm run v6:build && wrangler deploy --config wrangler.jsonc --minify",
     "pretest": "sbt bbs/Test/fastLinkJS bbsClient/fastLinkJS",
