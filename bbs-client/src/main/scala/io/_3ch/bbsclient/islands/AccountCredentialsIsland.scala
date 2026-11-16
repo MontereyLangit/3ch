@@ -1,6 +1,7 @@
 package io._3ch.bbsclient.islands
 
 import io._3ch.common.islands.AccountCredentialsProps
+import io._3ch.common.validation.JsShape
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import scala.scalajs.js
@@ -65,5 +66,10 @@ object AccountCredentialsIsland {
           <.p(^.className := "mt-2 text-xs text-[#697785]", "変更すると、この端末以外はログアウトします。"),
           if passwordMessage.value.nonEmpty then <.p(^.role := "status", ^.className := "mt-2", passwordMessage.value) else EmptyVdom))
     }
+  }
+
+  /** props を検証してから描画する。不正なら console.error に出して何も描画しない */
+  final val JsComponent = ScalaFnComponent[AccountCredentialsProps] { raw =>
+    JsShape.read[AccountCredentialsProps]("AccountCredentialsJs", raw, AccountCredentialsProps.fields).fold[VdomNode](EmptyVdom)(Component(_))
   }
 }

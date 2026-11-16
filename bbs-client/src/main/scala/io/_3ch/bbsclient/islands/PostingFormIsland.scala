@@ -29,8 +29,8 @@ object PostingFormIsland {
       for {
         bbs <- BoardId.create(raw.bbs).toOption
         key <- threadKey.fold[Option[Option[ThreadKey]]](Option(None))(_.map(Option(_)))
-      } yield Props(bbs, raw.time, key, raw.imgurClientId, commands, raw.authEnabled.getOrElse(false),
-        raw.session.toOption.map(AuthClient.sessionView), raw.requiredLevel.getOrElse(0), raw.returnPath.getOrElse(""))
+      } yield Props(bbs, raw.time, key, raw.imgurClientId, commands, raw.authEnabled,
+        raw.session.toOption.map(AuthClient.sessionView), raw.requiredLevel, raw.returnPath)
     }
   }
 

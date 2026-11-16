@@ -2,6 +2,7 @@ package io._3ch.bbsclient.islands
 
 import io._3ch.common.islands.{AccountCapProps, AccountPostItemProps}
 import io._3ch.common.domain.account.CapName
+import io._3ch.common.validation.JsShape
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
@@ -10,7 +11,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
 /** アカウント設定画面のキャップ。発行・再発行したパスワードはその場だけで表示する */
 object AccountCapIsland {
-  import AccountPostView.{button, list, number}
+  import AccountPostView.{button, number}
 
   private final case class CapRow(id: String, name: String, strong: Boolean, issuedAt: Double, revokedAt: Option[Double], posts: List[AccountPostItemProps]) {
     def active: Boolean = revokedAt.isEmpty
@@ -19,7 +20,7 @@ object AccountCapIsland {
   private final case class Issued(name: String, password: String)
 
   private def rows(raw: AccountCapProps): List[CapRow] = raw.caps.toList.map { cap =>
-    CapRow(cap.id, cap.name, cap.strong, number(cap.issuedAt).getOrElse(0d), number(cap.revokedAt), list(cap.recentPosts).take(5))
+    CapRow(cap.id, cap.name, cap.strong, cap.issuedAt, number(cap.revokedAt), cap.recentPosts.toList.take(5))
   }
   private def dateTime(seconds: Double): String = if seconds > 0 then io._3ch.common.text.JstTime.dateTime(seconds) else ""
 
@@ -102,5 +103,10 @@ object AccountCapIsland {
             <.b(row.label), s" ${row.revokedAt.fold("")(dateTime)}に無効化") }) else EmptyVdom,
         <.p(^.role := "status", ^.className := "my-2", message.value))
     }
+  }
+
+  /** props を検証してから描画する。不正なら console.error に出して何も描画しない */
+  final val JsComponent = ScalaFnComponent[AccountCapProps] { raw =>
+    JsShape.read[AccountCapProps]("AccountCapJs", raw, AccountCapProps.fields).fold[VdomNode](EmptyVdom)(Component(_))
   }
 }

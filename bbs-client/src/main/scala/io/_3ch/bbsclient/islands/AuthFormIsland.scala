@@ -1,6 +1,7 @@
 package io._3ch.bbsclient.islands
 
 import io._3ch.common.islands.AuthFormProps
+import io._3ch.common.validation.JsShape
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
@@ -23,7 +24,7 @@ object AuthFormIsland {
 
   /** Google の開始はフォームの遷移で送る。埋め込み時は別のウィンドウで開く */
   private def startGoogle(raw: AuthFormProps, uid: String, agreed: Boolean): Unit = {
-    val upgrade = raw.upgrade.getOrElse(false)
+    val upgrade = raw.upgrade
     val form = dom.document.createElement("form").asInstanceOf[dom.html.Form]
     form.method = "post"
     form.action = "/auth/google/start"
@@ -46,8 +47,8 @@ object AuthFormIsland {
 
   final val Component = ScalaFnComponent[AuthFormProps] { raw =>
     for {
-      login <- useState(raw.login.getOrElse(false) && !raw.upgrade.getOrElse(false))
-      chosen <- useState(if raw.upgrade.getOrElse(false) then AuthMethod.Password else AuthMethod.Client)
+      login <- useState(raw.login && !raw.upgrade)
+      chosen <- useState(if raw.upgrade then AuthMethod.Password else AuthMethod.Client)
       agreed <- useState(false)
       userId <- useState("")
       password <- useState("")
@@ -57,7 +58,7 @@ object AuthFormIsland {
       notice <- useState("")
       token <- useState("")
       busy <- useState(false)
-      error <- useState(raw.notice.getOrElse(""))
+      error <- useState(raw.notice)
       container <- useRefToVdom[dom.html.Div]
       widget <- useRef(Option.empty[String])
       mounted <- useRef(false)
@@ -89,9 +90,9 @@ object AuthFormIsland {
         }
       })
     } yield {
-      val google = raw.googleEnabled.getOrElse(false)
-      val mail = raw.mailEnabled.getOrElse(false)
-      val upgrade = raw.upgrade.getOrElse(false)
+      val google = raw.googleEnabled
+      val mail = raw.mailEnabled
+      val upgrade = raw.upgrade
       val registering = !login.value
       val choice = chosen.value
       def resetTurnstile(): Unit = {
@@ -222,5 +223,10 @@ object AuthFormIsland {
           if registering && choice == AuthMethod.Client then "この端末に認証情報（Cookie）を保存します。次からは認証不要です。"
           else "この端末に認証情報（Cookie）を保存します。") else EmptyVdom)
     }
+  }
+
+  /** props を検証してから描画する。不正なら console.error に出して何も描画しない */
+  final val JsComponent = ScalaFnComponent[AuthFormProps] { raw =>
+    JsShape.read[AuthFormProps]("AuthFormJs", raw, AuthFormProps.fields).fold[VdomNode](EmptyVdom)(Component(_))
   }
 }

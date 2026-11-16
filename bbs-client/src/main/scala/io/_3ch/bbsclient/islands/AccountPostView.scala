@@ -13,7 +13,6 @@ private[islands] object AccountPostView {
 
   /** 有限の数値なら Some */
   def number(value: js.UndefOr[Double]): Option[Double] = value.toOption.filter(_.isFinite)
-  def list[A](value: js.UndefOr[js.Array[A]]): List[A] = value.toOption.fold(List.empty[A])(_.toList)
   /** UNIX 秒を日本時間で出す。値が無ければ空 */
   def time(value: js.UndefOr[Double]): String = number(value).filter(_ > 0).fold("")(JstTime.dateTime)
 

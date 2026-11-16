@@ -44,6 +44,24 @@ class JsShapeSuite extends FunSuite {
     assert(JsShape.validate[Probe](parse("""{"label":"a","count":1,"items":{}}"""), fields).isLeft)
   }
 
+  test("Num は NaN・無限大を拒否し、Int は小数と Int の範囲外も拒否する") {
+    val numbers = List(required("n", JsKind.Num))
+    val integers = List(required("n", JsKind.Int))
+    def probe(value: Double): js.Any = js.Dynamic.literal(n = value)
+    assert(JsShape.validate[js.Object](probe(1.5), numbers).isRight)
+    List(Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity).foreach { value =>
+      assert(JsShape.validate[js.Object](probe(value), numbers).left.exists(_.contains("expected finite number")), value)
+      assert(JsShape.validate[js.Object](probe(value), integers).isLeft, value)
+    }
+    List(1.5, -0.25, 2147483648d, -2147483649d).foreach { value =>
+      assertEquals(JsShape.validate[js.Object](probe(value), integers).left.map(_.startsWith("props.n: expected integer in Int range")), Left(true), value)
+    }
+    List(0d, -3d, 2147483647d, -2147483648d).foreach { value =>
+      assert(JsShape.validate[js.Object](probe(value), integers).isRight, value)
+    }
+    assertEquals(JsShape.validate[js.Object](parse("""{"n":"1"}"""), integers), Left("props.n: expected number, got string"))
+  }
+
   test("read は失敗を console.error に出して None を返し、例外にしない") {
     val console = js.Dynamic.global.console
     val original = console.error

@@ -1,6 +1,7 @@
 package io._3ch.bbsclient.islands
 
 import io._3ch.common.islands.AccountNavProps
+import io._3ch.common.validation.JsShape
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
@@ -13,7 +14,7 @@ object AccountNavIsland {
     for {
       session <- AuthClient.useSession(raw.session.toOption.flatMap(AuthClient.session(_)))
     } yield {
-      val authUrl = "/auth/?return=" + URIUtils.encodeURIComponent(raw.returnPath.getOrElse("/"))
+      val authUrl = "/auth/?return=" + URIUtils.encodeURIComponent(raw.returnPath)
       session match {
         case None => <.span(<.a(^.href := authUrl, "認証・登録"), <.span(" | "), <.a(^.href := s"$authUrl&mode=login", "ログイン"))
         case Some(s) => <.details(^.className := "relative",
@@ -26,5 +27,10 @@ object AccountNavIsland {
             }), <.button(^.`type` := "submit", ^.className := "cursor-pointer py-1", "ログアウト"))))
       }
     }
+  }
+
+  /** props を検証してから描画する。不正なら console.error に出して何も描画しない */
+  final val JsComponent = ScalaFnComponent[AccountNavProps] { raw =>
+    JsShape.read[AccountNavProps]("AccountNavJs", raw, AccountNavProps.fields).fold[VdomNode](EmptyVdom)(Component(_))
   }
 }

@@ -3,9 +3,9 @@ package io._3ch.common.validation
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSGlobal
 
-/** JSON で受け渡せる値の種類 */
+/** JSON で受け渡せる値の種類。Num は有限の数、Int は Int の範囲の整数 */
 enum JsKind {
-  case Str, Num, Bool
+  case Str, Num, Int, Bool
   case Obj(fields: List[JsField])
   case Arr(element: JsKind)
 }
@@ -43,9 +43,14 @@ object JsShape {
   private def problems(value: js.Any, kind: JsKind, path: String): List[String] = {
     val actual = describe(value)
     def expect(name: String): List[String] = if (actual == name) Nil else List(s"$path: expected $name, got $actual")
+    def number(check: Double => Option[String]): List[String] =
+      if (actual != "number") expect("number")
+      else check(value.asInstanceOf[Double]).map(problem => s"$path: $problem").toList
     kind match {
       case JsKind.Str => expect("string")
-      case JsKind.Num => expect("number")
+      case JsKind.Num => number(n => Option.when(n.isNaN || n.isInfinite)(s"expected finite number, got $n"))
+      case JsKind.Int =>
+        number(n => Option.unless(n.isWhole && n >= scala.Int.MinValue && n <= scala.Int.MaxValue)(s"expected integer in Int range, got $n"))
       case JsKind.Bool => expect("boolean")
       case JsKind.Arr(element) =>
         if (actual != "array") List(s"$path: expected array, got $actual")

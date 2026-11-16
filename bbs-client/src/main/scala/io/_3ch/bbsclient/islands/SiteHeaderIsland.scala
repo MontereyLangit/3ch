@@ -1,6 +1,7 @@
 package io._3ch.bbsclient.islands
 
 import io._3ch.common.islands.SiteHeaderProps
+import io._3ch.common.validation.JsShape
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
@@ -38,7 +39,7 @@ object SiteHeaderIsland {
         <.nav(^.aria.label := "メインメニュー",
           <.a(^.href := "/", "ホーム"), <.span("|"), <.a(^.href := "/bbsmenu.html", "板一覧"), <.span("|"),
           <.a(^.href := "#board-search", ^.onClick ==> focusSearch, "検索")),
-        if raw.authEnabled.getOrElse(false) then <.nav(^.className := "account-nav ml-auto", ^.aria.label := "アカウント", AccountNavIsland.Component(raw)) else
+        if raw.authEnabled then <.nav(^.className := "account-nav ml-auto", ^.aria.label := "アカウント", AccountNavIsland.Component(raw)) else
           <.nav(^.className := "account-nav ml-auto", ^.aria.label := "アカウント",
           <.span(^.title := "準備中", "認証・登録"), <.span("|"), <.span(<.span(^.title := "準備中", "ログイン"),
             <.button(^.`type` := "button", ^.className := "dropBtnSetting settingDrop cursor-pointer border-0 bg-transparent p-0", ^.title := "準備中",
@@ -47,5 +48,9 @@ object SiteHeaderIsland {
       ).withRef(header.ref)
     }
   }
-  final val JsComponent = Component
+
+  /** props を検証してから描画する。不正なら console.error に出して何も描画しない */
+  final val JsComponent = ScalaFnComponent[SiteHeaderProps] { raw =>
+    JsShape.read[SiteHeaderProps]("SiteHeaderJs", raw, SiteHeaderProps.fields).fold[VdomNode](EmptyVdom)(Component(_))
+  }
 }

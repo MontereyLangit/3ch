@@ -1,6 +1,7 @@
 package io._3ch.bbsclient.islands
 
 import io._3ch.common.islands.AuthTokenProps
+import io._3ch.common.validation.JsShape
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import scala.scalajs.js
@@ -53,5 +54,10 @@ object AuthTokenIsland {
           ^.disabled := busy.value || (reset && (password.value.isEmpty || confirmation.value.isEmpty)),
           if reset then "パスワードを変更する" else "確認する"))
     }
+  }
+
+  /** props を検証してから描画する。不正なら console.error に出して何も描画しない */
+  final val JsComponent = ScalaFnComponent[AuthTokenProps] { raw =>
+    JsShape.read[AuthTokenProps]("AuthTokenJs", raw, AuthTokenProps.fields).fold[VdomNode](EmptyVdom)(Component(_))
   }
 }

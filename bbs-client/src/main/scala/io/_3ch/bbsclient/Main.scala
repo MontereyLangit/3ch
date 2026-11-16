@@ -30,7 +30,7 @@ object Main {
 
   @islands[io._3ch.common.islands.AuthFormProps]("auth-form.tsx")
   @JSExportTopLevel("AuthFormJs", "client")
-  final val authForm: js.Any = AuthFormIsland.Component.toJsComponent.raw
+  final val authForm: js.Any = AuthFormIsland.JsComponent.toJsComponent.raw
 
   @islands("auth-modal.tsx")
   @JSExportTopLevel("AuthModalJs", "client")
@@ -38,25 +38,25 @@ object Main {
 
   @islands[io._3ch.common.islands.AccountNavProps]("account-nav.tsx")
   @JSExportTopLevel("AccountNavJs", "client")
-  final val accountNav: js.Any = AccountNavIsland.Component.toJsComponent.raw
+  final val accountNav: js.Any = AccountNavIsland.JsComponent.toJsComponent.raw
 
   @islands[io._3ch.common.islands.AccountMenuProps]("account-menu.tsx")
   @JSExportTopLevel("AccountMenuJs", "client")
-  final val accountMenu: js.Any = AccountMenuIsland.Component.toJsComponent.raw
+  final val accountMenu: js.Any = AccountMenuIsland.JsComponent.toJsComponent.raw
 
   @islands[io._3ch.common.islands.AccountCapProps]("account-cap.tsx")
   @JSExportTopLevel("AccountCapJs", "client")
-  final val accountCap: js.Any = AccountCapIsland.Component.toJsComponent.raw
+  final val accountCap: js.Any = AccountCapIsland.JsComponent.toJsComponent.raw
 
   @islands[io._3ch.common.islands.AccountLogoutProps]("account-logout.tsx")
   @JSExportTopLevel("AccountLogoutJs", "client")
-  final val accountLogout: js.Any = AccountLogoutIsland.Component.toJsComponent.raw
+  final val accountLogout: js.Any = AccountLogoutIsland.JsComponent.toJsComponent.raw
 
   @islands[io._3ch.common.islands.AuthTokenProps]("auth-token.tsx")
   @JSExportTopLevel("AuthTokenJs", "client")
-  final val authToken: js.Any = AuthTokenIsland.Component.toJsComponent.raw
+  final val authToken: js.Any = AuthTokenIsland.JsComponent.toJsComponent.raw
 
   @islands[io._3ch.common.islands.AccountCredentialsProps]("account-credentials.tsx")
   @JSExportTopLevel("AccountCredentialsJs", "client")
-  final val accountCredentials: js.Any = AccountCredentialsIsland.Component.toJsComponent.raw
+  final val accountCredentials: js.Any = AccountCredentialsIsland.JsComponent.toJsComponent.raw
 }

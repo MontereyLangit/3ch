@@ -29,9 +29,9 @@ trait PostingFormProps extends js.Object {
   val bbs: String
   val time: String
   val imgurClientId: String
-  val authEnabled: js.UndefOr[Boolean]
-  val requiredLevel: js.UndefOr[Int]
-  val returnPath: js.UndefOr[String]
+  val authEnabled: Boolean
+  val requiredLevel: Int
+  val returnPath: String
   val commands: js.Array[ThreadCommandProps]
   val session: js.UndefOr[SessionProps]
   val threadKey: js.UndefOr[String]
@@ -41,7 +41,7 @@ object PostingFormProps {
   private val command = JsKind.Obj(List("text", "label", "field", "description").map(required(_, JsKind.Str)))
   val fields: List[JsField] = List(
     required("bbs", JsKind.Str), required("time", JsKind.Str), required("imgurClientId", JsKind.Str),
-    optional("authEnabled", JsKind.Bool), optional("requiredLevel", JsKind.Num), optional("returnPath", JsKind.Str),
+    required("authEnabled", JsKind.Bool), required("requiredLevel", JsKind.Int), required("returnPath", JsKind.Str),
     required("commands", JsKind.Arr(command)), optional("session", JsKind.Obj(SessionProps.fields)), optional("threadKey", JsKind.Str)
   )
   def validate(raw: js.Any): Either[String, PostingFormProps] = JsShape.validate(raw, fields)
@@ -81,11 +81,21 @@ object ThreadListProps {
 
 /** AccountNavJs の props */
 trait AccountNavProps extends js.Object {
-  val returnPath: js.UndefOr[String]
+  val returnPath: String
   val session: js.UndefOr[SessionProps]
+}
+
+object AccountNavProps {
+  val fields: List[JsField] = List(required("returnPath", JsKind.Str), optional("session", JsKind.Obj(SessionProps.fields)))
+  def validate(raw: js.Any): Either[String, AccountNavProps] = JsShape.validate(raw, fields)
 }
 
 /** SiteHeaderJs の props。authEnabled ならアカウントの欄に AccountNav を出す */
 trait SiteHeaderProps extends AccountNavProps {
-  val authEnabled: js.UndefOr[Boolean]
+  val authEnabled: Boolean
+}
+
+object SiteHeaderProps {
+  val fields: List[JsField] = required("authEnabled", JsKind.Bool) :: AccountNavProps.fields
+  def validate(raw: js.Any): Either[String, SiteHeaderProps] = JsShape.validate(raw, fields)
 }
