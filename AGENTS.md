@@ -46,7 +46,7 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 ### 1.3 技術スタック（現行 v6）
 
 - **ランタイム**: Cloudflare Workers (ES Modules, `compatibility_date: 2026-10-02`。`nodejs_compat` は既定で有効)
-- **言語 / フレームワーク**: Scala 3 / Scala.js（`bbs/` = Worker・DO・ハンドラ、`common/` = 純粋ロジック）+ scalajs-react + HonoX + Vite。`codegen` は `bbs.Main` の `@route` と `bbsclient.Main` の `@islands` から配線を生成。既存 fetch の `app/routes/index.ts` は手書き
+- **言語 / フレームワーク**: Scala 3 / Scala.js（`bbs/` = Worker・DO・ハンドラ、`common/` = 純粋ロジック）+ scalajs-react + HonoX + Vite。`codegen` は `bbs.Main` の `@route` と `bbsclient.Main` の `@islands` から配線を生成。手書きの route は `app/routes/` の `index.ts`（トップページ）、`admin/index.ts`・`auth.js.ts`・`bbsmenu.html.ts`（`publicHandler` へ渡すだけ）と `_renderer.tsx`（生成マーカーの無いファイル）
   - 管理画面はscalajs-reactのSPA。利用者向け画面はHonoX SSR (Islands)
 - **状態管理**: Durable Objects — `Board`（板: スレ一覧 / 削除済み一覧）, `Thread`（スレ: dat / log / settings / hidden / stopped / movedTo）
 - **オブジェクトストレージ**: R2 `ch3www`（`SETTING.TXT`, `head.txt`, `bbsmenu.html`, `headline.txt`, `deny.cgi`, `ngwords.cgi`, 過去ログ `.cgi`）
@@ -106,6 +106,8 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 | `docs/admin-spa-auth-plan.md`                                                          | 管理画面の改修計画（アカウント認証化・新 UI・scalajs-react SPA。2026-11-02、未着手）                                                                                                            |
 | `docs/admin-spa-auth-review.md`                                                        | 管理画面改修計画の Opus 5 セルフレビュー記録（2026-11-02）                                                                                                                               |
 | `docs/durable-object-stubs.md`                                                         | DO の RPC スタブ（`*DoStub`）のコンパイル時生成の仕様・対応範囲・運用手順                                                                                                            |
+| `docs/codegen.md`                                                                      | `@route` / `@islands` の配線生成（hx4s へ移す framework 部分と 3ch の設定）の規則・設定・出力の安全策・エラー形式                                                                     |
+| `docs/hx4s-foundation-review.md`                                                       | codegen の framework 分離・型付き island props のレビュー記録（2026-11-16。セルフレビューと Codex CLI）                                                                          |
 | `docs/thread-creation-regulation.md` / `docs/global-thread.md`                         | 投稿機能の追加仕様（スレ立て規制、全板共通スレ 924 / 900）                                                                                                                            |
 | `docs/post-rate-limit.md`                                                              | 連投規制（ごんたくれ・Samba24・広域 FlyRibbon・スレ連投・コピペ吸い込み、段階 `BBS_FR_LEVEL`。既定は規制＋FlyRibbon）の仕様と保存形式                                                                       |
 

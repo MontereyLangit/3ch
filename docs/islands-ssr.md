@@ -52,23 +52,28 @@ context.renderPromise(island.rawElement)
 
 戻り値は `VdomElement` なので、scalajs-react のページの子要素にもできる。
 props の trait に使ってよい型は `String`・`Double`・`Int`・`Boolean`・`js.UndefOr[...]`・`js.Array[...]`・他の props trait。
+`Double` には `JsKind.Num`、`Int` には `JsKind.Int` を対応させる。
 `Option`・Scala のコレクション・関数は HonoX のシリアライズで失われるので使わない。値が無いときは `js.undefined` にする（JSON ではキーごと省かれる）。
 React 要素や要素配列の props は HonoX が別扱いする。
 
 ## クライアントの入口での検証
 
-trait はシリアライズ後の値の欠落を検出できないので、必須の値がある island は入口で
-`io._3ch.common.validation.JsShape` を使って確かめる（`PostingFormJs`・`BoardDetailsJs`・`ThreadListJs`）。
-各 props の companion に `fields`（キー名・種類・省略可否）と `validate` を置く。
+trait はシリアライズ後の値の欠落を検出できないので、props を持つ island（`AuthModalJs` 以外の 11 個）はすべて入口で
+`io._3ch.common.validation.JsShape` を使って確かめる。各 island の `JsComponent` が検証してから `Component` を描画し、
+`bbs-client/.../Main.scala` は `JsComponent` を export する。各 props の companion に `fields`（キー名・種類・省略可否）を置き、
+island の props には `validate` も置く。
 失敗したら `console.error` に island 名と誤りのあるキーを出し、例外にせず何も描画しない。
+SSR でも同じ `JsComponent` が同じ props で動くので、SSR とクライアントの描画は食い違わない（不正なら両方とも空）。
+数値は `JsKind.Num`（有限の数）と `JsKind.Int`（Int の範囲の整数）を使い分ける。`NaN`・無限大は JSON で `null` になり、
+SSR とクライアントで値が変わるため、どちらも拒否する。
 `JsShape` は 3ch の型に依存しない汎用の補助で、後で hx4s へ移す。
 
-検証しない island（アカウント設定・認証画面）では、以前クライアントが既定値で補っていたキーを `js.UndefOr` にしている。
+`js.UndefOr` はサーバーが実際に省くキー（未ログイン時の `session`、新規スレッドの `threadKey`、キーの `boundAt` など）だけに使う。
 サーバー側は trait の抽象メンバをすべて定義しないとコンパイルできないので、送り忘れは起きない。
 イベントハンドラはクライアントコンポーネント内部で定義し、サーバーから関数を props として送らない。
 
 export 名と生成メソッド名は同じ。ファイル名を変更した場合は再生成すれば SSR 側の識別子も追従する。
-同じ export 名を異なる island ファイルへ割り当てる宣言は、SSR API が曖昧になるため生成時に拒否する。
+1 つのメンバに付けられる `@islands` は 1 つまでで、export 名はメンバをまたいで一意なので、SSR API のメソッド名は重複しない。
 生成 Scala は Islands の宣言がない場合も空の `IslandComponents` として出力する。生成の規則・設定・エラーの形式は `docs/codegen.md`。
 
 ## 描画と hydration
@@ -84,7 +89,7 @@ SSR 用 Scala は `scalajs:client.js` を直接 import し、既存の Vite alia
 
 通常の入れ子は親の hydration 境界に含め、React 要素の props は `<template>` から復元する。
 この判定・シリアライズを独自に実装せず、HonoX の Context と template 処理に任せる。
-利用している HonoX 0.1.61 の挙動に依存するため、更新時は下記のテストで確認する。
+利用している HonoX 0.1.62（`package-lock.json` の版）の挙動に依存するため、更新時は下記のテストで確認する。
 
 ## 検証
 

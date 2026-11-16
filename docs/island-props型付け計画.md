@@ -155,6 +155,8 @@ trait では、シリアライズ後に値が欠けていても検出できな�
 - 検証: 汎用の `io._3ch.common.validation.JsShape`（必須キーの存在・`js.typeOf`・入れ子と配列）を作り、各 props の companion に `fields` と `validate` を置いた。
   `PostingFormJs`・`BoardDetailsJs`・`ThreadListJs` の入口で使い、失敗は `console.error` に出して何も描画しない（6 章の「描画」は「JS 無し相当」のままとした）。
   ほかの island は検証せず、以前既定値で補っていたキーを `js.UndefOr` にした（`docs/islands-ssr.md`）。
+  レビューを受けて、props を持つ 11 個すべての入口で検証するようにし、サーバーが必ず送るキーは必須に戻した（`docs/hx4s-foundation-review.md`）。
+  検証は SSR でも同じ props で動くので、不正な props では SSR も空になる。2.3 の「SSR の markup をそのまま残す」とは違う。
 - `SessionProps.lv` は JSON の数値として `Double` で受け、クライアントで `Int` にする。
 - 6 章の「他画面の island の props の置き場所」は未決のまま。今は `io._3ch.common.islands` 直下に画面ごとのファイルで置いている。
 
