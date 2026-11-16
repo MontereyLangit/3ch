@@ -62,6 +62,22 @@ lazy val generateDurableObjectStubsTask: Def.Initialize[Task[Seq[File]]] = Def.t
   }
 }
 
+// bbs-client の @islands から SSR 用 Scala API（IslandComponents）を生成する。入力は bbs-client のソースファイルだけで、
+// bbsClient のコンパイルには依存しないのでタスクグラフは循環しない（docs/codegen.md）
+val islandComponentsFile = settingKey[File]("生成する SSR 用 island API（src_managed 配下）")
+val generateIslandComponents = taskKey[Seq[File]]("bbs-client の @islands から SSR 用 island API を生成する")
+
+lazy val generateIslandComponentsTask: Def.Initialize[Task[Seq[File]]] = Def.taskDyn {
+  val output = (Compile / islandComponentsFile).value
+  val root = (ThisBuild / baseDirectory).value
+  def quotedPath(path: File): String = "\"" + path.getAbsolutePath.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+  val arguments = s" io._3ch.codegen.GenerateAppFiles --project-root ${quotedPath(root)} --island-components ${quotedPath(output)}"
+  Def.task {
+    (codegen / Compile / runMain).toTask(arguments).value
+    Seq((Compile / islandComponentsFile).value)
+  }
+}
+
 // --- bbs: Scala.js — Durable Object と、HonoXから呼ばれるサーバ側ロジック（Workersバンドル専用） ---
 lazy val bbs = project
   .in(file("bbs"))
@@ -91,6 +107,9 @@ lazy val bbs = project
     Compile / durableObjectStubsFile := (Compile / sourceManaged).value / "io" / "_3ch" / "bbs" / "external" / "cloudflare" / "DurableObjectStubs.scala",
     Compile / generateDurableObjectStubs := generateDurableObjectStubsTask.value,
     Compile / sourceGenerators += (Compile / generateDurableObjectStubs).taskValue,
+    Compile / islandComponentsFile := (Compile / sourceManaged).value / "io" / "_3ch" / "bbs" / "generated" / "IslandComponents.scala",
+    Compile / generateIslandComponents := generateIslandComponentsTask.value,
+    Compile / sourceGenerators += (Compile / generateIslandComponents).taskValue,
     // テストは Date / Math.random / caches 等のグローバルを差し替えるが、Scala.js はスレッドごとに別の JS 実行環境で
     // スイートを 1 つずつ動かすので、並列に実行しても差し替えは他のスイートに漏れない（docs/v6s実装メモ.md 4 章）
     Test / parallelExecution := true,
@@ -129,14 +148,13 @@ lazy val bbsClient = project
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) }
   )
 
-// --- codegen: JVM — Main のアノテーションから配線、DO の Scala 宣言から TS 型と Scala RPC スタブを生成 ---
+// --- codegen: JVM — @route / @islands から配線、DO の Scala 宣言から TS 型と Scala RPC スタブを生成 ---
 lazy val codegen = project
   .in(file("codegen"))
-  .dependsOn(commonJVM)
   .settings(commonSettings)
   .settings(
     libraryDependencies += ("org.scalameta" %% "scalameta" % "4.17.4").cross(CrossVersion.for3Use2_13),
-    // `sbt codegen/run`（npm run v6:generate）はルートと TS 型の生成。Scala スタブは bbs の sourceGenerators から runMain で呼ぶ
+    // `sbt codegen/run`（npm run v6:generate）は TS の配線と型の生成。Scala の island API と DO スタブは bbs の sourceGenerators から runMain で呼ぶ
     Compile / mainClass := Some("io._3ch.codegen.GenerateAppFiles")
   )
 

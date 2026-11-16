@@ -1,80 +1,44 @@
 package io._3ch.codegen
 
-import io._3ch.common.routes.RouteTable
-import java.nio.file.{Files, Path}
-import scala.jdk.CollectionConverters.*
+import io._3ch.codegen.framework.{Codegen, OutputWriter}
 import munit.FunSuite
 
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Path, Paths}
+import scala.jdk.CollectionConverters.*
+import scala.util.Using
+
 class GenerateAppFilesSuite extends FunSuite {
-  private def withApp(test: Path => Unit): Unit = {
-    val root = Files.createTempDirectory("ch3s-codegen-test-")
-    try { test(root) }
-    finally {
-      val paths = Files.walk(root)
-      try { paths.iterator().asScala.toList.sortBy(_.getNameCount).reverse.foreach(Files.delete) }
-      finally { paths.close() }
+  private val projectRoot = Paths.get(System.getProperty("user.dir")).toAbsolutePath
+  private val config = GenerateAppFiles.config(projectRoot)
+
+  private def read(path: Path): String = Files.readString(path, StandardCharsets.UTF_8).replace("\r\n", "\n")
+
+  test("3ch の設定で生成した route / island はコミット済みの app/ と一致し、生成ファイルが余っていない") {
+    val outputs = Codegen.appOutputs(config).fold(errors => fail(errors.map(_.render).mkString("\n")), identity)
+    assert(outputs.nonEmpty)
+    outputs.foreach(file => assertEquals(read(file.root.resolve(file.relativePath)), file.content, file.relativePath))
+    val generated = List(config.routeRoot, config.islandRoot).flatMap { root =>
+      Using.resource(Files.walk(root))(_.iterator().asScala.filter(Files.isRegularFile(_)).toList)
+        .filter(path => read(path).startsWith(config.generatedMarker))
     }
+    assertEquals(generated.map(_.toString).sorted, outputs.map(f => f.root.resolve(f.relativePath).normalize().toString).sorted)
   }
 
-  private val generated = RouteTable.renderRouteFile(
-    RouteTable.RouteEntry("probe.ts", RouteTable.RouteKind.PassThrough("probe"), Nil)
-  )
-
-  test("再生成は古い生成ファイルを削除し、手書きルートは残す") {
-    withApp { root =>
-      val routes = Files.createDirectories(root.resolve("routes"))
-      val stale = routes.resolve("stale.ts")
-      val manual = routes.resolve("index.ts")
-      val fresh = routes.resolve("fresh.ts")
-      Files.writeString(stale, generated)
-      Files.writeString(manual, "export default manual;\n")
-      GenerateAppFiles.writeOutputs(root, List(fresh -> generated))
-      assert(!Files.exists(stale))
-      assertEquals(Files.readString(manual), "export default manual;\n")
-      assertEquals(Files.readString(fresh), generated)
-    }
-  }
-
-  test("手書きファイルとの衝突は削除・書き込みの前に失敗する") {
-    withApp { root =>
-      val routes = Files.createDirectories(root.resolve("routes"))
-      val stale = routes.resolve("stale.ts")
-      val manual = routes.resolve("index.ts")
-      Files.writeString(stale, generated)
-      Files.writeString(manual, "handwritten")
-      intercept[IllegalArgumentException](GenerateAppFiles.writeOutputs(root, List(manual -> generated)))
-      assertEquals(Files.readString(manual), "handwritten")
-      assert(Files.exists(stale))
-    }
-  }
-
-  test("パッケージ名変更前の生成ファイルも置換・削除できる") {
-    withApp { root =>
-      val routes = Files.createDirectories(root.resolve("routes"))
-      val stale = routes.resolve("stale.ts")
-      val current = routes.resolve("current.ts")
-      val legacy = generated.replace("io._3ch.codegen.GenerateAppFiles", "ch3s.codegen.GenerateAppFiles")
-      assertNotEquals(legacy, generated)
-      Files.writeString(stale, legacy)
-      Files.writeString(current, legacy)
-      GenerateAppFiles.writeOutputs(root, List(current -> generated))
-      assert(!Files.exists(stale))
-      assertEquals(Files.readString(current), generated)
-    }
-  }
-
-  test("Scala islandの配線は手書きファイルを残し、以前の生成エントリを置き換える") {
-    withApp { root =>
-      val scalaFile = root.resolve("IslandComponents.scala")
-      val content = GenerateIslandComponents.render(Nil)
-      Files.writeString(scalaFile, "object Handwritten {}\n")
-      intercept[IllegalArgumentException](GenerateAppFiles.writeOutputs(root, List(scalaFile -> content)))
-      assertEquals(Files.readString(scalaFile), "object Handwritten {}\n")
-      Files.writeString(scalaFile, GenerateIslandComponents.render(List(
-        RouteTable.IslandEntry("old.tsx", "OldWidget", "client.js")
-      )))
-      GenerateAppFiles.writeOutputs(root, List(scalaFile -> content))
-      assertEquals(Files.readString(scalaFile), content)
+  test("SSR 用 Scala API は bbs-client の Main だけを入力にし、内容が同じなら書き直さない") {
+    val output = Files.createTempDirectory("ch3s-island-components-").resolve("IslandComponents.scala")
+    try {
+      val withOutput = GenerateAppFiles.config(projectRoot, Some(output))
+      val first = Codegen.islandComponents(withOutput.copy(serverSources = List("does/not/exist.scala"))).toOption.get
+      assertEquals(first.written, List(output))
+      val second = Codegen.islandComponents(withOutput).toOption.get
+      assertEquals(second.unchanged, List(output))
+      assert(read(output).startsWith("// This file is generated by codegen"))
+      assert(read(output).contains("package io._3ch.bbs.generated"))
+      assert(!OutputWriter.writeIfChanged(output, read(output)))
+    } finally {
+      Files.deleteIfExists(output)
+      Files.deleteIfExists(output.getParent)
     }
   }
 }
