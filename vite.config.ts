@@ -1,42 +1,23 @@
 import path from "node:path";
-import { defineConfig, type Plugin } from "vite";
-import honox from "honox/vite";
+import { defineConfig } from "vite";
 import buildCloudflareWorkers, {
   defaultOptions as cloudflareWorkersDefaultOptions,
 } from "@hono/vite-build/cloudflare-workers";
-import scalaJSPlugin from "@scala-js/vite-plugin-scalajs";
 import tailwindcss from "@tailwindcss/vite";
+import { scalaHonoxClient, scalaHonoxServer, type ScalaHonoxOptions } from "./vite/scalajs-honox";
 
-const scalaCwd = path.resolve(import.meta.dirname);
-
-function scalaProject(projectID: string, uriPrefix?: string): Plugin {
-  const plugin = scalaJSPlugin({ cwd: scalaCwd, projectID, uriPrefix });
-  const buildStart = plugin.buildStart;
-  if (buildStart) {
-    plugin.buildStart = {
-      sequential: true,
-      handler:
-        typeof buildStart === "function" ? buildStart : buildStart.handler,
-    };
-  }
-  return plugin;
-}
+const scala: ScalaHonoxOptions = {
+  cwd: path.resolve(import.meta.dirname),
+  serverProjectID: "bbs",
+  clientProjectID: "bbsClient",
+};
 
 export default defineConfig(({ mode }) => {
   if (mode === "client") {
+    const client = scalaHonoxClient(scala, ["./app/client.ts"]);
     return {
-      plugins: [tailwindcss(), scalaProject("bbsClient")],
-      build: {
-        rollupOptions: {
-          input: ["./app/client.ts"],
-          output: {
-            entryFileNames: "static/client.js",
-            chunkFileNames: "static/assets/[name]-[hash].js",
-            assetFileNames: "static/assets/[name].[ext]",
-          },
-        },
-        emptyOutDir: false,
-      },
+      plugins: [tailwindcss(), ...client.scalaPlugins],
+      build: client.build,
     };
   }
 
@@ -48,18 +29,16 @@ export default defineConfig(({ mode }) => {
       `export { Board, Thread, Account, AccountIndex, AuthRate } from '/app/server.ts'`,
   ];
 
+  const server = scalaHonoxServer(scala);
   return {
-    resolve: {
-      alias: { "scalajs:client.js": "scalajs-client:client.js" },
-    },
+    resolve: { alias: server.alias },
     plugins: [
-      honox({ islandComponents: { reactApiImportSource: "react" } }),
+      ...server.honoxPlugins,
       buildCloudflareWorkers({
         external: ["cloudflare:workers"],
         entryContentAfterHooks,
       }),
-      scalaProject("bbs"),
-      scalaProject("bbsClient", "scalajs-client"),
+      ...server.scalaPlugins,
     ],
   };
 });

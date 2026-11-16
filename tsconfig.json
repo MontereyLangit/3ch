@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "allowJs": true
   },
-  "include": ["app", "*.d.ts"]
+  "include": ["app", "*.d.ts", "vite", "vite.config.ts"]
 }
