@@ -1,19 +1,18 @@
 package io._3ch.bbs
 
 import hx4s.annotation.route
+import hx4s.hono.ExecutionContext
+import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.hono.HonoContextFacade
-import io._3ch.bbs.external.web.{Response, ResponseInit}
-import io._3ch.bbs.handler.RendererShell
+import io._3ch.bbs.external.hono.HonoContextFacade.*
+import io._3ch.bbs.external.web.{Request, Response, ResponseInit}
+import io._3ch.bbs.handler.{BoardHandler, RendererShell}
 import io._3ch.bbs.util.SjisEncoding
 import japgolly.scalajs.react.facade.React
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSExportTopLevel
 import scala.scalajs.js.typedarray.Uint8Array
-
-import external.web.Request
-import external.cloudflare.WorkerEnv
-import io._3ch.bbs.handler.BoardHandler
 
 object Main {
 
@@ -27,10 +26,10 @@ object Main {
 
   //noinspection ScalaWeakerAccess
   @JSExportTopLevel("publicFetch", "server")
-  def publicFetch(request: Request, env: WorkerEnv, ctx: js.Dynamic): js.Promise[Response] = handler.PublicRoutes.fetch(request, env, ctx)
+  def publicFetch(request: Request, env: WorkerEnv, ctx: ExecutionContext): js.Promise[Response] = handler.PublicRoutes.fetch(request, env, ctx)
 
   @JSExportTopLevel("publicHandler", "server")
-  def publicHandler(c: js.Dynamic): js.Promise[Response] = publicFetch(c.req.raw.asInstanceOf[Request], c.env.asInstanceOf[WorkerEnv], c.executionCtx)
+  def publicHandler(c: HonoContextFacade): js.Promise[Response] = publicFetch(c.request, c.env, c.executionCtx)
 
   @JSExportTopLevel("bbs_entry", "server")
   def bbsEntry(request: Request, env: WorkerEnv): js.Promise[Response] = handler.Posting.entry(request, env)

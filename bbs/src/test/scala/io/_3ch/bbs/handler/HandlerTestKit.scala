@@ -1,5 +1,6 @@
 package io._3ch.bbs.handler
 
+import hx4s.hono.ExecutionContext
 import io._3ch.bbs.external.web.{Request, TextEncoder}
 import io._3ch.bbs.util.SjisEncoding
 import scala.collection.mutable
@@ -44,7 +45,8 @@ object HandlerTestKit {
 
   def status(res: js.Dynamic): Int = res.status.asInstanceOf[Int]
 
-  def ctx: js.Dynamic = js.Dynamic.literal(waitUntil = ((p: js.Any) => p): js.Function1[js.Any, js.Any])
+  def ctx: ExecutionContext =
+    js.Dynamic.literal(waitUntil = ((p: js.Any) => p): js.Function1[js.Any, js.Any]).asInstanceOf[ExecutionContext]
 
   /** `body` の実行中だけグローバル `name` を `value` に差し替え、完了（成功・失敗とも）で元に戻す。 */
   private def withGlobal[A](name: String, value: js.Any)(body: => Future[A]): Future[A] = {
