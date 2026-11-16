@@ -1,24 +1,20 @@
-import path from "node:path";
 import { defineConfig } from "vite";
 import buildCloudflareWorkers, {
   defaultOptions as cloudflareWorkersDefaultOptions,
 } from "@hono/vite-build/cloudflare-workers";
 import tailwindcss from "@tailwindcss/vite";
-import { scalaHonoxClient, scalaHonoxServer, type ScalaHonoxOptions } from "./vite/scalajs-honox";
+import hx4s from "hx4s-vite";
 
-const scala: ScalaHonoxOptions = {
-  cwd: path.resolve(import.meta.dirname),
-  serverProjectID: "bbs",
-  clientProjectID: "bbsClient",
-};
-
+// client: dist/static/client.js・dist/static/assets/*（Workers Static Assets で配信）、workers: dist/index.js
 export default defineConfig(({ mode }) => {
+  const plugins = hx4s({
+    mode,
+    sbt: { cwd: import.meta.dirname },
+    server: { projectID: "bbs" },
+    client: { projectID: "bbsClient" },
+  });
   if (mode === "client") {
-    const client = scalaHonoxClient(scala, ["./app/client.ts"]);
-    return {
-      plugins: [tailwindcss(), ...client.scalaPlugins],
-      build: client.build,
-    };
+    return { plugins: [tailwindcss(), ...plugins] };
   }
 
   // 既定のフック配列にDurable Objectの再exportをappend
@@ -29,16 +25,13 @@ export default defineConfig(({ mode }) => {
       `export { Board, Thread, Account, AccountIndex, AuthRate } from '/app/server.ts'`,
   ];
 
-  const server = scalaHonoxServer(scala);
   return {
-    resolve: { alias: server.alias },
     plugins: [
-      ...server.honoxPlugins,
+      ...plugins,
       buildCloudflareWorkers({
         external: ["cloudflare:workers"],
         entryContentAfterHooks,
       }),
-      ...server.scalaPlugins,
     ],
   };
 });
