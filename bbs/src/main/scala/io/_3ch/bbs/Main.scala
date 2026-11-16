@@ -1,10 +1,10 @@
 package io._3ch.bbs
 
+import hx4s.annotation.route
 import io._3ch.bbs.external.hono.HonoContextFacade
 import io._3ch.bbs.external.web.{Response, ResponseInit}
 import io._3ch.bbs.handler.RendererShell
 import io._3ch.bbs.util.SjisEncoding
-import io._3ch.common.routes.route
 import japgolly.scalajs.react.facade.React
 
 import scala.scalajs.js

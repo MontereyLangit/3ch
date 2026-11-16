@@ -1254,3 +1254,12 @@ test('アカウント・認証系の island もサーバーと同じ完全な pr
     assert.deepEqual(errors, []);
   }
 });
+
+test('props を持つ 11 個の island は hydrate 前の検証関数を持ち、props の無い AuthModalJs は持たない', () => {
+  const typed = ['SiteHeaderJs', 'BoardDetailsJs', 'PostingFormJs', 'ThreadListJs', 'AuthFormJs', 'AccountNavJs', 'AccountMenuJs',
+    'AccountCapJs', 'AccountLogoutJs', 'AuthTokenJs', 'AccountCredentialsJs'];
+  for (const name of typed) assert.equal(typeof client[name].hx4sValidate, 'function', name);
+  assert.equal(client.AuthModalJs.hx4sValidate, undefined);
+  assert.equal(client.ThreadListJs.hx4sValidate(listProps), undefined);
+  assert.equal(client.ThreadListJs.hx4sValidate({ ...listProps, now: '1' }), 'props.now: expected number, got string');
+});

@@ -2,7 +2,6 @@ package io._3ch.bbsclient.islands
 
 import io._3ch.common.domain.{BbsSubject, BbsSubjects, BoardId, SubjectText}
 import io._3ch.common.islands.ThreadListProps
-import io._3ch.common.validation.JsShape
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
@@ -213,11 +212,6 @@ object ThreadListIsland {
     }
   }
 
-  /**
-   * jsから渡されるpropsを検証して [[Props]] へ変換して描画
-   * 不正なpropsのときは何も描画しない（形の誤りは console.error に出す）
-   */
-  final val JsComponent = ScalaFnComponent[ThreadListProps] { raw =>
-    JsShape.read[ThreadListProps]("ThreadListJs", raw, ThreadListProps.fields).flatMap(Props.fromJs).fold[VdomNode](EmptyVdom)(Component(_))
-  }
+  /** 検証済みの props を [[Props]] へ変換して描画する。変換できない値なら何も描画しない */
+  def render(raw: ThreadListProps): VdomNode = Props.fromJs(raw).fold[VdomNode](EmptyVdom)(Component(_))
 }

@@ -53,7 +53,7 @@ class HonoRenderSuite extends munit.FunSuite {
       assertEquals(receivedProps.flatMap(_.title).toOption, Some("題名"))
       RendererShell.createSjisResponse(element, "text/html")
     })
-    context.renderPromise(page, props).toFuture.flatMap { response =>
+    context.renderPage(page, props).toFuture.flatMap { response =>
       val res = response.asInstanceOf[js.Dynamic]
       bytes(res).map { body =>
         assertEquals(body, sjisBytes("<!DOCTYPE html><main>日本語 &lt;&amp;&gt;</main>"))
@@ -70,7 +70,7 @@ class HonoRenderSuite extends munit.FunSuite {
       assert(props.isEmpty)
       js.Promise.resolve(expected)
     })
-    context.renderPromise(<.main("本文").rawElement).toFuture.map { response =>
+    context.renderPage(<.main("本文").rawElement).toFuture.map { response =>
       assert(response eq expected)
     }
   }
@@ -80,7 +80,7 @@ class HonoRenderSuite extends munit.FunSuite {
     app.use("*", ReactRendererMiddleware(props => Main.renderShell(props.children, props.title, "/static/client.js")))
     app.get("/", context => {
       val props = new RenderProps { title = "題名 <&>" }
-      context.renderPromise(<.main("日本語 <&>").rawElement, props)
+      context.renderPage(<.main("日本語 <&>").rawElement, props)
     })
     app.request("/").toFuture.flatMap { response =>
       val res = response.asInstanceOf[js.Dynamic]
@@ -100,7 +100,7 @@ class HonoRenderSuite extends munit.FunSuite {
     val context = new RenderContext(request("https://example.test/"))
     val failure = new js.Error("render failed")
     context.setRenderer((_, _) => js.Promise.reject(failure))
-    context.renderPromise(<.main("本文").rawElement).toFuture.failed.map {
+    context.renderPage(<.main("本文").rawElement).toFuture.failed.map {
       case js.JavaScriptException(error) => assert(error == failure)
       case error => fail(s"Unexpected rejection: $error")
     }

@@ -1,7 +1,7 @@
 package io._3ch.common.islands
 
-import io._3ch.common.validation.{JsField, JsKind, JsShape}
-import io._3ch.common.validation.JsShape.{optional, required}
+import hx4s.props.{JsField, JsKind, JsShape}
+import hx4s.props.JsShape.{optional, required}
 
 import scala.scalajs.js
 

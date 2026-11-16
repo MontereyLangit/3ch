@@ -2,7 +2,6 @@ package io._3ch.bbsclient.islands
 
 import io._3ch.common.islands.{AccountMenuProps, AccountPostItemProps, AccountTokenItemProps}
 import io._3ch.common.domain.account.TokenRevokeReason
-import io._3ch.common.validation.JsShape
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
@@ -93,10 +92,5 @@ object AccountMenuIsland {
           <.p(^.className := "mt-2 text-xs", "専用ブラウザのメール欄に入れて書き込んでください。24時間使われないと失効します。")) },
         <.p(^.role := "status", ^.className := "my-2", message.value))
     }
-  }
-
-  /** props を検証してから描画する。不正なら console.error に出して何も描画しない */
-  final val JsComponent = ScalaFnComponent[AccountMenuProps] { raw =>
-    JsShape.read[AccountMenuProps]("AccountMenuJs", raw, AccountMenuProps.fields).fold[VdomNode](EmptyVdom)(Component(_))
   }
 }

@@ -1,7 +1,6 @@
 package io._3ch.bbsclient.islands
 
 import io._3ch.common.islands.SiteHeaderProps
-import io._3ch.common.validation.JsShape
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
@@ -47,10 +46,5 @@ object SiteHeaderIsland {
               <.img(^.src := "/static/icon_extend.png", ^.alt := "", ^.className := "dropBtnSetting ml-[5px] mb-[2px] inline"))))
       ).withRef(header.ref)
     }
-  }
-
-  /** props を検証してから描画する。不正なら console.error に出して何も描画しない */
-  final val JsComponent = ScalaFnComponent[SiteHeaderProps] { raw =>
-    JsShape.read[SiteHeaderProps]("SiteHeaderJs", raw, SiteHeaderProps.fields).fold[VdomNode](EmptyVdom)(Component(_))
   }
 }

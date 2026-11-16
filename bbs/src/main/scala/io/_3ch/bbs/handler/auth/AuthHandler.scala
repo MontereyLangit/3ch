@@ -7,6 +7,7 @@ import io._3ch.bbs.service.posting.CapKey
 import io._3ch.bbs.components.{AccountCapProps, AccountComponent, AccountProps, AccountTokenProps, AccountPostProps, AccountTokenWarningProps, AuthComponent, AuthProps, AuthTokenComponent, AuthTokenProps}
 import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.hono.{HonoContextFacade, RenderProps}
+import io._3ch.bbs.external.hono.HonoContextFacade.*
 import io._3ch.bbs.external.web.{Request, Response, TextDecoder, URL}
 import io._3ch.bbs.handler.{PublicText, Responses}
 import io._3ch.bbs.hash.{AuthHmac, PasswordHasher, WebHasher}
@@ -231,7 +232,7 @@ object AuthHandler {
 
   /** 認証画面と本人向け設定画面を SSR する。未ログインでアカウント設定を開いたら認証画面へ送る */
   def page(c: HonoContextFacade, accountPage: Boolean = false): js.Promise[Response] = {
-    val request = c.req.raw
+    val request = c.request
     AuthEnv.settings(c.env) match {
       case None => js.Promise.resolve[Response](notFound(request))
       case Some(config) =>
@@ -240,7 +241,7 @@ object AuthHandler {
         props.title = if (accountPage) "アカウント設定" else if (upgrade) "登録方法の切り替え" else "認証・登録"
         val rendered = Future.unit.flatMap { _ =>
           if (accountPage) account(c, config, props)
-          else c.renderPromise(AuthComponent.Component(AuthProps(config.turnstileSiteKey, safeReturn(c.req.query("return").getOrElse("/"), request.url),
+          else c.renderPage(AuthComponent.Component(AuthProps(config.turnstileSiteKey, safeReturn(c.req.query("return").getOrElse("/"), request.url),
             c.req.query("embed").contains("1"), c.req.query("mode").contains("login"), config.agreementVersion,
             AuthEnv.google(c.env).isDefined, notice(c.req.query("error").getOrElse("")).getOrElse(""), MailSenders.from(c.env).isDefined, upgrade)).rawElement, props).toFuture
         }
@@ -254,7 +255,7 @@ object AuthHandler {
 
   /** メールのリンクの画面。トークンの消費は画面のボタンからの POST で行う */
   def tokenPage(c: HonoContextFacade, reset: Boolean): js.Promise[Response] = {
-    val request = c.req.raw
+    val request = c.request
     AuthEnv.settings(c.env) match {
       case None => js.Promise.resolve[Response](notFound(request))
       case Some(config) =>
@@ -269,7 +270,7 @@ object AuthHandler {
           .getOrElse(Future.successful(None)).recover { case NonFatal(_) => None }
         target.flatMap { found =>
           val token = if (found.isDefined || MailSenders.from(c.env).isEmpty) link.map(_.text).getOrElse("") else ""
-          c.renderPromise(AuthTokenComponent.Component(AuthTokenProps(reset, token, MailSenders.from(c.env).isDefined,
+          c.renderPage(AuthTokenComponent.Component(AuthTokenProps(reset, token, MailSenders.from(c.env).isDefined,
             found.fold("")(_._1), found.fold("")(_._2))).rawElement, props).toFuture
         }.map(secure).recover { case error => failure(error) }.toJSPromise
     }
@@ -277,7 +278,7 @@ object AuthHandler {
 
   private def account(c: HonoContextFacade, config: AuthSettings, props: RenderProps): Future[Response] = {
     val repository = new AccountRepository(c.env)
-    managed(c.req.raw, config.secret, repository, now).flatMap { case (session, account) =>
+    managed(c.request, config.secret, repository, now).flatMap { case (session, account) =>
       repository.inspect(account.aid).flatMap { panel =>
         val tokens = panel.tokens.map(token => AccountTokenProps(token.id, token.label, token.issuedAt, token.expiresAt,
           token.boundAt, token.lastUsedAt, token.revokedAt, token.revokeReason, token.replacedTokenAt,
@@ -286,7 +287,7 @@ object AuthHandler {
         val device = DeviceHashRef.parse(session.device).map(_.granularity)
         val caps = panel.caps.map(cap => AccountCapProps(cap.id, cap.name, cap.strong, cap.issuedAt, cap.revokedAt,
           cap.recentPosts.map(post => AccountPostProps(post.t, post.bbs, post.key, post.title, post.resNum, post.excerpt, post.network))))
-        c.renderPromise(AccountComponent.Component(AccountProps(account.uid, account.lv, tokens, panel.activeCount,
+        c.renderPage(AccountComponent.Component(AccountProps(account.uid, account.lv, tokens, panel.activeCount,
           kind = account.kind, expiresAt = account.expiresAt, device = device, deviceCount = panel.deviceCount, caps = caps, roles = account.roles,
           email = panel.email, pendingEmail = panel.pendingEmail, mailEnabled = MailSenders.from(c.env).isDefined,
           notice = notice(c.req.query("error").getOrElse("")).getOrElse(""), google = AuthEnv.google(c.env).isDefined)).rawElement, props).toFuture

@@ -7,7 +7,7 @@
     "deploy": "npm run v6:build && wrangler deploy --config wrangler.jsonc --minify",
     "pretest": "sbt bbs/Test/fastLinkJS bbsClient/fastLinkJS",
     "test": "node --test tests/*.test.js",
-    "v6:generate": "sbt codegen/run",
+    "v6:generate": "sbt bbs/hx4sGenerate codegen/run",
     "v6:build:client": "vite build --mode client",
     "v6:build:server": "vite build --mode workers",
     "v6:build": "npm run v6:generate && npm run v6:build:client && npm run v6:build:server",

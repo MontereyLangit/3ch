@@ -1,6 +1,9 @@
 package io._3ch.bbs.external.hono
 
+import hx4s.hono.Context
 import io._3ch.bbs.external.cloudflare.WorkerEnv
+import io._3ch.bbs.external.web.{Request, Response}
+import japgolly.scalajs.react.facade.React
 
 import scala.scalajs.js
 
@@ -11,8 +14,16 @@ trait RenderProps extends js.Object {
 }
 
 /** 3ch の Hono Context */
-type HonoContextFacade = HonoContext[WorkerEnv, RenderProps]
+type HonoContextFacade = Context[WorkerEnv, RenderProps]
 
+/** hx4s の Context が使う scalajs-dom の Request / Response を、3ch の Fetch facade（external.web）として読む境界 */
 object HonoContextFacade {
-  export io._3ch.bbs.external.hono.HonoContext.renderPromise
+  extension (c: HonoContextFacade) {
+    /** c.req.raw */
+    def request: Request = c.req.raw.asInstanceOf[Request]
+
+    /** c.render の結果を Promise にそろえて返す */
+    def renderPage(children: React.Element, props: js.UndefOr[RenderProps] = js.undefined): js.Promise[Response] =
+      c.renderPromise(children, props).asInstanceOf[js.Promise[Response]]
+  }
 }

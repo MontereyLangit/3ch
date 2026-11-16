@@ -1,7 +1,6 @@
 package io._3ch.bbsclient.islands
 
 import io._3ch.common.islands.AuthFormProps
-import io._3ch.common.validation.JsShape
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
@@ -223,10 +222,5 @@ object AuthFormIsland {
           if registering && choice == AuthMethod.Client then "この端末に認証情報（Cookie）を保存します。次からは認証不要です。"
           else "この端末に認証情報（Cookie）を保存します。") else EmptyVdom)
     }
-  }
-
-  /** props を検証してから描画する。不正なら console.error に出して何も描画しない */
-  final val JsComponent = ScalaFnComponent[AuthFormProps] { raw =>
-    JsShape.read[AuthFormProps]("AuthFormJs", raw, AuthFormProps.fields).fold[VdomNode](EmptyVdom)(Component(_))
   }
 }

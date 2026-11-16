@@ -2,6 +2,7 @@ package io._3ch.bbs.handler
 
 import io._3ch.bbs.components.{BoardIndexComponent, BoardIndexProps}
 import io._3ch.bbs.external.hono.{HonoContextFacade, RenderProps}
+import io._3ch.bbs.external.hono.HonoContextFacade.*
 import io._3ch.bbs.external.web.Response
 import io._3ch.bbs.repository.BoardRepository
 import io._3ch.bbs.handler.auth.{AuthEnv, SessionReader}
@@ -55,7 +56,7 @@ object BoardHandler {
 
         val viewType = if c.req.query("type").contains("feed") then "feed" else "subback"
         val sort = c.req.query("sort").filter(Set("new", "speed", "res")).getOrElse("new")
-        c.renderPromise(
+        c.renderPage(
           BoardIndexComponent.Component(BoardIndexProps(
             title, headText, board, viewType, subjects, boardSettings.value,
             c.req.query("q").getOrElse(""), sort, math.floor(js.Date.now() / 1000).toLong.toString,
