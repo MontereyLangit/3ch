@@ -96,7 +96,7 @@ class HonoRenderSuite extends munit.FunSuite {
     }
   }
 
-  test("renderPromiseは非同期レンダラのrejectを伝播する") {
+  test("renderPageは非同期レンダラのrejectを伝播する") {
     val context = new RenderContext(request("https://example.test/"))
     val failure = new js.Error("render failed")
     context.setRenderer((_, _) => js.Promise.reject(failure))

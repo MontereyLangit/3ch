@@ -13,7 +13,7 @@
 - 利用側: `WorkerEnv` の `THREAD_DO: DurableObjectNamespace[ThreadDoStub]` 等（`Bindings.scala`）。
   `get` が型付きスタブを返すので、呼び出し側の `asInstanceOf[...DoStub]` は不要。
 - `ThreadInspectResult` のような結果オブジェクトの facade は `Bindings.scala` に手書きのまま残す。
-- `npm run v6:generate`（`sbt codegen/run`）はルートと TS 型の生成のみ。Scala スタブは生成しない。
+- `npm run v6:generate`（`sbt bbs/hx4sGenerate codegen/run`）はルート（hx4s）と TS 型（`codegen/run`）の生成のみ。Scala スタブは生成しない。
 
 ## 生成仕様
 

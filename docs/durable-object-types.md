@@ -1,6 +1,6 @@
 # Durable Object の TypeScript 型生成
 
-`npm run v6:generate`（`sbt codegen/run`）で、ルートとともに
+`npm run v6:generate`（`sbt bbs/hx4sGenerate codegen/run`）の `codegen/run` で、ルートとともに
 `app/scalajs-durable-objects.generated.d.ts` を生成する。`npm run v6:build` からも実行される。
 生成ファイルは Git に含める。手編集せず、DO の変更時に再生成する。
 `app/scalajs-server.d.ts` は `renderShell` の手書き宣言を保持する。

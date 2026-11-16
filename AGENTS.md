@@ -46,7 +46,7 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 ### 1.3 技術スタック（現行 v6）
 
 - **ランタイム**: Cloudflare Workers (ES Modules, `compatibility_date: 2026-10-02`。`nodejs_compat` は既定で有効)
-- **言語 / フレームワーク**: Scala 3 / Scala.js（`bbs/` = Worker・DO・ハンドラ、`common/` = 純粋ロジック）+ scalajs-react + HonoX + Vite。`codegen` は `bbs.Main` の `@route` と `bbsclient.Main` の `@islands` から配線を生成。手書きの route は `app/routes/` の `index.ts`（トップページ）、`admin/index.ts`・`auth.js.ts`・`bbsmenu.html.ts`（`publicHandler` へ渡すだけ）と `_renderer.tsx`（生成マーカーの無いファイル）
+- **言語 / フレームワーク**: Scala 3 / Scala.js（`bbs/` = Worker・DO・ハンドラ、`common/` = 純粋ロジック）+ scalajs-react + HonoX + Vite。Scala.js と HonoX の連携は独立フレームワーク **hx4s**（`sbt-hx4s`・`hx4s-core`・`hx4s-react`・`hx4s-vite`。別リポジトリで、`hx4s.lock.json` の commit と版でローカル公開したものを使う。`docs/development.md`）に任せ、`bbs.Main` の `@route` と `bbsclient.Main` の `@islands` から配線を生成する（`docs/codegen.md`）。手書きの route は `app/routes/` の `index.ts`（トップページ）、`admin/index.ts`・`auth.js.ts`・`bbsmenu.html.ts`（`publicHandler` へ渡すだけ）と `_renderer.tsx`（生成マーカーの無いファイル）
   - 管理画面はscalajs-reactのSPA。利用者向け画面はHonoX SSR (Islands)
 - **状態管理**: Durable Objects — `Board`（板: スレ一覧 / 削除済み一覧）, `Thread`（スレ: dat / log / settings / hidden / stopped / movedTo）
 - **オブジェクトストレージ**: R2 `ch3www`（`SETTING.TXT`, `head.txt`, `bbsmenu.html`, `headline.txt`, `deny.cgi`, `ngwords.cgi`, 過去ログ `.cgi`）
@@ -58,7 +58,7 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 ```
 common/                Scala (JVM/JS cross)。純粋ロジック（ルート表 RouteTable.scala, BoardId / ThreadKey / BbsSettings 等）。
                        domain/account/ はアカウント・Cookie・専ブラキー・ログイン失敗の規則、domain/device/ は端末ハッシュと Client Hints
-                       src/main/scala-js/ は JS 専用: islands/ は island の props の trait、validation/ は境界の値の汎用検証（JsShape）
+                       src/main/scala-js/ は JS 専用: islands/ は island の props の trait と検証用の fields（hx4s の JsShape）
 bbs/
   src/main/scala/io/_3ch/bbs/
     Main.scala         Worker エントリ（JSExportTopLevel）
@@ -72,11 +72,10 @@ bbs/
     external/cloudflare/  Workers / DO / R2 / KV の facade（DO の RPC スタブ `*DoStub` はコンパイル時に codegen が生成。docs/durable-object-stubs.md）
     hash/, util/       Web Crypto ハッシュ（SHA-1 / SHA-256）, Shift_JIS 変換
   src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
-  test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ
+  test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ（scalajs:client.js と hono/jsx は hx4s-vite/node-loader）
 bbs-client/            クライアント側（hydration）Scala
-codegen/               @route / @islands から app/routes/・app/islands/・bbs の IslandComponents（src_managed）を、DO から TS 型と Scala RPC スタブを生成。
-                       framework/ が汎用部分（hx4s へ移す予定）、GenerateAppFiles が 3ch の設定（docs/codegen.md）
-vite/                  Scala.js × HonoX の汎用 Vite 設定（vite.config.ts は 3ch 固有の設定だけを持つ）
+codegen/               DO から TS 型と Scala RPC スタブを生成（@route / @islands の配線は hx4s の sbt-hx4s。build.sbt の bbs の hx4s* 設定）
+scripts/setup-hx4s.mjs hx4s を hx4s.lock.json の commit と版でローカル公開し、npm 依存と hx4s-vite を入れる
 app/                   HonoX（server.ts がエントリ。routes/index.ts と _renderer.tsx は手書き）
 public/
   3chiko.html          3chiko.html本体。Vite の publicDir として dist/ へコピーされ Workers Static Assets で配信
@@ -106,16 +105,17 @@ wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
 | `docs/admin-spa-auth-plan.md`                                                          | 管理画面の改修計画（アカウント認証化・新 UI・scalajs-react SPA。2026-11-02、未着手）                                                                                                            |
 | `docs/admin-spa-auth-review.md`                                                        | 管理画面改修計画の Opus 5 セルフレビュー記録（2026-11-02）                                                                                                                               |
 | `docs/durable-object-stubs.md`                                                         | DO の RPC スタブ（`*DoStub`）のコンパイル時生成の仕様・対応範囲・運用手順                                                                                                            |
-| `docs/codegen.md`                                                                      | `@route` / `@islands` の配線生成（hx4s へ移す framework 部分と 3ch の設定）の規則・設定・出力の安全策・エラー形式                                                                     |
-| `docs/hx4s-foundation-review.md`                                                       | codegen の framework 分離・型付き island props のレビュー記録（2026-11-16。セルフレビューと Codex CLI）                                                                          |
+| `docs/development.md`                                                                  | 開発環境。hx4s の取得・版の固定・ローカル公開の手順と、CI への組み込み案                                                                                                              |
+| `docs/codegen.md`                                                                      | `@route` / `@islands` の配線生成（hx4s）の 3ch の設定と、DO の型・スタブ生成。規則の本体は hx4s の文書                                                                                |
+| `docs/hx4s-foundation-review.md`                                                       | codegen の framework 分離・型付き island props のレビュー記録と、hx4s への移行（Phase 4）の記録（2026-11-16）                                                                    |
 | `docs/thread-creation-regulation.md` / `docs/global-thread.md`                         | 投稿機能の追加仕様（スレ立て規制、全板共通スレ 924 / 900）                                                                                                                            |
 | `docs/post-rate-limit.md`                                                              | 連投規制（ごんたくれ・Samba24・広域 FlyRibbon・スレ連投・コピペ吸い込み、段階 `BBS_FR_LEVEL`。既定は規制＋FlyRibbon）の仕様と保存形式                                                                       |
 
 ### 1.6 開発コマンド
 
 ```bash
-npm ci                 # 依存導入
-npm run v6:build       # sbt codegen/run → vite build（client / workers）→ dist/
+npm run hx4s:setup     # 依存導入（hx4s をローカル公開 → npm ci → hx4s-vite の tgz を --no-save で入れる。npm ci だけでは hx4s-vite が入らない）
+npm run v6:build       # sbt bbs/hx4sGenerate codegen/run → vite build（client / workers）→ dist/
 npm run dev            # v6:build 後に wrangler dev --config wrangler.jsonc → http://127.0.0.1:8787
 sbt test               # 単体テスト/現仕様固定テスト（munit。golden 照合を含む）
 npm test               # Scala テスト用リンク → workerd 統合・Islands SSR/hydration 検証（要 dist/）

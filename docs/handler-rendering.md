@@ -8,9 +8,9 @@
 ## 通常画面
 
 `VdomElement.rawElement` は scalajs-react の `React.Element`（実体は React の要素）を返す。
-文字列化や JSON 変換は不要。`HonoContextFacade.render` にそのまま渡せる。
+文字列化や JSON 変換は不要。`HonoContextFacade`（`hx4s.hono.Context[WorkerEnv, RenderProps]` の別名）の `render` にそのまま渡せる。
 Hono の戻り値は `Response | Promise<Response>` なので、Promise を返す handler では
-`js.Promise.resolve[Response](c.render(...))` または `c.renderPromise(...)` を使う。
+`c.renderPage(...)`（`HonoContextFacade.*` の拡張）を使う。hx4s の Context の `Request` / `Response` は scalajs-dom の型なので、3ch の Fetch facade（`external.web`）として扱う変換は `HonoContextFacade` の `request`・`renderPage` だけで行う。
 
 ```scala
 import io._3ch.bbs.external.hono.{HonoContextFacade, RenderProps}
@@ -26,11 +26,11 @@ def pageHandler(c: HonoContextFacade): js.Promise[Response] = {
   val props = new RenderProps {}
   props.title = "板一覧"
   val page = <.main(<.h1("板一覧"))
-  c.renderPromise(page.rawElement, props)
+  c.renderPage(page.rawElement, props)
 }
 ```
 
-`@route` は `io._3ch.common.routes.route`。`props` は省略可能。`RenderProps` は `app/renderer.d.ts` の Props と対応させる。
+`@route` は `hx4s.annotation.route`。`props` は省略可能。`RenderProps` は `app/renderer.d.ts` の Props と対応させる。
 通常画面は既存の `_renderer.tsx` と `RendererShell` により UTF-8 のレイアウト付き応答になる。
 Hono の API は [render / setRenderer](https://hono.dev/docs/api/context#render-setrenderer) を参照。
 
@@ -50,10 +50,10 @@ React 要素は `renderToStaticMarkup` で HTML 化し、文字列はそのま�
 
 ## Islands
 
-Island は `bbs-client/.../Main.scala` の export に `@islands[P]("x.tsx")` を付けて宣言する。codegen がブラウザ用の
+Island は `bbs-client/.../Main.scala` の export に `@islands[P]("x.tsx")` を付けて宣言する。hx4s の codegen がブラウザ用の
 `app/islands/x.tsx` と、SSR 用の `io._3ch.bbs.generated.IslandComponents` を生成する。handler は生成 API を呼び、
-戻り値の `VdomElement` をページの子要素にするか `c.renderPromise(island.rawElement)` に渡す。
-SSR 側は `app/islands/*.tsx` を import せず、生成 API が HonoX の `HonoXIsland` で包むので、hydration 用の識別情報と props が付く。
+戻り値の `VdomElement` をページの子要素にするか `c.renderPage(island.rawElement)` に渡す。
+SSR 側は `app/islands/*.tsx` を import せず、生成 API が `hx4s.react.Island`（HonoX の `HonoXIsland`）で包むので、hydration 用の識別情報と props が付く。
 宣言・props の型・検証は `docs/islands-ssr.md` を参照。
 
 props は HonoX が JSON 化できる JS オブジェクトにする。Scala のケースクラスや関数は渡さない。
