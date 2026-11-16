@@ -44,8 +44,37 @@ class CodegenMainSuite extends FunSuite {
         "missing value for --route-dir"))
       val missing = CodegenMain.parse(List("app", "--scala-object", "A", "--scala-object", "B")).left.getOrElse(fail("expected errors"))
       assert(missing.exists(_.message == "option --scala-object is given more than once"), missing)
-      assert(missing.exists(_.message == "missing option --route-dir"), missing)
+      assert(missing.exists(_.message == "missing option --scala-package"), missing)
       assert(missing.exists(_.message == "missing option --server-sources"), missing)
+      assert(!missing.exists(_.message == "missing option --route-dir"), "route-dir には既定値がある")
+    }
+  }
+
+  test("省いたキーは CodegenConfig.default の HonoX の既定にする") {
+    withTempDir { root =>
+      val minimal = List("app", "--project-root", root.toString, "--server-sources", "server/App.scala", "--client-sources", "client/App.scala",
+        "--scala-package", "example.generated", "--island-bridge", "example.bridge.Island", "--annotation-package", "example.annotations")
+      val expected = CodegenConfig.default(root.toAbsolutePath.normalize(), List("server/App.scala"), List("client/App.scala"),
+        "example.generated", "example.bridge.Island", "example.annotations")
+      assertEquals(CodegenMain.parse(minimal), Right(CodegenMain.Command.App -> expected))
+      assertEquals((expected.routeDir, expected.islandDir, expected.islandIdPrefix, expected.serverModule, expected.clientModule,
+        expected.virtualModulePrefix, expected.scalaObject), ("app/routes", "app/islands", "/app/islands/", "server", "client", "scalajs:", "IslandComponents"))
+      assert(expected.banner.head.startsWith(expected.generatedMarker))
+    }
+  }
+
+  test("空のマーカーやバナーの 1 行目がマーカーで始まらない設定は、引数の解釈でも生成でも拒否する") {
+    withTempDir { root =>
+      val base = args(root)
+      val withEmptyMarker = base.updated(base.lastIndexOf("--generated-marker") + 1, "")
+      val emptyMarker = CodegenMain.parse("app" :: withEmptyMarker).left.getOrElse(fail("expected errors"))
+      assert(emptyMarker.exists(_.message.contains("generatedMarker must not be empty")), emptyMarker)
+      val mismatch = TestConfig(root).copy(banner = List("// other banner"))
+      assert(Codegen.validate(mismatch).left.exists(_.exists(_.message.contains("must start with generatedMarker"))))
+      Files.createDirectories(root.resolve("app/routes"))
+      Files.writeString(root.resolve("app/routes/manual.ts"), "// handwritten\nexport default 1;\n")
+      assert(Codegen.appFiles(TestConfig(root).copy(generatedMarker = "", banner = List("// x"))).isLeft)
+      assertEquals(Files.readString(root.resolve("app/routes/manual.ts")), "// handwritten\nexport default 1;\n")
     }
   }
 

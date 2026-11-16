@@ -14,7 +14,6 @@ object CodegenMain {
   }
 
   private val Repeatable = Set("server-sources", "client-sources", "banner")
-  private val Defaults = Map("server-module" -> "server", "client-module" -> "client", "virtual-module-prefix" -> "scalajs:")
   private val Keys = Set(
     "project-root", "server-sources", "client-sources", "server-module", "client-module", "route-dir", "island-dir",
     "island-id-prefix", "scala-output", "scala-package", "scala-object", "island-bridge", "annotation-package",
@@ -31,7 +30,10 @@ object CodegenMain {
     }
   }
 
-  /** 引数を解釈する。`server-sources` / `client-sources` はカンマ区切りか繰り返し、`banner` は 1 行ずつ繰り返す */
+  /**
+   * 引数を解釈し、設定を確かめる。省いたキーは CodegenConfig.default の値にする
+   * `server-sources` / `client-sources` はカンマ区切りか繰り返し、`banner` は 1 行ずつ繰り返す
+   */
   def parse(args: List[String], workingDirectory: Path = Paths.get(System.getProperty("user.dir"))): Result[(Command, CodegenConfig)] = {
     def error(message: String) = CodegenError("<args>", None, message)
     val command = args.headOption match {
@@ -56,39 +58,36 @@ object CodegenMain {
   private def toConfig(command: Command, values: Map[String, List[String]], workingDirectory: Path): Result[(Command, CodegenConfig)] = {
     def error(message: String) = CodegenError("<args>", None, message)
     val repeated = values.collect { case (key, list) if list.size > 1 && !Repeatable(key) => error(s"option --$key is given more than once") }.toList
-    def one(key: String): Result[String] =
-      values.get(key).flatMap(_.headOption).orElse(Defaults.get(key)).toRight(List(error(s"missing option --$key")))
+    def single(key: String): Option[String] = values.get(key).flatMap(_.headOption)
     def many(key: String): List[String] = values.getOrElse(key, Nil).flatMap(_.split(",")).map(_.trim).filter(_.nonEmpty)
-    val projectRoot = values.get("project-root").flatMap(_.headOption).fold(workingDirectory)(Paths.get(_)).toAbsolutePath.normalize()
-    val required = CodegenError.sequence(List("server-module", "client-module", "route-dir", "island-dir", "island-id-prefix",
-      "scala-package", "scala-object", "island-bridge", "annotation-package", "virtual-module-prefix", "generated-marker").map(key => one(key).map(key -> _)))
-    val lists = CodegenError.sequence(List("server-sources", "client-sources", "banner").map { key =>
-      val list = if (key == "banner") values.getOrElse(key, Nil) else many(key)
+    val projectRoot = single("project-root").fold(workingDirectory)(Paths.get(_)).toAbsolutePath.normalize()
+    val required = CodegenError.sequence(List("scala-package", "island-bridge", "annotation-package").map { key =>
+      single(key).map(key -> _).toRight(List(error(s"missing option --$key")))
+    })
+    val sources = CodegenError.sequence(List("server-sources", "client-sources").map { key =>
+      val list = many(key)
       if (list.isEmpty) Left(List(error(s"missing option --$key"))) else Right(key -> list)
     })
-    (required, lists) match {
-      case (Right(single), Right(multi)) if repeated.isEmpty =>
-        val s = single.toMap
-        val m = multi.toMap
-        Right(command -> CodegenConfig(
-          projectRoot = projectRoot,
-          serverSources = m("server-sources"),
-          clientSources = m("client-sources"),
-          serverModule = s("server-module"),
-          clientModule = s("client-module"),
-          routeDir = s("route-dir"),
-          islandDir = s("island-dir"),
-          islandIdPrefix = s("island-id-prefix"),
-          scalaOutput = values.get("scala-output").flatMap(_.headOption).map(Paths.get(_)),
-          scalaPackage = s("scala-package"),
-          scalaObject = s("scala-object"),
-          islandBridge = s("island-bridge"),
-          annotationPackage = s("annotation-package"),
-          virtualModulePrefix = s("virtual-module-prefix"),
-          banner = m("banner"),
-          generatedMarker = s("generated-marker")
-        ))
-      case _ => Left(repeated ++ required.left.getOrElse(Nil) ++ lists.left.getOrElse(Nil))
+    (required, sources) match {
+      case (Right(r), Right(s)) if repeated.isEmpty =>
+        val req = r.toMap
+        val src = s.toMap
+        val base = CodegenConfig.default(projectRoot, src("server-sources"), src("client-sources"), req("scala-package"), req("island-bridge"),
+          req("annotation-package"))
+        val config = base.copy(
+          serverModule = single("server-module").getOrElse(base.serverModule),
+          clientModule = single("client-module").getOrElse(base.clientModule),
+          routeDir = single("route-dir").getOrElse(base.routeDir),
+          islandDir = single("island-dir").getOrElse(base.islandDir),
+          islandIdPrefix = single("island-id-prefix").getOrElse(base.islandIdPrefix),
+          scalaOutput = single("scala-output").map(Paths.get(_)),
+          scalaObject = single("scala-object").getOrElse(base.scalaObject),
+          virtualModulePrefix = single("virtual-module-prefix").getOrElse(base.virtualModulePrefix),
+          banner = values.getOrElse("banner", base.banner),
+          generatedMarker = single("generated-marker").getOrElse(base.generatedMarker)
+        )
+        Codegen.validate(config).map(_ => command -> config)
+      case _ => Left(repeated ++ required.left.getOrElse(Nil) ++ sources.left.getOrElse(Nil))
     }
   }
 }
