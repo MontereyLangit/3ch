@@ -81,3 +81,110 @@ framework からの 3ch の型への直接の依存は解消されていて、�
 
 - IntelliJ の脆弱性インスペクションの指摘を受け、`hono` を 4.13.11 から 4.13.18 に上げた。4.13.11 には `mount()` のミドルウェア迂回、RegExpRouter のワイルドカード、`css` ヘルパーの HTML 注入、`csrf()` の `text/ping` 未検査、`validator('form')` の multipart 迂回の各勧告（`npm audit`）があった。3ch は `csrf()` を使わず、`hono/trailing-slash` と honox 経由の利用だけである。
 - `npm ls hono` で honox・`@hono/react-renderer`・`@hono/vite-build` が 4.13.18 に揃うことを確かめた。`sbt test`（218 件）、`npm run v6:build`、`npm run v6:typecheck`、`npm test`（80 件）はすべて通り、`npm audit` から hono の指摘は消えた。
+
+## Phase 4: hx4s の利用側への移行（2026-11-16）
+
+対象は `8c8404e..2888791` の 4 コミット。hx4s は `d133d7c1f1`（`develop`）を `0.1.0-local.1` としてローカル公開したものを使う（`hx4s.lock.json`）。
+hx4s のソースは変更していない。
+
+### hx4s に委ねたもの・3ch に残したもの
+
+| hx4s に委ねた | 3ch に残した |
+| --- | --- |
+| `@route` / `@islands` のアノテーション（`hx4s.annotation`）、走査と route / island / `IslandComponents` の生成（`sbt-hx4s` の `hx4sGenerate` と `sourceGenerators`）、client ↔ server の依存の検査（`hx4sCheckDependencies`） | `bbs.Main` / `bbsclient.Main` の宣言、生成の設定（2 つの `Main` だけを走査、`io._3ch.bbs.generated`、旧マーカー） |
+| `JsShape`・`JsField`・`JsKind`（`hx4s.props`）、`Island`（`hx4s.react`）、client の export の型 `IslandExport[P]` | 各 props の trait と `fields`・`validate`、板名などを確かめる `render`（`Props.fromJs`） |
+| Hono の Context の facade（`hx4s.hono.Context`） | `HonoContextFacade`（`Context[WorkerEnv, RenderProps]` の別名）、`RenderProps`、Fetch の型の境界 |
+| Vite の配線（Scala.js プロジェクトの登録と直列化、`scalajs:client.js` の別名、honox の React 設定、client の出力名） | Tailwind、`@hono/vite-build/cloudflare-workers`（external と DO の再 export）、`app/client.ts` |
+| hydrate 前の props の検証（`hx4s-vite/client` の `islandPropsProblem`） | 板top の hydration・island の描画・バンドルの 3ch 固有のテスト |
+| Node 用 loader の `scalajs:client.js` と `hono/jsx`（`hx4s-vite/node-loader`） | `cloudflare:workers` のスタブ |
+| 汎用のテスト（旧 `tests/islands-bridge`・`islands-hydration`、codegen の framework のテスト） | DO の TS 型と RPC スタブの生成（`codegen/`） |
+
+### Request / Response の型
+
+hx4s の `Context` は Fetch の `Request` / `Response` を scalajs-dom の型で持つ。3ch のハンドラ・リポジトリ・テストは
+手書きの `external.web.{Request, Response, ResponseInit}`（`cf`・`ResponseInit.headers: js.Object` など 3ch が使う形）で書かれている。
+
+採った方法は「境界の 1 か所で読み替える」。`HonoContextFacade` の拡張 `request`（`c.req.raw`）と `renderPage`（`c.render` を Promise にそろえる）だけが
+`asInstanceOf` を持ち、ハンドラは `c.request` / `c.renderPage(...)` を使う。どちらも実行時は同じ JS オブジェクトなので変換の費用は無い。
+
+見送った案:
+
+- 3ch の facade を scalajs-dom の型の別名にする: `new Response(body, init)` の `ResponseInit`・`Headers` の型、`Request.cf` の扱いが変わり、
+  ハンドラ・リポジトリ・テストの多くに差分が出る。最小の差分に反する
+- 3ch の facade を scalajs-dom の型の拡張にする: `dom.Request` / `dom.Response` は JS のクラスで、native trait から継承すると
+  コンストラクタと型の関係が込み入る。得るものが境界の 2 か所の読み替えと変わらない
+- hx4s の `renderPromise` と同じ名前の拡張を 3ch に置く: hx4s の拡張（`Context` の companion。implicit scope で見つかる）と名前がぶつかり、
+  import の有無で解決先が変わる。読み手に分かりにくいので `renderPage` という別名にした
+
+### 挙動の変化
+
+- SSR の HTML は変わらない。認証の統合テストと同じ構成（ローカルストレージ、`persist: false`）で板top（通常・feed・ログイン中）・認証画面（通常・ログイン・埋め込み）・
+  アカウント画面を移行前後で取得し、uid・時刻を伏せたうえでバイト単位で一致した（`data-serialized-props` を含む）。
+- 本番の `wrangler.jsonc` の構成（ローカル、`persist: false`）で、`/`・`/3chiko.html`・`/bbsmenu.html`・`/test/subject.txt`（Shift_JIS）・`/test/SETTING.TXT`・
+  `/test/`・存在しない dat・`/test/read.cgi/...`・`/admin/`・`/auth/`・`/auth.js`・存在しないパスのステータス・Content-Type・本文のハッシュが移行前と一致した。
+  `/test/bbs.cgi` への POST はステータスと Content-Type が一致し、本文は移行前どうしでも乱択のエラー文言で毎回変わる（`Referer is invalid` の拒否で同じ）。
+  投稿の成功経路は `post-rate.integration.test.js` と投稿スナップショット（`PostingSuite`）で確かめた。
+- サーバー側で props が `fields` に合わないときは、移行前の `JsComponent` と同じく `console.error` を出して何も描画しない（`IslandExport.apply`）。
+- client 側は、hydrate の前に `islandPropsProblem` で props を確かめ、合わなければ `console.error` を出して hydrate せず SSR の markup を残す。
+  移行前は hydrate したうえで `JsComponent` が空を描画し、SSR の内容が消えていた。HTML と client の世代がずれたときだけ表に出る違いで、
+  正常な配信では変わらない。`tests/board-top-hydration.test.js` に、`thread-list` の props から `now` を外した HTML で
+  スレ一覧だけが SSR のまま残り、残りの 2 つは hydrate されることを足した。
+- client の export が `ScalaFnComponent.withDisplayName(<export 名>)` を通るので、React DevTools での名前が export 名になる（描画結果は同じ）。
+- `hx4s-codegen` の新しい検査（同じ URL への衝突、HonoX が無視する名前、HEAD）で弾かれる生成ルートは無かった。
+
+### バンドルサイズ（`vite build` の値。移行前は `fa757fb`）
+
+| 成果物 | 移行前 | 移行後 |
+| --- | --- | --- |
+| `dist/index.js`（Worker） | 2,152,287 B（gzip 577.53 kB） | 2,150,594 B（gzip 577.53 kB） |
+| `dist/static/client.js`（client の入口） | 210,378 B | 211,128 B（`islandPropsProblem` の分） |
+| `dist/static/assets/client-*.js`（Scala.js の client） | 578,177 B | 576,394 B（各 island の `JsComponent` を消した分） |
+| island の chunk（12 個） | 70 B ずつ | 70 B ずつ |
+| `runtime-*.js`（HonoX） | 1,997 B | 1,997 B |
+
+### 検証（`2888791`。この記録のコミットは文書だけ）
+
+`~/.ivy2/local/io.github.montereylangit`、3ch の `node_modules`・各 `target`（`project/target`・`project/project` を含む）・`dist` を消してから実行した。
+
+| コマンド | 結果 |
+| --- | --- |
+| `node scripts/setup-hx4s.mjs` | 成功（hx4s の HEAD と作業ツリーを確かめ、`0.1.0-local.1` を公開、`npm ci`、tgz を `--no-save`）。`package-lock.json` は変わらない |
+| `npm run v6:build` | 成功。`route / island files: wrote 0, unchanged 17, deleted 0`、DO の型は unchanged |
+| `npm run v6:typecheck` | 成功 |
+| `sbt test` | 成功。commonJVM 218 件、commonJS 227 件（`JsShapeSuite` 5 件は hx4s へ）、bbsClient 2 件、codegen 14 件（framework と `GenerateAppFilesSuite` 42 件は hx4s へ）、bbs 950 件 |
+| `npm test` | 74 件すべて成功（skip なし。workerd の統合テストを含む。移行前の 80 件から汎用の 7 件を hx4s へ移し、export の検証関数の 1 件を足した） |
+| `sbt 'set ThisBuild / scalacOptions += "-no-indent"' Test/compile` | 成功 |
+| `sbt bbs/hx4sGenerate codegen/run` を 2 回 | 2 回とも `wrote 0, unchanged 17, deleted 0` |
+| ビルド・テスト後の `git status --porcelain --untracked-files=all` | 空 |
+| `wrangler dev`（本番設定、使い捨てのローカルストレージ）とアプリ内ブラウザ | `/test/` の 3 つの island（`site-header`・`board-details`・`thread-list`）が hydrate され、パネルの開閉が動き、コンソールにエラーは無かった |
+| `dist/index.js` の export | `Account`・`AccountIndex`・`AuthRate`・`Board`・`Thread`・`default` |
+
+Playwright は 3ch の依存に無いので入れず、Claude のアプリ内ブラウザ（Chromium）で確かめた。
+
+### hx4s 側に必要と分かったこと
+
+hx4s は直さず、3ch 側にも回避の実装は足していない。
+
+1. `hx4s.hono.Context` に `executionCtx` が無い。3ch の `publicHandler` は `c.executionCtx` を使うので `js.Dynamic` のままにしている。
+   再現: `Context[Env, R]` の値から `executionCtx` を読もうとするとコンパイルエラー。必要な変更: `val executionCtx: js.Any`（型付きにするなら利用側が型引数で渡す）。
+2. Node の loader を利用側の loader と組み合わせる方法が文書に無い。`hx4s-vite/node-register` は hx4s の loader だけを登録するので、
+   Cloudflare のスタブなどを足す利用側は `register('hx4s-vite/node-loader', import.meta.url)` を自分で書く必要がある（3ch の `bbs/test-stubs/register.mjs`）。
+   必要な変更: build-integration.md 1.4 / 2.1 に組み合わせ方の例を書く。
+3. `scripts/publish-local.mjs` は hx4s のワークスペースの `node_modules` を前提にする（`npm run build -w hx4s-vite`）。clone 直後の checkout で
+   利用側から呼ぶと hx4s-vite のビルド（`tsc`）ができないはず（今回は hx4s に `node_modules` があったので未確認）。
+   確かめ方: `node_modules` の無い hx4s で `node scripts/publish-local.mjs --version 0.1.0-local.1`。
+   必要な変更: README の「ローカル公開」に `npm ci` が先に要ることを書くか、スクリプトが確かめて案内する（3ch の `setup-hx4s.mjs` は `npm ci` を先に呼んでいる）。
+4. `--no-save` で入れた `hx4s-vite` は、利用側が `npm ci` / `npm install` を単体で実行すると消える。examples と同じ方式の帰結で不具合ではないが、
+   利用側の文書で毎回説明が要る。公開（Phase 5）までの間、`hx4s-vite` の解決を案内する一文を README に足すとよい。
+5. `project/plugins.sbt` で版を読む方法が examples（`hx4s-version.txt` を読む）しか無い。commit を固定する利用側は自分で版のファイルを持つことになる。
+   現状の API で足りるが、`hx4s.lock.json` のような固定の方法を推奨として文書に書くと揃えやすい。
+
+### セルフレビュー（AGENTS.md 3.5）
+
+| 観点 | 結果 |
+| --- | --- |
+| 規約・既存実装との整合 | 波括弧のまま（`-no-indent` で確認）。Scaladoc は 1〜2 行。island の export は `final val`。手書きルート（`index.ts`・`admin/index.ts`・`auth.js.ts`・`bbsmenu.html.ts`・`_renderer.tsx`）は変えていない |
+| 言語の選択 | TS は Vite の設定・`app/client.ts`・セットアップのスクリプトに限る |
+| DDD・FP | ドメインには触れていない。`asInstanceOf` は Fetch の型の境界 2 か所だけ |
+| テスト | 消したテストは hx4s に同等のものがある。3ch 固有の挙動（板top の hydration、古い props の island を残す、11 個の export の検証関数）にテストを足した |
+| 不変条件（3.2） | dat / subject.txt / Shift_JIS / bbs.cgi / DO・R2・KV の形式は変えていない（上の「挙動の変化」の比較と統合テスト） |
