@@ -76,3 +76,8 @@ framework からの 3ch の型への直接の依存は解消されていて、�
 - worktree には `.idea` が無く、ヘッドレスでは sbt プロジェクトが取り込まれず Scala が解析されない。本体 checkout の `.idea`（modules / libraries / sbt.xml など）を複製し、絶対パスを置換した。
 - IDE の system ディレクトリのロックが残っていたため、`IDEA_PROPERTIES` で `idea.system.path` を一時領域に向けた。
 - 変更ファイル以外の既存コードの指摘は直していない。
+
+依存の更新（2026-11-16）
+
+- IntelliJ の脆弱性インスペクションの指摘を受け、`hono` を 4.13.11 から 4.13.18 に上げた。4.13.11 には `mount()` のミドルウェア迂回、RegExpRouter のワイルドカード、`css` ヘルパーの HTML 注入、`csrf()` の `text/ping` 未検査、`validator('form')` の multipart 迂回の各勧告（`npm audit`）があった。3ch は `csrf()` を使わず、`hono/trailing-slash` と honox 経由の利用だけである。
+- `npm ls hono` で honox・`@hono/react-renderer`・`@hono/vite-build` が 4.13.18 に揃うことを確かめた。`sbt test`（218 件）、`npm run v6:build`、`npm run v6:typecheck`、`npm test`（80 件）はすべて通り、`npm audit` から hono の指摘は消えた。
