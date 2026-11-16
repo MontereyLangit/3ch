@@ -46,7 +46,7 @@ v5 のソース（`src/`）は削除した。参照が必要なときは git タ
 ### 1.3 技術スタック（現行 v6）
 
 - **ランタイム**: Cloudflare Workers (ES Modules, `compatibility_date: 2026-10-02`。`nodejs_compat` は既定で有効)
-- **言語 / フレームワーク**: Scala 3 / Scala.js（`bbs/` = Worker・DO・ハンドラ、`common/` = 純粋ロジック）+ scalajs-react + HonoX + Vite。Scala.js と HonoX の連携は独立フレームワーク **hx4s**（`sbt-hx4s`・`hx4s-core`・`hx4s-react`・`hx4s-vite`。別リポジトリで、`hx4s.lock.json` の commit と版でローカル公開したものを使う。`docs/development.md`）に任せ、`bbs.Main` の `@route` と `bbsclient.Main` の `@islands` から配線を生成する（`docs/codegen.md`）。手書きの route は `app/routes/` の `index.ts`（トップページ）、`admin/index.ts`・`auth.js.ts`・`bbsmenu.html.ts`（`publicHandler` へ渡すだけ）と `_renderer.tsx`（生成マーカーの無いファイル）
+- **言語 / フレームワーク**: Scala 3 / Scala.js（`bbs/` = Worker・DO・ハンドラ、`common/` = 純粋ロジック）+ scalajs-react + HonoX + Vite。Scala.js と HonoX の連携は独立フレームワーク **hx4s**（`sbt-hx4s`・`hx4s-core`・`hx4s-react`・`hx4s-vite`。別リポジトリで、`hx4s.lock` の commit と版でローカル公開したものを使う。`docs/development.md`）に任せ、`bbs.Main` の `@route` と `bbsclient.Main` の `@islands` から配線を生成する（`docs/codegen.md`）。手書きの route は `app/routes/` の `index.ts`（トップページ）、`admin/index.ts`・`auth.js.ts`・`bbsmenu.html.ts`（`publicHandler` へ渡すだけ）と `_renderer.tsx`（生成マーカーの無いファイル）
   - 管理画面はscalajs-reactのSPA。利用者向け画面はHonoX SSR (Islands)
 - **状態管理**: Durable Objects — `Board`（板: スレ一覧 / 削除済み一覧）, `Thread`（スレ: dat / log / settings / hidden / stopped / movedTo）
 - **オブジェクトストレージ**: R2 `ch3www`（`SETTING.TXT`, `head.txt`, `bbsmenu.html`, `headline.txt`, `deny.cgi`, `ngwords.cgi`, 過去ログ `.cgi`）
@@ -75,11 +75,12 @@ bbs/
   test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ（scalajs:client.js と hono/jsx は hx4s-vite/node-loader）
 bbs-client/            クライアント側（hydration）Scala
 codegen/               DO から TS 型と Scala RPC スタブを生成（@route / @islands の配線は hx4s の sbt-hx4s。build.sbt の bbs の hx4s* 設定）
-scripts/setup-hx4s.mjs hx4s を hx4s.lock.json の commit と版でローカル公開し、npm 依存と hx4s-vite を入れる
+scripts/setup-hx4s.mjs hx4s を hx4s.lock の commit と版でローカル公開（公開記録を照合し、合わなければ公開し直す）し、npm 依存と hx4s-vite を入れる
 app/                   HonoX（server.ts がエントリ。routes/index.ts と _renderer.tsx は手書き）
 public/
   3chiko.html          3chiko.html本体。Vite の publicDir として dist/ へコピーされ Workers Static Assets で配信
 tests/                 実workerdを使う統合テスト（要 dist/）用ディレクトリ。admin・rpc・post-rate・auth（認証の HTTP と DO）・storage-atomicity（SQLite DO の同期 KV と SQL の原子性）の *.integration.test.js（実 workerd。support/ はテスト専用 Worker）。
+                       generated-app.test.js はコミット済みの app/routes・app/islands と、pretest が target/generated-app-check に生成した結果の照合。
                        golden/ は言語中立の入出力表（Scala 側が読む。端末ハッシュ・Client Hints・空白処理の照合表を含む）
 docs/                  仕様書・設計メモ（後述）
 wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
@@ -118,7 +119,7 @@ npm run hx4s:setup     # 依存導入（hx4s をローカル公開 → npm ci �
 npm run v6:build       # sbt bbs/hx4sGenerate codegen/run → vite build（client / workers）→ dist/
 npm run dev            # v6:build 後に wrangler dev --config wrangler.jsonc → http://127.0.0.1:8787
 sbt test               # 単体テスト/現仕様固定テスト（munit。golden 照合を含む）
-npm test               # Scala テスト用リンク → workerd 統合・Islands SSR/hydration 検証（要 dist/）
+npm test               # Scala テスト用リンクと生成結果の照合用の生成 → workerd 統合・Islands SSR/hydration・app/ の生成物の照合（要 dist/）
 npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc --minify
 ```
 

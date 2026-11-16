@@ -157,6 +157,15 @@ lazy val codegen = project
     Compile / mainClass := Some("io._3ch.codegen.GenerateDurableObjectTypesMain")
   )
 
+// 3ch の設定で route / island を target/generated-app-check に生成する。tests/generated-app.test.js がコミット済みの app/ と比べる。
+// set でこのセッションの出力先を変えるので、同じ sbt の実行ではこの後にコマンドを続けない（npm の pretest の最後で呼ぶ）
+addCommandAlias(
+  "generatedAppCheck",
+  "; set bbs / hx4sRouteDir := (ThisBuild / baseDirectory).value / \"target\" / \"generated-app-check\" / \"routes\"" +
+    "; set bbs / hx4sIslandDir := (ThisBuild / baseDirectory).value / \"target\" / \"generated-app-check\" / \"islands\"" +
+    "; bbs / hx4sGenerate"
+)
+
 lazy val root = project
   .in(file("."))
   .aggregate(commonJVM, commonJS, bbs, bbsClient, codegen)

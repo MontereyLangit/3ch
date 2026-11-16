@@ -1,24 +1,29 @@
-// hx4s を hx4s.lock.json の commit と版でローカル公開し、3ch の npm 依存を入れる（docs/development.md の「hx4s」）。
-//   1. hx4s の checkout が記録した commit で、作業ツリーがクリーンであることを確かめる
-//   2. hx4s の scripts/publish-local.mjs --version <版> で sbt の成果物を ~/.ivy2/local に、hx4s-vite を tgz にする
+// hx4s を hx4s.lock の commit と版でローカル公開し、3ch の npm 依存を入れる（docs/development.md の「hx4s」）。
+//   1. hx4s の checkout が lock の commit で、作業ツリーがクリーンであることを確かめる
+//   2. hx4s の publish-local.mjs --verify で公開記録を照合し、通らなければ公開し直してもう一度照合する
 //   3. 3ch で npm ci（package-lock.json どおり）の後、hx4s-vite の tgz を --no-save で入れる（tgz のハッシュを lockfile に載せない）
 // hx4s の場所は環境変数 HX4S_DIR。無ければ、このリポジトリから親をたどって最初に見つかる兄弟の hx4s ディレクトリを使う。
-// 使い方: node scripts/setup-hx4s.mjs [--skip-publish]（--skip-publish は同じ版の公開済みの成果物があるときだけ使える）
-import { spawnSync } from "node:child_process";
+// 外部コマンドはシェルを介さずに起動する（パスに空白や & があっても壊れない）。npm は実行中の Node で npm-cli.js を直接起動する。
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const windows = process.platform === "win32";
-const lock = JSON.parse(readFileSync(path.join(root, "hx4s.lock.json"), "utf8"));
-if (!/^[0-9a-f]{40}$/.test(lock.commit)) throw new Error(`hx4s.lock.json: commit must be a full SHA-1, got ${lock.commit}`);
-if (!/^\d+\.\d+\.\d+-local\.\d+$/.test(lock.version)) throw new Error(`hx4s.lock.json: version must look like 0.1.0-local.N, got ${lock.version}`);
+if (process.argv.length > 2) throw new Error(`unknown argument ${process.argv[2]}`);
 
-const args = process.argv.slice(2);
-for (const arg of args) if (arg !== "--skip-publish") throw new Error(`unknown argument ${arg}`);
-const skipPublish = args.includes("--skip-publish");
+const lock = Object.fromEntries(
+  readFileSync(path.join(root, "hx4s.lock"), "utf8")
+    .split(/\r?\n/)
+    .map((line) => /^(\w+)=(.+)$/.exec(line.trim()))
+    .filter(Boolean)
+    .map((match) => [match[1], match[2]]),
+);
+if (!/^[0-9a-f]{40}$/.test(lock.commit ?? "")) throw new Error(`hx4s.lock: commit must be the full 40-character SHA, got ${lock.commit}`);
+// 版は hx4s の既定（<版>-local.g<commit 10 桁>）にそろえ、commit と食い違う lock を公開の前に止める
+if (!new RegExp(`^\\d+\\.\\d+\\.\\d+-local\\.g${lock.commit.slice(0, 10)}$`).test(lock.version ?? "")) {
+  throw new Error(`hx4s.lock: version must be <X.Y.Z>-local.g${lock.commit.slice(0, 10)} for commit ${lock.commit}, got ${lock.version}`);
+}
 
 function isHx4s(dir) {
   return existsSync(path.join(dir, "scripts", "publish-local.mjs")) && existsSync(path.join(dir, "sbt-plugin"));
@@ -37,42 +42,41 @@ function findHx4s() {
   throw new Error("hx4s checkout not found. Clone it next to this repository or set HX4S_DIR.");
 }
 
-function run(command, commandArgs, cwd) {
-  console.log(`> (${path.relative(root, cwd) || "."}) ${command} ${commandArgs.join(" ")}`);
-  // Windows の npm.cmd はシェル経由でしか起動できない。引数に空白や引用符を含めない
-  const result = spawnSync(command, commandArgs, { cwd, stdio: "inherit", shell: windows });
-  if (result.status !== 0) throw new Error(`${command} ${commandArgs.join(" ")} failed with exit code ${result.status}`);
+const npmCli = [
+  process.env.npm_execpath,
+  path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+  path.join(path.dirname(process.execPath), "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+].find((file) => file && path.basename(file) === "npm-cli.js" && existsSync(file));
+if (!npmCli) throw new Error("npm-cli.js was not found next to the running Node");
+
+function npm(...args) {
+  console.log(`> npm ${args.join(" ")}`);
+  const result = spawnSync(process.execPath, [npmCli, ...args], { cwd: root, stdio: "inherit" });
+  if (result.status !== 0) throw new Error(`npm ${args.join(" ")} failed with exit code ${result.status}`);
 }
 
-function git(hx4s, gitArgs) {
-  const result = spawnSync("git", gitArgs, { cwd: hx4s, encoding: "utf8" });
-  if (result.status !== 0) throw new Error(`git ${gitArgs.join(" ")} failed: ${result.stderr}`);
-  return result.stdout;
-}
-
-const npm = windows ? "npm.cmd" : "npm";
 const hx4s = findHx4s();
-const head = git(hx4s, ["rev-parse", "HEAD"]).trim();
+const git = (...args) => execFileSync("git", ["-C", hx4s, ...args], { encoding: "utf8" }).trim();
+const publishLocal = (...args) => {
+  console.log(`> (hx4s) node scripts/publish-local.mjs ${args.join(" ")}`);
+  return spawnSync(process.execPath, [path.join(hx4s, "scripts", "publish-local.mjs"), ...args], { cwd: hx4s, stdio: "inherit" }).status === 0;
+};
+
+const head = git("rev-parse", "HEAD");
 if (head !== lock.commit) {
-  throw new Error(`${hx4s} is at ${head}, but hx4s.lock.json pins ${lock.commit}. Run \`git -C ${hx4s} checkout ${lock.commit}\`.`);
+  throw new Error(`${hx4s} is at ${head}, but hx4s.lock pins ${lock.commit}. Run: git -C "${hx4s}" checkout ${lock.commit}`);
 }
-const dirty = git(hx4s, ["status", "--porcelain", "--untracked-files=all"]);
+const dirty = git("status", "--porcelain", "--untracked-files=all");
 if (dirty !== "") throw new Error(`${hx4s} has uncommitted changes or untracked files:\n${dirty}`);
 
-const tgz = path.join(hx4s, "target", "local", "hx4s-vite.tgz");
-const versionFile = path.join(hx4s, "target", "local", "hx4s-version.txt");
-if (skipPublish) {
-  const published = existsSync(versionFile) ? readFileSync(versionFile, "utf8").trim() : "";
-  const ivy = path.join(os.homedir(), ".ivy2", "local", "io.github.montereylangit", "sbt-hx4s", "scala_2.12", "sbt_1.0", lock.version);
-  if (published !== lock.version || !existsSync(tgz) || !existsSync(ivy)) {
-    throw new Error(`hx4s ${lock.version} is not published locally. Run without --skip-publish.`);
-  }
-} else {
-  // publish-local.mjs は hx4s のワークスペースで hx4s-vite をビルドするので、hx4s 側の依存が要る
-  if (!existsSync(path.join(hx4s, "node_modules"))) run(npm, ["ci"], hx4s);
-  run("node", ["scripts/publish-local.mjs", "--version", lock.version], hx4s);
+const expected = ["--version", lock.version, "--commit", lock.commit];
+if (!publishLocal("--verify", ...expected)) {
+  console.log("hx4s is not published for hx4s.lock; publishing it again");
+  // hx4s 側の npm ci は publish-local が行う。前回の npm ci と package-lock.json が同じときだけ省く
+  if (!publishLocal("--version", lock.version, "--reuse-node-modules")) throw new Error("hx4s publish-local failed");
+  if (!publishLocal("--verify", ...expected)) throw new Error("hx4s was published but does not match hx4s.lock");
 }
 
-run(npm, ["ci"], root);
-run(npm, ["install", "--no-save", "--no-audit", "--no-fund", path.relative(root, tgz).replaceAll("\\", "/")], root);
+npm("ci", "--no-audit", "--no-fund");
+npm("install", "--no-save", "--no-audit", "--no-fund", path.relative(root, path.join(hx4s, "target", "local", "hx4s-vite.tgz")).replaceAll("\\", "/"));
 console.log(`hx4s ${lock.version} (${lock.commit.slice(0, 10)}) is ready`);

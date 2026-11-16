@@ -5,7 +5,7 @@
     "hx4s:setup": "node scripts/setup-hx4s.mjs",
     "dev": "npm run v6:build && wrangler dev --config wrangler.jsonc",
     "deploy": "npm run v6:build && wrangler deploy --config wrangler.jsonc --minify",
-    "pretest": "sbt bbs/Test/fastLinkJS bbsClient/fastLinkJS",
+    "pretest": "sbt bbs/Test/fastLinkJS bbsClient/fastLinkJS generatedAppCheck",
     "test": "node --test tests/*.test.js",
     "v6:generate": "sbt bbs/hx4sGenerate codegen/run",
     "v6:build:client": "vite build --mode client",
