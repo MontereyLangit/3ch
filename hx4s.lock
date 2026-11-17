@@ -1,3 +1,3 @@
 # 使う hx4s の commit（完全な SHA）と版。scripts/setup-hx4s.mjs と project/plugins.sbt が読む（docs/development.md）
-commit=73eb735b970d6b327f0d3725ec9cf0b11fee2f2d
-version=0.1.0-local.g73eb735b97
+commit=27838da70ca556dc3c507c11aa8449e7e89b774e
+version=0.1.0-local.g27838da70c

@@ -260,3 +260,8 @@ hx4s を `d133d7c1f1` から `95d77c2af9`（`0.1.0-local.g95d77c2af9`）に上�
 
 `hx4s.lock` を hx4s の最終レビュー（Codex・inspect の指摘 Q1〜Q8 の対応。hx4s の `docs/hx4s/reviews/final-review.md`）の commit `73eb735b970d6b327f0d3725ec9cf0b11fee2f2d`・版 `0.1.0-local.g73eb735b97` に上げた。公開記録に ivy の実体の SHA-256 と hx4s の lockfile が入ったが、`setup-hx4s.mjs` は `--verify` に任せているので変更は要らず、`docs/development.md` の照合の説明だけを直した。
 上と同じく依存キャッシュを消してから、`npm run hx4s:setup`（1 回目は公開、2 回目は照合が通って省略）→ `v6:build`（`wrote 0, unchanged 17`）→ `v6:typecheck` → `sbt test`（commonJVM 218、commonJS 227、bbsClient 2、codegen 14、bbs 950）→ `npm test`（77 件すべて成功）→ `-no-indent` の `Test/compile` → 再生成（`wrote 0, unchanged 17`）がすべて通り、`git status` の差分は lock と文書だけだった。
+
+### hx4s の push 後の更新（lock を 27838da に）
+
+hx4s を GitHub に push し、リモート CI（Ubuntu・Windows）が通った。CI の起動ブランチを既定ブランチの master に合わせる 1 行の修正（hx4s `27838da70ca556dc3c507c11aa8449e7e89b774e`）が入ったので、`hx4s.lock` をこの commit と版 `0.1.0-local.g27838da70c` に上げた。hx4s のソースは変わっていない。
+`npm run hx4s:setup` → `v6:build`（`wrote 0, unchanged 17`）→ `v6:typecheck` → `sbt test`（commonJVM 218、commonJS 227、bbsClient 2、codegen 14、bbs 950）→ `npm test`（77 件）がすべて成功した。この回は依存キャッシュを消していない。
