@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import test, { beforeEach } from 'node:test';
@@ -8,8 +7,7 @@ import { JSDOM } from 'jsdom';
 // 板topのIslandを、リンク済みの実モジュールのままjsdom上で動かす
 // npm pretest が bbsClient/fastLinkJS を実行
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
-const clientJs = path.join(root, 'bbs-client/target/scala-3.3.8/bbsclient-fastopt/client.js');
-await access(clientJs);
+const clientOutput = path.join(root, 'bbs-client/target/scala-3.3.8/bbsclient-fastopt');
 
 // react-dom は読み込み時に window の有無を見るため、import より前にグローバルを用意する
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'https://board.example/sample/' });
@@ -28,7 +26,24 @@ window.performance.getEntriesByType = () => [];
 const { act, createElement } = await import('react');
 const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { renderToString } = await import('react-dom/server');
-const client = await import(pathToFileURL(clientJs).href);
+const islandModules = {
+  SiteHeaderJs: 'island-site-header.js',
+  BoardDetailsJs: 'island-board-details.js',
+  PostingFormJs: 'island-posting-form.js',
+  ThreadListJs: 'island-thread-list.js',
+  AuthFormJs: 'island-auth-form.js',
+  AuthModalJs: 'island-auth-modal.js',
+  AccountNavJs: 'island-account-nav.js',
+  AccountMenuJs: 'island-account-menu.js',
+  AccountCapJs: 'island-account-cap.js',
+  AccountLogoutJs: 'island-account-logout.js',
+  AuthTokenJs: 'island-auth-token.js',
+  AccountCredentialsJs: 'island-account-credentials.js',
+};
+const client = Object.fromEntries(await Promise.all(Object.entries(islandModules).map(async ([name, file]) => {
+  const exports = await import(pathToFileURL(path.join(clientOutput, file)).href);
+  return [name, exports[name]()];
+})));
 
 const scrollIntoViewCalls = [];
 window.HTMLElement.prototype.scrollIntoView = function (options) { scrollIntoViewCalls.push({ element: this, options }); };

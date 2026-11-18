@@ -12,7 +12,7 @@ import { act } from 'react';
 // 3 つの island がすべて hydrate され、サーバーの DOM を再利用し、操作が効くことを確かめる。
 const root = fileURLToPath(new URL('../', import.meta.url));
 const bridge = path.join(root, 'bbs/target/scala-3.3.8/bbs-test-fastopt/island-test.js');
-const clientModule = path.join(root, 'bbs-client/target/scala-3.3.8/bbsclient-fastopt/client.js');
+const clientOutput = path.join(root, 'bbs-client/target/scala-3.3.8/bbsclient-fastopt');
 
 const subjectText = '1800000001.dat<>実スレ &amp; <b> (3)\n1800000002.dat<>次の話題 (7)\n9240000001.dat<>共通のお知らせ (12)\n';
 const sample = {
@@ -22,7 +22,7 @@ const sample = {
 
 test('板topの実 SSR HTML を HonoX の createClient で hydrate できる', async () => {
   await access(bridge);
-  await access(clientModule);
+  await access(clientOutput);
   const previousNodeEnv = process.env.NODE_ENV;
   process.env.NODE_ENV = 'development';
   const fixture = await mkdtemp(path.join(root, 'tests/.board-top-hydration-'));
@@ -66,11 +66,11 @@ export function hydrate() {
       configFile: false,
       root: fixture,
       logLevel: 'silent',
-      resolve: { alias: {
-        'scala-island-test': bridge,
-        'scalajs:client.js': clientModule,
-        'cloudflare:workers': path.join(root, 'bbs/test-stubs/cloudflare-workers-stub.mjs'),
-      } },
+      resolve: { alias: [
+        { find: 'scala-island-test', replacement: bridge },
+        { find: /^scalajs:/, replacement: clientOutput.replaceAll('\\', '/') + '/' },
+        { find: 'cloudflare:workers', replacement: path.join(root, 'bbs/test-stubs/cloudflare-workers-stub.mjs') },
+      ] },
       ssr: { noExternal: ['honox'] },
     };
     await build({ ...config,

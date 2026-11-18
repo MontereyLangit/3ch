@@ -113,7 +113,7 @@ lazy val bbs = project
     // クラスが常にexportされるため、Testのリンク成果物にも巻き込まれる。素の NodeJSEnv では
     // cloudflare: スキームを解決できず Test 全体が起動できないため、Node の Module customization
     // hooks（--import で module.register）で cloudflare:workers の解決だけをスタブへ差し替える。
-    // island が import する scalajs:client.js と HonoX 内の hono/jsx は hx4s-vite/node-loader が解決する
+    // island が import する scalajs:island-*.js と HonoX 内の hono/jsx は hx4s-vite/node-loader が解決する
     // （HX4S_CLIENT_JS_DIR に bbsClient のリンク成果物を渡す）。リンクはテスト実行・Test/fastLinkJS の前に行う
     Test / jsEnv := {
       val clientDir = (bbsClient / Compile / fastLinkJS / scalaJSLinkerOutputDirectory).value
@@ -144,7 +144,10 @@ lazy val bbsClient = project
       "com.github.japgolly.scalajs-react" %%% "core" % "4.0.0",
       "io.github.montereylangit" %%% "hx4s-react" % hx4sVersion
     ),
-    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) }
+    scalaJSLinkerConfig ~= {
+      _.withModuleKind(ModuleKind.ESModule)
+        .withModuleSplitStyle(org.scalajs.linker.interface.ModuleSplitStyle.SmallModulesFor(List("io._3ch.bbsclient")))
+    }
   )
 
 // --- codegen: JVM — DO の Scala 宣言から TS 型と Scala RPC スタブを生成（@route / @islands の配線は hx4s） ---
