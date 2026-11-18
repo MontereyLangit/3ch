@@ -1,6 +1,7 @@
 package io._3ch.bbsclient.islands
 
 import io._3ch.common.domain.account.SessionView
+import io._3ch.common.islands.SessionProps
 import japgolly.scalajs.react.*
 import org.scalajs.dom
 import scala.concurrent.{Future, Promise}
@@ -9,20 +10,12 @@ import scala.scalajs.js
 
 /** 認証の表示情報とクライアント間通知 */
 private[islands] object AuthClient {
-  def session(raw: js.Any): Option[SessionView] = {
-    if raw == null || js.typeOf(raw) != "object" then None
-    else {
-      val o = raw.asInstanceOf[js.Dynamic]
-      val uid = o.selectDynamic("uid")
-      val lv = o.selectDynamic("lv")
-      Option.when(js.typeOf(uid) == "string" && js.typeOf(lv) == "number")(SessionView(uid.asInstanceOf[String], lv.asInstanceOf[Double].toInt))
-    }
-  }
-  def initial(raw: js.Object): Option[SessionView] = session(raw.asInstanceOf[js.Dynamic].selectDynamic("session"))
-  def text(raw: js.Object, name: String, default: String = ""): String =
-    raw.asInstanceOf[js.Dynamic].selectDynamic(name).asInstanceOf[js.UndefOr[String]].getOrElse(default)
-  def flag(raw: js.Object, name: String): Boolean =
-    raw.asInstanceOf[js.Dynamic].selectDynamic(name).asInstanceOf[js.UndefOr[Boolean]].getOrElse(false)
+  def sessionView(value: SessionProps): SessionView = SessionView(value.uid, value.lv.toInt)
+  /** 認証 API の応答やイベントの値を読む。uid と lv が無ければ None */
+  def session(raw: js.Any): Option[SessionView] = SessionProps.validate(raw).toOption.map(sessionView)
+  /** 認証 API の応答の文字列の値 */
+  def text(json: js.Object, name: String, default: String = ""): String =
+    json.asInstanceOf[js.Dictionary[js.Any]].get(name).filter(js.typeOf(_) == "string").fold(default)(_.asInstanceOf[String])
   def readSession(): Future[Option[SessionView]] = {
     dom.fetch("/auth/session", new dom.RequestInit { credentials = dom.RequestCredentials.`same-origin`; cache = dom.RequestCache.`no-store` }).toFuture
       .flatMap(r => if r.ok then r.json().toFuture.map(session) else Future.successful(None)).recover { case _ => None }

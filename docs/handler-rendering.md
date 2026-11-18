@@ -1,16 +1,16 @@
 # Scala.js handler からの描画
 
-ルートの TS は `export default createRoute((c) => handler(c));` を生成する。
-データ取得、パラメータ解釈、描画方式の選択は Scala.js の handler が担当する。
+ルートの TS は `bbs/.../Main.scala` の `@route` から codegen が生成し、`export default createRoute((c) => handler(c));`
+の形になる（規則は `docs/codegen.md`）。データ取得、パラメータ解釈、描画方式の選択は Scala.js の handler が担当する。
 `IslandRender` は廃止し、`app/routes/**/_middleware.ts` は手動管理する。
-既存の全メソッド用 `LegacyDispatch` は公開ルートの互換性維持のため残す。
+ファイルルートに一致しないリクエストは、`app/server.ts` の `app.all("*")` が既存の公開ハンドラ `publicHandler` に渡す。
 
 ## 通常画面
 
 `VdomElement.rawElement` は scalajs-react の `React.Element`（実体は React の要素）を返す。
-文字列化や JSON 変換は不要。`HonoContextFacade.render` にそのまま渡せる。
+文字列化や JSON 変換は不要。`HonoContextFacade`（`hx4s.hono.Context[WorkerEnv, RenderProps]` の別名）の `render` にそのまま渡せる。
 Hono の戻り値は `Response | Promise<Response>` なので、Promise を返す handler では
-`js.Promise.resolve[Response](c.render(...))` または `c.renderPromise(...)` を使う。
+`c.renderPage(...)`（`HonoContextFacade.*` の拡張）を使う。hx4s の Context の `Request` / `Response` は scalajs-dom の型なので、3ch の Fetch facade（`external.web`）として扱う変換は `HonoContextFacade` の `request`・`renderPage` だけで行う。
 
 ```scala
 import io._3ch.bbs.external.hono.{HonoContextFacade, RenderProps}
@@ -20,17 +20,17 @@ import japgolly.scalajs.react.vdom.html_<^.*
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSExportTopLevel
 
+@route("boards.ts")
 @JSExportTopLevel("pageHandler", "server")
 def pageHandler(c: HonoContextFacade): js.Promise[Response] = {
   val props = new RenderProps {}
   props.title = "板一覧"
   val page = <.main(<.h1("板一覧"))
-  c.renderPromise(page.rawElement, props)
+  c.renderPage(page.rawElement, props)
 }
 ```
 
-`RouteTable.routes` には `RouteEntry("boards.ts", RouteKind.PassThrough("pageHandler"), Nil)`
-を登録する。`props` は省略可能。`RenderProps` は `app/renderer.d.ts` の Props と対応させる。
+`@route` は `hx4s.annotation.route`。`props` は省略可能。`RenderProps` は `app/renderer.d.ts` の Props と対応させる。
 通常画面は既存の `_renderer.tsx` と `RendererShell` により UTF-8 のレイアウト付き応答になる。
 Hono の API は [render / setRenderer](https://hono.dev/docs/api/context#render-setrenderer) を参照。
 
@@ -50,36 +50,12 @@ React 要素は `renderToStaticMarkup` で HTML 化し、文字列はそのま�
 
 ## Islands
 
-`RouteTable.islands` の登録と `renderIslandFile` の形式は維持する。
-サーバー側は Scala コンポーネントの元の export ではなく、HonoX がラップする
-`app/islands/*.tsx` を import する。これにより SSR に hydration 用の識別情報と props が付く。
+Island は `bbs-client/.../Main.scala` の export に `@islands[P]("x.tsx")` を付けて宣言する。hx4s の codegen がブラウザ用の
+`app/islands/x.tsx` と、SSR 用の `io._3ch.bbs.generated.IslandComponents` を生成する。handler は生成 API を呼び、
+戻り値の `VdomElement` をページの子要素にするか `c.renderPage(island.rawElement)` に渡す。
+SSR 側は `app/islands/*.tsx` を import せず、生成 API が `hx4s.react.Island`（HonoX の `HonoXIsland`）で包むので、hydration 用の識別情報と props が付く。
+宣言・props の型・検証は `docs/islands-ssr.md` を参照。
 
-```scala
-import japgolly.scalajs.react.{Children, JsComponent}
-import scala.scalajs.js.annotation.JSImport
-
-trait ThreadViewProps extends js.Object {
-  val title: String
-}
-
-@js.native
-@JSImport("/app/islands/thread-view.tsx", "default")
-object ThreadViewIsland extends js.Object
-
-val ThreadView = JsComponent[ThreadViewProps, Children.None, Null](ThreadViewIsland)
-
-def threadHandler(c: HonoContextFacade): js.Promise[Response] = {
-  val props = new ThreadViewProps { val title = "スレッド" }
-  c.renderPromise(ThreadView(props).rawElement)
-}
-```
-
-例のコンポーネントを実装する際は `IslandEntry("thread-view.tsx", "ThreadViewJs", "client.js")`
-を登録し、`bbs-client` から React コンポーネントを `ThreadViewJs` として export する。
-`bbs-client` でも scalajs-react の DSL を使う場合は、`bbs` と同じ `core` 依存を追加する。
 props は HonoX が JSON 化できる JS オブジェクトにする。Scala のケースクラスや関数は渡さない。
 サーバーとクライアントは別々にリンクするため、`bbs` のコードを `bbs-client` に依存させない。
-ブラウザ側は `app/client.ts` の React `hydrateRoot` で hydration する。
-
-この変更自体は新しい画面・Island コンポーネントを登録しない。既存の公開エンドポイントの
-Shift_JIS 出力、dat、ストレージ形式は変更しない。
+ブラウザ側は `app/client.ts` の HonoX `createClient` が React の `hydrateRoot` で hydration する。

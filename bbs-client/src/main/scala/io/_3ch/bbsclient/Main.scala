@@ -1,62 +1,82 @@
 package io._3ch.bbsclient
 
+import hx4s.annotation.islands
+import hx4s.react.IslandExport
 import io._3ch.bbsclient.islands.*
-import io._3ch.common.routes.islands
-import japgolly.scalajs.react.*
+import io._3ch.common.islands.{AccountCapProps, AccountCredentialsProps, AccountLogoutProps, AccountMenuProps, AccountNavProps, AuthFormProps,
+  AuthTokenProps, BoardDetailsProps, PostingFormProps, SiteHeaderProps, ThreadListProps}
 
-import scala.scalajs.js
 import scala.scalajs.js.annotation.JSExportTopLevel
 
-/**
- * client.jsの処理のexport
- * bbsClientで独立してリンクする
- */
-object Main {
+object SiteHeaderEntry {
+  @islands[io._3ch.common.islands.SiteHeaderProps]("site-header.tsx")
+  @JSExportTopLevel("SiteHeaderJs", "island-site-header")
+  def siteHeader(): IslandExport[SiteHeaderProps] = IslandExport("SiteHeaderJs", SiteHeaderProps.fields)(SiteHeaderIsland.Component(_))
+}
 
-  @islands("site-header.tsx")
-  @JSExportTopLevel("SiteHeaderJs", "client")
-  val siteHeader: js.Any = SiteHeaderIsland.JsComponent.toJsComponent.raw
+object BoardDetailsEntry {
+  @islands[io._3ch.common.islands.BoardDetailsProps]("board-details.tsx")
+  @JSExportTopLevel("BoardDetailsJs", "island-board-details")
+  def boardDetails(): IslandExport[BoardDetailsProps] = IslandExport("BoardDetailsJs", BoardDetailsProps.fields)(BoardDetailsIsland.render)
+}
 
-  @islands("board-details.tsx")
-  @JSExportTopLevel("BoardDetailsJs", "client")
-  val boardDetails: js.Any = BoardDetailsIsland.JsComponent.toJsComponent.raw
+object PostingFormEntry {
+  @islands[io._3ch.common.islands.PostingFormProps]("posting-form.tsx")
+  @JSExportTopLevel("PostingFormJs", "island-posting-form")
+  def postingForm(): IslandExport[PostingFormProps] = IslandExport("PostingFormJs", PostingFormProps.fields)(PostingFormIsland.render)
+}
 
-  @islands("posting-form.tsx")
-  @JSExportTopLevel("PostingFormJs", "client")
-  val postingForm: js.Any = PostingFormIsland.JsComponent.toJsComponent.raw
+object ThreadListEntry {
+  @islands[io._3ch.common.islands.ThreadListProps]("thread-list.tsx")
+  @JSExportTopLevel("ThreadListJs", "island-thread-list")
+  def threadList(): IslandExport[ThreadListProps] = IslandExport("ThreadListJs", ThreadListProps.fields)(ThreadListIsland.render)
+}
 
-  @islands("thread-list.tsx")
-  @JSExportTopLevel("ThreadListJs", "client")
-  val threadList: js.Any = ThreadListIsland.JsComponent.toJsComponent.raw
-  @islands("auth-form.tsx")
-  @JSExportTopLevel("AuthFormJs", "client")
-  final val authForm: js.Any = AuthFormIsland.Component.toJsComponent.raw
+object AuthFormEntry {
+  @islands[io._3ch.common.islands.AuthFormProps]("auth-form.tsx")
+  @JSExportTopLevel("AuthFormJs", "island-auth-form")
+  def authForm(): IslandExport[AuthFormProps] = IslandExport("AuthFormJs", AuthFormProps.fields)(AuthFormIsland.Component(_))
+}
 
-  @islands("auth-modal.tsx")
-  @JSExportTopLevel("AuthModalJs", "client")
-  final val authModal: js.Any = AuthModalIsland.Component.toJsComponent.raw
+object AuthModalEntry {
+  @islands[scala.scalajs.js.Object]("auth-modal.tsx")
+  @JSExportTopLevel("AuthModalJs", "island-auth-modal")
+  def authModal(): IslandExport[scala.scalajs.js.Object] = AuthModalIsland.Component.toJsComponent.raw.asInstanceOf[IslandExport[scala.scalajs.js.Object]]
+}
 
-  @islands("account-nav.tsx")
-  @JSExportTopLevel("AccountNavJs", "client")
-  final val accountNav: js.Any = AccountNavIsland.Component.toJsComponent.raw
+object AccountNavEntry {
+  @islands[io._3ch.common.islands.AccountNavProps]("account-nav.tsx")
+  @JSExportTopLevel("AccountNavJs", "island-account-nav")
+  def accountNav(): IslandExport[AccountNavProps] = IslandExport("AccountNavJs", AccountNavProps.fields)(AccountNavIsland.Component(_))
+}
 
-  @islands("account-menu.tsx")
-  @JSExportTopLevel("AccountMenuJs", "client")
-  final val accountMenu: js.Any = AccountMenuIsland.Component.toJsComponent.raw
+object AccountMenuEntry {
+  @islands[io._3ch.common.islands.AccountMenuProps]("account-menu.tsx")
+  @JSExportTopLevel("AccountMenuJs", "island-account-menu")
+  def accountMenu(): IslandExport[AccountMenuProps] = IslandExport("AccountMenuJs", AccountMenuProps.fields)(AccountMenuIsland.Component(_))
+}
 
-  @islands("account-cap.tsx")
-  @JSExportTopLevel("AccountCapJs", "client")
-  final val accountCap: js.Any = AccountCapIsland.Component.toJsComponent.raw
+object AccountCapEntry {
+  @islands[io._3ch.common.islands.AccountCapProps]("account-cap.tsx")
+  @JSExportTopLevel("AccountCapJs", "island-account-cap")
+  def accountCap(): IslandExport[AccountCapProps] = IslandExport("AccountCapJs", AccountCapProps.fields)(AccountCapIsland.Component(_))
+}
 
-  @islands("account-logout.tsx")
-  @JSExportTopLevel("AccountLogoutJs", "client")
-  final val accountLogout: js.Any = AccountLogoutIsland.Component.toJsComponent.raw
+object AccountLogoutEntry {
+  @islands[io._3ch.common.islands.AccountLogoutProps]("account-logout.tsx")
+  @JSExportTopLevel("AccountLogoutJs", "island-account-logout")
+  def accountLogout(): IslandExport[AccountLogoutProps] = IslandExport("AccountLogoutJs", AccountLogoutProps.fields)(AccountLogoutIsland.Component(_))
+}
 
-  @islands("auth-token.tsx")
-  @JSExportTopLevel("AuthTokenJs", "client")
-  final val authToken: js.Any = AuthTokenIsland.Component.toJsComponent.raw
+object AuthTokenEntry {
+  @islands[io._3ch.common.islands.AuthTokenProps]("auth-token.tsx")
+  @JSExportTopLevel("AuthTokenJs", "island-auth-token")
+  def authToken(): IslandExport[AuthTokenProps] = IslandExport("AuthTokenJs", AuthTokenProps.fields)(AuthTokenIsland.Component(_))
+}
 
-  @islands("account-credentials.tsx")
-  @JSExportTopLevel("AccountCredentialsJs", "client")
-  final val accountCredentials: js.Any = AccountCredentialsIsland.Component.toJsComponent.raw
+object AccountCredentialsEntry {
+  @islands[io._3ch.common.islands.AccountCredentialsProps]("account-credentials.tsx")
+  @JSExportTopLevel("AccountCredentialsJs", "island-account-credentials")
+  def accountCredentials(): IslandExport[AccountCredentialsProps] =
+    IslandExport("AccountCredentialsJs", AccountCredentialsProps.fields)(AccountCredentialsIsland.Component(_))
 }

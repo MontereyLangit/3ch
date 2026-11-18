@@ -4,6 +4,7 @@ import io._3ch.bbs.components.layout.{FooterComponent, HeaderComponent, RightSid
 import io._3ch.bbs.generated.IslandComponents
 import io._3ch.common.domain.account.{Phoebe, SessionView}
 import io._3ch.common.domain.{BbsSubjects, BoardId}
+import io._3ch.common.islands
 import japgolly.scalajs.react.ScalaFnComponent
 import japgolly.scalajs.react.vdom.html_<^.*
 
@@ -40,20 +41,30 @@ object BoardIndexComponent {
         VdomAttr("aria-current") := (if active then "page" else "false"), label)
     }
 
-    val details = PostingFormComponent.islandProps(PostingFormProps(props.bbs, props.time, imgurClientId = props.imgurClientId, authEnabled = props.authEnabled, session = props.session,
-      requiredLevel = Phoebe.required(props.settings.get("BBS_PHOEBE")), returnPath = props.returnPath)).asInstanceOf[js.Dynamic]
-    details.updateDynamic("headText")(props.headText)
-    details.updateDynamic("settingsText")(props.settings.map { case (k, v) => s"$k=$v" }.mkString("\n"))
+    val details = new islands.BoardDetailsProps {
+      val bbs = props.bbs.value
+      val headText = props.headText
+      val settingsText = props.settings.map { case (k, v) => s"$k=$v" }.mkString("\n")
+      val postingForm = PostingFormComponent.islandProps(PostingFormProps(props.bbs, props.time, imgurClientId = props.imgurClientId,
+        authEnabled = props.authEnabled, session = props.session, requiredLevel = Phoebe.required(props.settings.get("BBS_PHOEBE")),
+        returnPath = props.returnPath))
+    }
 
-    val list = js.Dynamic.literal(bbs = props.bbs.value, `type` = props.`type`, subjectText = if props.`type` == "subback" then props.subjects.toString else "",
-      query = props.query, sort = props.sort, now = props.now)
+    val list = new islands.ThreadListProps {
+      val bbs = props.bbs.value
+      val `type` = props.`type`
+      val subjectText = if props.`type` == "subback" then props.subjects.toString else ""
+      val query = props.query
+      val sort = props.sort
+      val now = props.now
+    }
 
     <.div(^.className := "board-ui min-h-screen bg-[#fafafa] text-sm text-[#333] wrap-anywhere [--header-height:64px] [&_summary]:cursor-pointer",
       HeaderComponent.AuthComponent(HeaderProps(props.authEnabled, props.session, props.returnPath)),
       <.div(^.className := "board-layout grid p-2 grid-cols-[minmax(0,3fr)_minmax(0,1fr)] items-start max-[767px]:block",
         <.main(^.className := "board-main min-w-0 pr-2 max-[767px]:pr-0",
           <.h1(^.className := "board-title my-2 text-lg font-bold", props.title),
-          IslandComponents.BoardDetailsJs(details.asInstanceOf[js.Object]),
+          IslandComponents.BoardDetailsJs(details),
           <.noscript(^.dangerouslySetInnerHtml := "<style>.board-ui .board-panel[hidden]{display:block!important}.board-ui .board-details,.board-ui [data-board-reload]{display:none}</style>"),
           <.div(^.className := "toolbar flex flex-wrap gap-2 p-[13px] max-[660px]:p-[9px]",
             <.nav(^.className := "tabs flex min-w-0 flex-wrap gap-[3px]", ^.aria.label := "表示切り替え",
@@ -70,7 +81,7 @@ object BoardIndexComponent {
               <.button(^.className := "cursor-pointer border border-[#d6dce3] bg-white px-2.5 py-1", ^.`type` := "submit", "表示")
             )
           ),
-          IslandComponents.ThreadListJs(list.asInstanceOf[js.Object]),
+          IslandComponents.ThreadListJs(list),
           <.div(^.className := "board-admin p-3 text-right",
             <.a(^.className := "text-[#06f] hover:underline", ^.href := s"/admin/board?bbs=${URIUtils.encodeURIComponent(props.bbs.value)}", "管理画面へ"))
         ),

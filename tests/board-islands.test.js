@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import test, { beforeEach } from 'node:test';
@@ -8,8 +7,7 @@ import { JSDOM } from 'jsdom';
 // 板topのIslandを、リンク済みの実モジュールのままjsdom上で動かす
 // npm pretest が bbsClient/fastLinkJS を実行
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
-const clientJs = path.join(root, 'bbs-client/target/scala-3.3.8/bbsclient-fastopt/client.js');
-await access(clientJs);
+const clientOutput = path.join(root, 'bbs-client/target/scala-3.3.8/bbsclient-fastopt');
 
 // react-dom は読み込み時に window の有無を見るため、import より前にグローバルを用意する
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'https://board.example/sample/' });
@@ -28,7 +26,24 @@ window.performance.getEntriesByType = () => [];
 const { act, createElement } = await import('react');
 const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { renderToString } = await import('react-dom/server');
-const client = await import(pathToFileURL(clientJs).href);
+const islandModules = {
+  SiteHeaderJs: 'island-site-header.js',
+  BoardDetailsJs: 'island-board-details.js',
+  PostingFormJs: 'island-posting-form.js',
+  ThreadListJs: 'island-thread-list.js',
+  AuthFormJs: 'island-auth-form.js',
+  AuthModalJs: 'island-auth-modal.js',
+  AccountNavJs: 'island-account-nav.js',
+  AccountMenuJs: 'island-account-menu.js',
+  AccountCapJs: 'island-account-cap.js',
+  AccountLogoutJs: 'island-account-logout.js',
+  AuthTokenJs: 'island-auth-token.js',
+  AccountCredentialsJs: 'island-account-credentials.js',
+};
+const client = Object.fromEntries(await Promise.all(Object.entries(islandModules).map(async ([name, file]) => {
+  const exports = await import(pathToFileURL(path.join(clientOutput, file)).href);
+  return [name, exports[name]()];
+})));
 
 const scrollIntoViewCalls = [];
 window.HTMLElement.prototype.scrollIntoView = function (options) { scrollIntoViewCalls.push({ element: this, options }); };
@@ -177,12 +192,14 @@ test('リロード失敗時は一覧を変えずエラーを表示する', async
 
 // ---------------------------------------------------------------- ヘッダー（SiteHeaderJs）
 
+const headerProps = { authEnabled: false, returnPath: '/sample/' };
+
 async function mountHeader() {
   const board = document.body.appendChild(document.createElement('div'));
   board.className = 'board-ui';
   const search = board.appendChild(document.createElement('input'));
   search.id = 'board-search';
-  await mount(client.SiteHeaderJs, {}, board);
+  await mount(client.SiteHeaderJs, headerProps, board);
   return { board, search, header: query('header', board) };
 }
 
@@ -231,7 +248,8 @@ test('ヘッダーの検索リンクは入力欄へフォーカスを移して�
 
 // ---------------------------------------------------------------- 板の開閉パネル（BoardDetailsJs）
 
-const detailsProps = { bbs: 'sample', headText: '<b>ルール</b>', settingsText: 'BBS_TITLE=テスト\nBBS_NONAME_NAME=名無し', time: '1', imgurClientId: '', commands: [] };
+const detailsProps = { bbs: 'sample', headText: '<b>ルール</b>', settingsText: 'BBS_TITLE=テスト\nBBS_NONAME_NAME=名無し',
+  postingForm: { bbs: 'sample', time: '1', imgurClientId: '', authEnabled: false, requiredLevel: 0, returnPath: '/sample/', commands: [] } };
 
 test('パネルのボタンは開閉と aria-expanded・矢印を切り替える', async () => {
   await mount(client.BoardDetailsJs, detailsProps);
@@ -258,7 +276,7 @@ test('パネルのボタンは開閉と aria-expanded・矢印を切り替える
 
 // ---------------------------------------------------------------- 書き込みフォーム（PostingFormJs）
 
-const formProps = { bbs: 'sample', time: '1800000100', imgurClientId: 'cid', commands: [
+const formProps = { bbs: 'sample', time: '1800000100', imgurClientId: 'cid', authEnabled: false, requiredLevel: 0, returnPath: '/sample/', commands: [
   { text: '!cmd', label: 'cmd', field: 'MESSAGE', description: 'コマンド' },
   { text: 'sage', label: 'sage', field: 'mail', description: 'sage' },
 ] };
@@ -586,11 +604,39 @@ test('不正な板名・スレキーの props では何も描画しない（例�
     [client.PostingFormJs, { ...formProps, bbs: 'bad-name' }],
     [client.PostingFormJs, { ...formProps, threadKey: 'abc' }],
     [client.BoardDetailsJs, { ...detailsProps, bbs: '' }],
+    [client.BoardDetailsJs, { ...detailsProps, postingForm: { ...detailsProps.postingForm, bbs: 'bad-name' } }],
     [client.ThreadListJs, { ...listProps, bbs: 'a'.repeat(17) }],
   ];
   for (const [Component, props] of cases) {
     const container = await mount(Component, props);
     assert.equal(container.innerHTML, '');
+  }
+});
+
+test('必須キーが欠けた・型が違う props では console.error に出して何も描画しない（例外にしない）', async () => {
+  const { commands, ...withoutCommands } = formProps;
+  const { now, ...withoutNow } = listProps;
+  const cases = [
+    [client.PostingFormJs, withoutCommands, /PostingFormJs.*props\.commands: missing/],
+    [client.PostingFormJs, { ...formProps, session: { uid: 'member' } }, /props\.session\.lv: missing/],
+    [client.BoardDetailsJs, { ...detailsProps, postingForm: { ...detailsProps.postingForm, time: 1 } },
+      /BoardDetailsJs.*props\.postingForm\.time: expected string, got number/],
+    [client.BoardDetailsJs, { bbs: 'sample', headText: '', settingsText: '', time: '1', imgurClientId: '', commands: [] },
+      /props\.postingForm: missing/],
+    [client.ThreadListJs, withoutNow, /ThreadListJs.*props\.now: missing/],
+    [client.ThreadListJs, { ...listProps, subjectText: null }, /props\.subjectText: expected string, got null/],
+  ];
+  const originalError = console.error;
+  try {
+    for (const [Component, props, pattern] of cases) {
+      const errors = [];
+      console.error = (...args) => { errors.push(args.map(String).join(' ')); };
+      const container = await mount(Component, props);
+      assert.equal(container.innerHTML, '');
+      assert.ok(errors.some(message => pattern.test(message)), `${pattern}: ${errors.join('\n')}`);
+    }
+  } finally {
+    console.error = originalError;
   }
 });
 
@@ -751,7 +797,7 @@ test('SSR の描画と最初のクライアント描画が一致する（保存�
   window.localStorage.setItem('3ch:postName', '名無し');
   window.localStorage.setItem('3ch:threadSeen:sample/1800000001', '1');
   const cases = [
-    [client.SiteHeaderJs, {}],
+    [client.SiteHeaderJs, headerProps],
     [client.BoardDetailsJs, detailsProps],
     [client.PostingFormJs, formProps],
     [client.PostingFormJs, { ...formProps, threadKey: '1800000001' }],
@@ -892,11 +938,19 @@ test('ログアウト: フォーム形式の空の本文で送り、成功した
 });
 
 test('アカウント設定のログアウト: かんたん登録には戻せない注意を出す', async () => {
-  const simple = await mount(client.AccountLogoutJs, { simple: true });
+  const simple = await mount(client.AccountLogoutJs, { simple: true, kind: 'client', google: false });
   assert.match(simple.textContent, /かんたん登録のアカウントは、ログアウトするとこの端末から戻せません/);
-  const other = await mount(client.AccountLogoutJs, { simple: false });
+  const other = await mount(client.AccountLogoutJs, { simple: false, kind: 'password', google: false });
   assert.doesNotMatch(other.textContent, /戻せません/);
 });
+
+// サーバーの AccountComponent と同じく、省けるのは boundAt などの時刻と revokeReason だけ
+const tokenProps = token => ({ issuedAt: 0, expiresAt: 0, recentPosts: [], warnings: [], ...token });
+const menuProps = ({ tokens, ...rest }) => ({ activeCount: 0, nowSeconds: 1800000100, ...rest, tokens: tokens.map(tokenProps) });
+const issueMenuProps = menuProps({ activeCount: 1, tokens: [{ id: 'bound-id', label: 'Jane', boundAt: 1800000000 },
+  { id: 'unused-id', label: '前の未使用キー', issuedAt: 1800000000, expiresAt: 1800086400 }] });
+const authFormProps = extra => ({ turnstileSiteKey: 'public-key', returnPath: '/sample/', embed: true, login: false, agreementVersion: 'current-v3',
+  googleEnabled: false, notice: '', mailEnabled: false, upgrade: false, ...extra });
 
 test('専ブラ用キー: 発行したキーはメモリ上にだけ表示し、再マウントすると消える', async () => {
   let issueCalls = 0;
@@ -905,7 +959,7 @@ test('専ブラ用キー: 発行したキーはメモリ上にだけ表示し、
     issueCalls++;
     return { ok: true, json: async () => ({ uid: 'member', lv: 1, token: '!#one-time-secret' }) };
   };
-  const container = await mount(client.AccountMenuJs, { tokens: [{ id: 'bound-id', label: 'Jane', boundAt: 1800000000 }, { id: 'unused-id', label: '前の未使用キー', issuedAt: 1800000000, expiresAt: 1800086400 }] });
+  const container = await mount(client.AccountMenuJs, issueMenuProps);
   assert.doesNotMatch(container.textContent, /one-time-secret/);
   await click([...container.querySelectorAll('button')].find(button => button.textContent === '新しいキーを発行'));
   await flush();
@@ -917,7 +971,7 @@ test('専ブラ用キー: 発行したキーはメモリ上にだけ表示し、
   assert.equal(window.localStorage.length, 0);
   assert.equal(window.sessionStorage.length, 0);
   await act(async () => { for (const entry of mounted.splice(0)) entry.unmount(); });
-  const fresh = await mount(client.AccountMenuJs, { tokens: [{ id: 'bound-id', label: 'Jane', boundAt: 1800000000 }, { id: 'unused-id', label: '前の未使用キー', issuedAt: 1800000000, expiresAt: 1800086400 }] });
+  const fresh = await mount(client.AccountMenuJs, issueMenuProps);
   assert.doesNotMatch(fresh.textContent, /one-time-secret/);
 });
 
@@ -950,7 +1004,7 @@ test('かんたん登録: 規約同意とTurnstileが揃ってから端末情報
     return { ok: false, json: async () => ({ error: 'もう一度認証してください', code: 'auth:turnstile' }) };
   };
   try {
-    const container = await mount(client.AuthFormJs, { turnstileSiteKey: 'public-key', agreementVersion: 'current-v3', returnPath: '/sample/', embed: true });
+    const container = await mount(client.AuthFormJs, authFormProps());
     const submit = container.querySelector('button[type="submit"]');
     assert.equal(widgetOptions.sitekey, 'public-key');
     assert.equal(submit.disabled, true);
@@ -1010,7 +1064,7 @@ test('ID・パスワード: タブを替えてもTurnstileを作り直さず、�
     return { ok: true, json: async () => ({ uid: 'taro_2026', lv: 1, returnPath: '/sample/' }) };
   };
   await withTurnstile(async widget => {
-    const container = await mount(client.AuthFormJs, { turnstileSiteKey: 'public-key', agreementVersion: 'current-v3', returnPath: '/sample/', embed: true });
+    const container = await mount(client.AuthFormJs, authFormProps());
     const radios = container.querySelectorAll('input[type="radio"]');
     assert.equal(radios.length, 3);
     assert.equal(radios[2].disabled, true, 'Googleは未設定なら選べない');
@@ -1065,8 +1119,8 @@ test('Google: 設定があればユーザーIDと同意を付けてフォーム�
   globalThis.fetch = async () => { throw new Error('Googleの開始はfetchで送らない'); };
   try {
     await withTurnstile(async () => {
-      const container = await mount(client.AuthFormJs, { turnstileSiteKey: 'public-key', agreementVersion: 'current-v3', returnPath: '/sample/', embed: true, googleEnabled: true,
-        notice: 'このGoogleアカウントはまだ登録されていません。' });
+      const container = await mount(client.AuthFormJs, authFormProps({ googleEnabled: true,
+        notice: 'このGoogleアカウントはまだ登録されていません。' }));
       assert.match(container.textContent, /このGoogleアカウントはまだ登録されていません。/);
       await click(container.querySelectorAll('input[type="radio"]')[2]);
       assert.equal(container.querySelector('input[autocomplete="new-password"]'), null);
@@ -1095,11 +1149,11 @@ test('専ブラ用キー: 対象IDで失効し使用枠と失効理由を更新�
     requests.push({ url, id: new URLSearchParams(init.body.toString()).get('id') });
     return { ok: true, json: async () => ({ uid: 'member', lv: 1 }) };
   };
-  const container = await mount(client.AccountMenuJs, {
+  const container = await mount(client.AccountMenuJs, menuProps({
     activeCount: 1, nowSeconds: 1800000100,
     tokens: [{ id: 'public-token-id', label: 'JaneStyle・Windows', boundAt: 1800000000, issuedAt: 1799999900, expiresAt: 1800086400,
       recentPosts: [{ t: 1800000001, bbs: 'sample', key: '1800000001', title: '投稿先', resNum: 12, excerpt: '本文', network: '回線・東京都' }] }],
-  });
+  }));
   assert.match(container.textContent, /専用ブラウザ 1 \/ 5/);
   await click([...container.querySelectorAll('button')].find(button => button.textContent === 'このブラウザのキーを無効にする'));
   await flush();
@@ -1110,13 +1164,13 @@ test('専ブラ用キー: 対象IDで失効し使用枠と失効理由を更新�
 });
 
 test('専ブラ用キー: 日時は日本時間で出し、無効化の理由はサーバの値から決める', async () => {
-  const container = await mount(client.AccountMenuJs, {
+  const container = await mount(client.AccountMenuJs, menuProps({
     activeCount: 0, nowSeconds: 1800000100,
     tokens: [
       { id: 'manual', label: '手動の専ブラ', boundAt: 1799990000, issuedAt: 1799980000, expiresAt: 1800066400, revokedAt: 1800000000, revokeReason: 'revoked' },
       { id: 'expired', label: '期限の専ブラ', issuedAt: 1799900000, expiresAt: 1799986400, revokedAt: 1799986400, revokeReason: 'expired' },
     ],
-  });
+  }));
   assert.match(container.textContent, /手動の専ブラ 2027\/01\/15 17:00 手動で無効化/);
   assert.match(container.textContent, /期限の専ブラ 2027\/01\/15 13:13 未使用のまま失効/);
   assert.doesNotMatch(container.textContent, /UTC/);
@@ -1172,4 +1226,55 @@ test('キャップ: 直近の書き込みを出し、拒否はサーバの文言
   await click([...container.querySelectorAll('button')].find(button => button.textContent === 'キャップを発行'));
   await flush();
   assert.match(container.textContent, /使えない文字/);
+});
+
+test('アカウント・認証系の island も、欠けた・型が違う・null の props では console.error に出して何も描画しない', async () => {
+  const { notice, ...authWithoutNotice } = authFormProps();
+  const tokenWithoutWarnings = { ...issueMenuProps, tokens: issueMenuProps.tokens.map(({ warnings, ...token }) => token) };
+  const cases = [
+    [client.SiteHeaderJs, { returnPath: '/sample/' }, /SiteHeaderJs.*props\.authEnabled: missing/],
+    [client.AccountNavJs, { session: { uid: 'member', lv: 3 } }, /AccountNavJs.*props\.returnPath: missing/],
+    [client.AuthFormJs, authWithoutNotice, /AuthFormJs.*props\.notice: missing/],
+    [client.AccountMenuJs, tokenWithoutWarnings, /AccountMenuJs.*props\.tokens\[0\]\.warnings: missing/],
+    [client.AccountMenuJs, { ...issueMenuProps, activeCount: 1.5 }, /props\.activeCount: expected integer in Int range, got 1\.5/],
+    [client.AccountCapJs, { caps: null, admin: false, canIssue: false }, /AccountCapJs.*props\.caps: expected array, got null/],
+    [client.AccountLogoutJs, { simple: true }, /AccountLogoutJs.*props\.kind: missing; props\.google: missing/],
+    [client.AuthTokenJs, { mode: 'reset', token: 't', enabled: 'yes', uid: 'u', email: '' }, /AuthTokenJs.*props\.enabled: expected boolean, got string/],
+    [client.AccountCredentialsJs, { email: '', pendingEmail: null, mailEnabled: false }, /AccountCredentialsJs.*props\.pendingEmail: expected string, got null/],
+  ];
+  for (const [Component, props, pattern] of cases) {
+    let container;
+    const errors = await captureConsoleErrors(async () => { container = await mount(Component, props); });
+    assert.equal(container.innerHTML, '', String(pattern));
+    assert.ok(errors.some(message => pattern.test(message)), `${pattern}: ${errors.join('\n')}`);
+  }
+});
+
+test('アカウント・認証系の island もサーバーと同じ完全な props なら SSR と hydration が一致する', async () => {
+  const cases = [
+    [client.AccountMenuJs, issueMenuProps],
+    [client.AccountCapJs, { caps: [], admin: false, canIssue: true }],
+    [client.AccountLogoutJs, { simple: true, kind: 'client', google: false }],
+    [client.AuthTokenJs, { mode: 'email', token: 't', enabled: true, uid: 'member', email: 'm***@example.com' }],
+    [client.AccountCredentialsJs, { email: '', pendingEmail: '', mailEnabled: false }],
+  ];
+  for (const [Component, props] of cases) {
+    const container = document.body.appendChild(document.createElement('div'));
+    container.innerHTML = renderToString(createElement(Component, props));
+    assert.notEqual(container.innerHTML, '');
+    const errors = [];
+    await act(async () => {
+      mounted.push(hydrateRoot(container, createElement(Component, props), { onRecoverableError: error => errors.push(error.message) }));
+    });
+    assert.deepEqual(errors, []);
+  }
+});
+
+test('props を持つ 11 個の island は hydrate 前の検証関数を持ち、props の無い AuthModalJs は持たない', () => {
+  const typed = ['SiteHeaderJs', 'BoardDetailsJs', 'PostingFormJs', 'ThreadListJs', 'AuthFormJs', 'AccountNavJs', 'AccountMenuJs',
+    'AccountCapJs', 'AccountLogoutJs', 'AuthTokenJs', 'AccountCredentialsJs'];
+  for (const name of typed) assert.equal(typeof client[name].hx4sValidate, 'function', name);
+  assert.equal(client.AuthModalJs.hx4sValidate, undefined);
+  assert.equal(client.ThreadListJs.hx4sValidate(listProps), undefined);
+  assert.equal(client.ThreadListJs.hx4sValidate({ ...listProps, now: '1' }), 'props.now: expected number, got string');
 });

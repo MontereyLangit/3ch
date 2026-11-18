@@ -1,6 +1,7 @@
 package io._3ch.bbsclient.islands
 
 import io._3ch.common.domain.{BbsSubject, BbsSubjects, BoardId, SubjectText}
+import io._3ch.common.islands.ThreadListProps
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
@@ -21,13 +22,8 @@ object ThreadListIsland {
 
   object Props {
     /** 板名が不正なら None */
-    def fromJs(raw: js.Object): Option[Props] = {
-      val o = raw.asInstanceOf[js.Dynamic]
-      def text(name: String): String = o.selectDynamic(name).asInstanceOf[js.UndefOr[String]].getOrElse("")
-      BoardId.create(text("bbs")).toOption.map { bbs =>
-        Props(bbs, text("type"), text("subjectText"), text("query"), text("sort"), o.selectDynamic("now").asInstanceOf[js.UndefOr[Double]].getOrElse(0.0))
-      }
-    }
+    def fromJs(raw: ThreadListProps): Option[Props] =
+      BoardId.create(raw.bbs).toOption.map(bbs => Props(bbs, raw.`type`, raw.subjectText, raw.query, raw.sort, raw.now))
   }
 
   /** seen は板/スレキーごとに localStorage から読んだ既読レス数 */
@@ -216,11 +212,6 @@ object ThreadListIsland {
     }
   }
 
-  /**
-   * jsから渡されるpropsを [[Props]] へ変換して描画
-   * 不正なpropsのときは何も描画しない
-   */
-  final val JsComponent = ScalaFnComponent[js.Object] { raw =>
-    Props.fromJs(raw).fold[VdomNode](EmptyVdom)(Component(_))
-  }
+  /** 検証済みの props を [[Props]] へ変換して描画する。変換できない値なら何も描画しない */
+  def render(raw: ThreadListProps): VdomNode = Props.fromJs(raw).fold[VdomNode](EmptyVdom)(Component(_))
 }

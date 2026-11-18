@@ -28,6 +28,19 @@ class BoardIndexSuite extends munit.FunSuite {
 
   private def render(props: BoardIndexProps): String = visible(BoardMarkup(BoardIndexComponent.Component(props).rawElement))
 
+  test("BoardDetailsJs の data-serialized-props は書き込みフォームの props を postingForm に入れ子で持つ") {
+    val html = BoardMarkup(BoardIndexComponent.Component(props).rawElement)
+    val attribute = "component-name=\"/app/islands/board-details.tsx\"[^>]*data-serialized-props=\"([^\"]*)\"".r
+      .findFirstMatchIn(html).map(_.group(1)).getOrElse(fail(html))
+    val json = js.JSON.parse(attribute.replace("&quot;", "\"").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&"))
+      .asInstanceOf[js.Dictionary[js.Any]]
+    assertEquals(json.keys.toList, List("bbs", "headText", "settingsText", "postingForm"))
+    assertEquals(json("headText").asInstanceOf[String], "<b>ローカルルール</b>")
+    val form = json("postingForm").asInstanceOf[js.Dictionary[js.Any]]
+    assertEquals(form.keys.toList, List("bbs", "time", "imgurClientId", "authEnabled", "requiredLevel", "returnPath", "commands"))
+    assertEquals(form("time").asInstanceOf[String], "1800000100")
+  }
+
   test("feed と新着レス一覧は準備中表示、subback は実際の subject を描画する") {
     val feed = render(props.copy(`type` = "feed"))
     assert(feed.contains("Coming Soon…"))

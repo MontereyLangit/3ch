@@ -1,5 +1,6 @@
 package io._3ch.bbs.handler
 
+import hx4s.hono.ExecutionContext
 import io._3ch.bbs.external.cloudflare.*
 import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.domain.posting.GlobalThread
@@ -36,7 +37,7 @@ object PublicRoutes {
     e.ASSETS.fetch(assetRequest.asInstanceOf[Request]).toFuture
   }
 
-  def fetch(r: Request, e: WorkerEnv, ctx: js.Dynamic): js.Promise[Response] = {
+  def fetch(r: Request, e: WorkerEnv, ctx: ExecutionContext): js.Promise[Response] = {
     val url = js.Dynamic.newInstance(js.Dynamic.global.URL)(r.url)
     val path = str(url.pathname)
     val oldDomain = str(url.hostname) == "www.3chbbs.com"
@@ -47,7 +48,7 @@ object PublicRoutes {
       cache.`match`(key).asInstanceOf[js.Promise[js.Dynamic]].toFuture.flatMap { hit =>
         if truth(hit) then Future.successful(hit.asInstanceOf[Response]) else work.map { response =>
           val raw = response.asInstanceOf[js.Dynamic]
-          if raw.status.asInstanceOf[Int] == 200 then ctx.waitUntil(cache.put(key, raw.applyDynamic("clone")()))
+          if raw.status.asInstanceOf[Int] == 200 then ctx.waitUntil(cache.put(key, raw.applyDynamic("clone")()).asInstanceOf[js.Promise[Unit]])
           response
         }
       }

@@ -107,7 +107,7 @@ E-2に含めなかったもの: メールの提供元、要確認・規則の管
 通常の開発環境では次のコマンドを使う。今回の環境専用のラッパーは前提にしない。
 
 ```bash
-npm ci
+npm run hx4s:setup
 npm run v6:build
 sbt test
 npm test
