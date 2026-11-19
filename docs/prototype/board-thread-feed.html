@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>板top スレッドフィード モック</title>
+<style>
+:root{--text:#333;--sub:#697785;--line:#dce1e6;--line2:#dcdcdc;--link:#06f;--accent:#f66}
+*{box-sizing:border-box}
+body{margin:0;background:#fafafa;color:var(--text);font:14px/1.6 system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;overflow-wrap:anywhere}
+a{color:var(--link);text-decoration:none}
+a:hover{text-decoration:underline}
+button,input,select{font:inherit}
+.header{height:64px;display:flex;align-items:center;gap:24px;padding:0 16px;background:#fff;border-bottom:2px solid #f99}
+.header .logo{font-size:22px;font-weight:bold;color:#c33}
+.header nav{display:flex;gap:16px;font-size:13px}
+.header nav a{color:var(--text)}
+.layout{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1fr);align-items:start;padding:8px}
+main{min-width:0;padding-right:8px}
+h1{margin:8px 0;font-size:18px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;padding:13px}
+.tabs{display:flex;flex-wrap:wrap;gap:3px;min-width:0}
+.tab{margin-right:10px;padding:4px 0;border-bottom:2px solid transparent;color:var(--text)}
+.tab:hover{border-color:var(--accent);text-decoration:none}
+.tab.active{border-color:var(--accent);font-weight:bold}
+.tab.unavailable{color:#777;cursor:default}
+.tab.unavailable:hover{border-color:transparent}
+.right-controls{margin-left:auto;display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+.right-controls input{width:220px;max-width:100%;border:1px solid #d6dce3;background:#fff;padding:4px 10px;font-size:16px}
+.right-controls select{border:1px solid #d6dce3;background:#fff;padding:7px;font-size:11px;color:#465565;cursor:pointer}
+.reload{border-bottom:2px solid #e0e0e0;padding:2px 0;text-align:center}
+.reload button{border:0;background:none;color:#0187e8;font-size:16px;cursor:pointer;padding:4px}
+.reload button:hover{text-decoration:underline}
+.notice{margin:8px;font-size:12px;color:var(--sub)}
+details.common{margin:8px 0;border-top:1px solid var(--line)}
+details.common>summary{padding:9px 16px;cursor:pointer}
+details.common>summary span{margin-left:10px;font-size:12px;color:#4d4d4d}
+.feed-list{border-top:1px solid var(--line2)}
+.card{padding:12px 16px;border-bottom:1px solid var(--line)}
+.meta{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--sub)}
+.card h2{margin:4px 0;font-size:18px;font-weight:normal}
+.card h2 a{color:red}
+.card h2 small{font-size:13px}
+.post{margin-top:10px;padding-bottom:5px;border-bottom:1px dotted var(--line2)}
+.post .num,.post .name{font-size:11px;color:#4d4d4d}
+.post .num{font-weight:bold}
+.post .name{margin-left:6px}
+.post .slip{margin-left:4px;font-size:11px;font-weight:bold;color:#333}
+.post .date{padding-left:16px;font-size:11px;color:#aaa}
+.post .msg{margin-left:40px;font-size:16px;color:#000;white-space:pre-wrap}
+.gap{margin:8px 0;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px;padding:10px;border:1px dashed var(--line);background:#f6f8fc;font-size:12px;text-align:center}
+.gap span{color:var(--sub)}
+.btn{cursor:pointer;border:1px solid #cbd3dd;background:#fff;padding:4px 8px;font-size:12px;color:#37475a}
+.btn:hover{background:#f0f6ff;text-decoration:none}
+.foot{margin-top:12px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+.linkbtn{border:0;background:none;padding:0;font-size:12px;color:var(--link);cursor:pointer}
+.linkbtn:hover{text-decoration:underline}
+.empty{margin:8px;font-size:12px;color:var(--sub)}
+aside{min-width:0;font-size:12px}
+aside section{margin-bottom:12px;padding:10px;background:#fff;border:1px solid var(--line)}
+aside h3{margin:0 0 6px;font-size:13px}
+@media(max-width:767px){.layout{display:block}main{padding-right:0}aside{margin-top:12px}}
+@media(max-width:660px){
+  .header nav{display:none}
+  .toolbar{padding:9px}
+  .tab{padding:7px 9px;font-size:12px}
+  .right-controls{margin-left:0;width:100%}
+  .right-controls input{flex:1;width:auto}
+  details.common>summary,.card{padding-left:9px;padding-right:9px}
+  .post .msg{margin-left:20px}
+}
+</style>
+</head>
+<body>
+<header class="header"><span class="logo">3ちゃんねる</span><nav><a href="#">ホーム</a><a href="#">板一覧</a><a href="#">検索</a></nav></header>
+<div class="layout">
+  <main>
+    <h1>test＠3ch掲示板</h1>
+    <div class="toolbar">
+      <nav class="tabs" aria-label="表示切り替え">
+        <a class="tab active" href="#" aria-current="page">スレッドフィード</a>
+        <a class="tab" href="#">スレ一覧</a>
+        <span class="tab unavailable">おすすめ3ちゃんねる</span>
+      </nav>
+      <div class="right-controls">
+        <input id="query" type="search" placeholder="スレッドを検索" aria-label="スレッドを検索">
+        <select id="sort" aria-label="並び順"><option value="new">新着順</option><option value="speed">勢い順</option><option value="res">レス数順</option></select>
+      </div>
+    </div>
+    <div class="reload"><button type="button">リロード</button></div>
+    <p class="notice">スレッドフィードはダミーデータで表示しています。</p>
+    <details class="common"><summary><b>全板共通スレ</b><span id="common-count"></span></summary><div id="common"></div></details>
+    <div class="feed-list" id="feed"></div>
+  </main>
+  <aside>
+    <section><h3>板設定・ローカルルール</h3>（モックでは省略）</section>
+    <section><h3>新着レス一覧</h3>（モックでは省略）</section>
+  </aside>
+</div>
+<script>
+(() => {
+  'use strict';
+  const BBS = 'test';
+  const EXPANDED = 10;
+  const thread = (key, title, count, ago, speed, first, latest) => ({key, title, count, ago, speed, first, latest});
+  const threads = [
+    thread('1793358001', '雑談スレッド Part 12', 48, '2分前', 32.4, '気軽に雑談していきましょう。', '昼休みに覗きに来た'),
+    thread('1793358002', '今日の出来事を書いていくスレ', 23, '15分前', 12.8, '駅前のパン屋が新装開店してた', '帰りに寄ってみるわ'),
+    thread('1793358003', '掲示板の使い方・質問スレッド', 7, '1時間前', 8.2, 'スレ一覧の並び順はどこで変えられますか？', '検索欄の横の並び順で変えられます'),
+    thread('1793358004', '好きな音楽を教えてください', 2, '3時間前', 5.1, '最近はジャズばかり聴いてる', '自分はずっとシティポップ'),
+    thread('1793358005', '掲示板からのお知らせ', 1, '1日前', 0.5, '新しい板topの試験運用を始めました。', '')
+  ];
+  const commonThreads = [
+    thread('9240000001', '★ ３ちゃんねるからのお知らせ', 12, '3時間前', 0, '３ちゃんねるからのお知らせを掲載します。\nこのスレッドは★（キャップ）のみ書き込めます。', 'メンテナンス予定のお知らせです。'),
+    thread('9240000002', 'アクセス規制情報', 30, '2日前', 0, 'アクセス規制の実施・解除をお知らせします。', '一部プロバイダからの書き込み規制を解除しました。'),
+    thread('9000000001', '３ちゃんねる 全板共通スレ', 523, '1時間前', 0, 'どの板からでも書き込める共通スレッドです。\n雑談・質問などご自由にどうぞ。', '新しい板topいい感じだな'),
+    thread('9000000002', '通報スレ', 88, '14時間前', 0, '荒らし・スパム・削除依頼の通報はこちらへ。', '対応ありがとうございます。')
+  ];
+  const replies = ['それな', 'わかる', '>>1 乙', 'なるほどね', '今来た', 'ちょっと見ない間に伸びてるな', 'いいね'];
+  const expanded = new Set();
+
+  const escape = s => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+  const isCap = t => t.key.startsWith('924');
+  const board = t => (isCap(t) || t.key.startsWith('900')) ? '924' : BBS;
+  const two = n => String(n).padStart(2, '0');
+
+  const post = (t, n) => {
+    const message = n === 1 ? t.first : n === t.count ? t.latest : replies[n % replies.length];
+    const m = n - 1;
+    return {n, message, date: `2026/10/30(金) ${two(12 + Math.floor(m / 60))}:${two(m % 60)}:10`};
+  };
+  const tail = (t, open) => {
+    const from = Math.max(2, t.count - (open ? EXPANDED : 1) + 1);
+    const xs = [];
+    for (let n = from; n <= t.count; n++) xs.push(post(t, n));
+    return xs;
+  };
+
+  const postHTML = (p, cap) => `<div class="post"><span class="num">${p.n} : </span><span class="name">${cap ? '３ちゃんねる運営 ★' : '名無しさん'}</span>${cap ? '' : '<span class="slip">(ｱｳｱｳ Sa01-AbCd)</span>'}<span class="date">${p.date}</span><div class="msg">${escape(p.message)}</div></div>`;
+
+  const card = t => {
+    const open = expanded.has(t.key);
+    const cap = isCap(t);
+    const rest = tail(t, open);
+    const missing = rest.length ? rest[0].n - 2 : 0;
+    const href = `/test/read.cgi/${board(t)}/${t.key}/`;
+    return `<article class="card">
+      <div class="meta"><span>更新 ${t.ago}</span><span>${t.count} レス</span></div>
+      <h2><a href="${href}">${escape(t.title)}</a><small> (${t.count})</small></h2>
+      ${postHTML(post(t, 1), cap)}
+      ${missing > 0 ? `<div class="gap"><span>${missing}件のレスを省略</span>${open ? '' : `<button class="btn" type="button" data-expand="${t.key}">最新${EXPANDED}レスを表示 ↓</button>`}</div>` : ''}
+      ${rest.map(p => postHTML(p, cap)).join('')}
+      <div class="foot"><div>${open ? `<button class="linkbtn" type="button" data-collapse="${t.key}">最新1レスに戻す</button>` : ''}</div><a class="btn" href="${href}">スレッドを開く ›</a></div>
+    </article>`;
+  };
+
+  const render = () => {
+    const q = document.getElementById('query').value.toLowerCase();
+    const sort = document.getElementById('sort').value;
+    const match = t => t.title.toLowerCase().includes(q);
+    const common = commonThreads.filter(match);
+    const list = threads.filter(match);
+    if (sort === 'res') list.sort((a, b) => b.count - a.count);
+    if (sort === 'speed') list.sort((a, b) => b.speed - a.speed);
+    document.getElementById('common-count').textContent = `${common.length}件`;
+    document.getElementById('common').innerHTML = common.map(card).join('');
+    document.getElementById('feed').innerHTML = list.length ? list.map(card).join('') : '<p class="empty">該当するスレッドはありません。</p>';
+  };
+
+  document.addEventListener('click', e => {
+    const target = e.target.closest('[data-expand],[data-collapse]');
+    if (!target) return;
+    if (target.dataset.expand) expanded.add(target.dataset.expand);
+    else expanded.delete(target.dataset.collapse);
+    render();
+  });
+  document.getElementById('query').addEventListener('input', render);
+  document.getElementById('sort').addEventListener('change', render);
+  render();
+})();
+</script>
+</body>
+</html>
