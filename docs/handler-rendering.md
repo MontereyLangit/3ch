@@ -20,7 +20,7 @@ import japgolly.scalajs.react.vdom.html_<^.*
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSExportTopLevel
 
-@route("boards.ts")
+@route("boards")
 @JSExportTopLevel("pageHandler", "server")
 def pageHandler(c: HonoContextFacade): js.Promise[Response] = {
   val props = new RenderProps {}
@@ -50,7 +50,7 @@ React 要素は `renderToStaticMarkup` で HTML 化し、文字列はそのま�
 
 ## Islands
 
-Island は `bbs-client/.../Main.scala` の export に `@islands[P]("x.tsx")` を付けて宣言する。hx4s の codegen がブラウザ用の
+Island は `bbs-client/.../Main.scala` の export に `@islands[P]("x")` を付けて宣言する。hx4s の codegen がブラウザ用の
 `app/islands/x.tsx` と、SSR 用の `io._3ch.bbs.generated.IslandComponents` を生成する。handler は生成 API を呼び、
 戻り値の `VdomElement` をページの子要素にするか `c.renderPage(island.rawElement)` に渡す。
 SSR 側は `app/islands/*.tsx` を import せず、生成 API が `hx4s.react.Island`（HonoX の `HonoXIsland`）で包むので、hydration 用の識別情報と props が付く。

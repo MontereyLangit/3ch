@@ -37,28 +37,28 @@ object Main {
   @JSExportTopLevel("settingTxtDefault", "server")
   val settingTxtDefault: String = handler.PostingText.settingTxtDefault
 
-  @route("[bbs]/index.ts")
+  @route("[bbs]/index")
   @JSExportTopLevel("boardIndexHandler", "server")
   def boardIndexHandler(c: js.Any): js.Promise[Response] =
   BoardHandler.index(c.asInstanceOf[HonoContextFacade])
 
   /** 認証・登録画面を描画する */
-  @route("auth/index.ts")
+  @route("auth/index")
   @JSExportTopLevel("authPageHandler", "server")
   def authPageHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.page(c.asInstanceOf[HonoContextFacade])
 
   /** 本人のアカウント設定画面を描画する */
-  @route("auth/account/index.ts")
+  @route("auth/account/index")
   @JSExportTopLevel("authAccountHandler", "server")
   def authAccountHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.page(c.asInstanceOf[HonoContextFacade], accountPage = true)
 
   /** メールアドレスの確認リンクの画面を描画する */
-  @route("auth/email/verify/index.ts")
+  @route("auth/email/verify/index")
   @JSExportTopLevel("authEmailVerifyHandler", "server")
   def authEmailVerifyHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.tokenPage(c.asInstanceOf[HonoContextFacade], reset = false)
 
   /** パスワードの再設定リンクの画面を描画する */
-  @route("auth/reset/index.ts")
+  @route("auth/reset/index")
   @JSExportTopLevel("authResetHandler", "server")
   def authResetHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.tokenPage(c.asInstanceOf[HonoContextFacade], reset = true)
 

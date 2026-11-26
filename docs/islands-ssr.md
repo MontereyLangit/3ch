@@ -12,7 +12,7 @@ props の形は `common/src/main/scala-js/io/_3ch/common/islands/` に非ネイ�
 
 ```scala
 // bbs-client/.../Main.scala
-@islands[io._3ch.common.islands.ThreadListProps]("thread-list.tsx")
+@islands[io._3ch.common.islands.ThreadListProps]("thread-list")
 @JSExportTopLevel("ThreadListJs", "client")
 final val threadList: IslandExport[ThreadListProps] = IslandExport("ThreadListJs", ThreadListProps.fields)(ThreadListIsland.render)
 ```

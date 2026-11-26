@@ -5,6 +5,8 @@
 設定キーは hx4s の文書を参照する（hx4s の checkout の `docs/hx4s/codegen.md`、`docs/hx4s/build-integration.md` 2.2・3.3）。
 3ch の `codegen/` プロジェクトに残るのは DO の TS 型と RPC スタブの生成（`GenerateDurableObject*`）だけで、`docs/durable-object-stubs.md` を参照。
 
+@route の末尾の `.ts` と @islands の末尾の `.tsx` は省略できる。たとえば `@route("auth/index")` は `app/routes/auth/index.ts` を生成する。拡張子付きの宣言も引き続き使え、生成先と island ID は同じになる。
+
 ## 生成物と実行のきっかけ
 
 | 生成物 | きっかけ | 備考 |
