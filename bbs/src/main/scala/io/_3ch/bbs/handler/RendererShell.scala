@@ -14,9 +14,9 @@ private object renderToStaticMarkup extends js.Function1[React.Element, String] 
   def apply(element: React.Element): String = js.native
 }
 
-/** 通常画面の React シェルと、専ブラ互換の既存 HTML 応答を画面側で選択する。 */
+/** 通常画面の React シェルと、専ブラ互換の既存 HTML 応答を画面側で選択する */
 object RendererShell {
-  /** 完成済み文字列または React 要素を Shift_JIS 応答にする。レイアウトは付けない。 */
+  /** 完成済み文字列または React 要素を Shift_JIS 応答にする。レイアウトは付けない */
   def createSjisResponse(content: String, contentType: String): Response = {
     val bytes = SjisEncoding.encode(content)
     Responses.response(bytes, headers = js.Dictionary(
@@ -36,7 +36,7 @@ object RendererShell {
     React.createElement("script", js.Dictionary("type" -> "module", "src" -> src).asInstanceOf[js.Object])
   }
 
-  /** 専ブラ用 React ページを静的 HTML にし、指定文字コードで返す。通常画面のシェルは付けない。 */
+  /** 専ブラ用 React ページを静的 HTML にし、指定文字コードで返す。通常画面のシェルは付けない */
   def legacyReact(
     page: React.Element,
     encoding: String = "Shift_JIS",
@@ -47,7 +47,7 @@ object RendererShell {
     legacyHtml(renderToStaticMarkup(page), encoding, modified, since, extra)
   }
 
-  /** 完成済み HTML のタグ・コメントを維持して応答する。投稿画面は既存の文字コード判定を渡す。 */
+  /** 完成済み HTML のタグとコメントを変えずに応答する。投稿画面では既存の文字コード判定を渡す */
   def legacyHtml(
     html: String,
     encoding: String = "Shift_JIS",

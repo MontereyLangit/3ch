@@ -24,7 +24,7 @@ object ThreadCreationSettings {
     }
   }
 
-  /** SETTING.TXT 本文を読む。値は最初の = 以降の全体、キー・値は前後の空白を除き、重複キーは後勝ち */
+  /** SETTING.TXT 本文を読む。値は最初の = 以降すべて、キーと値は前後の空白を除き、重複キーは後に書かれたものが優先される */
   def settingsMap(text: String): Map[String, String] = text.split("\\r?\\n", -1).flatMap { line =>
     val parts = line.split("=", 2)
     if (parts.length == 2) Some(parts(0).trim -> parts(1).trim) else None
@@ -38,7 +38,7 @@ object ThreadCreationSettings {
     settings.value.foldLeft(Option.empty[String]) { case (acc, (k, v)) => if (k.trim == "BBS_THREAD_PASS") Some(v) else acc }
       .flatMap(BypassLevel.parse).getOrElse(BypassLevel.Default)
 
-  /** 板設定から読む。設定名の前後の空白は除き、重複は後勝ち */
+  /** 板設定から読む。設定名の前後の空白は除き、重複は後に書かれたものが優先される */
   def fromSettings(settings: BbsSettings): Either[ThreadCreationSettingError, Parsed] =
     parse(settings.value.foldLeft(Map.empty[String, String]) { case (acc, (k, v)) => acc.updated(k.trim, v) })
 

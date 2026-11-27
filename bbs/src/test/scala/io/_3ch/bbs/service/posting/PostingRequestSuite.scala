@@ -5,7 +5,7 @@ import io._3ch.bbs.domain.posting.PostingError
 import io._3ch.bbs.external.web.Request
 import scala.scalajs.js
 
-/** bbs.cgi のヘッダの読み取りと検査 */
+/** bbs.cgi のヘッダの読み取りと検査を確かめる */
 class PostingRequestSuite extends FunSuite {
   private def makeRequest(method: String = "POST", headers: Seq[(String, String)] = Nil, cf: js.UndefOr[js.Dictionary[js.Any]] = js.undefined): Request = {
     val lowered = headers.map((k, v) => k.toLowerCase -> v).toMap

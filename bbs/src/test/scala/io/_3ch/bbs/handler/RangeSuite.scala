@@ -10,7 +10,7 @@ import scala.scalajs.js
 /**
  * v6 の現仕様固定: dat ルート経由で観測できる Range / If-Modified-Since の挙動（旧 respondPlainText の特性テストの移植）。
  * KB-nn は docs/既知不具合台帳.md を参照。
- * UTF-8 の Range 応答 (KB-20)・respond500・KB-22(生タグ入り404本文: URLが%エンコードされ到達不能)は公開ルートから観測できないため対象外。
+ * UTF-8 の Range 応答 (KB-20)、respond500、KB-22(生タグ入り404本文: URLが%エンコードされ到達不能)は公開ルートから観測できないため対象外。
  */
 class RangeSuite extends FunSuite {
   import HandlerTestKit.*

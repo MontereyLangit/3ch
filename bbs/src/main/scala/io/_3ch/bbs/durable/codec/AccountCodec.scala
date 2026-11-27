@@ -111,13 +111,13 @@ object AccountCodec {
   def description(v: AccountDescription): js.Dynamic = js.Dynamic.literal(code = "", aid = v.aid, uid = v.uid, kind = v.kind.code, generation = v.generation,
     expiresAt = v.expiresAt.orUndefined, lv = v.lv, roles = encodeRoles(v.roles), agreedAt = v.agreedAt, agreementVersion = v.agreementVersion, createdAt = v.createdAt)
 
-  /** 本人確認後の応答。登録準備中なら確定の再開に使う uid だけを返す */
+  /** 本人確認後の応答。登録準備中のときは、確定を再開するための uid だけを返す */
   def signIn(value: Either[AccountRejection, AccountDescription], uid: String): js.Dynamic = value match {
     case Left(AccountRejection.Pending) => js.Dynamic.literal(code = AccountRejection.Pending.code, uid = uid)
     case other => describe(other)
   }
 
-  /** 保留トークンの発行結果。再設定では送り先のアドレスを返す */
+  /** 保留トークンの発行結果。再設定のときは、送り先のアドレスを返す */
   def pending(state: AccountState, kind: PendingKind): js.Dynamic =
     js.Dynamic.literal(code = "", email = (if (kind == PendingKind.Reset) state.profile.email else None).orUndefined)
 
@@ -125,7 +125,7 @@ object AccountCodec {
   def withdrawal(value: Withdrawal): js.Dynamic = js.Dynamic.literal(code = "", loginId = value.loginId.orUndefined, email = value.email.orUndefined,
     googleSubHash = value.googleSubHash.orUndefined, caps = value.caps.map(_.hash).toJSArray)
 
-  /** ログインの失敗。存在しない ID・不一致・ロック中を区別しない */
+  /** ログインの失敗。存在しない ID、不一致、ロック中のどれかは区別しない */
   def loginFailure(): js.Dynamic = js.Dynamic.literal(code = AccountRejection.LoginFailed.code)
 
   def tokenDescription(value: AccountDescription, tokenId: String): js.Dynamic = {
@@ -139,7 +139,7 @@ object AccountCodec {
     result
   }
 
-  /** 失効させたキャップの照合値と、再発行なら新しいキャップの表示名と強さ */
+  /** 失効させたキャップの照合値。再発行のときは、新しいキャップの表示名と強さも持つ */
   def capRevocation(revoked: AccountCap, issued: Option[AccountCap]): js.Dynamic = js.Dynamic.literal(code = "", hash = revoked.hash,
     name = issued.map(_.name).orUndefined, strong = issued.map(_.strong).orUndefined)
 
@@ -159,13 +159,13 @@ object AccountCodec {
     val v = value.asInstanceOf[js.Dynamic]
     AccountLogPage(decodeLogPosition(field(v, "number")).next, array(field(v, "entries")).map(decodePost))
   }
-  /** 専ブラキーの照合で拒否した記録。保存キーは rejections */
+  /** 専ブラキーの照合で拒否した記録。保存するときのキーは rejections */
   val rejectionsKey: String = "rejections"
   def decodeRejections(value: js.Any): Vector[AccountPost] = if (missing(value)) Vector.empty else array(value).map(decodePost)
   def encodeRejections(entries: Vector[AccountPost]): js.Array[js.Dynamic] = entries.map(encodePost).toJSArray
   def encodeLogPage(page: AccountLogPage): js.Dynamic = js.Dynamic.literal(number = page.number.toDouble, entries = page.entries.map(encodePost).toJSArray)
 
-  /** 本人向けのキー一覧から照合用ハッシュを除く */
+  /** 本人向けのキー一覧から、照合用のハッシュを除く */
   def inspect(state: AccountState, logs: Vector[AccountPost], rejections: Vector[AccountPost], now: Double): js.Dynamic = {
     val tokens = DedicatedBrowserTokens.retained(state.tokens, now).map { token =>
       js.Dynamic.literal(tokenId = token.tokenId, issuedAt = token.issuedAt, expiresAt = token.expiresAt, uaLabel = token.uaLabel.orUndefined,

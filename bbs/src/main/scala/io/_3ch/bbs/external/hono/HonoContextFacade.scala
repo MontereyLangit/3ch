@@ -16,7 +16,7 @@ trait RenderProps extends js.Object {
 /** 3ch の Hono Context */
 type HonoContextFacade = Context[WorkerEnv, RenderProps]
 
-/** hx4s の Context が使う scalajs-dom の Request / Response を、3ch の Fetch facade（external.web）として読む境界 */
+/** hx4s の Context が使う scalajs-dom の Request / Response を、3ch の Fetch facade（external.web）として読み替える境界 */
 object HonoContextFacade {
   extension (c: HonoContextFacade) {
     /** c.req.raw */

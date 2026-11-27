@@ -7,13 +7,13 @@ import japgolly.scalajs.react.vdom.html_<^.*
 
 import scala.scalajs.js.URIUtils
 
-/** 板概要・板設定・新着レス一覧・新規スレッド作成の開閉ボタン・パネル */
+/** 板概要、板設定、新着レス一覧、新規スレッド作成を開閉するボタンとパネル */
 object BoardDetailsIsland {
 
   final case class Props(bbs: BoardId, headText: String, settingsText: String, posting: PostingFormIsland.Props)
 
   object Props {
-    /** 板名が不正なら None */
+    /** 板名が不正なら None を返す */
     def fromJs(raw: BoardDetailsProps): Option[Props] = {
       for {
         bbs <- BoardId.create(raw.bbs).toOption

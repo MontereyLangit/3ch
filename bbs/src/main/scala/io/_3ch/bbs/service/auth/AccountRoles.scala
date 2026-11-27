@@ -6,7 +6,7 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.util.control.NonFatal
 
-/** 役割の付け外しと初回の管理者の確保。admin を持つアカウントを role:admin 索引に載せる */
+/** 役割の付け外しと、初回の管理者の確保をする。admin を持つアカウントは role:admin 索引に載せる */
 final class AccountRoles(accounts: AccountRoleStore, keys: AuthenticationKeys) {
   private val kind = AccountIndexKind.Admin.code
 
@@ -14,8 +14,8 @@ final class AccountRoles(accounts: AccountRoleStore, keys: AuthenticationKeys) {
     keys.index(kind, aid).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
 
   /**
-    * actor の今の役割で target の役割を置き換え、admin の付け外しを索引に反映する。権限の判定は Account DO が行う。
-    * admin を足すときは索引が先、外すときは役割が先（索引に載らない admin を作らない）。最後の admin は外せない
+    * actor の今の役割で target の役割を置き換え、admin の付け外しを索引に反映する。権限の判定は Account DO がする。
+    * admin を足すときは索引を先に、外すときは役割を先に更新する（索引に載らない admin を作らない）。最後の admin は外せない
     */
   def assign(actor: AccountDescription, target: String, next: Roles, now: Double): Future[Unit] = hash(target).flatMap { key =>
     if (next.admin) grant(key, actor, target, next, now) else strip(key, actor, target, next, now)
@@ -40,13 +40,13 @@ final class AccountRoles(accounts: AccountRoleStore, keys: AuthenticationKeys) {
       }
     }
 
-  /** 索引に確定済みで載せる。同じ所有者の予約・確定が既にあれば確定し直すだけ */
+  /** 索引を確定済みの状態で載せる。同じ所有者の予約か確定がすでにあれば、確定し直すだけにする */
   private def listed(key: String, aid: String, now: Double): Future[Unit] =
     accounts.reserve(kind, key, aid, now).flatMap(_ => accounts.confirm(kind, key, aid, now))
 
   /**
-    * 有効な admin が居ない間か非常用期間だけ、aid を初回の管理者にする。途中で止まったら admin の有無を読み直し、
-    * admin なら確保を確定し、admin でなければ確保を外す。読み直せなければ確保を残す
+    * 有効な admin が居ない間か非常用期間だけ、aid を初回の管理者にする。途中で止まったときは admin の有無を読み直し、
+    * admin なら確保を確定し、admin でなければ確保を外す。読み直せなければ確保をそのまま残す
     */
   def claimFirstAdmin(aid: String, now: Double, breakGlass: Boolean): Future[Unit] = hash(aid).flatMap { key =>
     accounts.claimFirstAdmin(key, aid, now, breakGlass).flatMap { _ =>

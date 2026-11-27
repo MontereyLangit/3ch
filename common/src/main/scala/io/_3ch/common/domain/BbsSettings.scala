@@ -19,7 +19,7 @@ case class BbsSettings (
     */
   override def toString: String = value.map { case (k, v) => s"$k=$v" }.mkString("", "\n", "\n")
 
-  /** 設定値。無ければ None */
+  /** 設定値を返す。無ければ None */
   def get(name: String): Option[String] = value.get(name)
 
   /** 値が空でなければその値、無いか空なら default */

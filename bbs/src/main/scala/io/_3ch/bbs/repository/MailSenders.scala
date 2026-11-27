@@ -7,7 +7,7 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
-/** メールの送信先の設定。どれも無ければ None で、メール認証と再設定を止める */
+/** メールの送信先を設定から決める。どれも無ければ None を返し、メール認証と再設定を止める */
 object MailSenders {
   /** MAIL_SENDER（send を持つ service binding）を使う。提供元を選んだら MAIL_API_KEY を読む実装をここに足す */
   def from(env: WorkerEnv): Option[MailSender] =

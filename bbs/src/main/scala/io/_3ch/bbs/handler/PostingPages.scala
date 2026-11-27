@@ -17,7 +17,7 @@ object PostingPages {
     React.createElement(tag, js.Dynamic.literal(dangerouslySetInnerHTML = js.Dynamic.literal(__html = content)))
   }
 
-  /** 投稿処理の結果の画面。拒否ならその時点のフォームとホストを出す */
+  /** 投稿処理の結果を画面にする。拒否ならその時点のフォームとホストを出す */
   def render(outcome: PostingOutcome, charset: String): React.Element = outcome match {
     case PostingOutcome.Rejected(error, context, _) =>
       val message = error match {

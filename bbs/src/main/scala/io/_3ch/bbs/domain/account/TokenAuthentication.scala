@@ -5,7 +5,7 @@ import io._3ch.common.domain.account.AccountDescription
 /** 専ブラキーの索引から得た参照 */
 final case class TokenReference(aid: String, tokenId: String)
 
-/** Account DO が照合する専ブラキーと完全な UA ハッシュ */
+/** Account DO が照合する専ブラキーと、全長の UA ハッシュ */
 final case class TokenProof(tokenId: String, uaHash: String)
 
 /** 認証したキーと現在のアカウント */

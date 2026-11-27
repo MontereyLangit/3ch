@@ -30,7 +30,7 @@ object PublicRoutes {
   private def read(e: WorkerEnv, file: String): Future[Option[String]] = e.ch3www.get(file).toFuture.flatMap(o => if o == null then Future.successful(None) else o.text().toFuture.map(Option(_)))
   private def date(s: String, parse: Boolean = false): js.Date = new js.Date((if parse then js.Dynamic.global.parseInt(s).asInstanceOf[Double] else js.Dynamic.global.Number(s).asInstanceOf[Double]) * 1000)
   private def guard(path: String)(f: => Future[Response]): Future[Response] = Future.unit.flatMap(_ => f).recover { case e => failed(s"$path Error -> ${error(e)}") }
-  /** 3chiko.html本体をWorkers Static Assets(env.ASSETS)経由で取得する(public/3chiko.html、src/3chiko.js参照)。 */
+  /** 3chiko.html本体をWorkers Static Assets(env.ASSETS)経由で取得する(public/3chiko.html、src/3chiko.js参照) */
   private def view3chiko(e: WorkerEnv, url: js.Dynamic, r: Request): Future[Response] = {
     val assetUrl = js.Dynamic.newInstance(js.Dynamic.global.URL)("/3chiko.html", url)
     val assetRequest = js.Dynamic.newInstance(js.Dynamic.global.Request)(assetUrl, r)
@@ -58,7 +58,7 @@ object PublicRoutes {
     else if path == "/" then view3chiko(e, url, r)
     // read.cgi スレ表示 (3chiko.html)
     else if new js.RegExp("^/test/read\\.cgi/[a-zA-Z0-9\\-_]+/[0-9]{10}/$").test(path) then view3chiko(e, url, r)
-    // 過去ログ倉庫 (3chiko.html)。subject.txt系APIはRouteTable経由で別途下(archive/archives)で処理する
+    // 過去ログ倉庫 (3chiko.html)。subject.txt系のAPIはRouteTable経由で、下の(archive/archives)が別に処理する
     else if new js.RegExp("^/[a-zA-Z0-9\\-_]+/kako(/.*)?$").test(path) && !path.endsWith("/subject.txt") then view3chiko(e, url, r)
     else if new js.RegExp("^/test/(sub)?bbs.cgi").test(path) then Posting.entry(r, e).toFuture
     else if path == "/auth.js" then Future.successful(Responses.response("/* test */", headers = js.Dictionary("content-type" -> "application/javascript;charset=UTF-8")))

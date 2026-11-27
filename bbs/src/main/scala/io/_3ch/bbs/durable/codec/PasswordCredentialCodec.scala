@@ -54,7 +54,7 @@ object PasswordCredentialCodec {
     js.Dynamic.literal(sources = js.Dictionary(value.sources.toSeq.map { case (key, entry) => key -> source(entry).asInstanceOf[js.Any] }*), account = account)
   }
 
-  /** 必須項目の型・長さ・計数状態を検証する。欠損値を初期設定で補わない */
+  /** 必須項目の型・長さ・計数の状態を検証する。欠けている値は、初期設定で補わない */
   def decode(value: js.Any): PasswordCredential = {
     val iterations = time(field(value, "iterations"))
     if (iterations < 1 || iterations > PasswordCredential.currentIterations) invalid()

@@ -31,7 +31,7 @@ object BrowserFingerprintCollector {
     }
   }.getOrElse("")
 
-  /** 候補の順序・計測文字列・サイズは端末ハッシュの材料仕様 */
+  /** 候補の順序、計測する文字列、サイズは、端末ハッシュの材料として仕様で決まっている */
   private def fonts(): String = Try {
     val canvas = dom.document.createElement("canvas").asInstanceOf[dom.HTMLCanvasElement]
     Option(canvas.getContext("2d")).fold("") { raw =>

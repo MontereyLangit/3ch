@@ -1,16 +1,16 @@
 package io._3ch.common.domain.account
 
-/** 認証後に HTTP 層へ返す情報。資格情報とキーのハッシュは含めない。createdAt はエッジ防御の免除に使う作成時刻 */
+/** 認証後に HTTP 層へ返す情報。資格情報とキーのハッシュは含めない。createdAt はエッジ防御の免除に使うアカウントの作成時刻 */
 final case class AccountDescription(aid: String, uid: String, kind: AccountKind, generation: Int, expiresAt: Option[Double],
   lv: Int, roles: Roles, agreedAt: Double, agreementVersion: String, createdAt: Double = 0)
 
-/** アカウントに結び付いた端末の初回・最終観測 */
+/** アカウントに結び付いた端末について、初めて観測した時と最後に観測した時の記録 */
 final case class AccountDevice(hash: String, firstSeen: Double, lastSeen: Double, keyIpHash: String) {
   def valid: Boolean = hash.matches("[pgu](?:[0-9a-f]{18}|[0-9a-f]{16})") && DedicatedBrowserTokens.validHash(keyIpHash) &&
     AccountProfile.validTime(firstSeen) && AccountProfile.validTime(lastSeen) && lastSeen >= firstSeen
 }
 
-/** 書き込み・認証キー照合の経路 */
+/** 書き込みと認証キーの照合の経路 */
 enum AccountVia(val code: String) {
   case Web extends AccountVia("web")
   case Token extends AccountVia("token")
@@ -20,7 +20,7 @@ object AccountVia {
   def parse(code: String): Option[AccountVia] = AccountVia.values.find(_.code == code)
 }
 
-/** アカウントに結び付く書き込み結果。本文の抜粋は保存前に長さを制限する */
+/** アカウントに結び付いた書き込みの結果。本文の抜粋は、保存する前に長さを制限する */
 final case class AccountPost(
   t: Double,
   via: AccountVia = AccountVia.Web,
@@ -60,23 +60,23 @@ object AccountPost {
   }
 }
 
-/** 専ブラキーの照合で拒否した記録。ログ本体とは別に新しい順で上限まで残し、漏れたキーの試行で書き込み記録を押し出さない */
+/** 専ブラキーの照合で拒否した記録。ログ本体とは別に、新しい順に上限の件数まで残す。漏れたキーで試行されても、書き込み記録は押し出されない */
 object AccountRejectionLog {
   val limit: Int = 20
 
   def append(entries: Vector[AccountPost], entry: AccountPost): Vector[AccountPost] = (entry.shortened +: entries).take(limit)
 }
 
-/** 書き込み時に得た端末の情報。ハッシュの生成はアプリケーション層で行う */
+/** 書き込み時に得た端末の情報。ハッシュは service 層で生成する */
 final case class AccountObservation(deviceHash: String = "", keyIpHash: String = "")
 
-/** クライアント ID からの移行先。パスワード方式は新しい資格情報、Google は sub の HMAC と参考のアドレスを持つ */
+/** クライアント ID からの移行先。パスワード方式は新しい資格情報を、Google は sub の HMAC と参考のアドレスを持つ */
 enum AccountConversion {
   case ToPassword(credential: PasswordCredential)
   case ToGoogle(subHash: String, email: Option[String])
 }
 
-/** 退会で外す索引と KV。loginId と email は索引の HMAC を計算する前の値、googleSubHash は google 索引のキー、caps は失効させたキャップ */
+/** 退会時に外す索引と KV の値。loginId と email は索引の HMAC を計算する前の値、googleSubHash は google 索引のキー、caps は失効させたキャップを表す */
 final case class Withdrawal(loginId: Option[String], email: Option[String], googleSubHash: Option[String], caps: Vector[AccountCap])
 
 /** パスワード照合の結果 */
@@ -113,7 +113,7 @@ final case class AccountState(
   def description: AccountDescription = AccountDescription(profile.aid, profile.uid, profile.kind, profile.generation,
     profile.expiresAt, level.effective, roles, profile.agreedAt, profile.agreementVersion, profile.createdAt)
 
-  /** 不正な状態・登録準備中・凍結・停止・退会とクライアント ID の期限切れを拒否する */
+  /** 不正な状態、登録準備中、凍結、停止、退会のアカウントと、期限切れのクライアント ID を拒否する */
   def usable(now: Double): Either[AccountRejection, Unit] = {
     if (!AccountProfile.validTime(now) || !valid) Left(AccountRejection.Invalid)
     else if (readiness == AccountReadiness.Pending) Left(AccountRejection.Pending)
@@ -126,7 +126,7 @@ final case class AccountState(
     }
   }
 
-  /** 投稿時の世代を照合する。キー由来なら有効性と完全な UA ハッシュも確認する */
+  /** 投稿時の世代を照合する。キー由来の投稿では、キーが有効かどうかと、UA ハッシュが完全に一致するかも確認する */
   def describe(aid: String, generation: Int, now: Double, tokenId: Option[String] = None, uaHash: Option[String] = None): Either[AccountRejection, AccountDescription] = {
     if (aid != profile.aid || generation != profile.generation) Left(AccountRejection.Generation)
     else for {
@@ -136,7 +136,7 @@ final case class AccountState(
     } yield description
   }
 
-  /** 所有アカウントとキャップが利用できる場合だけ投稿用の情報を返す。自分で発行したキャップは役割を全て外すと使えず、強キャップは使う時点で admin が要る */
+  /** 所有アカウントとキャップが利用できる場合だけ、投稿用の情報を返す。自分で発行したキャップは、役割をすべて外すと使えなくなる。強キャップは、使う時点で admin である必要がある */
   def describeForCap(aid: String, hash: String, now: Double): Either[AccountRejection, (AccountDescription, AccountCap)] = {
     if (aid != profile.aid) Left(AccountRejection.Missing)
     else usable(now).flatMap { _ =>
@@ -145,7 +145,7 @@ final case class AccountState(
     }
   }
 
-  /** 権限保持者は自分宛に一個まで登録でき、強キャップと他人宛の発行は管理者に限る。クライアント ID には登録しない */
+  /** 権限を持つ人は自分宛のキャップを一個まで登録できる。強キャップの登録と他人宛の発行ができるのは管理者だけで、クライアント ID には登録しない */
   def bindCap(cap: AccountCap, issuerIsAdmin: Boolean, now: Double): Either[AccountRejection, AccountState] = usable(now).flatMap { _ =>
     if (!cap.valid || cap.issuedAt > now || cap.revokedAt.isDefined || CapName.parse(cap.name) != Right(cap.name)) Left(AccountRejection.Invalid)
     else if (profile.kind == AccountKind.Client) Left(AccountRejection.RolesForbidden)
@@ -164,7 +164,7 @@ final case class AccountState(
     }
   }
 
-  /** 有効なキャップを失効させ、同じ表示名・強さで照合値だけ新しいキャップを同じ保存で登録する。失効させたものと新しいものを返す */
+  /** 有効なキャップを失効させ、表示名と強さは同じで照合値だけ新しいキャップを、同じ保存で登録する。失効させたキャップと新しいキャップを返す */
   def reissueCap(capId: String, nextId: String, nextHash: String, issuedBy: String, issuerIsAdmin: Boolean,
     now: Double): Either[AccountRejection, (AccountState, AccountCap, AccountCap)] =
     caps.find(cap => cap.capId == capId && cap.active).toRight(AccountRejection.CapRevoked).flatMap { previous =>
@@ -185,7 +185,7 @@ final case class AccountState(
     else Right(copy(profile = profile.copy(agreementVersion = version, agreedAt = now)))
   }
 
-  /** 全端末の既存セッションを失効させる。世代の上限では更新を拒否する */
+  /** 全端末の既存セッションを失効させる。世代が上限に達している場合は更新を拒否する */
   def bumpGeneration: Either[AccountRejection, AccountState] =
     if (profile.generation == Int.MaxValue) Left(AccountRejection.Invalid)
     else Right(copy(profile = profile.copy(generation = profile.generation + 1)))
@@ -194,7 +194,7 @@ final case class AccountState(
   def bumpGeneration(now: Double): Either[AccountRejection, AccountState] =
     if (!AccountProfile.validTime(now)) Left(AccountRejection.Invalid) else bumpGeneration
 
-  /** 管理者が Lv を固定する。None で固定を外して投稿による昇格に戻す */
+  /** 管理者が Lv を固定する。None を渡すと固定を外し、投稿による昇格に戻す */
   def setLevelOverride(value: Option[Int], now: Double): Either[AccountRejection, AccountState] =
     if (!AccountProfile.validTime(now) || !valid) Left(AccountRejection.Invalid)
     else level.overridden(value).toRight(AccountRejection.Invalid).map(next => copy(level = next))
@@ -226,13 +226,13 @@ final case class AccountState(
     case _ => false
   })
 
-  /** 利用できるアカウントの役割。凍結・退会などでは空 */
+  /** 利用できるアカウントの役割を返す。凍結や退会などの状態では空になる */
   def activeRoles(now: Double): Roles = if (usable(now).isRight) roles else Roles()
 
   /** 利用できる admin か。初回の管理者の確保で、有効な管理者を数えるのに使う */
   def activeAdmin(now: Double): Boolean = roles.admin && usable(now).isRight
 
-  /** 初回観測を保って端末を更新し、最終観測が新しい十件を残す。空の端末は記録しない */
+  /** 初回の観測は保ったまま端末を更新し、最終観測が新しい十件を残す。空の端末は記録しない */
   def bindDevice(hash: String, keyIpHash: String, now: Double): Either[AccountRejection, AccountState] = usable(now).flatMap { _ =>
     if (hash.isEmpty) Right(this)
     else if (!hash.matches("[pgu](?:[0-9a-f]{18}|[0-9a-f]{16})") || !DedicatedBrowserTokens.validHash(keyIpHash)) Left(AccountRejection.Invalid)
@@ -246,7 +246,7 @@ final case class AccountState(
   def issueToken(tokenId: String, hash: String, now: Double): Either[AccountRejection, AccountState] =
     usable(now).flatMap(_ => DedicatedBrowserTokens.issue(tokens, tokenId, hash, now).map(ts => copy(tokens = ts)))
 
-  /** 初回の UA 紐付けと照合を行う。拒否時も期限切れの整理結果を返す */
+  /** 初回の UA の紐付けと照合をする。拒否する場合も、期限切れのキーを整理した結果を返す */
   def useToken(tokenId: String, uaHash: String, uaLabel: String, now: Double): (AccountState, Either[AccountRejection, DedicatedBrowserToken]) = usable(now) match {
     case Left(rejection) => (this, Left(rejection))
     case Right(_) =>
@@ -258,7 +258,7 @@ final case class AccountState(
   def revokeToken(tokenId: String, now: Double): Either[AccountRejection, AccountState] =
     usable(now).flatMap(_ => DedicatedBrowserTokens.revoke(tokens, tokenId, now).map(ts => copy(tokens = ts)))
 
-  /** 照合に使う資格情報と、試行前の接続元のロック状態。パスワード方式以外は拒否する */
+  /** 照合に使う資格情報と、試行前の接続元のロック状態を返す。パスワード方式以外は拒否する */
   def passwordCheck(keyIpHash: String, now: Double): Either[AccountRejection, (PasswordCredential, LoginThrottleDecision)] = {
     if (!AccountProfile.validTime(now) || !valid || profile.kind != AccountKind.Password) Left(AccountRejection.Invalid)
     else credential.toRight(AccountRejection.Invalid).flatMap { value =>
@@ -303,7 +303,7 @@ final case class AccountState(
     if (profile.kind != AccountKind.Google || !profile.googleSubHash.contains(subHash)) Left(AccountRejection.Invalid)
     else usable(now).map(_ => description)
 
-  /** メールによるパスワード再設定を使えるか。メール認証済みで役割の無い ID・パスワードのアカウントだけ */
+  /** メールによるパスワード再設定を使えるか。使えるのは、メール認証済みで役割の無い ID・パスワードのアカウントだけ */
   def resettable: Boolean =
     profile.kind == AccountKind.Password && profile.email.isDefined && profile.emailVerifiedAt.isDefined && roles.values.isEmpty
 
@@ -319,13 +319,13 @@ final case class AccountState(
       else Right(copy(pending = pending.updated(kind, token)))
     }
 
-  /** 一致する期限内で、発行時と同じ世代の保留トークン。消費はしない */
+  /** 一致する保留トークンのうち、期限内で発行時と同じ世代のものを返す。消費はしない */
   def pendingFor(kind: PendingKind, hash: String, now: Double): Either[AccountRejection, PendingToken] =
     usable(now).flatMap(_ => pending.get(kind).filter(token => token.accepts(hash, now) && token.generation == profile.generation).toRight(AccountRejection.PendingInvalid))
 
   /**
     * メール認証のトークンを消費してアドレスを確定させ、Lv が 3 未満なら 3 にする（下げない）。
-    * 保留中のトークンは全て捨て、置き換えた前のアドレスがあれば一緒に返す
+    * 保留中のトークンはすべて捨て、置き換えた前のアドレスがあれば一緒に返す
     */
   def verifyEmail(hash: String, now: Double): Either[AccountRejection, (AccountState, Option[String])] =
     pendingFor(PendingKind.Email, hash, now).flatMap { token =>
@@ -336,7 +336,7 @@ final case class AccountState(
       }
     }
 
-  /** 再設定のトークンを消費してパスワードを置き換え、世代を進める。専ブラキーは全て無効にする。役割を得たアカウントでは使えない */
+  /** 再設定のトークンを消費してパスワードを置き換え、世代を進める。専ブラキーはすべて無効にする。役割を得たアカウントでは使えない */
   def resetPassword(hash: String, next: PasswordCredential, now: Double): Either[AccountRejection, AccountState] =
     pendingFor(PendingKind.Reset, hash, now).flatMap { _ =>
       if (!resettable) Left(AccountRejection.KindForbidden)
@@ -344,7 +344,7 @@ final case class AccountState(
     }
 
   /**
-    * クライアント ID を ID・パスワードか Google に移す。aid・Lv・端末・履歴はそのままにし、uid を登録した ID に替えて期限を外し、世代を進めて保留トークンを捨てる。
+    * クライアント ID を ID・パスワードか Google に移す。aid・Lv・端末・履歴はそのままにして、uid を登録した ID に替え、期限を外す。世代を進め、保留トークンは捨てる。
     * Google は種別の規則で Lv10 にする。generation は移行を始めたセッションの世代
     */
   def convert(target: AccountConversion, uid: String, generation: Int, now: Double): Either[AccountRejection, AccountState] =
@@ -385,7 +385,7 @@ final case class AccountState(
       }
     }
 
-  /** 成功投稿だけで期限・投稿数と Lv・端末とキーの直近五件を更新する。失効済み ID は復活させない */
+  /** 成功した投稿のときだけ、期限、投稿数、Lv、端末、キーの直近五件を更新する。失効済みの ID は復活させない */
   def recordPost(now: Double, post: AccountPost, observation: AccountObservation): Either[AccountRejection, AccountState] = {
     if (!AccountProfile.validTime(now) || !AccountProfile.validTime(post.t)) Left(AccountRejection.Invalid)
     else if (post.result != "posted") Right(this)
@@ -401,7 +401,7 @@ object AccountState {
   /** 失効させたキャップの記録を残す件数 */
   val revokedCapLimit: Int = 20
 
-  /** 同意・時刻・初期状態を確認して作成する。パスワード方式と Google は索引の確定まで登録準備中にする */
+  /** 同意、時刻、初期状態を確認してから作成する。パスワード方式と Google は索引の確定まで登録準備中にする */
   def create(profile: AccountProfile, now: Double, credential: Option[PasswordCredential] = None): Either[AccountRejection, AccountState] = {
     val initial = profile.copy(expiresAt = if (profile.kind == AccountKind.Client) Some(profile.createdAt + AccountProfile.clientLifetime) else None)
     val state = AccountState(initial, AccountLevel(Phoebe.initial(profile.kind, profile.emailVerifiedAt.isDefined), now),

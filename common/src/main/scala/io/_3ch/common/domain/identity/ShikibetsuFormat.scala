@@ -13,7 +13,7 @@ object ShikibetsuFormat {
   /** 識別子末尾の Lv。0〜9 はその数字、10 以上は * */
   def levelMark(lv: Int): String = if (lv >= 10) "*" else math.max(lv, 0).toString
 
-  /** checked 以外の方式の書式。Phoebe と Hidden は空 */
+  /** checked 以外の方式の書式。Phoebe と Hidden では空になる */
   def plain(mode: ShikibetsuMode, country: String, region: String, city: String, asn: String): String = mode match {
     case ShikibetsuMode.Raw => s"$country.$region $asn"
     case ShikibetsuMode.Ken => s"$country.$region"

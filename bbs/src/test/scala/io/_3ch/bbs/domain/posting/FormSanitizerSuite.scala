@@ -2,7 +2,7 @@ package io._3ch.bbs.domain.posting
 
 import munit.FunSuite
 
-/** フォーム値の整形と名前欄のコマンド */
+/** フォーム値の整形と、名前欄のコマンドを確かめる */
 class FormSanitizerSuite extends FunSuite {
   test("HTML 特殊文字をエスケープし、数値文字参照の & は残す（名前付き参照の & はエスケープする）") {
     val form = FormSanitizer.fromFields(Map("FROM" -> "a&b\"c<d>e'f", "MESSAGE" -> "&#65;&amp;x"))

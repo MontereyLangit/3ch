@@ -3,7 +3,7 @@ package io._3ch.bbs.domain.posting
 import munit.FunSuite
 import io._3ch.common.domain.posting.{PostForm, PostKind}
 
-/** 復号済みフォームの振り分けと必須項目の検査 */
+/** 復号済みのフォームの振り分けと、必須項目の検査を確かめる */
 class PostRoutingSuite extends FunSuite {
   private val base = PostForm(message = "本文", subject = "題名", bbs = "sample", time = "1")
 

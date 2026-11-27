@@ -16,7 +16,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 
-/** bbs.cgi の書き込み。リクエストを PostingRequest にしてサービスに渡し、結果を画面にする */
+/** bbs.cgi の書き込みを受け付ける。リクエストを PostingRequest にしてサービスに渡し、結果を画面にする */
 object Posting {
   def entry(request: Request, env: WorkerEnv, resolveUser: PostingUserResolver.Resolver = PostingUserResolver.unresolved): js.Promise[Response] = {
     val settings = AuthEnv.settings(env)
@@ -50,7 +50,7 @@ object Posting {
     RendererShell.legacyReact(PostingPages.render(outcome, charset), encoding = charset, extra = outcome.headers ++ result)
   }
 
-  /** 認証を有効にした環境の拒否に付ける追加ヘッダ。ログインと再同意はモーダルで、Lv 不足は必要 Lv を返す */
+  /** 認証を有効にした環境で拒否したときに付ける追加ヘッダ。ログインと再同意の拒否はモーダルで処理し、Lv 不足の拒否は必要な Lv を返す */
   private[handler] def rejectionHeaders(error: PostingError, bbs: String): Seq[(String, String)] = {
     val authUrl = "/auth/?return=/" + bbs + "/"
     val code = Seq("x-post-error" -> error.code)

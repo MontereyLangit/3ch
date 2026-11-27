@@ -17,10 +17,10 @@ final case class PostRateRecord(key: String, timestampSeconds: Double, identity:
   def toEntry: Entry = Entry(timestampSeconds, identity)
 }
 
-/** 履歴を保存しているページの範囲。newest・oldest はページの通し番号 */
+/** 履歴を保存しているページの範囲。newest と oldest はページの通し番号 */
 final case class PostRateMeta(newest: Int, oldest: Int)
 
-/** 履歴の 1 ページ。records は古い順 */
+/** 履歴の 1 ページ。records は古い順に並ぶ */
 final case class PostRatePage(number: Int, records: Vector[PostRateRecord])
 
 /** 予約の結果。saved は保存する履歴で、拒否して記録しないときは None */
@@ -46,7 +46,7 @@ final case class PostRateHistory(meta: PostRateMeta, pages: Vector[PostRatePage]
   def withOlder(page: PostRatePage): PostRateHistory = copy(pages = pages :+ page)
 
   /**
-    * 板単位の判定と保持のために次に読むページ。確定済みの直近 timecount 件と Samba24・広域の秒数の範囲を読み終えていれば None。
+    * 板単位の判定と保持のために次に読むページ。確定済みの直近 timecount 件と Samba24 と広域の秒数の範囲を読み終えていれば None を返す。
     * 保持が読み込み済みのページだけで決まるよう、予約中は件数に数えない
     */
   def nextPage(settings: BoardSettings, now: Double): Option[Int] = older.filter { _ =>
@@ -74,7 +74,7 @@ final case class PostRateHistory(meta: PostRateMeta, pages: Vector[PostRatePage]
   }
 
   /**
-    * 確定済みの直近 max(timecount, 1) 件・Samba24 か広域の秒数以内の確定済み・期限内の予約のどれかを含むページまでを残し、それより古いページを範囲から外す。
+    * 確定済みの直近 max(timecount, 1) 件、Samba24 か広域の秒数以内の確定済みの記録、期限内の予約のどれかを含むページまでを残し、それより古いページを範囲から外す。
     * 板設定だけで決まり、予約中の記録は件数と秒数に数えない
     */
   def retained(settings: BoardSettings, now: Double): PostRateHistory = {

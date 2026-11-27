@@ -21,7 +21,7 @@ object ThreadRepository {
   def getSettings(board: BoardId, key: String, e: WorkerEnv): Future[BbsSettings] =
     stub(board, key, e).getSettings().toFuture.map(BbsSettings.parse(_, "<>"))
 
-  /** dat 行と log 行を追記し、確定したレス番号を返す。スレの状態・スレ立て規制・連投規制による拒否は結果で返し、それ以外の障害は Future の失敗 */
+  /** dat 行と log 行を追記し、確定したレス番号を返す。スレの状態、スレ立て規制、連投規制による拒否は結果で返し、それ以外の障害は Future の失敗にする */
   def addRes(board: BoardId, key: String, datLine: String, logLine: String, posting: ThreadPosting, e: WorkerEnv): Future[ThreadWriteResult] =
     stub(board, key, e).addRes(datLine, logLine, PostingCodec.encode(posting)).toFuture
       .map { result =>

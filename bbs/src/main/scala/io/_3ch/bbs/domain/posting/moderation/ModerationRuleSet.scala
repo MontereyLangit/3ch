@@ -2,7 +2,7 @@ package io._3ch.bbs.domain.posting.moderation
 
 import scala.scalajs.js
 
-/** 規制ルールの動作欄。空・deny・md5 は拒否 */
+/** 規制ルールの動作欄。空、deny、md5 のときは拒否する */
 enum ModerationAction {
   case Deny, Mark, TateDame
 }
@@ -15,7 +15,7 @@ enum ModerationRuleProblem {
 /** ルールの書式の誤りと、その行番号（1 始まり） */
 final case class ModerationRuleError(line: Int, problem: ModerationRuleProblem)
 
-/** deny.cgi / ngwords.cgi の 1 行。板・対象・NG ワードは JavaScript の正規表現で、空欄は全対象。bypass はこの行を免除される段階 */
+/** deny.cgi / ngwords.cgi の 1 行。板、対象、NG ワードは JavaScript の正規表現で、空欄は全対象を表す。bypass はこの行の規制を免除される段階 */
 final class ModerationRule private (board: js.RegExp, target: js.RegExp, word: js.RegExp, val action: ModerationAction, val isWord: Boolean,
   val bypass: BypassLevel) {
   /** 板名と投稿者情報が一致し、照合する文字列のどれかが NG ワードに一致するか */

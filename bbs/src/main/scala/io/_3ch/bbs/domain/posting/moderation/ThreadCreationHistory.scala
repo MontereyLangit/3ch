@@ -11,9 +11,9 @@ final case class ThreadCreationLimit(settings: ThreadCreationRateLimit.Settings,
 
 /** スレ立て予約の拒否理由。RPC では [[code]] の文字列で返す */
 enum ThreadCreationRejection {
-  /** 同一 IP・同一スレタイによる規制 */
+  /** 同一 IP と同一スレタイによる規制 */
   case Narrow(reason: Reason)
-  /** 同一 UA・同一ネットワークグループによる規制 */
+  /** 同一 UA と同一ネットワークグループによる規制 */
   case Broad(reason: Reason)
   /** 履歴の保存件数の上限に達した */
   case Capacity
@@ -85,7 +85,7 @@ final case class ThreadCreationHistory(records: Vector[ThreadCreationRecord]) {
     })
   }
 
-  /** 判定に通れば新しい予約を先頭に加えた履歴を返す。容量超過は他の理由より優先する */
+  /** 判定に通れば新しい予約を先頭に加えた履歴を返す。容量超過は、ほかの理由より優先して判定する */
   def reserve(
     key: String,
     request: ThreadCreationRequest,

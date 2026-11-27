@@ -8,7 +8,7 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
-/** 公開ルート（`PublicRoutes.fetch`）の現仕様固定。KB-nn は docs/既知不具合台帳.md を参照。 */
+/** 公開ルート（`PublicRoutes.fetch`）の現仕様固定。KB-nn は docs/既知不具合台帳.md を参照 */
 class PublicRoutesSuite extends FunSuite {
 
   override def beforeEach(context: BeforeEach): Unit = installCaches()
@@ -327,7 +327,7 @@ class PublicRoutesSuite extends FunSuite {
 
   test("subject.txt: タスク指示文の想定に反し、意図的に遠い未来のIf-Modified-Sinceを送ると実際には304になる") {
     // respondPlainTextの比較自体は `lastModified <= new Date(ifModifiedSinceHeader)` という素直な比較であり、
-    // 本当に現在時刻より先の日付を送れば304になる。不具合として効いているのは「lastModifiedが常に現在時刻」
+    // 本当に現在時刻より先の日付を送れば304になる。不具合の原因になっているのは「lastModifiedが常に現在時刻」
     // であるため前回値を送る通常の巡回では304にならない点で、それは上のテストで固定化した。
     val env = DurableTestKit.newEnv()
     val farFuture = new js.Date(js.Date.now() + 365d * 24 * 3600 * 1000).toUTCString()
@@ -357,7 +357,7 @@ class PublicRoutesSuite extends FunSuite {
       assertEquals(body, "9240000002.dat<>cap-only (5)\n9000000003.dat<>open-new (1)\n9000000001.dat<>open-old (2)\n1800000010.dat<>own (3)\n")
       // スレの無い板でも共通スレだけは載る
       assertEquals(emptyBody, "9240000002.dat<>cap-only (5)\n9000000003.dat<>open-new (1)\n9000000001.dat<>open-old (2)\n")
-      // 板924自身は共通スレを並べ替えたものだけ
+      // 板924自身には、共通スレを並べ替えたものだけが載る
       assertEquals(ownBody, "9240000002.dat<>cap-only (5)\n9000000003.dat<>open-new (1)\n9000000001.dat<>open-old (2)\n")
     }
   }

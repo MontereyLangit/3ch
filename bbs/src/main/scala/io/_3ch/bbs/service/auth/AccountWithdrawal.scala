@@ -7,7 +7,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.util.control.NonFatal
 
 /**
-  * 退会。Account を deleted にしてから login・email・google の索引とキャップの KV を外す。uid と cap の索引と書き込みは残す。
+  * 退会する。Account を deleted にしてから、login・email・google の索引とキャップの KV を外す。uid と cap の索引と書き込みは残す。
   * 退会済みで同じセッションの世代なら後始末をやり直す。本人の再認証は呼び出し元で済ませる
   */
 final class AccountWithdrawal(accounts: AccountWithdrawalStore, directory: CapDirectory, keys: AuthenticationKeys) {

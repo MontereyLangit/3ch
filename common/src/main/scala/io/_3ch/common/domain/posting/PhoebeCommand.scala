@@ -2,7 +2,7 @@ package io._3ch.common.domain.posting
 
 import io._3ch.common.domain.account.Phoebe
 
-/** 本文先頭のスレ Lv の指定。!バルサン は Lv3、!SETTING:BBS_PHOEBE:n は Lv n を求める */
+/** 本文の先頭にあるスレ Lv の指定。!バルサン は Lv3、!SETTING:BBS_PHOEBE:n は Lv n を求める */
 enum PhoebeCommand {
   case Balsan
   case Setting(value: Int)
@@ -13,7 +13,7 @@ enum PhoebeCommand {
     case Setting(n) => n
   }
 
-  /** スレ立て人か staff ならスレ設定への書き込みにする。下げてよいのは staff の !SETTING だけ。どちらでもなければ None。staff 以外が求められる Lv は自分の Lv（lv）まで */
+  /** スレ立て人か staff なら、スレ設定への書き込み要求にする。どちらでもなければ None を返す。Lv を下げてよいのは staff の !SETTING だけで、staff 以外が求められる Lv は自分の Lv（lv）まで */
   def request(owner: Boolean, staff: Boolean, boardLevel: Int, lv: Int): Option[ThreadPhoebeRequest] =
     Option.when(owner || staff)(ThreadPhoebeRequest(if (staff) level else math.min(level, lv), lower = staff && this != Balsan, boardLevel))
 }
@@ -36,7 +36,7 @@ object PhoebeCommand {
 
 /** Thread DO でスレ設定の BBS_PHOEBE を書き換える要求。boardLevel はスレ設定に値が無いときの現在値 */
 final case class ThreadPhoebeRequest(level: Int, lower: Boolean, boardLevel: Int) {
-  /** スレ設定の現在の値から書き込む値を決める。上げるときと、下げてよい要求で下げるときだけ Some */
+  /** スレ設定の現在の値から書き込む値を決める。Some を返すのは、上げるときと、下げてよい要求で下げるときだけ */
   def next(threadValue: Option[String]): Option[Int] = {
     val current = threadValue.fold(boardLevel)(value => Phoebe.required(Some(value)))
     Option.when(level > current || (lower && level < current))(level)

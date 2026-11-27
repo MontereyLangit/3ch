@@ -41,10 +41,10 @@ enum FailureClock(val label: String) {
   case Unixtime extends FailureClock("unixtime")
 }
 
-/** 内部エラーが起きたときの時刻・板・スレキー・レス番号。時刻が未設定なら undefined */
+/** 内部エラーが起きたときの時刻、板、スレキー、レス番号。時刻が設定されていなければ undefined */
 final case class FailureSite(clock: FailureClock, time: String, bbs: String, key: String, number: String)
 
-/** 投稿の拒否理由。文言は持たず、code で種別を英小文字の識別子にする */
+/** 投稿の拒否理由。文言は持たず、code で種別を英小文字の識別子として表す */
 enum PostingError {
   case Authentication(reason: io._3ch.bbs.domain.account.AuthenticationFailure)
   case AuthenticationLevel(required: Int)
@@ -86,7 +86,7 @@ enum PostingError {
   /** 段の途中で起きた例外。cause は例外の文字列 */
   case Internal(stage: PostingStage, site: FailureSite, cause: String)
 
-  /** 拒否理由の識別子。種別:詳細 の形 */
+  /** 拒否理由の識別子。種別:詳細 の形の文字列 */
   def code: String = this match {
     case Authentication(reason) => reason.code
     case AuthenticationLevel(_) => "auth:required:level"

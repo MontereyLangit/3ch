@@ -171,9 +171,9 @@ object AuthFormIsland {
         if registering then <.div(^.key := "register",
           <.h2(^.className := "mb-2 font-bold", if upgrade then "切り替える方法を選ぶ" else "登録方法を選ぶ"),
           <.div(^.role := "radiogroup", ^.className := "mb-4",
-            if upgrade then EmptyVdom else option(AuthMethod.Client, "かんたん登録", "この端末だけの仮登録です。Lv1から。1年書き込まないと失効します。"),
-            option(AuthMethod.Password, "ID・パスワード", if mail then "ほかの端末からもログインできます。Lv1から、メール認証でLv3。" else "ほかの端末からもログインできます。Lv1から。"),
-            option(AuthMethod.Google, if google then "Googleで続ける" else "Googleで続ける（準備中）", "Googleアカウントで登録します。Lv10。", google)),
+            if upgrade then EmptyVdom else option(AuthMethod.Client, "かんたん登録", "この端末だけで使える仮登録です。Lv1から始まり、1年書き込まないと失効します。"),
+            option(AuthMethod.Password, "ID・パスワード", if mail then "ほかの端末からもログインできます。Lv1から始まり、メールを認証するとLv3になります。" else "ほかの端末からもログインできます。Lv1から始まります。"),
+            option(AuthMethod.Google, if google then "Googleで続ける" else "Googleで続ける（準備中）", "Googleアカウントで登録します。Lv10になります。", google)),
           if choice != AuthMethod.Client then field("ユーザーID", idHint, userId.value, userId.setState, "text", "username") else EmptyVdom,
           if choice == AuthMethod.Password then <.div(
             field("パスワード", "（8文字以上）", password.value, password.setState, "password", "new-password"),
@@ -191,7 +191,7 @@ object AuthFormIsland {
               <.li("専ブラの内蔵ブラウザ → このページを推奨ブラウザで開き直す"),
               <.li("X・LINE・Discordなどのアプリ内ブラウザ →「ブラウザで開く」"),
               <.li("「PC版サイト」「デスクトップ表示」→ オフにして再読み込み"),
-              <.li("UAを変える拡張機能 → 切って再読み込み"))))
+              <.li("UAを変える拡張機能 → オフにして再読み込み"))))
         else if forgot.value then <.div(^.key := "forgot",
           <.h2(^.className := "mb-2 font-bold", "パスワードの再設定"),
           <.p(^.className := "mb-3", "メール認証済みのアカウントだけ、登録したアドレスに再設定のメールを送ります。削除・規制などの権限があるアカウントは管理者にお問い合わせください。"),

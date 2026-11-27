@@ -1,6 +1,6 @@
 package io._3ch.common.domain.account
 
-/** ユーザー ID の書式と登録時の予約語による拒否 */
+/** ユーザー ID を受け付けない理由（書式の誤りと、登録時の予約語） */
 enum LoginIdRejection {
   case Invalid
   case Reserved
@@ -32,7 +32,7 @@ object LoginId {
     }
   }
 
-  /** 登録用。固定の予約語に、呼び出し元の予約語と現在の板名を加えて拒否する */
+  /** 登録用に検証する。固定の予約語に、呼び出し元が渡す予約語と現在の板名を加えたものを拒否する */
   def create(raw: String, reservedIds: Set[String], boardIds: Set[String]): Either[LoginIdRejection, LoginId] =
     parse(raw).flatMap { id =>
       val additional = (reservedIds ++ boardIds).iterator.filter(_ != null).map(lowercase).toSet

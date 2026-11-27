@@ -15,9 +15,9 @@ enum PasswordHashFailure {
   case Unavailable
 }
 
-/** Web Crypto でパスワード資格情報を作成・照合する。平文や計算値をログへ出さない */
+/** Web Crypto でパスワード資格情報を作成し、照合する。平文や計算値はログに出さない */
 object PasswordHasher {
-  /** 新しい16バイトのソルトで現在の反復数の資格情報を作る */
+  /** 新しい 16 バイトのソルトと現在の反復数で、資格情報を作る */
   def create(password: Password, now: Double): Future[Either[PasswordHashFailure, PasswordCredential]] = {
     if (password == null || !AccountProfile.validTime(now)) Future.successful(Left(PasswordHashFailure.Invalid))
     else available {

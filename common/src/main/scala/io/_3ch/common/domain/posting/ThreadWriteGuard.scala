@@ -4,7 +4,7 @@ import io._3ch.common.text.JsText
 
 /** スレにレスを追記できない理由。code は Thread DO が RPC で返す文字列 */
 enum ThreadWriteRejection(val code: String) {
-  /** 停止・移動・削除の処理中か済み */
+  /** 停止、移動、削除の処理中、または済み */
   case Unavailable extends ThreadWriteRejection("thread-write:unavailable")
   /** スレ設定で BBS_HEISA=checked */
   case Closed extends ThreadWriteRejection("thread-write:closed")

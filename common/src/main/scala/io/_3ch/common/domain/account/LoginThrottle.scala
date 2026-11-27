@@ -12,12 +12,12 @@ final case class LoginAccountFailures(count: Int = 0, since: Double = 0, lockedU
   def valid: Boolean = count >= 0 && count <= LoginThrottle.accountFailureLimit && AccountProfile.validTime(since) && lockedUntil.forall(AccountProfile.validTime)
 }
 
-/** ログイン計数へ渡す時刻・接続元・保存状態の不正 */
+/** ログイン計数へ渡された時刻、接続元、保存状態の不正 */
 enum LoginThrottleRejection {
   case Invalid
 }
 
-/** 試行を拒否する期限。ロック中でなければ None。暗号計算は呼び出し元でロックの有無にかかわらず行う */
+/** 試行を拒否する期限。ロック中でなければ None を返す。暗号計算は、ロックの有無にかかわらず呼び出し元で行う */
 final case class LoginThrottleDecision(lockedUntil: Option[Double]) {
   def locked: Boolean = lockedUntil.isDefined
 }
@@ -26,7 +26,7 @@ final case class LoginThrottleDecision(lockedUntil: Option[Double]) {
 final case class LoginThrottleUpdate(state: LoginThrottle, decision: LoginThrottleDecision)
 
 /**
- * 一アカウントの接続元別の失敗数・ロックと、アカウント全体の失敗数。期限切れ以外の記録は捨てず、
+ * 一アカウントの、接続元別の失敗数とロック、およびアカウント全体の失敗数を持つ。期限切れ以外の記録は捨てず、
  * 保持できる接続元が尽きたときは新しい接続元をロック扱いにする。時刻逆行では未来側の記録を残す
  */
 final case class LoginThrottle(sources: Map[String, LoginSource] = Map.empty, account: LoginAccountFailures = LoginAccountFailures()) {

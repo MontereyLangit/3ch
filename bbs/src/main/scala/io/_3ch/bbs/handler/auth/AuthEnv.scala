@@ -8,7 +8,7 @@ final case class GoogleSettings(clientId: String, clientSecret: String)
 
 /** Worker の環境変数から認証の設定を読む */
 object AuthEnv {
-  /** 設定が揃っていなければ None。このとき画面と投稿は認証の無い従来の動作にする */
+  /** 設定が揃っていなければ None を返す。このときは、画面も投稿も認証の無い従来の動作にする */
   def settings(env: WorkerEnv): Option[AuthSettings] =
     AuthSettings.of(env.AUTH_SECRET.getOrElse(""), env.AGREEMENT_VERSION.getOrElse(""), env.TURNSTILE_SITE_KEY.getOrElse(""), env.TURNSTILE_SECRET_KEY.getOrElse(""))
 

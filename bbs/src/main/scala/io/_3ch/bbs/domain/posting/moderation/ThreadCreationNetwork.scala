@@ -2,7 +2,7 @@ package io._3ch.bbs.domain.posting.moderation
 
 /** 広域スレ立て規制で同じ接続環境とみなすネットワークグループ */
 object ThreadCreationNetwork {
-  /** 海外は overseas、国内で ASN が asOnly に当たれば AS:番号、ASN と地域があれば AS:番号:JP:地域、どれでもなければ空 */
+  /** 海外は overseas、国内で ASN が asOnly に当たれば AS:番号、ASN と地域があれば AS:番号:JP:地域、どれでもなければ空にする */
   def group(country: Option[String], asn: Option[String], region: Option[String], asOnly: String => Boolean): String = {
     val countryCode = country.getOrElse("").trim.toUpperCase
     val asNumber = asn.getOrElse("").trim.toLongOption.filter(n => n > 0 && n <= 4294967295L).map(_.toString).getOrElse("")

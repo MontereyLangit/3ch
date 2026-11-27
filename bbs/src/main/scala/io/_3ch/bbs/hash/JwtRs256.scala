@@ -14,9 +14,9 @@ final case class RsaPublicKey(kid: String, n: String, e: String)
 /** 署名を検証する前の JWT。header と payload は JSON の文字列 */
 final case class JwtParts(header: String, payload: String, signingInput: String, signature: Vector[Byte])
 
-/** RS256 の JWT の分解と署名検証、PKCE 用の base64url。暗号 API の失敗は検証失敗にする */
+/** RS256 の JWT を分解して署名を検証し、PKCE 用の base64url も扱う。暗号 API が失敗したときは、検証失敗にする */
 object JwtRs256 {
-  /** base64url を復号する。不正な文字や長さは None */
+  /** base64url を復号する。不正な文字や長さのときは None を返す */
   def decode(value: String): Option[Vector[Byte]] = {
     if (!value.matches("[A-Za-z0-9_-]*") || value.length % 4 == 1) None
     else Try {
@@ -29,7 +29,7 @@ object JwtRs256 {
   def encode(bytes: Vector[Byte]): String =
     GlobalBtoa(bytes.map(b => (b.toInt & 0xff).toChar).mkString).replace('+', '-').replace('/', '_').reverse.dropWhile(_ == '=').reverse
 
-  /** 3 つに分け、header と payload を UTF-8 の文字列にする */
+  /** JWT を 3 つに分け、header と payload を UTF-8 の文字列にする */
   def parse(token: String): Option[JwtParts] = Option(token).filter(_.length <= 8192).flatMap { text =>
     text.split("\\.", -1).toList match {
       case header :: payload :: signature :: Nil => for {

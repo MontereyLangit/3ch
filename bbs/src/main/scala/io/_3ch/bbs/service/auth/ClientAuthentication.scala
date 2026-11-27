@@ -11,7 +11,7 @@ enum AuthServiceFailure(val code: String) {
   case Invalid extends AuthServiceFailure("auth:invalid")
   case RateLimited extends AuthServiceFailure("auth:rate")
   case Unavailable extends AuthServiceFailure("auth:unavailable")
-  /** ユーザー ID が使用済み・予約語・予約中 */
+  /** ユーザー ID がすでに使われているか、予約語か、予約中である */
   case Taken extends AuthServiceFailure("auth:id:taken")
   /** メールアドレスが他のアカウントで使われている */
   case EmailTaken extends AuthServiceFailure("auth:email:taken")
@@ -22,7 +22,7 @@ enum AuthServiceFailure(val code: String) {
 /** AuthServiceFailure を Future の失敗として運ぶ */
 final case class AuthServiceException(failure: AuthServiceFailure) extends RuntimeException(failure.code)
 
-/** 投稿同意・Turnstile・端末申告を確認した後の計数とアカウント登録 */
+/** 投稿同意、Turnstile、端末申告を確認した後に、認証要求を数えてアカウントを登録する */
 final class ClientAuthentication(accounts: AccountManagementStore, keys: AuthenticationKeys, agreementVersion: String, review: AbuseReviewLog = AbuseReviewLog.none) {
   /** 既存の本人なら端末と同意だけを更新し、未登録なら UID を予約して作成する。strict なら乱造検知の閾値を半分にする */
   def verify(deviceHash: String, keyIp: String, now: Double, existing: Option[AccountDescription] = None, strict: Boolean = false): Future[AccountDescription] =

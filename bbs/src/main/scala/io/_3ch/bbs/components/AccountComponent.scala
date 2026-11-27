@@ -19,13 +19,13 @@ final case class AccountTokenProps(id: String, label: String, issuedAt: Double =
   recentPosts: Seq[AccountPostProps] = Nil, warnings: Seq[AccountTokenWarningProps] = Nil)
 /** 本人のキャップ。照合値とパスワードは持たない */
 final case class AccountCapProps(id: String, name: String, strong: Boolean, issuedAt: Double, revokedAt: Option[Double] = None, recentPosts: Seq[AccountPostProps] = Nil)
-/** アカウント設定画面の表示情報。device はこの端末の Cookie にある端末ハッシュの粒度、roles はキャップの発行欄の出し分けに使う */
+/** アカウント設定画面の表示情報。device は、この端末の Cookie にある端末ハッシュの粒度。roles はキャップの発行欄を出し分けるのに使う */
 final case class AccountProps(uid: String, lv: Int, tokens: Seq[AccountTokenProps] = Nil, activeCount: Int = 0, nowSeconds: Double = js.Date.now() / 1000,
   kind: AccountKind = AccountKind.Client, expiresAt: Option[Double] = None, device: Option[DeviceGranularity] = None, deviceCount: Int = 0,
   caps: Seq[AccountCapProps] = Nil, roles: Roles = Roles(), email: Option[String] = None, pendingEmail: Option[String] = None, mailEnabled: Boolean = false,
   notice: String = "", google: Boolean = false)
 
-/** アカウントの表示情報と専ブラ用キー・ログアウトの操作画面 */
+/** アカウントの表示情報を示し、専ブラ用キーとログアウトを操作する画面 */
 object AccountComponent {
   private def postProps(p: AccountPostProps): islands.AccountPostItemProps = new islands.AccountPostItemProps {
     val t = p.t

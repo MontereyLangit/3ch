@@ -9,13 +9,13 @@ final case class ClientHints(
   mobile: Boolean = false,
   mobileHeaderPresent: Boolean = false
 ) {
-  /** platform・版・機種・CPUのヒントが全て空か */
+  /** platform、版、機種、CPU のヒントがすべて空か */
   def isEmpty: Boolean = platform.isEmpty && platformVersion.isEmpty && model.isEmpty && cpuArch.isEmpty
 
   /** ヒントを1つでも受け取っているか */
   def isNotEmpty: Boolean = !isEmpty
 
-  /** iOS・iPadOSを名乗っているか */
+  /** iOS または iPadOS を名乗っているか */
   def claimsIos: Boolean = Set("ios", "ipados").contains(DeviceText.lowercase(DeviceStrings.trim(platform)))
 
   /** 申告と受信ヘッダに矛盾があるか */

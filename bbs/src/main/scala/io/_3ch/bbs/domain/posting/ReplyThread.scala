@@ -7,7 +7,7 @@ object ReplyThread {
   /** 旧形式のログのパス。スレが無いときの文言に出す */
   def logFile(bbs: String, key: String): String = s"$bbs/thread/${key.take(4)}/$key.cgi"
 
-  /** dat から読む。dat が無い・1 行目が空・題名が無い・満杯なら拒否。レス番号は改行で区切った数（末尾の空要素を含む） */
+  /** dat から読む。dat が無いとき、1 行目が空のとき、題名が無いとき、満杯のときは拒否する。レス番号は、改行で区切った数（末尾の空要素を含む）になる */
   def open(dat: String, bbs: String, key: String): Either[PostingError, ReplyThread] = {
     val lines = dat.split("\n", -1)
     if (dat.isEmpty) Left(PostingError.ThreadMissing(logFile(bbs, key)))

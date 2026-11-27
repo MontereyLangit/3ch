@@ -47,7 +47,7 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
 
   private def nowSeconds(): Double = js.Date.now() / 1000
 
-  /** スレ立て履歴の判定と予約を直列化する。成功は空文字、拒否は [[ThreadCreationRejection.code]] を返す。 */
+  /** スレ立て履歴の判定と予約を直列化する。成功すれば空文字を、拒否すれば [[ThreadCreationRejection.code]] を返す */
   def reserveThreadCreation(key: String, limit: js.Dynamic): js.Promise[String] = DurableLock.serialized(state) {
     val now = nowSeconds()
     val ThreadCreationLimit(settings, request) = ThreadCreationCodec.decodeRequest(limit)
@@ -85,12 +85,12 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
 
   private def postRatePage(page: PostRatePage): (String, js.Any) = postRatePageKey(page.number) -> page.records.map(PostRateCodec.encodeRecord).toJSArray
 
-  /** key の記録を含むページまで新しい方から読む */
+  /** key の記録を含むページまで、新しいページから順に読む */
   private def postRateHistoryWith(key: String): Future[PostRateHistory] = postRateHistory(history => if history.pageOf(key).isDefined then None else history.older)
 
   /**
-   * 連投規制の判定と予約を直列化する。許可は空文字、拒否は [[PostRateRejection.code]] を返す。
-   * settings.enforce が偽なら拒否理由を返しつつ予約する
+   * 連投規制の判定と予約を直列化する。許可すれば空文字を、拒否すれば [[PostRateRejection.code]] を返す。
+   * settings.enforce が偽のときは、拒否理由を返しつつ予約する
    */
   def reservePost(key: String, entry: js.Dynamic, settings: js.Dynamic): js.Promise[String] = DurableLock.serialized(state) {
     val now = nowSeconds()

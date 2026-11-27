@@ -14,7 +14,7 @@ object PostRateKey {
   /** Samba24 の照合キー。BBS_RENTOU_KEYS によらず固定 */
   val samba24: Set[PostRateKey] = Set(Ip, Account)
 
-  /** カンマ区切りの値を読む。知らない値（廃止した id など）は無視し、1 つも残らなければ既定 */
+  /** カンマ区切りの値を読む。知らない値（廃止した id など）は無視し、1 つも残らなければ既定のキーにする */
   def parse(text: String): Set[PostRateKey] = {
     val keys = text.split(",", -1).map(_.trim).flatMap(name => values.find(_.name == name)).toSet
     if (keys.isEmpty) defaults else keys
@@ -30,11 +30,11 @@ final case class PostRateIdentity(ip: String = "", shiki: String = "", aid: Stri
     case PostRateKey.Account => aid
   }
 
-  /** keys のどれか 1 つでも空でなく一致すれば同一の投稿者 */
+  /** keys のどれか 1 つでも空でなく一致すれば同一の投稿者とみなす */
   def sameAs(other: PostRateIdentity, keys: Set[PostRateKey]): Boolean =
     keys.exists(key => value(key).nonEmpty && value(key) == other.value(key))
 
-  /** 各値を先頭 ShortLength 文字にした照合値。1 つのスレの中だけで照合する値の保存に使う */
+  /** 各値を先頭 ShortLength 文字に縮めた照合値。1 つのスレの中だけで照合する値を保存するときに使う */
   def shortened: PostRateIdentity = PostRateIdentity(ip.take(PostRateIdentity.ShortLength), shiki.take(PostRateIdentity.ShortLength), aid.take(PostRateIdentity.ShortLength))
 }
 
@@ -108,15 +108,15 @@ object PostRateLimit {
   val DaySeconds: Double = 86400
 
   /**
-    * 板単位の設定。timecount・timeclose・samba24・fr は 0 で無効。keys はごんたくれの照合キー。
+    * 板単位の設定。timecount、timeclose、samba24、fr は 0 のとき無効。keys はごんたくれの照合キー。
     * checksFr が偽ならこの投稿では広域連投規制を判定しない（履歴の保持には fr を使う）
     */
   final case class BoardSettings(timecount: Int, timeclose: Int, samba24: Int, fr: Int, keys: Set[PostRateKey], checksFr: Boolean = true) {
-    /** 履歴の保持と読み込みに使う秒数。板設定だけから決まり、投稿ごとの判定の有無によらない。どちらも無効なら 0 */
+    /** 履歴の保持と読み込みに使う秒数。板設定だけから決まり、投稿ごとの判定の有無によらない。どちらも無効なら 0 になる */
     def windowSeconds: Int = math.max(samba24, fr)
   }
 
-  /** スレ単位の設定。count は 0 で無効 */
+  /** スレ単位の設定。count は 0 のとき無効 */
   final case class ThreadSettings(count: Int, resetSeconds: Double, keys: Set[PostRateKey])
 
   /** 判定に使う投稿の 1 件 */
@@ -124,7 +124,7 @@ object PostRateLimit {
 
   /**
     * 板単位の判定。history は新しい順で、予約中も 1 件に数える。ごんたくれ、Samba24、広域の順に見る。
-    * Samba24 は ip・aid、広域は識別子だけで照合する
+    * Samba24 は ip と aid、広域は識別子だけで照合する
     */
   def checkBoard(settings: BoardSettings, history: Seq[Entry], identity: PostRateIdentity, nowSeconds: Double): Option[PostRateRejection] = {
     val gontakure = settings.timecount > 0 && settings.timeclose > 0 &&

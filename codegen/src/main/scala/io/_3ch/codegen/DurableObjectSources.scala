@@ -5,10 +5,10 @@ import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters.*
 import scala.meta.*
 
-/** DO の Scala ソースを読み、`@JSExportTopLevel("名前", "server")` 付きクラスを取り出す。TS 型生成と Scala Stub 生成が共用する。 */
+/** DO の Scala ソースを読み、`@JSExportTopLevel("名前", "server")` 付きクラスを取り出す。TS 型生成と Scala Stub 生成が共用する */
 object DurableObjectSources {
 
-  /** `dir` 配下の `.scala` をパス順に読む（パス, 本文）。 */
+  /** `dir` 配下の `.scala` をパス順に読み、（パス, 本文）の組を返す */
   def read(dir: Path): Seq[(String, String)] = {
     val files = Files.walk(dir)
     try {
@@ -23,7 +23,7 @@ object DurableObjectSources {
   def parse(path: String, source: String): Source =
     dialects.Scala3(Input.VirtualFile(path, source)).parse[Source].get
 
-  /** `server` モジュールへ export された DO クラスを (export 名, クラス) で返す。他モジュールの export は無視する。 */
+  /** `server` モジュールへ export された DO クラスを (export 名, クラス) で返す。他モジュールの export は無視する */
   def serverExports(path: String, tree: Source): Seq[(String, Defn.Class)] =
     tree.collect { case cls: Defn.Class => cls }.flatMap { cls =>
       cls.mods.collect {

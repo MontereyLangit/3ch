@@ -9,7 +9,7 @@ import scala.meta.*
 object GenerateDurableObjectStubs {
   val packageName = "io._3ch.bbs.external.cloudflare"
   private val primitives = Set("String", "Boolean", "Int", "Double", "Unit")
-  // scala / Predef 由来で RPC 境界に向かない型。`*` import 経由の facade と誤解されないよう明示的に拒否する
+  // scala / Predef 由来で、RPC の境界に向かない型。`*` import 経由の facade と取り違えないよう、明示的に拒否する
   private val rejectedScalaTypes = Set(
     "Long", "Float", "Short", "Byte", "Char", "Any", "AnyRef", "AnyVal", "Nothing", "Null",
     "Option", "Some", "None", "Seq", "List", "Vector", "Array", "Map", "Set", "Either", "Future"
@@ -17,7 +17,7 @@ object GenerateDurableObjectStubs {
   private val jsPromise = Set("js.Promise", "scala.scalajs.js.Promise")
   private val jsUndefOr = Set("js.UndefOr", "scala.scalajs.js.UndefOr")
 
-  /** export 名から Stub 名を決める（`Board` → `BoardDoStub`、`V6PlaceholderDurableObject` → `V6PlaceholderDoStub`）。 */
+  /** export 名から Stub 名を決める（`Board` → `BoardDoStub`、`V6PlaceholderDurableObject` → `V6PlaceholderDoStub`） */
   def stubName(exportName: String): String = identifier(exportName.stripSuffix("DurableObject") + "DoStub")
 
   def render(sources: Seq[(String, String)]): String = {
@@ -60,13 +60,13 @@ object GenerateDurableObjectStubs {
       case d: Defn.Object if !isPrivate(d.mods) => scope.fail(s"$className.${d.name.value}", "nested public objects are not supported")
       case d: Defn.Enum if !isPrivate(d.mods) => scope.fail(s"$className.${d.name.value}", "nested public enums are not supported")
       case d: Defn.Type if !isPrivate(d.mods) => scope.fail(s"$className.${d.name.value}", "public type aliases are not supported")
-      case _ => None // フィールド（val / var）、private な宣言、副コンストラクタ、式
+      case _ => None // フィールド（val / var）、private な宣言、副コンストラクタ、式は対象にしない
     }.sortBy(_._1)
     val names = methods.map(_._1)
     require(names.distinct.size == names.size,
       s"${scope.path}: ${cls.name.value}: overloaded methods are not supported: ${names.diff(names.distinct).distinct.mkString(", ")}")
     val source = if exportName == className then "" else s"（$className）"
-    s"\n/** `$exportName`$source の RPC スタブ。 */\n@js.native\ntrait ${stubName(exportName)} extends DurableObjectStub {\n" +
+    s"\n/** `$exportName`$source の RPC スタブ */\n@js.native\ntrait ${stubName(exportName)} extends DurableObjectStub {\n" +
       methods.map(_._2).mkString + "}\n"
   }
 
@@ -131,7 +131,7 @@ object GenerateDurableObjectStubs {
     name
   }
 
-  /** 1 ファイル分の import から、シグネチャに現れる型名を生成先で解決できる形へ写す。 */
+  /** 1 ファイル分の import から、シグネチャに現れる型名を生成先で解決できる形へ写す */
   private final class Scope(val path: String, importers: List[Importer], localNames: Set[String]) {
     private val importsJs = importers.exists { importer =>
       importer.ref.syntax == "scala.scalajs" && importer.importees.exists {
@@ -143,7 +143,7 @@ object GenerateDurableObjectStubs {
     def fail(member: String, message: String): Nothing =
       throw new IllegalArgumentException(s"$path: $member: $message")
 
-    /** backquote 付きの名前（`` `type` `` 等）は `syntax` に backquote が残るので拒否される。 */
+    /** backquote 付きの名前（`` `type` `` 等）は `syntax` に backquote が残るので拒否される */
     def identifier(member: String, name: String): String =
       if name.matches(identifierPattern) then name else fail(member, s"unsupported identifier $name")
 
@@ -172,7 +172,7 @@ object GenerateDurableObjectStubs {
       case other => fail(member, s"unsupported type qualifier ${other.syntax}")
     }
 
-    /** 単純名は `packageName` からの import（明示または `*`）で来たものだけ受け付ける。 */
+    /** 単純名は `packageName` からの import（明示または `*`）で来たものだけ受け付ける */
     private def resolveSimple(member: String, name: String): String = {
       if localNames(name) then fail(member, s"type $name is declared in the Durable Object sources; RPC signatures may only use js.* and $packageName facades")
       val explicit = importers.filter(_.importees.exists {

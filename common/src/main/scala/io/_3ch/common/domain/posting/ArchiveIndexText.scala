@@ -13,7 +13,7 @@ object ArchiveIndexText {
     s"$unixtime\n${key.take(4)}<>$key\n${body(current)}"
 
   /**
-    * headline.txt の先頭に投稿を足し、今の 2〜301 行目のうち板名が正しく題名があり別の板のものを前後の空白を除いて残す
+    * headline.txt の先頭に投稿を足し、今の 2〜301 行目のうち板名が正しく題名があり、別の板のものだけを、前後の空白を除いて残す。
     * 板の題名が無ければ undefined と書く
     */
   def headline(unixtime: String, bbs: String, title: Option[String], key: String, message: String, current: Option[String]): String = {

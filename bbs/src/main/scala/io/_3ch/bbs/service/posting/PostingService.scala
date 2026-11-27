@@ -80,14 +80,14 @@ final class PostingService(ports: PostingPorts, salt: String) {
       .map(_.fold(reason => reject(PostingError.Authentication(reason), context), identity))
   }
 
-  /** 認証を有効にした環境の書き込み条件。Web 版と !auth はログイン必須、BBS_PHOEBE（スレ設定を優先）は Lv を求める。旧キャップは対象外 */
+  /** 認証を有効にした環境で、書き込みの条件を確かめる。Web 版と !auth ではログインが必須で、BBS_PHOEBE（スレ設定を優先）では Lv を求める。旧キャップは対象外 */
   private def admit(context: PostingContext, account: PostingAccount, request: PostingRequest): Unit = if (authEnabled && !account.legacyCap) {
     if (account.user.isEmpty && (!request.isMonazilla || context.mailCommands.auth)) reject(PostingError.Authentication(AuthenticationFailure.LoginRequired), context)
     val required = Phoebe.required(context.settings.get("BBS_PHOEBE"))
     if (!Phoebe.admits(account.lv, required, account.staff)) reject(levelError(account, required), context)
   }
 
-  /** Lv 不足の拒否。未ログインならログインを求め、認証済なら必要 Lv を示す */
+  /** Lv 不足の拒否。未ログインならログインを求め、認証済みなら必要 Lv を示す */
   private def levelError(account: PostingAccount, required: Int): PostingError =
     if (account.user.isEmpty) PostingError.Authentication(AuthenticationFailure.LoginRequired) else PostingError.AuthenticationLevel(required)
 
@@ -97,8 +97,8 @@ final class PostingService(ports: PostingPorts, salt: String) {
     else ports.phoebe.load().map(rules => account.copy(lv = rules.cap(account.lv, userInfo.text)))
 
   /**
-    * 認証を有効にした環境のエッジ防御。データセンターの AS からの投稿を判定する。
-    * 役割（admin・delete・regulate）の保持者とキャップ付きの投稿、phoebe.cgi の上限をかける前の Lv が3以上で作成から7日以上の認証済みは免除する。旧キャップは対象外
+    * 認証を有効にした環境のエッジ防御として、データセンターの AS からの投稿を判定する。
+    * 免除するのは、役割（admin・delete・regulate）の保持者とキャップ付きの投稿、および、認証済みでアカウント作成から7日以上たち、phoebe.cgi の上限をかける前の Lv が3以上の投稿者。旧キャップは対象外
     */
   private def edge(context: PostingContext, account: PostingAccount, accountLv: Int, request: PostingRequest): Future[Unit] =
     if (!authEnabled || account.legacyCap) Future.unit
@@ -180,7 +180,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
     }
   }
 
-  /** スレ立て規制の材料。BBS_THREAD_PASS で免除される投稿者は判定も記録もせず、設定の誤りでも拒否しない */
+  /** スレ立て規制の判定に渡す値を作る。BBS_THREAD_PASS で免除される投稿者は、判定も記録もせず、設定に誤りがあっても拒否しない */
   private def threadCreationLimit(context: PostingContext, request: PostingRequest, boardSettings: BbsSettings, bypass: BypassPoster): Future[Option[ThreadCreationLimit]] =
     if (!context.creating) Future.successful(None)
     else {
@@ -232,7 +232,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
     }
   }
 
-  /** phoebe 書式の5軸。認証済で端末ハッシュがあればそれを、無ければ UA 解析表で解析した値を使う */
+  /** phoebe 書式の5軸を決める。認証済みで端末ハッシュがあればそれを使い、無ければ UA 解析表で解析した値を使う */
   private def identifierAxes(account: PostingAccount, request: PostingRequest): Future[IdentifierAxes] =
     IdentifierAxes.fromDevice(account.device).filter(_ => authEnabled) match {
       case Some(axes) => Future.successful(axes)
@@ -256,7 +256,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
       (named, Option.when(context.creating)(poster))
     }
 
-  /** 連投規制の材料。判定しない投稿（off・BBS_LIVE・回避レベルで免除）は None。aid は認証主体の accountKey（未認証は空）、キャップの識別子（★）は空にして照合しない */
+  /** 連投規制の判定に渡す値を作る。判定しない投稿（off、BBS_LIVE、回避レベルで免除したもの）は None を返す。aid には認証した投稿者の accountKey を入れ（未認証なら空）、キャップの識別子（★）は空にして照合に使わない */
   private def postRateCheck(context: PostingContext, boardSettings: BbsSettings, user: Option[PostingUser], bypass: BypassPoster,
                             request: PostingRequest): Future[Option[PostRateCheck]] = {
     val settings = PostRateSettings.from(boardSettings, context.settings)
@@ -269,11 +269,11 @@ final class PostingService(ports: PostingPorts, salt: String) {
     } yield Some(PostRateCheck(settings.level, PostRateIdentity(ip, shiki, aid), settings.board, settings.thread))
   }
 
-  /** 書き込む直前に Thread DO で判定し直す BBS_PHOEBE の条件。認証を有効にしていない環境と旧キャップは判定しない */
+  /** 書き込む直前に Thread DO で判定し直す BBS_PHOEBE の条件を作る。認証を有効にしていない環境と旧キャップでは None を返す */
   private def admissionOf(account: PostingAccount, boardSettings: BbsSettings): Option[PhoebeAdmission] =
     Option.when(authEnabled && !account.legacyCap)(PhoebeAdmission(account.lv, account.staff, Phoebe.required(boardSettings.get("BBS_PHOEBE"))))
 
-  /** 本文先頭の !バルサン・!SETTING:BBS_PHOEBE:n をスレ設定の変更にする。スレ立て人と staff 以外のコマンドは無視して通常の投稿にする */
+  /** 本文先頭の !バルサン と !SETTING:BBS_PHOEBE:n をスレ設定の変更として扱う。スレ立て人と staff 以外が書いたコマンドは無視して、通常の投稿にする */
   private def phoebeCommand(context: PostingContext, account: PostingAccount, boardSettings: BbsSettings): Future[Option[ThreadPhoebeRequest]] =
     PhoebeCommand.parse(context.form.message).filter(_ => authEnabled) match {
       case None => Future.successful(None)
@@ -287,7 +287,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
         owner.map(command.request(_, account.staff, Phoebe.required(boardSettings.get("BBS_PHOEBE")), account.lv))
     }
 
-  /** dat に追記する。連投規制のコピペで吸い込んだら真を返す */
+  /** dat に追記する。連投規制のコピペ吸い込みで捨てた場合は真を返す */
   private def updateThread(context: PostingContext, board: PostingBoard, creationLimit: Option[ThreadCreationLimit], owner: Option[ThreadOwner],
                            rateLimit: Option[PostRateCheck], phoebe: Option[ThreadPhoebeRequest], admission: Option[PhoebeAdmission], account: PostingAccount, userInfo: UserInfo): Future[(PostingContext, Boolean)] = {
     val spaced = context.copy(form = context.form.copy(message = DatLineFormatter.spaceFirstBreak(context.form.message)))
@@ -353,7 +353,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
   private def digest(context: PostingContext, value: String): Future[String] =
     if (value.isEmpty) Future.successful("") else ports.hasher.sha256Hex(value + ":" + context.identity.salt)
 
-  /** 段の途中の例外を内部エラーにする。時刻は BoardSettings・スレの読込・書込の段だけ受付時刻を出し、ほかは未設定 */
+  /** 段の途中で起きた例外を内部エラーにする。受付時刻を出すのは BoardSettings とスレの読み込み・書き込みの段だけで、ほかの段では出さない */
   private def guarded[A](context: PostingContext, stage: PostingStage, clock: FailureClock)(f: => Future[A]): Future[A] =
     Future.unit.flatMap(_ => f).recover {
       case e if !e.isInstanceOf[Rejected] =>

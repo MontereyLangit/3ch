@@ -13,7 +13,7 @@ private[islands] object AuthClient {
   def sessionView(value: SessionProps): SessionView = SessionView(value.uid, value.lv.toInt)
   /** 認証 API の応答やイベントの値を読む。uid と lv が無ければ None */
   def session(raw: js.Any): Option[SessionView] = SessionProps.validate(raw).toOption.map(sessionView)
-  /** 認証 API の応答の文字列の値 */
+  /** 認証 API の応答から文字列の値を読む */
   def text(json: js.Object, name: String, default: String = ""): String =
     json.asInstanceOf[js.Dictionary[js.Any]].get(name).filter(js.typeOf(_) == "string").fold(default)(_.asInstanceOf[String])
   def readSession(): Future[Option[SessionView]] = {
@@ -31,7 +31,7 @@ private[islands] object AuthClient {
     dom.fetch(path, new dom.RequestInit { method = dom.HttpMethod.POST; credentials = dom.RequestCredentials.`same-origin`; body = params }).toFuture
       .flatMap(r => r.json().toFuture.map(json => (r.ok, json.asInstanceOf[js.Object])))
   }
-  /** 失敗の応答の文言 */
+  /** 失敗した応答の文言 */
   def error(json: js.Object, fallback: String = "操作できませんでした"): String =
     if json == null then fallback else text(json, "error", fallback)
 

@@ -11,7 +11,7 @@ import scala.scalajs.js.typedarray.Uint8Array
  */
 object WebHash {
 
-  /** `sha1Base64(str)`: SHA-1のBase64エンコードを先頭27文字にスライスして返す。 */
+  /** `sha1Base64(str)`: SHA-1 の Base64 エンコードの先頭 27 文字を返す */
   def sha1Base64(str: String): js.Promise[String] = {
     val data = new TextEncoder().encode(str)
     GlobalCrypto.subtle.digest("SHA-1", data).`then` { buffer =>
@@ -27,7 +27,7 @@ object WebHash {
     }
   }
 
-  /** `hash(algo, str)`: 指定アルゴリズム(例: "SHA-256")のダイジェストを16進(小文字)文字列で返す。 */
+  /** `hash(algo, str)`: 指定アルゴリズム(例: "SHA-256")のダイジェストを16進(小文字)文字列で返す */
   def hash(algo: String, str: String): js.Promise[String] = {
     val data = new TextEncoder().encode(str)
     GlobalCrypto.subtle.digest(algo, data).`then` { buffer =>

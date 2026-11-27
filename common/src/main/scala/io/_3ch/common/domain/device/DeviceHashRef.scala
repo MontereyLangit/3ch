@@ -5,7 +5,7 @@ final case class DeviceHashRef(granularity: DeviceGranularity, identifier: Strin
   /** 粒度1文字と端末部。旧保存値の公開鍵があればコロンで続ける */
   def format: String = s"${granularity.code}$identifier" + (if (pubKeyHash.isEmpty) "" else s":$pubKeyHash")
 
-  /** 規制照合に使う端末部。粒度による除外はしない */
+  /** 規制の照合に使う端末部。粒度による除外はしない */
   def individualIdentifier: String = identifier
 }
 

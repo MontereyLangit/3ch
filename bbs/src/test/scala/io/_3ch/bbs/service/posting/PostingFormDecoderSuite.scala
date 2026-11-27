@@ -9,7 +9,7 @@ import io._3ch.common.domain.posting.PostForm
 import scala.scalajs.js
 import scala.scalajs.js.typedarray.Uint8Array
 
-/** bbs.cgi の文字コード判定とフォーム復号 */
+/** bbs.cgi の文字コードの判定と、フォームの復号を確かめる */
 class PostingFormDecoderSuite extends FunSuite {
   private def sjis(fields: (String, String)*): Uint8Array = {
     def encode(v: String): String = {

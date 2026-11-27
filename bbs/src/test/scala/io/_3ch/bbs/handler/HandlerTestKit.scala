@@ -10,13 +10,13 @@ import scala.scalajs.js
 import scala.scalajs.js.Thenable.Implicits.*
 import scala.scalajs.js.typedarray.{ArrayBuffer, Uint8Array}
 
-/** ハンドラ層のテストが共有する、Request/Response・グローバル（Date / Math.random / caches）のテストダブル。 */
+/** ハンドラ層のテストが共有する、Request/Response・グローバル（Date / Math.random / caches）のテストダブル */
 object HandlerTestKit {
   val global: js.Dynamic = js.Dynamic.global.globalThis
 
   def fut[A](p: js.Any): Future[A] = p.asInstanceOf[js.Promise[A]].toFuture
 
-  /** 実 `Request`（GET/POST）。`body` は文字列。 */
+  /** 実 `Request`（GET/POST）を作る。`body` は文字列で渡す */
   def request(url: String, headers: Seq[(String, String)] = Nil, method: String = "GET", body: js.UndefOr[js.Any] = js.undefined): Request = {
     val init = js.Dynamic.literal(method = method, headers = js.Dictionary(headers*))
     if body.isDefined then init.updateDynamic("body")(body.get)
@@ -28,7 +28,7 @@ object HandlerTestKit {
   def bytes(res: js.Dynamic): Future[List[Int]] =
     fut[ArrayBuffer](res.arrayBuffer()).map(buffer => bytesOf(new Uint8Array(buffer)))
 
-  /** Shift_JIS 本文のレスポンスを復号する。 */
+  /** Shift_JIS 本文のレスポンスを復号する */
   def sjisText(res: js.Dynamic): Future[String] =
     fut[ArrayBuffer](res.arrayBuffer()).map(buffer => SjisEncoding.decode(new Uint8Array(buffer)))
 
@@ -48,7 +48,7 @@ object HandlerTestKit {
   def ctx: ExecutionContext =
     js.Dynamic.literal(waitUntil = ((p: js.Any) => p): js.Function1[js.Any, js.Any]).asInstanceOf[ExecutionContext]
 
-  /** `body` の実行中だけグローバル `name` を `value` に差し替え、完了（成功・失敗とも）で元に戻す。 */
+  /** `body` の実行中だけグローバル `name` を `value` に差し替え、完了（成功・失敗とも）で元に戻す */
   private def withGlobal[A](name: String, value: js.Any)(body: => Future[A]): Future[A] = {
     val original = global.selectDynamic(name)
     global.updateDynamic(name)(value)
@@ -57,7 +57,7 @@ object HandlerTestKit {
     result.transform { r => restore(); r }
   }
 
-  /** 引数なしの `new Date()` と `Date.now()` だけを固定ミリ秒にする（明示引数付きの `new Date(x)` は素通し）。 */
+  /** 引数なしの `new Date()` と `Date.now()` だけを固定ミリ秒にする（明示引数付きの `new Date(x)` は素通し） */
   def withFixedTime[A](ms: Double)(body: => Future[A]): Future[A] = {
     val make = js.Dynamic.newInstance(js.Dynamic.global.Function)(
       "RealDate", "ms",
@@ -75,7 +75,7 @@ object HandlerTestKit {
     result.transform { r => restore(); r }
   }
 
-  /** `publicFetch` が直接参照する Workers の Cache API (`caches.default`) のインメモリ実装。 */
+  /** `publicFetch` が直接参照する Workers の Cache API (`caches.default`) のインメモリ実装 */
   private def makeCaches(): js.Dynamic = {
     val store = mutable.Map.empty[String, js.Any]
     def keyOf(req: js.Any): String = if js.typeOf(req) == "string" then req.asInstanceOf[String] else req.asInstanceOf[js.Dynamic].url.asInstanceOf[String]
@@ -92,7 +92,7 @@ object HandlerTestKit {
 
   private var savedCaches: Option[js.Any] = None
 
-  /** `globalThis.caches` を新しいインメモリ実装へ差し替える。`restoreCaches()` で元に戻す。 */
+  /** `globalThis.caches` を新しいインメモリ実装へ差し替える。`restoreCaches()` で元に戻す */
   def installCaches(): Unit = {
     if savedCaches.isEmpty then savedCaches = Some(global.caches.asInstanceOf[js.Any])
     global.caches = makeCaches()
