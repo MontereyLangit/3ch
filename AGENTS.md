@@ -1,225 +1,198 @@
-# 3ch 掲示板システム 開発ガイド
+# 3ch Development Guide
 
-AI アシスタント（Claude Code / Gemini CLI / Codex CLI）および開発者向けの、本リポジトリにおける
-プロジェクト概要・移植計画・作業規約。
+Instructions for contributors and coding agents (Codex, Claude Code and Gemini CLI).
 
-> **本ファイル `AGENTS.md` が唯一の原本。** 各エージェントは次の経路でこれを読む。
->
-> - Codex CLI: `AGENTS.md` を直接読む。
-> - Claude Code: v2.1.277 以降は、`CLAUDE.md` がなければ `AGENTS.md` を読む（Bedrock / Vertex / Foundry 経由は未対応）。
-> - Gemini CLI: `.gemini/settings.json` の `context.fileName` で `AGENTS.md` を指定。
->
-> `CLAUDE.md` や `GEMINI.md` を作らないこと（`CLAUDE.md` があると Claude Code は `AGENTS.md` を読まなくなる）。以前は3ファイルに同じ内容を
-> 持たせていたが、片方だけ直した結果、Shift_JIS の方針が別ファイルで逆向きに書き換わる事故が起きた。
+## 1. Scope and sources of truth
 
----
+3ch (３ちゃんねる, https://3ch.io/) is a 2ch-compatible, thread-float bulletin board running on Cloudflare Workers. This repository contains the current Scala.js/HonoX generation of the system (v6), formerly called ch3s. It is not a Next.js application.
 
-## 1. プロジェクト概要
+- This file is the canonical repository-wide development guide. Do not create duplicate CLAUDE.md or GEMINI.md files. Codex reads AGENTS.md directly; Gemini CLI is configured through .gemini/settings.json; compatible Claude Code versions (2.1.277 or later, subject to provider support) read AGENTS.md when CLAUDE.md is absent.
+- Use the user's explicit instructions and approved issue requirements for the task. Read the relevant source, tests and configuration before making changes. Distinguish current behavior from target behavior; an open issue or design document is not evidence that a feature is implemented.
+- GitHub issues are the backlog and the place to track implementation plans and acceptance criteria. Keep detailed specifications and architectural decisions in docs/, and update affected documentation when behavior changes. Resolve conflicting requirements explicitly rather than silently choosing an obsolete design.
+- The former vanilla JavaScript implementation (v5) was retired after the v6 migration. Consult the v5-final tag when investigating historical behavior, e.g. `git show v5-final:src/common.js`. Old references to src/*.js may refer to that tag.
+- Do not depend on a developer-specific absolute path or on unrelated local repositories being present.
 
-### 1.1 これは何か
+## 2. Current architecture
 
-`3ch`（旧プロジェクト名 `ch3s`）は 2ch 互換掲示板「3ch（３ちゃんねる）」の **現行稼働システム = 3ch（Scala.js + HonoX）** のリポジトリ。
-Scala のパッケージは `io._3ch.*`。ローカル作業ディレクトリは `C:/project/3ch/ch3s/` のままとする。
-Cloudflare Workers / Durable Objects / R2 / KV 上で動く。専用ブラウザ（専ブラ, Monazilla 系）互換の
-dat / subject.txt プロトコルを提供する。
+### Technology stack
 
-もとは素の JavaScript 実装（v5）だった。**v5 から v6 への移植（step 3）は完了し、本番は v6 に切り替え済み**。
-v5 のソース（`src/`）は削除した。参照が必要なときは git タグ **`v5-final`** を使う
-（`git show v5-final:src/common.js` など）。docs や Scala のコメントにある `src/*.js` への言及は、このタグ上のファイルを指す。
+- Scala 3 (LTS), Scala.js, sbt, scalajs-react and React.
+- hx4s, the independent Scala.js/HonoX integration framework: https://github.com/MontereyLangit/hx4s. It provides typed route/island wiring, SSR integration, props validation and Vite support. Keep reusable framework functionality in hx4s, not in the application.
+- HonoX / Hono / Vite for routing, rendering, hydration, bundling and the Workers entry point. Public pages use server-side rendering with interactive React islands where migrated; a legacy HTML frontend remains for unmigrated pages. The admin scalajs-react SPA is a migration target, not a description of the entire current admin UI.
+- Cloudflare Workers, Durable Objects, R2 and KV. Consult wrangler.jsonc for actual bindings, compatibility flags and migrations, and build.sbt, package.json and hx4s.lock for dependency versions.
+- The current Board and Thread DOs use the legacy KV-backed storage model. Account, AccountIndex and AuthRate are SQLite-backed DO classes, but their application-level state is not yet fully relational. D1 catalog/feed projections are planned, not deployed by the current configuration.
+- R2 (ch3www) stores board settings, static resources, archive indexes and other legacy data. CAP and TEST are KV bindings.
+- Monazilla-compatible dat, subject.txt, SETTING.TXT, BBSMENU and bbs.cgi interfaces. Shift_JIS conversion uses the project's own SjisEncoding implementation.
 
-本リポジトリのゴールは、v6 を土台に step 4 以降（新 UI・新仕様バックエンド・データ移行）へ進めること。
+### Repository layout
 
-### 1.2 3ch 系プロジェクトの位置づけ（`C:/project/3ch/`）
+Scala packages use `io._3ch.*`.
 
-| PJ                                     | 内容                                                                                                                                                                                                          |
-| :------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `2ch`, `readcgi`, `gns`, `bbs18c`      | 参考用の歴史的実装（perl / C / PHP）                                                                                                                                                                          |
-| `v3`, `delightly-v2`(=v4)              | 旧 3ch システム（PHP）。現在ほぼ未使用                                                                                                                                                                        |
-| **`3ch`（本リポジトリ）**             | **v6 = 現行稼働システム**。Scala.js + HonoX on Cloudflare Workers + DO + R2 + KV（旧 v5 はタグ `v5-final`）                                                                                                   |
-| `ch3s-migration`                       | **Scala.js × HonoX 移植の参照実装**（後述 step 3 の手本）                                                                                                                                                     |
-| `ch3/3chiko`                           | 旧フロントエンド配布元（`3chiko.html`, Cloudflare Pages 経由）。**2026-09-25、`3ch` へ統合済み**（本体は `public/3chiko.html` 1本。Workers Static Assets(`env.ASSETS`)経由で配信）。以後はこちらを更新しない |
-| `3ch_ui`                               | 新 UI のデザイン案・HTML モック                                                                                                                                                                               |
-| `v6`, `v6-s`, `v6-k`, `v6-s2`, `v6-bp` | v6 検討・試作（Kotlin/Spring Boot 版含む）                                                                                                                                                                    |
-| `kako-data`                            | 過去ログデータ（step 6 の移行対象）                                                                                                                                                                           |
-| `3ch_workers`                          | v5 から途中で分離した別系統（`mmr-3ch/3ch_workers`）。TS + Hono JSX 移行試作を含む（1.7）                                                                                                                     |
+| Path | Responsibility |
+| --- | --- |
+| common/ | Shared JVM/JS cross-project: pure domain logic, value objects, route compatibility rules; JS-specific shared island props under src/main/scala-js/. No production I/O in the pure shared code. |
+| bbs/ | Scala.js server, Workers handlers, services, domain, persistence adapters, SSR components and DOs. |
+| bbs-client/ | Scala.js browser islands and client-side behavior. |
+| codegen/ | JVM-only 3ch-specific generation of DO TypeScript declarations and Scala RPC stubs. |
+| app/ | HonoX/Vite integration, handwritten entry points and generated route/island files. |
+| public/ | Static assets, including the remaining legacy 3chiko.html. |
+| tests/ | Node/workerd integration tests, SSR/hydration tests, generator checks and shared golden fixtures. |
+| docs/ | Specifications, development guides, design decisions, historical notes and UI mockups. |
+| .github/workflows/ci.yml | CI build, type checking, integration tests and startup smoke checks. |
+| wrangler.jsonc | Worker bindings, migrations, assets and deployment configuration (dist/index.js). |
 
-### 1.3 技術スタック（現行 v6）
+Within `bbs/src/main/scala/io/_3ch/bbs/`:
 
-- **ランタイム**: Cloudflare Workers (ES Modules, `compatibility_date: 2026-10-02`。`nodejs_compat` は既定で有効)
-- **言語 / フレームワーク**: Scala 3 / Scala.js（`bbs/` = Worker・DO・ハンドラ、`common/` = 純粋ロジック）+ scalajs-react + HonoX + Vite。Scala.js と HonoX の連携は独立フレームワーク **hx4s**（`sbt-hx4s`・`hx4s-core`・`hx4s-react`・`hx4s-vite`。別リポジトリで、`hx4s.lock` の commit と版でローカル公開したものを使う。`docs/development.md`）に任せ、`bbs.Main` の `@route` と `bbsclient.Main` の `@islands` から配線を生成する（`docs/codegen.md`）。手書きの route は `app/routes/` の `index.ts`（トップページ）、`admin/index.ts`・`auth.js.ts`・`bbsmenu.html.ts`（`publicHandler` へ渡すだけ）と `_renderer.tsx`（生成マーカーの無いファイル）
-  - 管理画面はscalajs-reactのSPA。利用者向け画面はHonoX SSR (Islands)
-- **状態管理**: Durable Objects — `Board`（板: スレ一覧 / 削除済み一覧）, `Thread`（スレ: dat / log / settings / hidden / stopped / movedTo）
-- **オブジェクトストレージ**: R2 `ch3www`（`SETTING.TXT`, `head.txt`, `bbsmenu.html`, `headline.txt`, `deny.cgi`, `ngwords.cgi`, 過去ログ `.cgi`）
-- **KV**: `CAP`（キャップ: パスワードハッシュ → 表示名）, `TEST`
-- **文字コード**: 自前 Shift_JIS (JIS X 0208) エンコーダ/デコーダ（`bbs/.../util/SjisEncoding.scala`、背景は `docs/sjis差異一覧.md`）
+- Main.scala: current Scala.js server exports and annotated routes.
+- handler/: HTTP/protocol adapters, including PublicRoutes, Posting, AdminHandler and auth/.
+- service/: use-case orchestration; service/*/ports defines external capabilities.
+- domain/: typed domain models and rules, including posting-specific rules; platform-independent rules belong in common/.
+- repository/: persistence and external service adapters implementing ports.
+- durable/: Board, Thread, Account, AccountIndex and AuthRate; codecs in durable/codec/ and infrastructure helpers in durable/support/.
+- external/cloudflare/: Cloudflare facades and generated RPC interfaces; hash/ and util/ contain hashing and encoding utilities.
 
-### 1.4 ディレクトリ構成
+The server and browser Scala.js projects link separately. Do not introduce dependencies from bbsClient to bbs or vice versa, or ship server logic and secrets to browsers.
 
-```
-common/                Scala (JVM/JS cross)。純粋ロジック（ルート表 RouteTable.scala, BoardId / ThreadKey / BbsSettings 等）。
-                       domain/account/ はアカウント・Cookie・専ブラキー・ログイン失敗の規則、domain/device/ は端末ハッシュと Client Hints
-                       src/main/scala-js/ は JS 専用: islands/ は island の props の trait と検証用の fields（hx4s の JsShape）
-bbs/
-  src/main/scala/io/_3ch/bbs/
-    Main.scala         Worker エントリ（JSExportTopLevel）
-    handler/           PublicRoutes（dat, subject.txt, SETTING.TXT, bbsmenu 等）, Posting（投稿パイプライン）,
-                       AdminHandler（/admin/*）, Responses。auth/ は /auth/* の画面と API、セッション Cookie、認証設定の読み取り
-    service/           サービス層。posting/PostingService が投稿の段の並びを持ち、ports/ に外部の読み書きの口を置く。
-                       auth/ はクライアント認証・専ブラキー発行・投稿の認証と記録（ports/ にアカウント・Cookie の口）
-    domain/            ドメインモデル・ドメインサービス（js.RegExp を使う規則と投稿処理の型。正規表現を使わない規則は common/）
-    repository/        ports の実装。DO スタブ / R2 / KV を包み、js.Dynamic をここで止める
-    durable/           Board DO, Thread DO, Account / AccountIndex / AuthRate DO
-    external/cloudflare/  Workers / DO / R2 / KV の facade（DO の RPC スタブ `*DoStub` はコンパイル時に codegen が生成。docs/durable-object-stubs.md）
-    hash/, util/       Web Crypto ハッシュ（SHA-1 / SHA-256）, Shift_JIS 変換
-  src/test/            munitによるScala側テスト。単体テストはこちらで実装する。
-  test-stubs/          sbt の Test / jsEnv が cloudflare:workers を差し替えるスタブ（scalajs:client.js と hono/jsx は hx4s-vite/node-loader）
-bbs-client/            クライアント側（hydration）Scala
-codegen/               DO から TS 型と Scala RPC スタブを生成（@route / @islands の配線は hx4s の sbt-hx4s。build.sbt の bbs の hx4s* 設定）
-scripts/setup-hx4s.mjs hx4s を hx4s.lock の commit と版でローカル公開（公開記録を照合し、合わなければ公開し直す）し、npm 依存と hx4s-vite を入れる
-app/                   HonoX（server.ts がエントリ。routes/index.ts と _renderer.tsx は手書き）
-public/
-  3chiko.html          3chiko.html本体。Vite の publicDir として dist/ へコピーされ Workers Static Assets で配信
-tests/                 実workerdを使う統合テスト（要 dist/）用ディレクトリ。admin・rpc・post-rate・auth（認証の HTTP と DO）・storage-atomicity（SQLite DO の同期 KV と SQL の原子性）の *.integration.test.js（実 workerd。support/ はテスト専用 Worker）。
-                       generated-app.test.js はコミット済みの app/routes・app/islands と、pretest が target/generated-app-check に生成した結果の照合。
-                       golden/ は言語中立の入出力表（Scala 側が読む。端末ハッシュ・Client Hints・空白処理の照合表を含む）
-docs/                  仕様書・設計メモ（後述）
-wrangler.jsonc         本番 Wrangler 設定（main = dist/index.js）
-```
+## 3. Roadmap and current priorities
 
-### 1.5 必読ドキュメント
+### Completed foundation
 
-| ファイル                                                                               | 位置づけ                                                                                                                                                                              |
-| :------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **`docs/現行システム仕様書.md`**                                                       | **最重要。v5 の全ロジックを抽出した仕様書（版 2.0.0）。v6 は同一仕様を実装している。** 文中の `src/*.js` はタグ `v5-final` 上のファイル。第11章に既知の不具合とv6推奨仕様の対照表あり |
-| **`docs/既知不具合台帳.md`**                                                           | **既知不具合の一覧（KB-nn）。** 新たに見つけた不具合もここに追記する。修正方針は 3.3                                                                                                  |
-| `docs/v6s実装メモ.md`                                                                  | Scala.js 実装（`bbs/`）の設計背景。doc コメントから参照される                                                                                                                  |
-| `docs/トリップ・ID廃止とスレ主表示.md`                                                 | 2026-11-02 の仕様変更（トリップ・ID 廃止、`!id`、スレ主表示 ` (主)`）。認証ブランチとの差分を含む                                                                                      |
-| `docs/admin.md`                                                                        | 管理画面の利用手順・規制ルール書式                                                                                                                                                    |
-| `docs/auth-phoebe-rate-limit-design.md`                                                | 認証・PHOEBE（Lv）・連投規制と新UIの設計。段Aは実装済み、段Bは部分実装、E-1（ID・パスワードの登録・ログイン・ロック、Googleログイン）とC（PHOEBE）は実装済み、段Dは管理画面を除いて実装済み（権限・キャップ・回避レベル）、E-2（メール認証・パスワードの変更と再設定・方式移行・退会・エッジ防御・乱造検知・Lv上限）は実装済み（メールの提供元は未定）。管理画面は改修計画 M0〜M4。現在の範囲は `docs/claude-handoff.md` を参照                                                                                                               |
-| `docs/claude-handoff.md` | 段B・E-1・C・D・E-2の実装範囲・残件・設定・検証結果と、次の管理画面（M0〜M4）への引き継ぎ |
-| `docs/auth-integration.md` | 認証の有効化、Turnstile、Googleログイン、メールの送信先、エッジ防御・Lv上限の規則、localhost、追加DOの開発・検証設定 |
-| `docs/auth-implementation-review.md` | 認証・PHOEBE 実装のレビュー記録（段A・段B・E-1途中の指摘と対応） |
-| `docs/auth-password-implementation-notes.md` | ID・パスワード方式（E-1）の実装メモ。入力規則・PBKDF2・登録回復方式の候補 |
-| `docs/bbs-cgi-ddd-refactoring-plan.md`                                                 | bbs.cgi 投稿処理の DDD 化リファクタリング計画（段0〜9は完了。段10以降が認証・規制の実装）                                                                                                            |
-| `docs/bbs-cgi-fp-refactoring-plan.md`                                                  | bbs.cgi の FP 化リファクタリング計画（FP > OOP > DDD、`service/` 層。2026-11-16、段1〜2完了）                                                                                                       |
-| `docs/auth-phoebe-review.md`                                                           | 上記 2 文書の Opus 5 セルフレビュー記録（2026-11-02）                                                                                                                                |
-| `docs/admin-spa-auth-plan.md`                                                          | 管理画面の改修計画（アカウント認証化・新 UI・scalajs-react SPA。2026-11-02、未着手）                                                                                                            |
-| `docs/admin-spa-auth-review.md`                                                        | 管理画面改修計画の Opus 5 セルフレビュー記録（2026-11-02）                                                                                                                               |
-| `docs/durable-object-stubs.md`                                                         | DO の RPC スタブ（`*DoStub`）のコンパイル時生成の仕様・対応範囲・運用手順                                                                                                            |
-| `docs/development.md`                                                                  | 開発環境。hx4s の取得・版の固定・ローカル公開の手順と、CI への組み込み案                                                                                                              |
-| `docs/codegen.md`                                                                      | `@route` / `@islands` の配線生成（hx4s）の 3ch の設定と、DO の型・スタブ生成。規則の本体は hx4s の文書                                                                                |
-| `docs/hx4s-foundation-review.md`                                                       | codegen の framework 分離・型付き island props のレビュー記録と、hx4s への移行（Phase 4）の記録（2026-11-16）                                                                    |
-| `docs/thread-creation-regulation.md` / `docs/global-thread.md`                         | 投稿機能の追加仕様（スレ立て規制、全板共通スレ 924 / 900）                                                                                                                            |
-| `docs/post-rate-limit.md`                                                              | 連投規制（ごんたくれ・Samba24・広域 FlyRibbon・スレ連投・コピペ吸い込み、段階 `BBS_FR_LEVEL`。既定は規制＋FlyRibbon）の仕様と保存形式                                                                       |
+The vanilla JS to Scala.js/HonoX migration and extraction of reusable integration infrastructure into hx4s are complete as a foundation. Some legacy presentation and dispatch paths remain intentionally for compatibility. Do not restart the migration or introduce Next.js as the default UI stack.
 
-### 1.6 開発コマンド
+### Phase 1 — Essential features, quality and refactoring (through the end of 2026)
+
+- Finish authentication, accounts, posting restrictions and management functionality. Authentication code exists on develop, but this does not establish production rollout or completion of all requirements. Finalize the authentication/account schema and migration (#75) before production authentication rollout; dedicated-browser bootstrap/session and abuse-control redesigns are #77 and #78.
+- Adopt handler-owned declarative routing and the layered/DDD-oriented structure (#73, #76); remove obsolete dispatch paths only after verifying equivalent behavior.
+- Continue the public Web UI migration (#17, #31), admin SPA migration (#10), and core features such as the thread feed (#12). Remove public placeholders and unused migration scaffolding (#45), without deleting planned functionality from the backlog. Remove 3chiko.html only after all dependent routes have replacements.
+- Improve reliability, compatibility, bundle size, CI and regression coverage (#43, #50, #53, #56, #59, #68). Keep existing working features intact.
+- Implement approved posting identifier changes through their own issues (#58, #74), not as incidental changes.
+
+Preserve deployed storage formats during unrelated changes. The authentication schema is an explicit exception to the former blanket rule against database changes in this phase. Other storage work requires its own migration plan.
+
+### Phase 2 — Storage modernization and legacy archive import (late 2026 / early 2027, provisional)
+
+See #14, #15, #72 and #27. The approved direction in #72 is:
+
+- SQLite-backed per-thread DOs as the authority for posts and thread state; board DOs for board-local ordering, configuration and restrictions.
+- D1 directories, catalogs/search indexes and bounded feed projections for global queries, maintained asynchronously and idempotently; never treat an eventually consistent projection as the authoritative posting or credential store.
+- R2 for daily historical feed snapshots under /kako/, legacy source archives and static exports. Do not evict old thread bodies from authoritative DO storage as a cold-tier design.
+- No automatic dat-drop or posting closure. Listing visibility and writability are different concepts; age-based bump restrictions are planned but thresholds are not yet fixed.
+- Support tag-based virtual boards while retaining canonical physical board/thread identities. Retain public posts separately from private posting audit data (approximately three months under #72).
+- Finalize schema, migration and reconciliation procedures before bulk importing legacy dat files. Preserve numbering, URLs, encodings and existing data; do not fabricate missing historical private metadata or historical state.
+
+### Phase 3 — Differentiating features (2027, provisional)
+
+Thread-title search (#18; may be implemented during Phase 2), ActivityPub federation (#11) and Workers AI-assisted moderation (#19). Establish the interoperability, authorization, privacy and failure-handling contracts before implementation. These are planned features, not current capabilities.
+
+Dates are planning targets, not release guarantees. Issue requirements and dependencies take precedence over old step numbers and outdated handoff dates.
+
+## 4. Architecture and coding conventions
+
+### Design principles
+
+Prefer FP > OOP > DDD. Use functional programming for domain rules, object-oriented encapsulation where useful, and DDD to establish meaningful boundaries. Avoid mechanical layering, speculative abstractions and large procedural services.
+
+- HTTP flow: Router -> Handler -> Service/use case. Services apply domain rules and depend on typed ports; repositories implement those ports and adapt DOs, databases and other storage. Domain models must not depend on transport or storage implementations. Lower layers must not import upper layers except to implement explicitly defined ports.
+- Use the existing service/ package for use cases rather than introducing a parallel application/ layer. Keep existing package names unless carrying out the deliberate migration in #73. As the application grows, separate handlers, views, reusable components/layouts, services, domain and repositories; cohesive vertical slices are acceptable when justified.
+- Handlers parse and validate transport input, perform HTTP-level authorization and map typed outcomes to responses. Services coordinate work; domain logic makes business decisions. Keep user-facing messages out of the persistence layer.
+- Use immutable values and collections, case classes, enums, Option, Either, pattern matching and standard Scala combinators. Represent expected business rejection as a value instead of an exception. Pass clocks, randomness and external effects through explicit boundaries. Do not read the current time inside a pure domain rule.
+- Prefer Scala.js libraries over equivalent npm packages when a suitable Scala.js library exists. Use TypeScript/JavaScript for necessary integration and tooling, not for logic that can be expressed in Scala.
+- Use explicit types at external boundaries. Avoid TypeScript any, untyped Scala structures, unchecked casts and spreading js.Dynamic through the application. Decode dynamic inputs into typed models at the boundary.
+- Use braces for multiline Scala blocks by default. Scala 3 if/then and while/do are allowed; optional-braces indentation syntax is reserved for clearly more readable cases. Ordinary match case bodies need not be braced. Do not enforce -no-indent globally; the previous migration check was `sbt 'set ThisBuild / scalacOptions += "-no-indent"' Test/compile`.
+- Keep comments and Scaladoc/JSDoc concise and useful, normally in Japanese to match existing code, without a final Japanese full stop in Scaladoc. Document public APIs and constraints; put rationale, benchmarks and migration history in docs/ rather than lengthy code comments or task-number annotations. Avoid unnatural generated prose.
+- Fix compiler/typecheck/lint warnings at their source; do not hide them or weaken compiler/test settings merely to pass. Scalafmt/WartRemover adoption is tracked in #68; follow the actual configured tools.
+
+### Durable Objects and persistence
+
+DOs are infrastructure boundaries, not the home of business rules.
+
+- Keep storage layout, serialization, RPC conversion, concurrency control and external infrastructure access in DOs. Put state transitions, retention decisions, restriction checks and expiry calculations into pure typed domain code.
+- A typical operation reads the clock once, serializes/locks as required, loads and decodes state, invokes domain logic, encodes and persists the result. Keep transactions within their actual storage boundary; do not assume cross-DO atomicity. Use idempotency and reconciliation where multiple stores are involved.
+- Do not manipulate business state as js.Dynamic in the DO. Keep codec and infrastructure helpers separate from domain models. Return typed outcomes or stable RPC codes, not HTML/user-facing text.
+- Changes to DO class migrations, storage keys, schemas or encodings require an explicit migration and compatibility strategy. Never wipe or rewrite production data to simplify a migration. Test failures, retries, concurrency and recovery.
+- Test domain behavior independently of DO infrastructure. Use integration tests for storage semantics, atomicity and runtime behavior.
+
+### hx4s, HonoX and generated code
+
+- Current build.sbt restricts hx4sServerSources and hx4sClientSources to the two Main.scala files. Route annotations and island declarations therefore live there today. Moving routes to handlers (#73) requires updating generation configuration, not just moving annotations. Authentication still has manual dispatch in app/server.ts and AuthHandler (#76).
+- Use supported @route / @islands[P] declarations and @JSExportTopLevel exports. Route/island extensions are optional in current hx4s. Preserve public paths, HTTP methods, trailing-slash and fallback semantics during migration.
+- Declare island props as shared typed JS traits in common/src/main/scala-js/io/_3ch/common/islands/. Use the shared fields/validation contract, typed IslandExport[P] and generated IslandComponents. Props must be serializable; use js.UndefOr only for truly optional fields, and do not pass functions, Scala collections or private server data across hydration. Verify SSR and hydration compatibility. Do not claim that runtime descriptors remove every possible schema drift.
+- Generated app/routes/, app/islands/, app/scalajs-durable-objects.generated.d.ts and managed Scala sources must never be edited by hand. Modify source declarations and regenerate instead. The current repository tracks generated app files and tests them against regenerated output; #43 proposes changing this. Until that issue is implemented, commit regenerated tracked files when applicable. Do not broadly ignore app/ or remove handwritten files.
+- Keep app/server.ts, app/client.ts, renderer, CSS and handwritten routes intact unless the task requires a verified migration. Check generation markers before deleting anything.
+- Framework-general changes belong in hx4s; 3ch-specific DO generation remains in codegen/. Update the pinned hx4s dependency deliberately and verify both sides when changing a framework contract.
+
+### Web UI
+
+- Use HonoX SSR and scalajs-react for interactive islands; avoid turning the public site into a full SPA by default. The admin UI is intended to be a scalajs-react SPA.
+- Prefer ScalaFnComponent/function components, hooks for state and effects, and final val for component definitions. Keep effects and cleanup explicit. Reuse existing layouts and components; avoid duplicate client-side and server-side business logic.
+- Follow current UI conventions and docs/ui/ mockups where applicable. Use square corners rather than border-radius unless a design explicitly changes this. Use natural Japanese UI text, consistent spacing, responsive CSS, and preserve accessibility and basic non-JS functionality where supported.
+- Do not expose unimplemented features as public placeholders. Do not add speculative components, exports or routes. Verify references through generated code, RPC and tests before removing apparently unused code.
+- Preserve compatibility and avoid duplicate submissions, stale hydration and unnecessary client/server bundle growth.
+
+## 5. Compatibility, security and privacy
+
+- Preserve Monazilla protocol compatibility: dat has five fields separated by <>, including spaces around the message field; preserve subject format, posting response markers (including HTTP 200 and <!-- 2ch_X:error --> on protocol errors), Range and conditional 304 behavior.
+- Preserve Shift_JIS output for Monazilla clients and the existing Web UTF-8 behavior. Consult the encoding implementation, tests and docs/sjis差異一覧.md before changing conversions. Do not apply a blanket UTF-8 migration to legacy endpoints.
+- Preserve stable board/thread IDs, reply numbering, legacy URLs and stored content. Compatibility changes require an explicit issue and regression tests.
+- Treat request data, headers and client/device claims as untrusted unless verified at the relevant boundary. Retain server-side authorization, CSRF/Origin checks, Turnstile verification, cookie signing, revocation, rate limits and input/output validation. Do not use client UI state as authorization.
+- Authentication behavior may be configuration-gated. Distinguish a code path being implemented from external setup being complete. Google OAuth, mail delivery and production verification require appropriate configuration; do not pretend that provider setup or deployment has been verified.
+- Do not expose raw credentials, tokens, private identifiers or audit information in HTML, island props, logs, commits, issue text or external agent prompts. Never copy salt, ADMIN_PASSWORD, AUTH_SECRET or other sensitive configuration values out of their intended scope. Use local ignored .dev.vars files and Wrangler secrets; never commit actual secret values.
+- New public derived posting identifiers should follow approved daily (JST), board-scoped keyed derivation requirements; nicknames are not unique IDs or authentication credentials. Do not silently change historical dat or invent unconfirmed identifier formats.
+- Use isolated local/test storage. Do not deploy, run production migrations or issue destructive production operations without explicit authorization.
+
+## 6. Development and verification
+
+CI currently uses JDK 21, Node.js 22 and sbt on Ubuntu and Windows. Use a Node.js version compatible with the pinned Vite release. Read docs/development.md and the actual build files before setup.
+
+hx4s is currently consumed from a pinned local publication, not a registry release. Clone MontereyLangit/hx4s next to this repository (or specify HX4S_DIR), check out the exact commit in hx4s.lock with a clean worktree, then run:
 
 ```bash
-npm run hx4s:setup     # 依存導入（hx4s をローカル公開 → npm ci → hx4s-vite の tgz を --no-save で入れる。npm ci だけでは hx4s-vite が入らない）
-npm run v6:build       # sbt bbs/hx4sGenerate codegen/run → vite build（client / workers）→ dist/
-npm run dev            # v6:build 後に wrangler dev --config wrangler.jsonc → http://127.0.0.1:8787
-sbt test               # 単体テスト/現仕様固定テスト（munit。golden 照合を含む）
-npm test               # Scala テスト用リンクと生成結果の照合用の生成 → workerd 統合・Islands SSR/hydration・app/ の生成物の照合（要 dist/）
-npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc --minify
+npm run hx4s:setup
+npm run v6:build
+npm run v6:typecheck
+sbt test
+npm test
 ```
 
-管理画面のローカル利用は `.dev.vars` に `ADMIN_PASSWORD="..."` を設定（Git 管理外）。
-本番は `npx wrangler secret put ADMIN_PASSWORD --config wrangler.jsonc`。
+- hx4s:setup verifies the pinned commit/version and local artifacts, publishes as necessary, installs npm dependencies and the local hx4s-vite tarball. Running npm ci alone removes hx4s-vite; use the setup script instead.
+- v6:generate generates route/island files and DO TypeScript declarations; v6:build runs generation followed by client and server Vite builds.
+- npm run dev builds and starts local Wrangler (normally http://127.0.0.1:8787). Use local settings according to docs/auth-integration.md and docs/admin.md.
+- sbt test runs munit unit tests across the Scala modules, including golden fixtures. Add domain unit tests for changed rules, boundary values, rejection precedence and compatibility.
+- npm test runs pretest (Scala.js test/client linking and generatedAppCheck), followed by Node tests. Workerd integration tests require built dist/; they cover HTTP, DO RPC, posting, auth and storage atomicity. Other tests verify SSR, hydration and generated files.
+- generatedAppCheck writes temporary output under target/generated-app-check, not app/. It changes sbt session settings, so keep it last in that invocation. After #43, follow the replacement generation tests.
+- CI currently builds, typechecks, runs pretest and Node tests, and checks development startup on Ubuntu/Windows. Do not assume it runs the full sbt test task or Playwright; E2E coverage is tracked in #53.
+- npm run deploy builds and deploys via Wrangler; use it only with explicit deployment authorization.
 
----
+Use focused checks while iterating, then relevant full verification before handoff. For code affecting generated wiring, run generation and review the diff, including preservation of handwritten files. Keep line endings stable across platforms. Report commands actually run, results and any unverified behavior. Do not mark tests as passed based on old reports.
 
-## 2. 開発計画（ロードマップ）
+## 7. Documentation map
 
-### 【完了】Step 1. 移植フェーズ: Vanilla JSからscalajs-react × HonoX構成に移植
-### 【進行中】Step 2. 小規模機能追加/改善/リファクタリングフェーズ: 現行システムの問題点の改善・リファクタリングおよび、現代2ch型掲示板の必須機能の追加
-- 26年中はこのフェーズを進める予定。
-- レガシーフロントエンド(`3chiko.html`)からHonoX画面への移行・新UI化も進める
-  - 現代掲示板としてWeb版のUIも改善していきたい
-    - 移行(3chiko.html画面全廃)完了後、3chiko.htmlは削除
-- 認証や規制などbbs.cgi必須機能の追加+アカウント制導入(認証のみの仮登録/ID・PASS方式/Google OAuth)
-- **基本的にDB 変更はここではしない**
+Read only the task-relevant documents, then verify against source, tests and newer approved issues. Some documents preserve historical plans and may have obsolete implementation status.
 
-### Step3. データ移行・過去ログアップロードフェーズ
-- 現行のデータストレージにはかなりパフォーマンス上の問題があり、実況・規模拡大時に耐えられるか不明
-  - このフェーズでデータストレージを改修しデータ移行を行う。
-- データストレージ改修後に過去ログ投入もしたい。`kako-data` 等の既存データを新スキーマへ移行し、過去ログを投入する。
-- 26年の年末？～27年頭に進める予定
+| Document | Purpose |
+| --- | --- |
+| docs/現行システム仕様書.md | Historical v5 behavioral baseline and known compatibility differences; not a complete current v6 specification. |
+| docs/既知不具合台帳.md | Known bug register (KB-nn); record newly discovered issues and link relevant fixes. |
+| docs/v6s実装メモ.md | Scala.js implementation background. |
+| docs/sjis差異一覧.md | Shift_JIS compatibility rationale. |
+| docs/トリップ・ID廃止とスレ主表示.md | Tripcode/date-field ID removal, !id and thread-owner display. |
+| docs/auth-phoebe-rate-limit-design.md | Authentication, PHOEBE levels, posting restrictions and UI design. |
+| docs/claude-handoff.md | Historical authentication implementation handoff and remaining work; newer issues may supersede plans. |
+| docs/auth-integration.md | Auth configuration, local development, external providers and integration checks. |
+| docs/auth-implementation-review.md, docs/auth-password-implementation-notes.md, docs/auth-phoebe-review.md | Auth reviews and implementation rationale. |
+| docs/admin.md, docs/admin-spa-auth-plan.md, docs/admin-spa-auth-review.md | Admin operations and migration design. |
+| docs/bbs-cgi-ddd-refactoring-plan.md, docs/bbs-cgi-fp-refactoring-plan.md | Posting pipeline refactoring and domain/service boundaries. |
+| docs/thread-creation-regulation.md, docs/global-thread.md, docs/post-rate-limit.md | Thread creation, global threads and rate limits. |
+| docs/development.md, docs/codegen.md, docs/islands-ssr.md | Setup, generation, shared props and rendering conventions. |
+| docs/durable-object-stubs.md, docs/hx4s-foundation-review.md | DO RPC generation and framework extraction background. |
+| docs/ui/ | UI prototypes and design references, not necessarily shipped functionality. |
 
-### Step4. 3chへの付加価値追加（大規模機能追加）フェーズ：ActivityPub、Workers AIによるAI統合モデレーション、検索機能、
-- 検索機能はStep3でやる可能性もある
-- Step3終わり次第進める
+## 8. Agent workflow and review
 
-## 3. 作業規約（AI エージェント向け）
+1. Inspect the relevant issue, requirements, existing code, tests and git status. Identify compatibility constraints and proposed versus confirmed decisions.
+2. Break implementation into reviewable tasks. Delegate implementation to subagents when supported, unless instructed otherwise; provide self-contained scope, file paths, specifications and acceptance criteria. The orchestrator owns integration and review. If delegation is unavailable, perform the work directly and report that limitation when relevant.
+3. Make the smallest coherent change that meets the requirements. Preserve unrelated changes. Avoid scope creep and do not add features merely because they appear in the roadmap.
+4. Verify the design and implementation, including UI design before coding. Review layer boundaries, Scala idioms, immutability, typed interfaces, auth/privacy, storage invariants, Monazilla compatibility, SSR/hydration, UI consistency, unnecessary exports and test coverage.
+5. Run appropriate checks, inspect the final diff, and update relevant docs and issue references. Report outstanding risks, decisions and unrun tests. Use reviewable commits/PRs; do not merge or deploy unless authorized.
 
-### 3.1 実装の委譲
-
-- **実装作業はサブエージェントに委譲する。ユーザーから指示があった場合はそちらを優先する**。
-  オーケストレーターは計画・分解・レビュー統合・最終判断を担う。
-- サブエージェントへの指示は自己完結させる（ファイルパス・仕様の根拠・完了条件を明記）。
-
-### 3.2 変更時の不変条件（壊してはいけないもの）
-
-- **専ブラ互換**: dat の `<>` 5 フィールド構造、本文フィールド前後の半角スペース、エラー時も HTTP 200 + `<!-- 2ch_X:error -->` マーカー、`Range` / `304` の挙動。
-- **Shift_JIS 出力**: 2ch専用ブラウザ（Monazilla）向け出力の文字コードを変えない。
-- **ストレージスキーマ**: データストレージ改修フェーズまでは DO / R2 / KV のキーとフォーマットを変更しない。
-
-### 3.3 コーディング規約
-- scalajs-reactのコンポーネントは原則関数コンポーネント（ScalaFnComponent）とする。React公式がクラスコンポーネントの新規採用を推奨していないため。
-- **ライブラリは Scala.js のものを npm より優先する**（2026-11-09 ユーザー指示）: 同じ用途の Scala.js ライブラリがあればそちらを使い、
-  npm パッケージを `@JSImport` の facade で取り込むのは、Scala.js 側に適当なものが無い場合に限る。
-- 既存コードのスタイルに合わせる。不要なコメント・過剰な抽象化を入れない。
-- TypeScript の `any`、Scala の未型付け構造型を避ける。コンパイル / Lint 警告は抑制せず解消する。
-- **Scala の Optional Braces（インデント構文）は原則使わない**（2026-09-08 ユーザー指示）: Scala 3 の
-  brace省略（`if ... then` の後ろをインデントだけで書く、`class Foo:` / `def f() =` の後を
-  インデントブロックにする等）は、**それを使うことで明らかに可読性が良くなる箇所に限定**する。
-  **基本は波括弧 `{}` を使う**。
-  - 理由: 省略と波括弧が混在すると読み手が構文境界を追いにくく、特に**深いネストや長いメソッドで
-    どこまでがブロックか分からなくなる**。Kotlin（波括弧必須）からの移植コードとの見比べも難しくなる。
-  - `if ... then` / `while ... do` などの新制御構文自体は可。複数行になるブロックは `{}` で囲む。
-    `match` の `case ... =>` 本体は従来どおり波括弧不要。
-  - 既存ソースは `-no-indent -rewrite` で一括変換済み。残存確認は
-    `sbt 'set ThisBuild / scalacOptions += "-no-indent"' Test/compile` がエラーなく通ることで行う
-    （例外を許す方針のため、ビルド設定では `-no-indent` を常時強制しない）。
-- **Scaladoc / JSDoc は簡潔に**: ドキュメントコメントには「何をするか」と
-  利用者が知るべき制約だけを 1〜2 行で書く。タスク番号(K-*など)は書かないこと。
-  経緯・却下した代案・実測値・性能上の理由・元コードの逐語引用などの**背景情報は `docs/` 配下に書く**。
-  - 理由: 長い doc コメントはコードを読む妨げになり、方針変更のたびに文書と食い違う
-    （`SjisEncoding.scala` の冒頭 48 行の Scaladoc が実例。背景は `docs/sjis差異一覧.md` へ移した）。
-- **設計思想は FP > OOP > DDD の順で優先する**（2026-11-15 ユーザー指示）: 層は
-  `(Router) -> Handler -> Service -> Domain Model (Value Object / Entity) -> Repository -> Durable Object / DB / Data Storage`。
-  `application/` パッケージは作らず `service/` を使う。下の層は上の層を import しない（例外: repository が実装する `service/*/ports` の trait。関数レコード化で解消する）。
-  業務上の拒否は例外ではなく値（`Either` / enum）で返し、純粋な計算と I/O を分ける。移行計画は `docs/bbs-cgi-fp-refactoring-plan.md`。
-- **Durable Object はインフラ操作だけを持つ**: DO（`bbs/.../durable/`）に書いてよいのは
-  ストレージの読み書き（キー設計・ページ分割・一括保存）、`blockConcurrencyWhile` による直列化、他 DO / R2 / KV の呼び出し、
-  RPC の引数・戻り値と保存形式の変換（コーデック）だけとする。DO の外で書けるロジックは
-  ドメインモデル / ドメインサービス（`bbs/.../domain/`、または `common/`）に純粋関数として置く。
-  - 状態遷移（予約・確定・取消など）、保持・切り捨て規則、規制判定とその組み合わせ、期限の計算はドメイン側の型のメソッドにする。
-    DO のメソッドは「ロック → 読込 → デコード → ドメイン呼出し → エンコード → 保存」の形にとどめる。
-  - DO の中で `js.Dynamic` のまま業務データを書き換えない。境界で case class / enum に変換する。
-  - `durable/` 直下には DO クラスだけを置く。変換（コーデック）は `durable/codec/`、ロックなど DO 共通の補助は
-    `durable/support/` に置く。これらは `js` / Cloudflare 型に依存するので `domain/` には置かない。
-  - 現在時刻はドメインの関数に引数で渡す（DO 側で1処理につき1回だけ読む）。ドメイン内で `js.Date.now()` を呼ばない。
-  - ユーザー向け文言は DO で組み立てない。DO / ドメインは結果を enum（RPC ではそのコード文字列）で返し、文言への変換は handler 側で行う。
-  - テストもこれに合わせ、ドメインの振る舞いは `bbs/src/test/.../domain/` の純粋な単体テストで、DO のテストは
-    直列化・保存形式・障害時の扱いなどインフラ固有の項目で確かめる。
-  - 理由: DO 内のロジックはテストに DO のテストキットと時刻の差し替えが要り、規則が保存処理に埋もれて読み取れなくなる。
-- テストは `npm test` で通ること。統合テストは実 Wrangler をローカルストレージで起動して検証する（本番ストレージは使わない）。
-
-### 3.4 セキュリティ
-
-- `wrangler.jsonc` の `salt` や `ADMIN_PASSWORD` 等の秘匿値をログ・コミットメッセージ・外部 CLI への送信内容に含めない。
-
-### 3.5 セルフレビュー
-
-実装・設計のどちらも、コミット前に次の観点でセルフレビューし、指摘があれば直してから渡す。サブエージェントへの指示にもこの節を含める。
-UI を変える作業は、実装だけでなく設計（設計書の画面仕様・`docs/ui/` のモック・CSS）の段階からこの観点でレビューする。
-
-- **規約・既存実装との整合**: 3.3 のコーディング規約と、周辺の既存実装の書き方・命名・置き場所に沿っているか
-- **言語の選択**: Scala で書けるロジックを TypeScript / JavaScript で書いていないか（TS は HonoX の配線など Scala で書けない部分に限る）
-- **DDD・FP の作法**: ドメインの規則が handler / DO に漏れていないか、可変状態（`var`・可変コレクション）や文字列で表した種別を必要以上に使っていないか、副作用が境界に寄っているか
-- **scalajs-react / HonoX の作法**: クラスコンポーネントを使わず関数コンポーネントにする、状態や副作用は適切に Hooks 化する、コンポーネントを持つ変数は `final val` にする
-- **Scala の標準的な書き方**: 標準ライブラリの慣用表現（`Option`・`Either`・`fold`・パターンマッチ等）を使い、JS 由来の書き方を持ち込まない
-- **Scaladoc**: 公開する型・メソッドに不足がないか。文体は既存実装に合わせ、日本語を基本に、末尾に「。」を付けない。バッククォートはやたらと使わない
-- **文章の自然さ**: コメント・文書・画面の文言が説明調の羅列や不自然な言い回し（いわゆる AI 臭さ）になっていないか
-- **UI**: 既存画面に合わせる。角は `border-radius` を使わず四角くする。文言・余白・部品が既存画面から浮いていないか
-- **テストカバレッジ**: 追加・変更したドメインロジックと境界（判定順・異常系・互換性）に単体テストがあるか
+Keep this guide focused on stable instructions and the high-level roadmap. Do not turn it into a duplicate issue tracker, a detailed schema specification, or a chronological implementation log.
