@@ -43,7 +43,28 @@ jobs:
           node-version: "22"
           cache: npm
 
-      - run: npm ci
+      - name: hx4s.lock からコミットを取得
+        id: hx4s-lock
+        shell: bash
+        run: |
+          commit=$(sed -n 's/^commit=//p' hx4s.lock | tr -d '\r')
+          if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+            echo '::error::hx4s.lock の commit に完全な SHA を指定してください'
+            exit 1
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: MontereyLangit/hx4s
+          ref: ${{ steps.hx4s-lock.outputs.commit }}
+          path: target/hx4s
+          persist-credentials: false
+
+      - name: npm run hx4s:setup
+        run: npm run hx4s:setup
+        env:
+          HX4S_DIR: ${{ github.workspace }}/target/hx4s
 
       - name: npm run v6:build
         run: npm run v6:build
