@@ -10,8 +10,10 @@ class UserAgentTableSuite extends FunSuite {
     val table = UserAgentTable(
       Seq(rule("iPhone OS (\\d+)_", "iOS $1"), rule("Windows NT 10", "Windows")),
       Seq(rule("Version/(\\d+)[.\\d]* .*Safari/", "Safari $1"), rule("Safari/", "Safari")),
-      Seq(rule("iphone", "スマートフォン iPhone", "i")))
-    val ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1"
+      Seq(rule("iphone", "スマートフォン iPhone", "i"))
+    )
+    val ua =
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1"
     assertEquals(table.profile(ua), UserAgentProfile("iOS 18", "Safari 18", "スマートフォン iPhone"))
   }
 

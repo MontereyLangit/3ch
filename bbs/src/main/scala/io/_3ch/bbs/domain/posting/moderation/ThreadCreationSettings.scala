@@ -4,6 +4,7 @@ import io._3ch.common.domain.BbsSettings
 
 /** スレ立て規制の設定を検証する。旧形式の 件数/秒 も受け付ける */
 object ThreadCreationSettings {
+
   /** 検証した上限と、ネットワークグループを ASN だけで作る ASN の集合 */
   final case class Parsed(limits: ThreadCreationRateLimit.Settings, asOnly: Set[String])
 
@@ -14,13 +15,14 @@ object ThreadCreationSettings {
 
   /** BBS_THREAD_JUNBAN_AS_ONLY の ASN の列（カンマか空白区切り、AS は付けても付けなくてもよい）を読む */
   def parseAsOnly(value: String): Either[ThreadCreationSettingError, Set[String]] = {
-    value.trim.split("[,\\s]+", -1).filter(_.nonEmpty).foldLeft[Either[ThreadCreationSettingError, Set[String]]](Right(Set.empty)) { (acc, token) =>
-      val digits = token.toUpperCase.stripPrefix("AS")
-      for {
-        result <- acc
-        asn <- integer(digits, "BBS_THREAD_JUNBAN_AS_ONLY", 4294967295L)
-        _ <- Either.cond(asn > 0, (), ThreadCreationSettingError.PositiveAsnRequired)
-      } yield result + asn.toString
+    value.trim.split("[,\\s]+", -1).filter(_.nonEmpty).foldLeft[Either[ThreadCreationSettingError, Set[String]]](Right(Set.empty)) {
+      (acc, token) =>
+        val digits = token.toUpperCase.stripPrefix("AS")
+        for {
+          result <- acc
+          asn <- integer(digits, "BBS_THREAD_JUNBAN_AS_ONLY", 4294967295L)
+          _ <- Either.cond(asn > 0, (), ThreadCreationSettingError.PositiveAsnRequired)
+        } yield result + asn.toString
     }
   }
 
@@ -49,7 +51,8 @@ object ThreadCreationSettings {
       if (parts.length > 2) Left(ThreadCreationSettingError.InvalidFormat(name))
       else for {
         count <- integer(parts(0), name, 1000)
-        reset <- integer(values.get(name + "_RESET").filter(_.nonEmpty).getOrElse(parts.lift(1).getOrElse("3600")), name + "_RESET", 315360000L)
+        reset <-
+          integer(values.get(name + "_RESET").filter(_.nonEmpty).getOrElse(parts.lift(1).getOrElse("3600")), name + "_RESET", 315360000L)
       } yield (count.toInt, reset.toDouble)
     }
     for {

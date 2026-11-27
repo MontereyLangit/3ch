@@ -11,6 +11,7 @@ final case class IssuedToken(tokenId: String, token: String)
 
 /** 専ブラキーを予約・発行・確定し、途中で失敗したキーを失効させる */
 final class TokenIssuing(accounts: AccountManagementStore, keys: AuthenticationKeys) {
+
   /** 一アカウント一日の発行回数を数えてから発行する */
   def issue(account: AccountDescription, now: Double): Future[IssuedToken] = for {
     key <- keys.index("token-issue", account.aid).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
@@ -26,23 +27,23 @@ final class TokenIssuing(accounts: AccountManagementStore, keys: AuthenticationK
       throw AuthServiceException(AuthServiceFailure.Invalid)
     }
     keys.index("token", token).flatMap {
-      case None => Future.failed(AuthServiceException(AuthServiceFailure.Unavailable))
+      case None       => Future.failed(AuthServiceException(AuthServiceFailure.Unavailable))
       case Some(hash) => accounts.reserve("token", hash, account.aid, now, Some(id)).recoverWith { case NonFatal(error) =>
-        accounts.remove("token", hash, account.aid).recover { case NonFatal(_) => () }.flatMap(_ => Future.failed(error))
-      }.flatMap {
-        case false => Future.failed(AuthServiceException(AuthServiceFailure.Unavailable))
-        case true =>
-          (for {
-            _ <- accounts.issueToken(account.aid, id, hash, now)
-            _ <- accounts.confirm("token", hash, account.aid, now)
-          } yield IssuedToken(id, token)).recoverWith { case NonFatal(error) =>
-            for {
-              _ <- accounts.revokeToken(account.aid, id, now).recover { case NonFatal(_) => () }
-              _ <- accounts.remove("token", hash, account.aid).recover { case NonFatal(_) => () }
-              result <- Future.failed[IssuedToken](error)
-            } yield result
-          }
-      }
+          accounts.remove("token", hash, account.aid).recover { case NonFatal(_) => () }.flatMap(_ => Future.failed(error))
+        }.flatMap {
+          case false => Future.failed(AuthServiceException(AuthServiceFailure.Unavailable))
+          case true  =>
+            (for {
+              _ <- accounts.issueToken(account.aid, id, hash, now)
+              _ <- accounts.confirm("token", hash, account.aid, now)
+            } yield IssuedToken(id, token)).recoverWith { case NonFatal(error) =>
+              for {
+                _ <- accounts.revokeToken(account.aid, id, now).recover { case NonFatal(_) => () }
+                _ <- accounts.remove("token", hash, account.aid).recover { case NonFatal(_) => () }
+                result <- Future.failed[IssuedToken](error)
+              } yield result
+            }
+        }
     }
   }
 }

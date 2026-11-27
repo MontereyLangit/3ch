@@ -4,9 +4,18 @@ import munit.FunSuite
 
 class GoogleIdTokenSuite extends FunSuite {
   private val now = 2000000000d
-  private val claims = GoogleIdClaims("https://accounts.google.com", "client.apps.googleusercontent.com", "1234567890", now + 3600, now, "nonce-value",
-    Some("user@example.com"), emailVerified = true)
-  private def check(c: GoogleIdClaims, nonce: String = "nonce-value") = GoogleIdToken.verifyClaims(c, now, nonce, "client.apps.googleusercontent.com")
+  private val claims = GoogleIdClaims(
+    "https://accounts.google.com",
+    "client.apps.googleusercontent.com",
+    "1234567890",
+    now + 3600,
+    now,
+    "nonce-value",
+    Some("user@example.com"),
+    emailVerified = true
+  )
+  private def check(c: GoogleIdClaims, nonce: String = "nonce-value") =
+    GoogleIdToken.verifyClaims(c, now, nonce, "client.apps.googleusercontent.com")
 
   test("発行者・対象・期限・nonce・メールの確認が揃ったときだけ受け付ける") {
     assertEquals(check(claims), Right(GoogleIdentity("1234567890", Some("user@example.com"))))

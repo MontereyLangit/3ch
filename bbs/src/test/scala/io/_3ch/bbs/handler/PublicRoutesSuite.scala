@@ -26,9 +26,19 @@ class PublicRoutesSuite extends FunSuite {
   private def get(env: Env, path: String, headers: (String, String)*): Future[js.Dynamic] =
     fut[js.Dynamic](PublicRoutes.fetch(request(s"http://x$path", headers), env.worker, ctx))
 
-  private def createThread(env: Env, bbs: String, key: String, title: String = "title", message: String = "hello", date: String = "2026/09/22(火) 12:00:00"): Future[Unit] =
-    env.thread(s"$bbs/$key").addRes(s"name<><>$date<>$message<>$title", "1<>log",
-      js.Dynamic.literal(bbs = bbs, key = key, title = title, resNum = 1, sage = false, maxThreads = 700, create = true)).toFuture.map(_ => ())
+  private def createThread(
+      env: Env,
+      bbs: String,
+      key: String,
+      title: String = "title",
+      message: String = "hello",
+      date: String = "2026/09/22(火) 12:00:00"
+  ): Future[Unit] =
+    env.thread(s"$bbs/$key").addRes(
+      s"name<><>$date<>$message<>$title",
+      "1<>log",
+      js.Dynamic.literal(bbs = bbs, key = key, title = title, resNum = 1, sage = false, maxThreads = 700, create = true)
+    ).toFuture.map(_ => ())
 
   private def updateThread(env: Env, bbs: String, key: String, title: String, resNum: Int): Future[Unit] =
     env.board(bbs).updateThread(js.Dynamic.literal(key = key, title = title, resNum = resNum), false, 700).toFuture
@@ -41,7 +51,14 @@ class PublicRoutesSuite extends FunSuite {
     for {
       _ <- createThread(env, "board1", "1800000200", message = " hello ")
       original <- env.thread("board1/1800000200").getDat().toFuture
-      old <- fut[js.Dynamic](PublicRoutes.fetch(request("https://www.3chbbs.com/board1/dat/1800000200.dat", Seq("range" -> "bytes=5-", "if-modified-since" -> "Wed, 01 Jan 2100 00:00:00 GMT")), env.worker, ctx))
+      old <- fut[js.Dynamic](PublicRoutes.fetch(
+        request(
+          "https://www.3chbbs.com/board1/dat/1800000200.dat",
+          Seq("range" -> "bytes=5-", "if-modified-since" -> "Wed, 01 Jan 2100 00:00:00 GMT")
+        ),
+        env.worker,
+        ctx
+      ))
       oldBody <- sjisText(old)
       current <- fut[js.Dynamic](PublicRoutes.fetch(request("https://www.3ch.io/board1/dat/1800000200.dat", Nil), env.worker, ctx))
       currentBody <- sjisText(current)
@@ -258,8 +275,16 @@ class PublicRoutesSuite extends FunSuite {
     val env = DurableTestKit.newEnv()
     for {
       _ <- createThread(env, "board1", "1800000009")
-      _ <- env.thread("board1/1800000009").moderate("editRes", js.Dynamic.literal(bbs = "board1", key = "1800000009", number = "1", name = "x", mail = "", message = "edited")).toFuture
-      res <- get(env, "/board1/dat/1800000009.dat", "range" -> "bytes=0-3", "if-modified-since" -> new js.Date(js.Date.now() + 86400000).toUTCString())
+      _ <- env.thread("board1/1800000009").moderate(
+        "editRes",
+        js.Dynamic.literal(bbs = "board1", key = "1800000009", number = "1", name = "x", mail = "", message = "edited")
+      ).toFuture
+      res <- get(
+        env,
+        "/board1/dat/1800000009.dat",
+        "range" -> "bytes=0-3",
+        "if-modified-since" -> new js.Date(js.Date.now() + 86400000).toUTCString()
+      )
     } yield assertEquals(status(res), 200, "編集済みスレはedited=trueのためrange/IMSが共に無効化される")
   }
 
@@ -296,7 +321,8 @@ class PublicRoutesSuite extends FunSuite {
 
   test(
     """KB-06: subject.txt: 既知の不具合 — lastModifiedが常にnew Date()のため、
-      |前回のLast-ModifiedをIf-Modified-Sinceに送っても304にならず200が返る（専ブラの定期巡回が軽減されない）""".stripMargin) {
+      |前回のLast-ModifiedをIf-Modified-Sinceに送っても304にならず200が返る（専ブラの定期巡回が軽減されない）""".stripMargin
+  ) {
     // グローバルDateをミリ秒≠0に固定して決定論的にする（ミリ秒が偶然0だと304になりフレーキーになるため）。
     withFixedTime(js.Date.UTC(2024, 0, 1, 0, 0, 30, 500)) {
       val env = DurableTestKit.newEnv()
@@ -354,7 +380,10 @@ class PublicRoutesSuite extends FunSuite {
       ownBody <- sjisText(own)
     } yield {
       assertEquals(status(res), 200)
-      assertEquals(body, "9240000002.dat<>cap-only (5)\n9000000003.dat<>open-new (1)\n9000000001.dat<>open-old (2)\n1800000010.dat<>own (3)\n")
+      assertEquals(
+        body,
+        "9240000002.dat<>cap-only (5)\n9000000003.dat<>open-new (1)\n9000000001.dat<>open-old (2)\n1800000010.dat<>own (3)\n"
+      )
       // スレの無い板でも共通スレだけは載る
       assertEquals(emptyBody, "9240000002.dat<>cap-only (5)\n9000000003.dat<>open-new (1)\n9000000001.dat<>open-old (2)\n")
       // 板924自身は共通スレを並べ替えたものだけ
@@ -515,7 +544,10 @@ class PublicRoutesSuite extends FunSuite {
 
   test("kako/{年}/subject.txt: R2の年別ログをUTF-8で返し、削除済みキーは除外・cache-control:no-store") {
     val env = DurableTestKit.newEnv()
-    env.putR2("board1/thread/1700/subject.txt", "1700000000\n1700000001<>ThreadA<>name<>id<>date<>msg\n1700000002<>ThreadB<>name<>id<>date<>msg\n")
+    env.putR2(
+      "board1/thread/1700/subject.txt",
+      "1700000000\n1700000001<>ThreadA<>name<>id<>date<>msg\n1700000002<>ThreadB<>name<>id<>date<>msg\n"
+    )
     for {
       res1 <- get(env, "/board1/kako/1700/subject.txt")
       body1 <- text(res1)
@@ -588,7 +620,14 @@ class PublicRoutesSuite extends FunSuite {
   test("POST /test/bbs.cgi と /test/subbbs.cgi はどちらも投稿エントリポイントに到達する") {
     val env = DurableTestKit.newEnv()
     def body(): js.Any = js.Dynamic.newInstance(global.URLSearchParams)(js.Dynamic.literal(
-      bbs = "board1", key = "", MESSAGE = "hi", FROM = "a", mail = "", subject = "t", time = "1", submit = "書き込む"
+      bbs = "board1",
+      key = "",
+      MESSAGE = "hi",
+      FROM = "a",
+      mail = "",
+      subject = "t",
+      time = "1",
+      submit = "書き込む"
     )).asInstanceOf[js.Any]
     def post(path: String): Future[js.Dynamic] =
       fut[js.Dynamic](PublicRoutes.fetch(request(s"http://x$path", method = "POST", body = body()), env.worker, ctx))

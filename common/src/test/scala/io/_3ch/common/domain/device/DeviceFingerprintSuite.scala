@@ -13,27 +13,47 @@ class DeviceFingerprintSuite extends FunSuite {
       val dpr = fields.get("dpr").fold(1d) {
         case JsonValue.Num(number) => number
         case JsonValue.Str(number) => number.toDouble
-        case other => fail(s"invalid DPR: $other")
+        case other                 => fail(s"invalid DPR: $other")
       }
       val touch = fields.get("touch").contains(JsonValue.Bool(true))
-      Some(ClientFingerprint(text("os"), integer("cores"), integer("ram"), text("screen"), dpr, integer("colorDepth", 24),
-        text("webgl"), text("fonts"), touch, text("arch")))
+      Some(ClientFingerprint(
+        text("os"),
+        integer("cores"),
+        integer("ram"),
+        text("screen"),
+        dpr,
+        integer("colorDepth", 24),
+        text("webgl"),
+        text("fonts"),
+        touch,
+        text("arch")
+      ))
     }
   }
 
   test("原本の9軸・UTF-16・DPR丸めを固定表と照合する") {
     Json.parse(GoldenFile.readText("device-fingerprint-reference.json")).field("cases").asArr.foreach { row =>
-      assertEquals(DeviceFingerprintHasher.hash(decode(row.field("fingerprint")), row.field("model").asString),
-        row.field("expected").asString, row.field("name").asString)
+      assertEquals(
+        DeviceFingerprintHasher.hash(decode(row.field("fingerprint")), row.field("model").asString),
+        row.field("expected").asString,
+        row.field("name").asString
+      )
     }
   }
 
   test("申告8軸が全欠損なら機種名だけでハッシュを作らない") {
     assertEquals(DeviceFingerprintHasher.hash(None, "Pixel 9"), "")
     assertEquals(DeviceFingerprintHasher.hash(ClientFingerprint(ram = 8, os = "iPhone"), "Pixel 9"), "")
-    val values = Vector(ClientFingerprint(screen = "393x852"), ClientFingerprint(dpr = 3), ClientFingerprint(cores = 6),
-      ClientFingerprint(touch = true), ClientFingerprint(colorDepth = 30), ClientFingerprint(arch = "iPhone"),
-      ClientFingerprint(fonts = "101"), ClientFingerprint(webgl = "Apple GPU"))
+    val values = Vector(
+      ClientFingerprint(screen = "393x852"),
+      ClientFingerprint(dpr = 3),
+      ClientFingerprint(cores = 6),
+      ClientFingerprint(touch = true),
+      ClientFingerprint(colorDepth = 30),
+      ClientFingerprint(arch = "iPhone"),
+      ClientFingerprint(fonts = "101"),
+      ClientFingerprint(webgl = "Apple GPU")
+    )
     values.foreach(fp => assertEquals(DeviceFingerprintHasher.hash(fp).length, 18))
   }
 
@@ -60,8 +80,14 @@ class DeviceFingerprintSuite extends FunSuite {
       assertEquals(DeviceHashRef.parse(s"${grain.code}$identifier"), Some(DeviceHashRef(grain, identifier)))
       assertEquals(DeviceHashRef(grain, identifier).format, s"${grain.code}$identifier")
     }
-    Seq("", "p0123456789abcde", s"p0123456789ABCDEF01:$keyHash", s"p0123456789abcdef01:$keyHash:extra",
-      s"x0123456789abcdef01:$keyHash", "p0123456789abcdef01:short").foreach(raw => assertEquals(DeviceHashRef.parse(raw), None))
+    Seq(
+      "",
+      "p0123456789abcde",
+      s"p0123456789ABCDEF01:$keyHash",
+      s"p0123456789abcdef01:$keyHash:extra",
+      s"x0123456789abcdef01:$keyHash",
+      "p0123456789abcdef01:short"
+    ).foreach(raw => assertEquals(DeviceHashRef.parse(raw), None))
     assertEquals(DeviceHashRef.parse(null), None)
   }
 

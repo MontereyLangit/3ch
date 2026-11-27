@@ -22,31 +22,35 @@ class AccountRegistrationSuite extends FunSuite {
   private final class Store(val kit: DurableTestKit.Env) extends AccountManagementStore with AccountSignInStore {
     private val repository = new AccountRepository(kit.worker)
     val trace = mutable.ArrayBuffer.empty[String]
+
     /** 操作名ごとの失敗。after なら操作を実行してから失敗させる */
     val failures = mutable.Map.empty[String, (Throwable, Boolean)]
     private def step[A](name: String)(run: => Future[A]): Future[A] = {
       trace += name
       failures.remove(name) match {
         case Some((error, false)) => Future.failed(error)
-        case Some((error, true)) => run.flatMap(_ => Future.failed(error))
-        case None => run
+        case Some((error, true))  => run.flatMap(_ => Future.failed(error))
+        case None                 => run
       }
     }
     def rate(key: String, kind: String, now: Double) = repository.rate(key, kind, now)
-    def reserve(kind: String, hash: String, aid: String, now: Double, tokenId: Option[String]) = step("reserve:" + kind)(repository.reserve(kind, hash, aid, now, tokenId))
+    def reserve(kind: String, hash: String, aid: String, now: Double, tokenId: Option[String]) =
+      step("reserve:" + kind)(repository.reserve(kind, hash, aid, now, tokenId))
     def confirm(kind: String, hash: String, aid: String, now: Double) = step("confirm:" + kind)(repository.confirm(kind, hash, aid, now))
     def remove(kind: String, hash: String, aid: String) = step("remove:" + kind)(repository.remove(kind, hash, aid))
     def holds(aid: String, kind: String, value: String) = repository.holds(aid, kind, value)
     def releaseReservation(kind: String, hash: String, aid: String) = repository.releaseReservation(kind, hash, aid)
     def create(profile: AccountProfile, now: Double) = repository.create(profile, now)
-    def create(profile: AccountProfile, now: Double, credential: Option[PasswordCredential]) = step("create")(repository.create(profile, now, credential))
+    def create(profile: AccountProfile, now: Double, credential: Option[PasswordCredential]) =
+      step("create")(repository.create(profile, now, credential))
     def bindDevice(aid: String, device: String, keyIp: String, now: Double) = step("bind")(repository.bindDevice(aid, device, keyIp, now))
     def agree(aid: String, version: String, now: Double) = repository.agree(aid, version, now)
     def issueToken(aid: String, tokenId: String, hash: String, now: Double) = repository.issueToken(aid, tokenId, hash, now)
     def revokeToken(aid: String, tokenId: String, now: Double) = repository.revokeToken(aid, tokenId, now)
     def lookup(kind: String, hash: String) = step("lookup:" + kind)(repository.lookup(kind, hash))
     def activate(aid: String, now: Double) = step("activate")(repository.activate(aid, now))
-    def verifyPassword(aid: String, password: String, keyIpHash: String, now: Double) = step("verify")(repository.verifyPassword(aid, password, keyIpHash, now))
+    def verifyPassword(aid: String, password: String, keyIpHash: String, now: Double) =
+      step("verify")(repository.verifyPassword(aid, password, keyIpHash, now))
     def describeGoogle(aid: String, subHash: String, now: Double) = repository.describeGoogle(aid, subHash, now)
   }
 
@@ -65,14 +69,17 @@ class AccountRegistrationSuite extends FunSuite {
   private def hash(kind: String): Future[String] = keys.index(kind, id.value).map(_.get)
   private def failure[A](future: Future[A]): Future[Throwable] = future.transform {
     case scala.util.Failure(error) => scala.util.Success(error)
-    case scala.util.Success(_) => scala.util.Failure(new AssertionError("expected failure"))
+    case scala.util.Success(_)     => scala.util.Failure(new AssertionError("expected failure"))
   }
 
   test("uid とログイン ID を予約し、作成・ログイン索引・uid の順に確定してから利用を開始する") {
     val store = new Store(DurableTestKit.newEnv())
     for {
       account <- service(store).register(id, password, "", keyIp, now)
-      _ = assertEquals(store.trace.toVector, Vector("reserve:uid", "reserve:login", "create", "confirm:login", "confirm:uid", "activate", "bind"))
+      _ = assertEquals(
+        store.trace.toVector,
+        Vector("reserve:uid", "reserve:login", "create", "confirm:login", "confirm:uid", "activate", "bind")
+      )
       _ = assertEquals((account.uid, account.kind, account.lv), ("taro_2026", AccountKind.Password, 1))
       owner <- hash("uid").flatMap(store.lookup("uid", _))
     } yield assertEquals(owner, Some(account.aid))
@@ -118,7 +125,7 @@ class AccountRegistrationSuite extends FunSuite {
       resumed <- service(store).login(Some(id), "correct horse", "", keyIp, now + 2)
       account = resumed match {
         case LoginOutcome.Success(value) => value
-        case other => fail(other.toString)
+        case other                       => fail(other.toString)
       }
       again <- service(store).login(Some(id), "correct horse", "", keyIp, now + 3)
     } yield {

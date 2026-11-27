@@ -77,6 +77,16 @@ hx4s を更新するときは、hx4s 側で commit してから `hx4s.lock` の 
   coursier のキャッシュ（`~/.cache/coursier`）は Maven Central の依存だけなのでキャッシュしてよい。
 - 公開を伴う解決方式（Maven Central / npm）は hx4s の Phase 5 で決める。そうなったら setup の手順は通常の依存解決に置き換える。
 
+## Scalafmt
+
+Scala と sbt のファイルは Scalafmt で整形する（設定は `.scalafmt.conf`）。コミットの前に `sbt scalafmtAll scalafmtSbt` を流す。
+CI は `sbt scalafmtCheckAll scalafmtSbtCheck` で整形漏れを落とす。
+
+- 1行は 140 桁まで。既存のコードに長い行が多いので、100 や 120 にすると差分が大きくなりすぎる
+- `newlines.source = keep` で、書き手が入れた改行はなるべく残す。Scaladoc も `docstrings.style = keep` で触らない
+- 波括弧を消す書き換え（`rewrite.scala3`）は入れない。インデント構文を使わない方針（AGENTS.md 3.3）のため
+- `stripMargin` の中身は整形しない（`assumeStandardLibraryStripMargin` は既定の false のまま）。Tailwind のクラスを `| ` の後ろに書く都合
+
 ## IntelliJ IDEA
 ### Scala プラグインの注意点
 

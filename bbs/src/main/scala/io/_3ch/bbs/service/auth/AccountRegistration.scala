@@ -21,15 +21,21 @@ final class AccountRegistration(accounts: AccountManagementStore & AccountSignIn
     release(signIn._1, signIn._2, aid).flatMap(_ => release("uid", uidHash, aid))
 
   /** 新しい aid でアカウントを作る。signIn は (索引の種別, ハッシュ)。ID が使われていれば Taken */
-  def register(profile: AccountProfile, signIn: (String, String), credential: Option[PasswordCredential], now: Double): Future[AccountDescription] =
+  def register(
+      profile: AccountProfile,
+      signIn: (String, String),
+      credential: Option[PasswordCredential],
+      now: Double
+  ): Future[AccountDescription] =
     hash("uid", profile.uid).flatMap { uidHash =>
       val aid = profile.aid
       def failed[A](error: Throwable): Future[A] = releaseBoth(signIn, uidHash, aid).flatMap(_ => Future.failed(error))
       val signValue = if (signIn._1 == "login") profile.loginId.getOrElse("") else signIn._2
-      def owned(kind: String, hash: String): Future[Unit] = reserve(kind, if (kind == "uid") "" else signValue, hash, aid, now).recoverWith {
-        case error @ AuthServiceException(AuthServiceFailure.Taken) => Future.failed(error)
-        case NonFatal(error) => release(kind, hash, aid).flatMap(_ => Future.failed(error))
-      }
+      def owned(kind: String, hash: String): Future[Unit] =
+        reserve(kind, if (kind == "uid") "" else signValue, hash, aid, now).recoverWith {
+          case error @ AuthServiceException(AuthServiceFailure.Taken) => Future.failed(error)
+          case NonFatal(error)                                        => release(kind, hash, aid).flatMap(_ => Future.failed(error))
+        }
       owned("uid", uidHash).flatMap { _ =>
         owned(signIn._1, signIn._2).recoverWith { case NonFatal(error) => release("uid", uidHash, aid).flatMap(_ => Future.failed(error)) }
       }.flatMap { _ =>
@@ -40,10 +46,10 @@ final class AccountRegistration(accounts: AccountManagementStore & AccountSignIn
       }.flatMap { _ =>
         accounts.confirm("uid", uidHash, aid, now).recoverWith {
           case error: AccountStoreException => failed(error)
-          case NonFatal(error) => accounts.lookup("uid", uidHash).flatMap {
-            case Some(owner) if owner == aid => Future.unit
-            case _ => failed(error)
-          }
+          case NonFatal(error)              => accounts.lookup("uid", uidHash).flatMap {
+              case Some(owner) if owner == aid => Future.unit
+              case _                           => failed(error)
+            }
         }
       }.flatMap(_ => accounts.activate(aid, now))
     }
@@ -53,10 +59,10 @@ final class AccountRegistration(accounts: AccountManagementStore & AccountSignIn
     hash("uid", uid).flatMap { uidHash =>
       accounts.lookup("uid", uidHash).flatMap {
         case Some(owner) if owner == aid => Future.unit
-        case Some(_) => Future.failed(AuthServiceException(AuthServiceFailure.Invalid))
-        case None => accounts.confirm("uid", uidHash, aid, now).recoverWith {
-          case _: AccountStoreException => Future.failed(AuthServiceException(AuthServiceFailure.Invalid))
-        }
+        case Some(_)                     => Future.failed(AuthServiceException(AuthServiceFailure.Invalid))
+        case None                        => accounts.confirm("uid", uidHash, aid, now).recoverWith {
+            case _: AccountStoreException => Future.failed(AuthServiceException(AuthServiceFailure.Invalid))
+          }
       }
     }.flatMap(_ => accounts.activate(aid, now))
 
@@ -66,9 +72,11 @@ final class AccountRegistration(accounts: AccountManagementStore & AccountSignIn
       if (reserved) Future.unit
       else if (kind == "uid") Future.failed(AuthServiceException(AuthServiceFailure.Taken))
       else accounts.lookup(kind, hash).flatMap {
-        case Some(owner) if owner != aid => stale.reclaim(kind, value, hash, owner).flatMap(freed =>
-          if (freed) accounts.reserve(kind, hash, aid, now).map(ok => if (!ok) throw AuthServiceException(AuthServiceFailure.Taken))
-          else Future.failed(AuthServiceException(AuthServiceFailure.Taken)))
+        case Some(owner) if owner != aid =>
+          stale.reclaim(kind, value, hash, owner).flatMap(freed =>
+            if (freed) accounts.reserve(kind, hash, aid, now).map(ok => if (!ok) throw AuthServiceException(AuthServiceFailure.Taken))
+            else Future.failed(AuthServiceException(AuthServiceFailure.Taken))
+          )
         case _ => Future.failed(AuthServiceException(AuthServiceFailure.Taken))
       }
     }

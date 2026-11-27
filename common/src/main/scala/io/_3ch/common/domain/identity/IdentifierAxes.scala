@@ -20,6 +20,7 @@ final case class IdentifierAxes(values: Map[IdentifierAxis, String]) {
 }
 
 object IdentifierAxes {
+
   /** 欠損した軸の表示 */
   val Missing: String = "000"
 
@@ -27,12 +28,22 @@ object IdentifierAxes {
   def fromDevice(stored: String): Option[IdentifierAxes] = DeviceHashRef.parse(stored).map { ref =>
     val id = ref.identifier
     def part(from: Int, until: Int): String = if (id.length >= until) id.substring(from, until) else ""
-    IdentifierAxes(Map(IdentifierAxis.E -> part(0, 4), IdentifierAxis.F -> part(4, 10), IdentifierAxis.G -> part(10, 14),
-      IdentifierAxis.Z -> part(14, 16), IdentifierAxis.X -> part(16, 18)))
+    IdentifierAxes(Map(
+      IdentifierAxis.E -> part(0, 4),
+      IdentifierAxis.F -> part(4, 10),
+      IdentifierAxis.G -> part(10, 14),
+      IdentifierAxis.Z -> part(14, 16),
+      IdentifierAxis.X -> part(16, 18)
+    ))
   }
 
   /** 未ログインと端末ハッシュの無い投稿の軸。hints は Client Hints の sec-ch-ua 系の値 */
   def fromAgent(profile: UserAgentProfile, userAgent: String, hints: String, acceptLanguage: String): IdentifierAxes =
-    IdentifierAxes(Map(IdentifierAxis.E -> profile.os, IdentifierAxis.F -> profile.browser, IdentifierAxis.G -> profile.device,
-      IdentifierAxis.Z -> userAgent, IdentifierAxis.X -> (if (hints.isEmpty && acceptLanguage.isEmpty) "" else hints + "|" + acceptLanguage)))
+    IdentifierAxes(Map(
+      IdentifierAxis.E -> profile.os,
+      IdentifierAxis.F -> profile.browser,
+      IdentifierAxis.G -> profile.device,
+      IdentifierAxis.Z -> userAgent,
+      IdentifierAxis.X -> (if (hints.isEmpty && acceptLanguage.isEmpty) "" else hints + "|" + acceptLanguage)
+    ))
 }

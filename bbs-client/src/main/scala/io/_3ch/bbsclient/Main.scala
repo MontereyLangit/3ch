@@ -3,8 +3,10 @@ package io._3ch.bbsclient
 import hx4s.annotation.islands
 import hx4s.react.IslandExport
 import io._3ch.bbsclient.islands.*
-import io._3ch.common.islands.{AccountCapProps, AccountCredentialsProps, AccountLogoutProps, AccountMenuProps, AccountNavProps, AuthFormProps,
-  AuthTokenProps, BoardDetailsProps, PostingFormProps, SiteHeaderProps, ThreadListProps}
+import io._3ch.common.islands.{
+  AccountCapProps, AccountCredentialsProps, AccountLogoutProps, AccountMenuProps, AccountNavProps, AuthFormProps,
+  AuthTokenProps, BoardDetailsProps, PostingFormProps, SiteHeaderProps, ThreadListProps
+}
 
 import scala.scalajs.js.annotation.JSExportTopLevel
 
@@ -41,7 +43,8 @@ object AuthFormEntry {
 object AuthModalEntry {
   @islands[scala.scalajs.js.Object]("auth-modal")
   @JSExportTopLevel("AuthModalJs", "island-auth-modal")
-  def authModal(): IslandExport[scala.scalajs.js.Object] = AuthModalIsland.Component.toJsComponent.raw.asInstanceOf[IslandExport[scala.scalajs.js.Object]]
+  def authModal(): IslandExport[scala.scalajs.js.Object] =
+    AuthModalIsland.Component.toJsComponent.raw.asInstanceOf[IslandExport[scala.scalajs.js.Object]]
 }
 
 object AccountNavEntry {
@@ -65,7 +68,8 @@ object AccountCapEntry {
 object AccountLogoutEntry {
   @islands[io._3ch.common.islands.AccountLogoutProps]("account-logout")
   @JSExportTopLevel("AccountLogoutJs", "island-account-logout")
-  def accountLogout(): IslandExport[AccountLogoutProps] = IslandExport("AccountLogoutJs", AccountLogoutProps.fields)(AccountLogoutIsland.Component(_))
+  def accountLogout(): IslandExport[AccountLogoutProps] =
+    IslandExport("AccountLogoutJs", AccountLogoutProps.fields)(AccountLogoutIsland.Component(_))
 }
 
 object AuthTokenEntry {

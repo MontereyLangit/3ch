@@ -8,7 +8,8 @@ class AccountCodecSuite extends FunSuite {
   private val now = 2000000000d
   private val profile = AccountProfile("abcdefghijklmnop", "user1234", AccountKind.Client, now, None, now, "v1")
   private val state = AccountState.create(profile, now).toOption.get.issueToken("token1", "a" * 64, now).toOption.get
-  private val credential = PasswordCredential(PasswordAlgorithm.Pbkdf2Sha256, 100000, Vector.tabulate(16)(i => (i * 17).toByte), Vector.fill(32)(2.toByte), now)
+  private val credential =
+    PasswordCredential(PasswordAlgorithm.Pbkdf2Sha256, 100000, Vector.tabulate(16)(i => (i * 17).toByte), Vector.fill(32)(2.toByte), now)
   private val prepared = AccountState.create(profile.copy(kind = AccountKind.Password, loginId = Some(profile.uid)), now).toOption.get
 
   private def stored(state: AccountState): js.Map[String, js.Any] = {
@@ -81,8 +82,21 @@ class AccountCodecSuite extends FunSuite {
     assertEquals(restored, state)
     assert(restored.usable(now).isRight)
     assertEquals(AccountCodec.encodeState(restored)("credential"), null)
-    assertEquals(AccountCodec.stateKeys.toSet, Set("profile", "level", "roles", "tokens", "devices", "caps", "activation", "credential",
-      "pending:email", "pending:reset"))
+    assertEquals(
+      AccountCodec.stateKeys.toSet,
+      Set(
+        "profile",
+        "level",
+        "roles",
+        "tokens",
+        "devices",
+        "caps",
+        "activation",
+        "credential",
+        "pending:email",
+        "pending:reset"
+      )
+    )
     legacy.update("activation", null)
     intercept[Throwable](AccountCodec.decodeState(legacy))
   }
@@ -136,8 +150,11 @@ class AccountCodecSuite extends FunSuite {
 
   test("本人向け一覧と投稿認証の DTO に資格情報と準備状態を含めない") {
     val ready = prepared.copy(credential = Some(credential), readiness = AccountReadiness.Ready)
-    val payloads = Seq(AccountCodec.inspect(ready, Vector.empty, Vector.empty, now), AccountCodec.description(ready.description),
-      AccountCodec.describe(ready.describe(profile.aid, 0, now)))
+    val payloads = Seq(
+      AccountCodec.inspect(ready, Vector.empty, Vector.empty, now),
+      AccountCodec.description(ready.description),
+      AccountCodec.describe(ready.describe(profile.aid, 0, now))
+    )
     payloads.foreach { payload =>
       val serialized = js.JSON.stringify(payload)
       Seq("credential", "activation", "salt", "hash", "throttle", "00112233445566778899aabbccddeeff", "02" * 32).foreach { secret =>

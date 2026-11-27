@@ -2,6 +2,7 @@ package io._3ch.common.domain.device
 
 /** 申告されたOS・端末区分・GPUの組合せを照合する */
 final case class DeviceInfo(os: String = "", device: String = "", webgl: String = "") {
+
   /** Mac系とGeForce、携帯端末とデスクトップGPUの組合せを不整合とする */
   def isLogicalMismatched: Boolean = {
     val osLower = DeviceText.lowercase(os)

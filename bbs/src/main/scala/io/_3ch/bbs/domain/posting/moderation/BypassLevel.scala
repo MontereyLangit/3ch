@@ -15,15 +15,16 @@ enum BypassLevel(val value: String) {
 
   /** 免除するか。cap 権限は名無しでは使えず、キャップを付けた投稿だけが privileged に入る */
   def exempts(poster: BypassPoster): Boolean = this match {
-    case Admin => poster.roles.admin
-    case Staff => poster.roles.staff
+    case Admin      => poster.roles.admin
+    case Staff      => poster.roles.staff
     case Privileged => poster.roles.staff || poster.cap
-    case L10 => Privileged.exempts(poster) || (poster.authenticated && poster.lv >= Phoebe.MaxLevel)
-    case Login => Privileged.exempts(poster) || poster.authenticated
+    case L10        => Privileged.exempts(poster) || (poster.authenticated && poster.lv >= Phoebe.MaxLevel)
+    case Login      => Privileged.exempts(poster) || poster.authenticated
   }
 }
 
 object BypassLevel {
+
   /** 指定が無いか知らない値のときの段階 */
   val Default: BypassLevel = Privileged
 

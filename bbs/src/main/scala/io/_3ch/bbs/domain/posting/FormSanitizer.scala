@@ -9,8 +9,16 @@ import scala.scalajs.js.JSStringOps.*
 object FormSanitizer {
   private val Trip = new js.RegExp("^([^#]*?)(?<!&#[xX]?[0-9a-fA-F]{1,8});?#(.+)$")
   private val Replacements: Seq[(js.RegExp, String)] = Seq(
-    "&(?!#[a-zA-Z0-9]+;)" -> "&amp;", "\"" -> "&quot;", "<" -> "&lt;", ">" -> "&gt;", "'" -> "&apos;", "\t" -> " ",
-    "&#0*1[03];" -> "<br>", "&#[xX]0*[aAdD];" -> "<br>", "\r\n?|\n" -> "<br>", "[\\x00-\\x1F\\x7F]" -> ""
+    "&(?!#[a-zA-Z0-9]+;)" -> "&amp;",
+    "\"" -> "&quot;",
+    "<" -> "&lt;",
+    ">" -> "&gt;",
+    "'" -> "&apos;",
+    "\t" -> " ",
+    "&#0*1[03];" -> "<br>",
+    "&#[xX]0*[aAdD];" -> "<br>",
+    "\r\n?|\n" -> "<br>",
+    "[\\x00-\\x1F\\x7F]" -> ""
   ).map((pattern, replacement) => new js.RegExp(pattern, "g") -> replacement)
 
   /** HTML 用にエスケープする。名前欄の # 以降は捨て、!id・!no を読む */

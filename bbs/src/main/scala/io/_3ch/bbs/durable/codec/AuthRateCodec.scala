@@ -15,7 +15,8 @@ object AuthRateCodec {
           throw js.JavaScriptException(new js.Error("invalid-auth-rate-data"))
         }
         val event = AuthRateEvent(v.kind.asInstanceOf[String], v.t.asInstanceOf[Double])
-        if (!AuthRateHistory.validKind(event.kind) || !AccountProfile.validTime(event.t)) throw js.JavaScriptException(new js.Error("invalid-auth-rate-data"))
+        if (!AuthRateHistory.validKind(event.kind) || !AccountProfile.validTime(event.t))
+          throw js.JavaScriptException(new js.Error("invalid-auth-rate-data"))
         event
       }
       AuthRateHistory(events)
@@ -27,17 +28,40 @@ object AuthRateCodec {
     if (value == null || js.isUndefined(value)) AbuseReview()
     else if (!js.Array.isArray(value)) invalid()
     else AbuseReview(value.asInstanceOf[js.Array[js.Dynamic]].toVector.map { v =>
-      def number(name: String): Double = if (js.typeOf(v.selectDynamic(name)) == "number") v.selectDynamic(name).asInstanceOf[Double] else invalid()
+      def number(name: String): Double =
+        if (js.typeOf(v.selectDynamic(name)) == "number") v.selectDynamic(name).asInstanceOf[Double] else invalid()
       val reason = if (js.typeOf(v.reason) == "string") AbuseReason.parse(v.reason.asInstanceOf[String]).getOrElse(invalid()) else invalid()
       val hash = if (js.typeOf(v.keyIpHash) == "string") v.keyIpHash.asInstanceOf[String] else invalid()
-      val flag = AbuseFlag(hash, reason, number("firstSeen"), number("lastSeen"), number("count").toInt, number("hour").toInt, number("day").toInt, number("devices").toInt)
+      val flag = AbuseFlag(
+        hash,
+        reason,
+        number("firstSeen"),
+        number("lastSeen"),
+        number("count").toInt,
+        number("hour").toInt,
+        number("day").toInt,
+        number("devices").toInt
+      )
       if (!flag.valid) invalid()
       flag
     })
   }
-  def encodeReview(review: AbuseReview): js.Array[js.Dynamic] = review.flags.map(f => js.Dynamic.literal(keyIpHash = f.keyIpHash, reason = f.reason.code,
-    firstSeen = f.firstSeen, lastSeen = f.lastSeen, count = f.count, hour = f.hour, day = f.day, devices = f.devices)).toJSArray
+  def encodeReview(review: AbuseReview): js.Array[js.Dynamic] = review.flags.map(f =>
+    js.Dynamic.literal(
+      keyIpHash = f.keyIpHash,
+      reason = f.reason.code,
+      firstSeen = f.firstSeen,
+      lastSeen = f.lastSeen,
+      count = f.count,
+      hour = f.hour,
+      day = f.day,
+      devices = f.devices
+    )
+  ).toJSArray
 
-  def counts(value: Either[AccountRejection, AuthRateCounts]): js.Dynamic = value.fold(error => js.Dynamic.literal(code = error.code), result =>
-    js.Dynamic.literal(code = "", hour = result.hour, day = result.day, distinctDevices24h = result.distinctDevices24h))
+  def counts(value: Either[AccountRejection, AuthRateCounts]): js.Dynamic = value.fold(
+    error => js.Dynamic.literal(code = error.code),
+    result =>
+      js.Dynamic.literal(code = "", hour = result.hour, day = result.day, distinctDevices24h = result.distinctDevices24h)
+  )
 }

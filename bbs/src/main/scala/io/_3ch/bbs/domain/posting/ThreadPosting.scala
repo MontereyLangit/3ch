@@ -9,16 +9,16 @@ import io._3ch.common.domain.posting.{PhoebeAdmission, ThreadPhoebeRequest}
   * admission があればロック内で最新のスレ設定の BBS_PHOEBE を判定し直す
   */
 final case class ThreadPosting(
-  bbs: Option[String] = None,
-  key: Option[String] = None,
-  title: Option[String] = None,
-  sage: Boolean = false,
-  maxThreads: Option[Double] = None,
-  create: Boolean = false,
-  initialSettings: Option[String] = None,
-  creationLimit: Option[ThreadCreationLimit] = None,
-  owner: Option[ThreadOwner] = None,
-  rateLimit: Option[PostRateCheck] = None,
-  phoebe: Option[ThreadPhoebeRequest] = None,
-  admission: Option[PhoebeAdmission] = None
+    bbs: Option[String] = None,
+    key: Option[String] = None,
+    title: Option[String] = None,
+    sage: Boolean = false,
+    maxThreads: Option[Double] = None,
+    create: Boolean = false,
+    initialSettings: Option[String] = None,
+    creationLimit: Option[ThreadCreationLimit] = None,
+    owner: Option[ThreadOwner] = None,
+    rateLimit: Option[PostRateCheck] = None,
+    phoebe: Option[ThreadPhoebeRequest] = None,
+    admission: Option[PhoebeAdmission] = None
 )

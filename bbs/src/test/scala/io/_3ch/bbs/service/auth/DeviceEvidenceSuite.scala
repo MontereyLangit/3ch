@@ -10,7 +10,8 @@ class DeviceEvidenceSuite extends FunSuite {
   private def decode(raw: String): Either[DeviceRejection, DeviceEvidence] = DeviceEvidence.fromJson(raw, hints, ua)
 
   test("型へ変換し受信モデルから粒度付き18桁を作る") {
-    val raw = s"""{"os":"$ua","screen":"393x852","dpr":3,"cores":8,"touch":true,"arch":"Linux armv8l","model":"forged","hints":{"model":"forged"}}"""
+    val raw =
+      s"""{"os":"$ua","screen":"393x852","dpr":3,"cores":8,"touch":true,"arch":"Linux armv8l","model":"forged","hints":{"model":"forged"}}"""
     val evidence = decode(raw).toOption.get
     val fp = ClientFingerprint(os = ua, screen = "393x852", dpr = 3, cores = 8, touch = true, arch = "Linux armv8l")
     assertEquals(evidence.fingerprint, Some(fp))
@@ -28,10 +29,29 @@ class DeviceEvidenceSuite extends FunSuite {
   }
 
   test("型違い・範囲外・非有限値・過大な文字列を拒否する") {
-    val invalid = Seq("[]", "true", "42", "invalid", "{\"cores\":1.5}", "{\"cores\":-1}", "{\"cores\":65536}",
-      "{\"ram\":\"8\"}", "{\"cores\":null}", "{\"os\":null}", "{\"touch\":null}", "{\"dpr\":1e999}", "{\"dpr\":-1}", "{\"dpr\":101}", "{\"touch\":1}",
-      "{\"arch\":[]}", "{\"screen\":\"393 x 852\"}", "{\"colorDepth\":129}", "{\"colorDepth\":24.5}",
-      "{\"webgl\":\"" + ("a" * 4097) + "\"}", " " * 20001)
+    val invalid = Seq(
+      "[]",
+      "true",
+      "42",
+      "invalid",
+      "{\"cores\":1.5}",
+      "{\"cores\":-1}",
+      "{\"cores\":65536}",
+      "{\"ram\":\"8\"}",
+      "{\"cores\":null}",
+      "{\"os\":null}",
+      "{\"touch\":null}",
+      "{\"dpr\":1e999}",
+      "{\"dpr\":-1}",
+      "{\"dpr\":101}",
+      "{\"touch\":1}",
+      "{\"arch\":[]}",
+      "{\"screen\":\"393 x 852\"}",
+      "{\"colorDepth\":129}",
+      "{\"colorDepth\":24.5}",
+      "{\"webgl\":\"" + ("a" * 4097) + "\"}",
+      " " * 20001
+    )
     invalid.foreach(raw => assertEquals(decode(raw), Left(DeviceRejection.Fingerprint), raw.take(70)))
     assertEquals(DeviceEvidence.decode(js.Dynamic.literal(dpr = Double.NaN), hints, ua), Left(DeviceRejection.Fingerprint))
     assertEquals(DeviceEvidence.decode(js.Dynamic.literal(cores = Double.PositiveInfinity), hints, ua), Left(DeviceRejection.Fingerprint))
@@ -56,8 +76,10 @@ class DeviceEvidenceSuite extends FunSuite {
     val profiles = DeviceEvidence.profilesFromJson("""[{"screen":"393x852","dpr":3,"minIosMajor":16}]""")
     assertEquals(profiles, Vector(IosDeviceProfile("393x852", 3, 16)))
     val ua = "iPhone; CPU iPhone OS 15_0 like Mac OS X"
-    assertEquals(DeviceEvidence.fromJson(s"""{"os":"$ua","screen":"393x852","dpr":3}""", ClientHints(), ua, profiles),
-      Left(DeviceRejection.Fingerprint))
+    assertEquals(
+      DeviceEvidence.fromJson(s"""{"os":"$ua","screen":"393x852","dpr":3}""", ClientHints(), ua, profiles),
+      Left(DeviceRejection.Fingerprint)
+    )
     Seq("not JSON", "{}", "[{\"screen\":\"393x852\",\"dpr\":0,\"minIosMajor\":16}]", "[{\"screen\":\"393x852\",\"dpr\":3}]")
       .foreach(raw => assertEquals(DeviceEvidence.profilesFromJson(raw), Vector.empty))
   }

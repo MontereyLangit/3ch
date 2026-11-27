@@ -9,7 +9,10 @@ class PostRoutingSuite extends FunSuite {
 
   test("スレ立ては key を unixtime に、返信は題名を空にする") {
     assertEquals(PostRouting.route(base, "1700000000").map(f => (f.key, f.kind)), Right(("1700000000", PostKind.NewThread)))
-    assertEquals(PostRouting.route(base.copy(key = "123"), "1700000000").map(f => (f.key, f.subject, f.kind)), Right(("123", "", PostKind.Reply)))
+    assertEquals(
+      PostRouting.route(base.copy(key = "123"), "1700000000").map(f => (f.key, f.subject, f.kind)),
+      Right(("123", "", PostKind.Reply))
+    )
   }
 
   test("!newthread は 9 始まりの key でだけスレ立てにする") {
@@ -24,7 +27,10 @@ class PostRoutingSuite extends FunSuite {
   }
 
   test("スレ立て本文先頭の !924 / !900 は共通スレのキーにし、残りが空なら本文なし") {
-    assertEquals(PostRouting.route(base.copy(message = "!924 本文"), "1700000000").map(f => (f.bbs, f.key, f.message)), Right(("924", "9240000000", "本文")))
+    assertEquals(
+      PostRouting.route(base.copy(message = "!924 本文"), "1700000000").map(f => (f.bbs, f.key, f.message)),
+      Right(("924", "9240000000", "本文"))
+    )
     assertEquals(PostRouting.route(base.copy(message = "!900<br>本文"), "1700000000").map(f => (f.bbs, f.key)), Right(("924", "9000000000")))
     assertEquals(PostRouting.route(base.copy(message = "!924"), "1700000000").left.map(_._1), Left(PostingError.EmptyMessage))
     assertEquals(PostRouting.route(base.copy(message = "!9240"), "1700000000").map(_.key), Right("1700000000"))

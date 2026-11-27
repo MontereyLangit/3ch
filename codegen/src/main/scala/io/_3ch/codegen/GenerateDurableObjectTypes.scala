@@ -15,8 +15,9 @@ object GenerateDurableObjectTypes {
           )
           s"${identifier(parameter.name.value)}: ${typeScriptType(tpe)}"
         }
-        name -> (s"  export class ${identifier(name)} {\n" +
-          s"    constructor(${parameters.mkString(", ")});\n  }\n")
+        name ->
+          (s"  export class ${identifier(name)} {\n" +
+            s"    constructor(${parameters.mkString(", ")});\n  }\n")
       }
     }.sortBy(_._1)
     require(declarations.map(_._1).distinct.size == declarations.size, "Duplicate Durable Object export names")
@@ -30,8 +31,8 @@ object GenerateDurableObjectTypes {
     case "DurableObjectState" | "io._3ch.bbs.external.cloudflare.DurableObjectState" |
         "WorkerEnv" | "io._3ch.bbs.external.cloudflare.WorkerEnv" => "object"
     case "String" | "scala.Predef.String" | "java.lang.String" => "string"
-    case "Boolean" | "scala.Boolean" => "boolean"
-    case "Int" | "scala.Int" | "Double" | "scala.Double" => "number"
+    case "Boolean" | "scala.Boolean"                           => "boolean"
+    case "Int" | "scala.Int" | "Double" | "scala.Double"       => "number"
     case _ => throw new IllegalArgumentException(s"Unsupported DO constructor type: ${tpe.syntax}")
   }
 

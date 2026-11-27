@@ -4,12 +4,14 @@ package io._3ch.bbs.service.auth
 final case class AuthSettings(secret: String, agreementVersion: String, turnstileSiteKey: String, turnstileSecretKey: String)
 
 object AuthSettings {
+
   /** HMAC の鍵とみなす秘密の最短の長さ */
   val minimumSecretLength: Int = 32
 
   /** 欠けた値や短すぎる秘密があれば認証を無効にする */
   def of(secret: String, agreementVersion: String, turnstileSiteKey: String, turnstileSecretKey: String): Option[AuthSettings] =
-    Option.when(secret.length >= minimumSecretLength && agreementVersion.nonEmpty && turnstileSiteKey.nonEmpty && turnstileSecretKey.nonEmpty) {
+    Option.when(secret.length >= minimumSecretLength && agreementVersion.nonEmpty && turnstileSiteKey.nonEmpty &&
+      turnstileSecretKey.nonEmpty) {
       AuthSettings(secret, agreementVersion, turnstileSiteKey, turnstileSecretKey)
     }
 }

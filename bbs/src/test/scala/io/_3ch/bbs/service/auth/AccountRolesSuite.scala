@@ -35,7 +35,8 @@ class AccountRolesSuite extends FunSuite {
     }
     created.map(_ => (kit, repository, new AccountRoles(repository, keys)))
   }
-  private def rolesOf(repository: AccountRepository, aid: String): Future[Set[AccountRole]] = repository.inspect(aid).map(_.account.roles.values)
+  private def rolesOf(repository: AccountRepository, aid: String): Future[Set[AccountRole]] =
+    repository.inspect(aid).map(_.account.roles.values)
   private def adminIndex(repository: AccountRepository, aid: String): Future[Option[String]] =
     keys.index(AccountIndexKind.Admin.code, aid).flatMap(hash => repository.lookup(AccountIndexKind.Admin.code, hash.get))
   private def admin(aid: String): AccountDescription =
@@ -79,7 +80,9 @@ class AccountRolesSuite extends FunSuite {
   test("同時に初回の管理者を確保しても admin になるのは一人だけ") {
     for {
       (_, repository, roles) <- setup(first, second, third)
-      results <- Future.traverse(Seq(first, second, third))(aid => roles.claimFirstAdmin(aid, now, breakGlass = false).map(_ => aid -> true).recover { case _ => aid -> false })
+      results <- Future.traverse(Seq(first, second, third))(aid =>
+        roles.claimFirstAdmin(aid, now, breakGlass = false).map(_ => aid -> true).recover { case _ => aid -> false }
+      )
       admins <- Future.traverse(Seq(first, second, third))(aid => rolesOf(repository, aid).map(r => aid -> r.contains(AccountRole.Admin)))
       later <- roles.claimFirstAdmin(third, now + 1000, breakGlass = false).failed
     } yield {
@@ -123,13 +126,19 @@ class AccountRolesSuite extends FunSuite {
     var failConfirms = 0
     def setRoles(aid: String, roles: Roles, actorAid: String, now: Double) = repository.setRoles(aid, roles, actorAid, now)
     def grantFirstAdmin(hash: String, aid: String, now: Double) =
-      repository.grantFirstAdmin(hash, aid, now).flatMap(_ => if (lostGrant) Future.failed(new IllegalStateException("lost")) else Future.unit)
-    def isAdmin(aid: String, now: Double) = if (failIsAdmin) Future.failed(new IllegalStateException("down")) else repository.isAdmin(aid, now)
+      repository.grantFirstAdmin(hash, aid, now).flatMap(_ =>
+        if (lostGrant) Future.failed(new IllegalStateException("lost")) else Future.unit
+      )
+    def isAdmin(aid: String, now: Double) =
+      if (failIsAdmin) Future.failed(new IllegalStateException("down")) else repository.isAdmin(aid, now)
     def surrender(hash: String, aid: String, now: Double) = repository.surrender(hash, aid, now)
-    def claimFirstAdmin(hash: String, aid: String, now: Double, breakGlass: Boolean) = repository.claimFirstAdmin(hash, aid, now, breakGlass)
-    def reserve(kind: String, hash: String, aid: String, now: Double, tokenId: Option[String]) = repository.reserve(kind, hash, aid, now, tokenId)
+    def claimFirstAdmin(hash: String, aid: String, now: Double, breakGlass: Boolean) =
+      repository.claimFirstAdmin(hash, aid, now, breakGlass)
+    def reserve(kind: String, hash: String, aid: String, now: Double, tokenId: Option[String]) =
+      repository.reserve(kind, hash, aid, now, tokenId)
     def confirm(kind: String, hash: String, aid: String, now: Double) =
-      if (failConfirms > 0) { failConfirms -= 1; Future.failed(new IllegalStateException("confirm lost")) } else repository.confirm(kind, hash, aid, now)
+      if (failConfirms > 0) { failConfirms -= 1; Future.failed(new IllegalStateException("confirm lost")) }
+      else repository.confirm(kind, hash, aid, now)
     def remove(kind: String, hash: String, aid: String) = repository.remove(kind, hash, aid)
   }
 

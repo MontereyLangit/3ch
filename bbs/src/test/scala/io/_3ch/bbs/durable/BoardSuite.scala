@@ -133,17 +133,20 @@ class BoardSuite extends FunSuite {
     val puts = mutable.Buffer.empty[Set[String]]
     val storage = instance.state.storage.asInstanceOf[js.Dynamic]
     val original = storage.put.asInstanceOf[js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]]]
-    storage.updateDynamic("put")(((key: js.Any, value: js.UndefOr[js.Any]) => {
-      puts += (if value.isDefined then Set(key.asInstanceOf[String]) else key.asInstanceOf[js.Dictionary[js.Any]].keys.toSet)
-      original(key, value)
-    }): js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]])
+    storage.updateDynamic("put")((
+        (key: js.Any, value: js.UndefOr[js.Any]) => {
+          puts += (if value.isDefined then Set(key.asInstanceOf[String]) else key.asInstanceOf[js.Dictionary[js.Any]].keys.toSet)
+          original(key, value)
+        }
+    ): js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]])
     puts
   }
 
   test("連投の予約は直列化され、同じ投稿者の同時の予約は片方だけ通る") {
     val board = DurableTestKit.newEnv().board("board1")
     for {
-      results <- Future.sequence(Seq(board.reservePost("1:a", entry("a"), rate()).toFuture, board.reservePost("2:b", entry("a"), rate()).toFuture))
+      results <-
+        Future.sequence(Seq(board.reservePost("1:a", entry("a"), rate()).toFuture, board.reservePost("2:b", entry("a"), rate()).toFuture))
       _ = assertEquals(results.count(_.isEmpty), 1)
       _ = assert(results.exists(_.startsWith("post-rate:board:samba24:")), results.toString)
       other <- board.reservePost("3:c", entry("b"), rate()).toFuture
@@ -206,7 +209,9 @@ class BoardSuite extends FunSuite {
     val instance = DurableTestKit.newEnv().boardInstance("board1")
     val settings = rate(samba24 = 0, timecount = 100)
     for {
-      _ <- (1 to 65).foldLeft(Future.unit)((acc, n) => acc.flatMap(_ => instance.reservePost(s"k$n", entry(s"ip$n"), settings).toFuture.map(_ => ())))
+      _ <- (1 to 65).foldLeft(Future.unit)((acc, n) =>
+        acc.flatMap(_ => instance.reservePost(s"k$n", entry(s"ip$n"), settings).toFuture.map(_ => ()))
+      )
       puts = recordPuts(instance)
       _ <- instance.reservePost("k66", entry("ip66"), settings).toFuture
       _ = assertEquals(puts.toList, List(Set("postRateMeta", "postRateHistory:1")))
@@ -227,7 +232,9 @@ class BoardSuite extends FunSuite {
   test("連投履歴の RPC の失敗はロックの外で投げ直す") {
     var gateRejections = 0
     val state = js.Dynamic.literal(
-      storage = js.Dynamic.literal(get = ((_: String) => js.Promise.reject(new js.Error("storage failed"))): js.Function1[String, js.Promise[js.Any]]),
+      storage = js.Dynamic.literal(get =
+        ((_: String) => js.Promise.reject(new js.Error("storage failed"))): js.Function1[String, js.Promise[js.Any]]
+      ),
       blockConcurrencyWhile = ((callback: js.Function0[js.Promise[js.Any]]) => {
         callback().toFuture.recoverWith { case error =>
           gateRejections += 1

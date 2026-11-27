@@ -31,8 +31,12 @@ class IdentifierSuite extends FunSuite {
   }
 
   test("UA 解析の軸は OS・ブラウザ・端末種別・UA 全体・Client Hints と言語で、取れない値は空") {
-    val axes = IdentifierAxes.fromAgent(UserAgentProfile("iOS 18", "Safari 18", "スマートフォン iPhone"), "Mozilla/5.0", "\"Chromium\";v=\"130\"", "ja")
-    assertEquals(IdentifierAxis.values.toList.map(axes.value), List("iOS 18", "Safari 18", "スマートフォン iPhone", "Mozilla/5.0", "\"Chromium\";v=\"130\"|ja"))
+    val axes =
+      IdentifierAxes.fromAgent(UserAgentProfile("iOS 18", "Safari 18", "スマートフォン iPhone"), "Mozilla/5.0", "\"Chromium\";v=\"130\"", "ja")
+    assertEquals(
+      IdentifierAxis.values.toList.map(axes.value),
+      List("iOS 18", "Safari 18", "スマートフォン iPhone", "Mozilla/5.0", "\"Chromium\";v=\"130\"|ja")
+    )
     val bare = IdentifierAxes.fromAgent(UserAgentProfile(), "Monazilla/1.00", "", "")
     assertEquals(IdentifierAxis.values.toList.map(bare.value), List("", "", "", "Monazilla/1.00", ""))
   }

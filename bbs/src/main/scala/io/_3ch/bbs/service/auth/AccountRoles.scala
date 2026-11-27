@@ -24,20 +24,24 @@ final class AccountRoles(accounts: AccountRoleStore, keys: AuthenticationKeys) {
   private def grant(key: String, actor: AccountDescription, target: String, next: Roles, now: Double): Future[Unit] =
     listed(key, target, now).flatMap(_ => accounts.setRoles(target, next, actor.aid, now)).recoverWith { case NonFatal(error) =>
       accounts.isAdmin(target, now).transformWith {
-        case scala.util.Success(false) => accounts.remove(kind, key, target).recover { case NonFatal(_) => () }.flatMap(_ => Future.failed(error))
+        case scala.util.Success(false) =>
+          accounts.remove(kind, key, target).recover { case NonFatal(_) => () }.flatMap(_ => Future.failed(error))
         case _ => Future.failed(error)
       }
     }
 
   private def strip(key: String, actor: AccountDescription, target: String, next: Roles, now: Double): Future[Unit] =
     accounts.isAdmin(target, now).flatMap {
-      case false => accounts.setRoles(target, next, actor.aid, now).flatMap(_ => accounts.remove(kind, key, target).recover { case NonFatal(_) => () })
+      case false =>
+        accounts.setRoles(target, next, actor.aid, now).flatMap(_ => accounts.remove(kind, key, target).recover { case NonFatal(_) => () })
       case true => accounts.surrender(key, target, now).flatMap { _ =>
-        accounts.setRoles(target, next, actor.aid, now).recoverWith { case NonFatal(error) =>
-          accounts.isAdmin(target, now).flatMap(admin => if (admin) listed(key, target, now) else Future.unit).recover { case NonFatal(_) => () }
-            .flatMap(_ => Future.failed(error))
+          accounts.setRoles(target, next, actor.aid, now).recoverWith { case NonFatal(error) =>
+            accounts.isAdmin(target, now).flatMap(admin => if (admin) listed(key, target, now) else Future.unit).recover {
+              case NonFatal(_) => ()
+            }
+              .flatMap(_ => Future.failed(error))
+          }
         }
-      }
     }
 
   /** 索引に確定済みで載せる。同じ所有者の予約・確定が既にあれば確定し直すだけ */
@@ -59,8 +63,9 @@ final class AccountRoles(accounts: AccountRoleStore, keys: AuthenticationKeys) {
 
   private def reconcile(key: String, aid: String, now: Double, error: Throwable): Future[Unit] =
     accounts.isAdmin(aid, now).transformWith {
-      case scala.util.Success(true) => accounts.confirm(kind, key, aid, now).recoverWith { case NonFatal(_) => Future.failed(error) }
-      case scala.util.Success(false) => accounts.remove(kind, key, aid).recover { case NonFatal(_) => () }.flatMap(_ => Future.failed(error))
+      case scala.util.Success(true)  => accounts.confirm(kind, key, aid, now).recoverWith { case NonFatal(_) => Future.failed(error) }
+      case scala.util.Success(false) =>
+        accounts.remove(kind, key, aid).recover { case NonFatal(_) => () }.flatMap(_ => Future.failed(error))
       case scala.util.Failure(_) => Future.failed(error)
     }
 }

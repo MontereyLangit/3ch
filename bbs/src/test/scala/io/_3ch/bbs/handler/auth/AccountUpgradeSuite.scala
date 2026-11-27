@@ -12,8 +12,14 @@ import scala.scalajs.js
 class AccountUpgradeSuite extends munit.FunSuite {
   private def now: Double = math.floor(js.Date.now() / 1000)
   private val verify = Seq("agreement" -> "v1", "cf-turnstile-response" -> "accepted")
-  private def upgrade(id: String) = Seq("id" -> id, "password" -> "correct horse", "password2" -> "correct horse", "agreement" -> "v1",
-    "cf-turnstile-response" -> "accepted", "upgrade" -> "1")
+  private def upgrade(id: String) = Seq(
+    "id" -> id,
+    "password" -> "correct horse",
+    "password2" -> "correct horse",
+    "agreement" -> "v1",
+    "cf-turnstile-response" -> "accepted",
+    "upgrade" -> "1"
+  )
 
   /** かんたん登録して Cookie と aid・自動採番の uid を返す */
   private def client(t: AuthSignInTestKit, ip: String = "192.0.2.80"): Future[(String, String, String)] =
@@ -30,7 +36,11 @@ class AccountUpgradeSuite extends munit.FunSuite {
         _ <- t.kit.account(aid).setLevel(4, now).toFuture
         moved <- t.send(t.post("/auth/register", upgrade("Taro_2026"), cookie = cookie))
         body <- t.body(moved)
-        _ = assertEquals((moved.status, body.uid.asInstanceOf[String], body.lv.asInstanceOf[Int]), (200, "taro_2026", 4), js.JSON.stringify(body))
+        _ = assertEquals(
+          (moved.status, body.uid.asInstanceOf[String], body.lv.asInstanceOf[Int]),
+          (200, "taro_2026", 4),
+          js.JSON.stringify(body)
+        )
         session <- SessionCookies.verify(t.cookie(moved, "__Host-ch3s_sid").get, AuthTestEnv.secret, now)
         panel <- t.kit.account(aid).inspect().toFuture
         oldHash <- t.index("uid", oldUid)
@@ -38,7 +48,11 @@ class AccountUpgradeSuite extends munit.FunSuite {
         oldOwner <- t.kit.index("uid").lookup(oldHash).toFuture
         newOwner <- t.kit.index("uid").lookup(newHash).toFuture
         stale <- t.send(t.get("/auth/session", cookie = cookie)).flatMap(t.body)
-        login <- t.send(t.post("/auth/login", Seq("id" -> "taro_2026", "password" -> "correct horse", "cf-turnstile-response" -> "accepted"), ip = "192.0.2.81"))
+        login <- t.send(t.post(
+          "/auth/login",
+          Seq("id" -> "taro_2026", "password" -> "correct horse", "cf-turnstile-response" -> "accepted"),
+          ip = "192.0.2.81"
+        ))
         loginBody <- t.body(login)
       } yield {
         assertEquals(session.map(s => (s.aid, s.generation)), Some((aid, 1L)))
@@ -86,17 +100,29 @@ class AccountUpgradeSuite extends munit.FunSuite {
       _ = { t.jwks = js.Dynamic.literal(keys = js.Array(keys.jwk)) }
       token <- keys.token(GoogleTestKeys.claims(sub, authorize.searchParams.get("nonce"), now))
       _ = { t.idToken = token }
-      callback <- t.send(t.get(s"/auth/google/callback/?code=test-code&state=${authorize.searchParams.get("state")}",
-        cookie = Seq(t.cookie(started, "__Host-ch3s_oauth").get, cookie).filter(_.nonEmpty).mkString("; ")))
+      callback <- t.send(t.get(
+        s"/auth/google/callback/?code=test-code&state=${authorize.searchParams.get("state")}",
+        cookie = Seq(t.cookie(started, "__Host-ch3s_oauth").get, cookie).filter(_.nonEmpty).mkString("; ")
+      ))
     } yield callback
     t.run {
       for {
         keys <- GoogleTestKeys.generate("upgrade-kid")
         _ <- roundTrip(keys, "111111111111", Seq("uid" -> "hanako", "agreement" -> "v1"), "")
         (cookie, aid, _) <- client(t)
-        linked <- roundTrip(keys, "111111111111", Seq("uid" -> "jiro_2026", "agreement" -> "v1", "purpose" -> "upgrade", "return" -> "/auth/account/"), cookie)
+        linked <- roundTrip(
+          keys,
+          "111111111111",
+          Seq("uid" -> "jiro_2026", "agreement" -> "v1", "purpose" -> "upgrade", "return" -> "/auth/account/"),
+          cookie
+        )
         _ = assertEquals(linked.headers.get("Location"), "/auth/?upgrade=1&error=google_linked&return=%2Fauth%2Faccount%2F")
-        moved <- roundTrip(keys, "222222222222", Seq("uid" -> "jiro_2026", "agreement" -> "v1", "purpose" -> "upgrade", "return" -> "/auth/account/"), cookie)
+        moved <- roundTrip(
+          keys,
+          "222222222222",
+          Seq("uid" -> "jiro_2026", "agreement" -> "v1", "purpose" -> "upgrade", "return" -> "/auth/account/"),
+          cookie
+        )
         _ = assertEquals(moved.headers.get("Location"), "/auth/account/")
         session <- SessionCookies.verify(t.cookie(moved, "__Host-ch3s_sid").get, AuthTestEnv.secret, now)
         panel <- t.kit.account(aid).inspect().toFuture
@@ -126,7 +152,11 @@ class AccountUpgradeSuite extends munit.FunSuite {
         uidHash <- t.index("uid", "taro_2026")
         login <- repository.lookup("login", loginHash)
         uid <- repository.lookup("uid", uidHash)
-        signedIn <- t.send(t.post("/auth/login", Seq("id" -> "taro_2026", "password" -> "correct horse", "cf-turnstile-response" -> "accepted"), ip = "192.0.2.85"))
+        signedIn <- t.send(t.post(
+          "/auth/login",
+          Seq("id" -> "taro_2026", "password" -> "correct horse", "cf-turnstile-response" -> "accepted"),
+          ip = "192.0.2.85"
+        ))
       } yield {
         assert(first.isInstanceOf[UpgradeOutcome.Converted])
         assertEquals(loser, AccountStoreException(AccountRejection.Generation))
@@ -141,7 +171,9 @@ class AccountUpgradeSuite extends munit.FunSuite {
       for {
         clients <- Future.traverse((1 to 6).toList)(i => client(t, ip = s"192.0.2.${100 + i}"))
         statuses <- clients.zipWithIndex.foldLeft(Future.successful(Vector.empty[Int])) { case (done, ((cookie, _, _), i)) =>
-          done.flatMap(list => t.send(t.post("/auth/register", upgrade(s"user_000$i"), cookie = cookie, ip = "192.0.2.99")).map(r => list :+ r.status))
+          done.flatMap(list =>
+            t.send(t.post("/auth/register", upgrade(s"user_000$i"), cookie = cookie, ip = "192.0.2.99")).map(r => list :+ r.status)
+          )
         }
       } yield assertEquals(statuses, Vector(200, 200, 200, 200, 200, 429))
     }

@@ -7,11 +7,11 @@
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 
 val scala3Version = "3.3.8" // Scala 3 LTS
-val munitVersion  = "1.0.0"
+val munitVersion = "1.0.0"
 
 ThisBuild / scalaVersion := scala3Version
 ThisBuild / organization := "io._3ch"
-ThisBuild / version      := "1.2.1"
+ThisBuild / version := "1.2.1"
 
 lazy val commonSettings = Seq(
   scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked"),
@@ -44,7 +44,7 @@ lazy val common = crossProject(JSPlatform, JVMPlatform)
   )
 
 lazy val commonJVM = common.jvm
-lazy val commonJS  = common.js
+lazy val commonJS = common.js
 
 // DO の公開メソッドから RPC スタブを生成する（docs/durable-object-stubs.md）。bbs の sourceGenerators から呼ぶ。
 // 生成器は JVM の codegen にあり、bbs のソースだけを入力に取るのでタスクグラフは循環しない。
@@ -76,12 +76,15 @@ lazy val bbs = project
     Compile / sourceGenerators += Def.task {
       val output = (Compile / sourceManaged).value / "io" / "_3ch" / "bbs" / "BuildInfo.scala"
       val updatedDate = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Tokyo")).toString
-      IO.write(output, s"""package io._3ch.bbs
+      IO.write(
+        output,
+        s"""package io._3ch.bbs
                          |object BuildInfo {
                          |  val version = "${version.value}"
                          |  val updatedDate = "$updatedDate"
                          |}
-                         |""".stripMargin)
+                         |""".stripMargin
+      )
       Seq(output)
     }.taskValue,
     scalaJSUseMainModuleInitializer := false,
@@ -92,7 +95,8 @@ lazy val bbs = project
     // ブラウザへサーバ処理を混入させないため、bbsClient とは別にリンクする
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
     // DO の公開メソッドから RPC スタブ（BoardDoStub 等）を生成する（上記 generateDurableObjectStubsTask）
-    Compile / durableObjectStubsFile := (Compile / sourceManaged).value / "io" / "_3ch" / "bbs" / "external" / "cloudflare" / "DurableObjectStubs.scala",
+    Compile / durableObjectStubsFile :=
+      (Compile / sourceManaged).value / "io" / "_3ch" / "bbs" / "external" / "cloudflare" / "DurableObjectStubs.scala",
     Compile / generateDurableObjectStubs := generateDurableObjectStubsTask.value,
     Compile / sourceGenerators += (Compile / generateDurableObjectStubs).taskValue,
     // @route / @islands から app/routes・app/islands（hx4sGenerate）と SSR 用の IslandComponents（sourceGenerators）を生成する（docs/codegen.md）

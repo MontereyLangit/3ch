@@ -17,6 +17,7 @@ enum PasswordHashFailure {
 
 /** Web Crypto でパスワード資格情報を作成・照合する。平文や計算値をログへ出さない */
 object PasswordHasher {
+
   /** 新しい16バイトのソルトで現在の反復数の資格情報を作る */
   def create(password: Password, now: Double): Future[Either[PasswordHashFailure, PasswordCredential]] = {
     if (password == null || !AccountProfile.validTime(now)) Future.successful(Left(PasswordHashFailure.Invalid))
@@ -46,7 +47,13 @@ object PasswordHasher {
   private def derive(password: Password, salt: Vector[Byte], iterations: Int): Future[Vector[Byte]] = {
     val algorithm = js.Dynamic.literal(name = "PBKDF2", salt = bytes(salt), iterations = iterations, hash = "SHA-256")
     for {
-      key <- GlobalCrypto.subtle.importKey("raw", new TextEncoder().encode(password.value), js.Dynamic.literal(name = "PBKDF2"), false, js.Array("deriveBits")).toFuture
+      key <- GlobalCrypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(password.value),
+        js.Dynamic.literal(name = "PBKDF2"),
+        false,
+        js.Array("deriveBits")
+      ).toFuture
       buffer <- GlobalCrypto.subtle.deriveBits(algorithm, key, 256).toFuture
     } yield {
       val hash = new Uint8Array(buffer)
@@ -65,6 +72,7 @@ object PasswordHasher {
 
   private def equal(actual: Vector[Byte], expected: Vector[Byte]): Boolean = {
     if (actual.size != expected.size) false
-    else actual.indices.foldLeft(0)((difference, index) => difference | ((actual(index).toInt & 0xff) ^ (expected(index).toInt & 0xff))) == 0
+    else actual.indices.foldLeft(0)((difference, index) => difference | ((actual(index).toInt & 0xff) ^ (expected(index).toInt & 0xff))) ==
+      0
   }
 }

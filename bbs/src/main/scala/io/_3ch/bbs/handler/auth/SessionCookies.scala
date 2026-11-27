@@ -20,14 +20,15 @@ object SessionCookies {
     }.recover { case NonFatal(_) => None }
 
   /** HTTPS または開発用 localhost にだけ発行する。期限切れや鍵の欠落は発行しない */
-  def issue(claims: SessionClaims, secret: String, requestUrl: String, nowSeconds: Double): Future[Option[String]] = Future.unit.flatMap { _ =>
-    if (!canIssue(requestUrl) || !claims.isCurrent(nowSeconds)) Future.successful(None)
-    else CookieCodec.payload(claims).fold(Future.successful(Option.empty[String])) { payload =>
-      AuthHmac.sessionSignature(secret, payload).map(_.flatMap(CookieCodec.encode(claims, _)).map { value =>
-        val maxAge = math.floor(claims.expiresAt.toDouble - nowSeconds).toLong
-        s"${CookieCodec.Name}=$value; Max-Age=$maxAge$Attributes"
-      })
-    }
+  def issue(claims: SessionClaims, secret: String, requestUrl: String, nowSeconds: Double): Future[Option[String]] = Future.unit.flatMap {
+    _ =>
+      if (!canIssue(requestUrl) || !claims.isCurrent(nowSeconds)) Future.successful(None)
+      else CookieCodec.payload(claims).fold(Future.successful(Option.empty[String])) { payload =>
+        AuthHmac.sessionSignature(secret, payload).map(_.flatMap(CookieCodec.encode(claims, _)).map { value =>
+          val maxAge = math.floor(claims.expiresAt.toDouble - nowSeconds).toLong
+          s"${CookieCodec.Name}=$value; Max-Age=$maxAge$Attributes"
+        })
+      }
   }.recover { case NonFatal(_) => None }
 
   /** 発行時と同じ属性で Cookie を削除する */

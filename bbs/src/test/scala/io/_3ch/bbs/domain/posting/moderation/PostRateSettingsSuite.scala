@@ -11,15 +11,30 @@ class PostRateSettingsSuite extends FunSuite {
 
   test("設定が無ければ既定値で、段階は規制、広域連投規制は 1") {
     val settings = PostRateSettings.from(none, none)
-    assertEquals(settings, PostRateSettings(PostRateLevel.Enforce(Some(1)), BypassLevel.Privileged, live = false,
-      BoardSettings(18, 10, 10, 1, PostRateKey.defaults), ThreadSettings(40, 3600, PostRateKey.defaults)))
+    assertEquals(
+      settings,
+      PostRateSettings(
+        PostRateLevel.Enforce(Some(1)),
+        BypassLevel.Privileged,
+        live = false,
+        BoardSettings(18, 10, 10, 1, PostRateKey.defaults),
+        ThreadSettings(40, 3600, PostRateKey.defaults)
+      )
+    )
   }
 
   test("shiki の照合値は識別子が checked でキャップでないときだけ使う") {
     import io._3ch.common.domain.identity.ShikibetsuMode
     assertEquals(PostRateSettings.shikiSource(ShikibetsuMode.Checked, cap = false, "ID-1"), "ID-1")
     assertEquals(PostRateSettings.shikiSource(ShikibetsuMode.Checked, cap = true, "★"), "")
-    Seq(ShikibetsuMode.Phoebe, ShikibetsuMode.Raw, ShikibetsuMode.Ken, ShikibetsuMode.City, ShikibetsuMode.As, ShikibetsuMode.Hidden).foreach { mode =>
+    Seq(
+      ShikibetsuMode.Phoebe,
+      ShikibetsuMode.Raw,
+      ShikibetsuMode.Ken,
+      ShikibetsuMode.City,
+      ShikibetsuMode.As,
+      ShikibetsuMode.Hidden
+    ).foreach { mode =>
       assertEquals(PostRateSettings.shikiSource(mode, cap = false, "JP.13"), "", mode.toString)
     }
   }
@@ -35,7 +50,9 @@ class PostRateSettingsSuite extends FunSuite {
   }
 
   test("不正な値は既定値で動き、上限を超えた値も既定値にする") {
-    val board = parse("timecount=-1\ntimeclose=abc\nBBS_SAMBA24=86401\nBBS_FR_SECOND=-1\nBBS_THREAD_RENTOU=1.5\nBBS_THREAD_RENTOU_RESET=\nBBS_FR_LEVEL=yes\nBBS_RENTOU_PASS=all\nBBS_RENTOU_KEYS=id\n")
+    val board = parse(
+      "timecount=-1\ntimeclose=abc\nBBS_SAMBA24=86401\nBBS_FR_SECOND=-1\nBBS_THREAD_RENTOU=1.5\nBBS_THREAD_RENTOU_RESET=\nBBS_FR_LEVEL=yes\nBBS_RENTOU_PASS=all\nBBS_RENTOU_KEYS=id\n"
+    )
     assertEquals(PostRateSettings.from(board, board), PostRateSettings.from(none, none))
     val maximum = parse("timecount=1000\nBBS_SAMBA24=86400\nBBS_THREAD_RENTOU_RESET=315360000\n")
     val parsed = PostRateSettings.from(maximum, maximum)
@@ -47,9 +64,18 @@ class PostRateSettingsSuite extends FunSuite {
       val settings = parse(text)
       PostRateSettings.from(settings, settings).board.fr
     }
-    val cases = Seq("" -> 1, "BBS_FR_SECOND=0\n" -> 0, "BBS_FR_SECOND=30\n" -> 30, "BBS_FR_SECOND=86400\n" -> 86400,
-      "BBS_FR_SECOND=86401\n" -> 1, "BBS_FR_SECOND=-5\n" -> 1, "BBS_FR_SECOND=1.5\n" -> 1, "BBS_FR_SECOND=abc\n" -> 1,
-      "BBS_FR_SECOND=\n" -> 1, " BBS_FR_SECOND = 5 \n" -> 5)
+    val cases = Seq(
+      "" -> 1,
+      "BBS_FR_SECOND=0\n" -> 0,
+      "BBS_FR_SECOND=30\n" -> 30,
+      "BBS_FR_SECOND=86400\n" -> 86400,
+      "BBS_FR_SECOND=86401\n" -> 1,
+      "BBS_FR_SECOND=-5\n" -> 1,
+      "BBS_FR_SECOND=1.5\n" -> 1,
+      "BBS_FR_SECOND=abc\n" -> 1,
+      "BBS_FR_SECOND=\n" -> 1,
+      " BBS_FR_SECOND = 5 \n" -> 5
+    )
     cases.foreach { case (text, expected) => assertEquals(fr(text), expected, text) }
   }
 
@@ -87,7 +113,8 @@ class PostRateSettingsSuite extends FunSuite {
       "BBS_FR_LEVEL=  log\n" -> PostRateLevel.Log,
       "BBS_FR_LEVEL= 5 \n" -> PostRateLevel.Enforce(Some(5)),
       "BBS_FR_LEVEL= 0 \n" -> PostRateLevel.Enforce(None),
-      "BBS_RENTOU_MODE=off\n" -> PostRateLevel.Enforce(Some(1)))
+      "BBS_RENTOU_MODE=off\n" -> PostRateLevel.Enforce(Some(1))
+    )
     cases.foreach { case (text, expected) => assertEquals(level(text), expected, text) }
   }
 
@@ -112,7 +139,13 @@ class PostRateSettingsSuite extends FunSuite {
   }
 
   test("off・BBS_LIVE・回避レベルで免除される投稿者には適用しない") {
-    def applies(text: String, cap: Boolean = false, authenticated: Boolean = false, roles: Set[AccountRole] = Set.empty, lv: Int = 0): Boolean = {
+    def applies(
+        text: String,
+        cap: Boolean = false,
+        authenticated: Boolean = false,
+        roles: Set[AccountRole] = Set.empty,
+        lv: Int = 0
+    ): Boolean = {
       val settings = parse(text)
       PostRateSettings.from(settings, settings).applies(BypassPoster(Roles(roles), cap, authenticated, lv))
     }

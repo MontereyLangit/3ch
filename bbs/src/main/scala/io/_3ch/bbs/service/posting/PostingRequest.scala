@@ -10,28 +10,28 @@ import scala.scalajs.js.typedarray.Uint8Array
 
 /** bbs.cgi へのリクエストのうち投稿処理が読むヘッダと cf の値。無いヘッダは空文字列。本文は body を呼んだときに読む */
 final case class PostingRequest(
-  method: String,
-  contentType: String,
-  referer: String,
-  userAgent: String,
-  secChUa: String,
-  secChUaFullVersionList: Option[String],
-  accept: String,
-  acceptLanguage: String,
-  acceptEncoding: String,
-  deviceInformation: String,
-  clientIp: String,
-  connectingIp: Option[String],
-  forwardedFor: String,
-  forwarded: String,
-  via: String,
-  cookie: String,
-  asn: Option[String],
-  country: Option[String],
-  region: Option[String],
-  city: Option[String],
-  body: () => Future[Uint8Array] = () => Future.successful(new Uint8Array(0)),
-  secure: Boolean = false
+    method: String,
+    contentType: String,
+    referer: String,
+    userAgent: String,
+    secChUa: String,
+    secChUaFullVersionList: Option[String],
+    accept: String,
+    acceptLanguage: String,
+    acceptEncoding: String,
+    deviceInformation: String,
+    clientIp: String,
+    connectingIp: Option[String],
+    forwardedFor: String,
+    forwarded: String,
+    via: String,
+    cookie: String,
+    asn: Option[String],
+    country: Option[String],
+    region: Option[String],
+    city: Option[String],
+    body: () => Future[Uint8Array] = () => Future.successful(new Uint8Array(0)),
+    secure: Boolean = false
 ) {
 
   /** UA に Client Hints（完全版があればそちら）を連結したもの */
@@ -54,7 +54,8 @@ final case class PostingRequest(
     if (method != "POST") Some(PostingError.MethodNotPost)
     else if (!contentType.contains("application/x-www-form-urlencoded")) Some(PostingError.BrokenBody(contentType))
     else if (!PostingRequest.Referer.test(referer) && !PostingRequest.LocalReferer.test(referer)) Some(PostingError.InvalidReferer(referer))
-    else if (userAgent.length < 7 || userAgent.length > 384 || PostingRequest.NonAscii.test(userAgent)) Some(PostingError.InvalidUserAgent(userAgent))
+    else if (userAgent.length < 7 || userAgent.length > 384 || PostingRequest.NonAscii.test(userAgent))
+      Some(PostingError.InvalidUserAgent(userAgent))
     else if (clientIp.nonEmpty) Some(PostingError.ProxyHeader(clientIp))
     else None
   }

@@ -12,8 +12,21 @@ class PostingAuthenticationSuite extends munit.FunSuite {
   private val aid = "abcdefghijklmnop"
   private val ua = "f" * 64
   private val account = AccountDescription(aid, "abcdefgh", AccountKind.Client, 2, Some(now + 31536000), 1, Roles(), now, "v1")
-  private def request(mail: String = "", cap: Option[String] = None, monazilla: Boolean = true, secure: Boolean = true): PostingAuthenticationRequest =
-    PostingAuthenticationRequest(io._3ch.common.domain.posting.MailCommands.parse(mail).token, "cookie", "Monazilla/1.00 Test", monazilla, secure, now, cap)
+  private def request(
+      mail: String = "",
+      cap: Option[String] = None,
+      monazilla: Boolean = true,
+      secure: Boolean = true
+  ): PostingAuthenticationRequest =
+    PostingAuthenticationRequest(
+      io._3ch.common.domain.posting.MailCommands.parse(mail).token,
+      "cookie",
+      "Monazilla/1.00 Test",
+      monazilla,
+      secure,
+      now,
+      cap
+    )
   private final class Fake {
     var cookieReads = 0
     var described = 0
@@ -26,16 +39,30 @@ class PostingAuthenticationSuite extends munit.FunSuite {
     var capOwnerResult: Either[AccountRejection, Option[String]] = Right(None)
     var proof: Option[TokenProof] = None
     val store = new AccountStore {
-      def describe(aid: String, generation: Int, now: Double, token: Option[TokenProof]): Future[Either[AccountRejection, AccountDescription]] = {
-        described += 1; proof = token; if (failDescribe) Future.failed(new IllegalStateException("unavailable")) else Future.successful(describeResult)
+      def describe(
+          aid: String,
+          generation: Int,
+          now: Double,
+          token: Option[TokenProof]
+      ): Future[Either[AccountRejection, AccountDescription]] = {
+        described += 1; proof = token;
+        if (failDescribe) Future.failed(new IllegalStateException("unavailable")) else Future.successful(describeResult)
       }
-      def token(hash: String): Future[Either[AccountRejection, Option[TokenReference]]] = Future.successful(Right(Some(TokenReference(aid, "token1"))))
-      def useToken(reference: TokenReference, hash: String, label: String, now: Double): Future[Either[AccountRejection, TokenAuthentication]] = {
+      def token(hash: String): Future[Either[AccountRejection, Option[TokenReference]]] =
+        Future.successful(Right(Some(TokenReference(aid, "token1"))))
+      def useToken(
+          reference: TokenReference,
+          hash: String,
+          label: String,
+          now: Double
+      ): Future[Either[AccountRejection, TokenAuthentication]] = {
         tokenUses += 1; assertEquals(hash, ua); Future.successful(tokenResult)
       }
       def capOwner(hash: String): Future[Either[AccountRejection, Option[String]]] = { capReads += 1; Future.successful(capOwnerResult) }
-      def describeCap(aid: String, capKey: String, now: Double): Future[Either[AccountRejection, CapAuthentication]] = Future.successful(Left(AccountRejection.CapRevoked))
-      def recordPost(aid: String, post: AccountPost, observation: AccountObservation): Future[AccountDescription] = Future.successful(account)
+      def describeCap(aid: String, capKey: String, now: Double): Future[Either[AccountRejection, CapAuthentication]] =
+        Future.successful(Left(AccountRejection.CapRevoked))
+      def recordPost(aid: String, post: AccountPost, observation: AccountObservation): Future[AccountDescription] =
+        Future.successful(account)
     }
     val credentials = new PostingCredentials {
       def session(header: String, now: Double): Future[Option[SessionClaims]] = { cookieReads += 1; Future.successful(cookie) }
@@ -77,7 +104,8 @@ class PostingAuthenticationSuite extends munit.FunSuite {
     val fake = new Fake
     fake.capOwnerResult = Right(Some(aid))
     fake.service.resolve(request(cap = Some("cap"))).map(result =>
-      assertEquals(result, PostingAuthenticationResult.Rejected(AuthenticationFailure.Account(AccountRejection.CapRevoked))))
+      assertEquals(result, PostingAuthenticationResult.Rejected(AuthenticationFailure.Account(AccountRejection.CapRevoked)))
+    )
   }
   test("キー Cookie は完全な UA ハッシュを一回の DO 照会に渡す") {
     val fake = new Fake
@@ -109,7 +137,9 @@ class PostingAuthenticationSuite extends munit.FunSuite {
     Future.sequence(Seq(AccountRejection.Frozen, AccountRejection.Banned, AccountRejection.Deleted).map { reason =>
       val fake = new Fake
       fake.describeResult = Left(reason)
-      fake.service.resolve(request()).map(result => assertEquals(result, PostingAuthenticationResult.Rejected(AuthenticationFailure.Account(reason))))
+      fake.service.resolve(request()).map(result =>
+        assertEquals(result, PostingAuthenticationResult.Rejected(AuthenticationFailure.Account(reason)))
+      )
     })
   }
   test("世代が Int の範囲を外れた Cookie は DO を呼ばない") {
@@ -131,12 +161,16 @@ class PostingAuthenticationSuite extends munit.FunSuite {
   test("Account DO 障害は認証を通さない") {
     val fake = new Fake
     fake.failDescribe = true
-    fake.service.resolve(request()).map(result => assertEquals(result, PostingAuthenticationResult.Rejected(AuthenticationFailure.Unavailable)))
+    fake.service.resolve(request()).map(result =>
+      assertEquals(result, PostingAuthenticationResult.Rejected(AuthenticationFailure.Unavailable))
+    )
   }
   test("同意版が古いアカウントを拒否する") {
     val fake = new Fake
     fake.describeResult = Right(account.copy(agreementVersion = "old"))
-    fake.service.resolve(request()).map(result => assertEquals(result, PostingAuthenticationResult.Rejected(AuthenticationFailure.Account(AccountRejection.Agreement))))
+    fake.service.resolve(request()).map(result =>
+      assertEquals(result, PostingAuthenticationResult.Rejected(AuthenticationFailure.Account(AccountRejection.Agreement)))
+    )
   }
   test("Cookie を再発行しない投稿も binding の写しを保持する") {
     val fake = new Fake

@@ -5,7 +5,7 @@ package io._3ch.common.domain
  * @param value 9桁～10桁のUNIXタイムスタンプ（スレ立て時刻）
  */
 case class ThreadKey private (
-  value: Long
+    value: Long
 )
 
 object ThreadKey {

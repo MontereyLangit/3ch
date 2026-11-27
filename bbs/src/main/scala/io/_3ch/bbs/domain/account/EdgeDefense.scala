@@ -15,9 +15,15 @@ final case class TlsRule(ua: js.RegExp, minLength: Int, maxLength: Int) {
 }
 
 /** R2 の edge-rules.json。datacenterAsns はデータセンターの AS 番号、rttMs は国内の遠い接続元の閾値 */
-final case class EdgeRules(mode: EdgeMode = EdgeMode.Log, datacenterAsns: Set[String] = Set.empty, rttMs: Double = 400, tls: Vector[TlsRule] = Vector.empty)
+final case class EdgeRules(
+    mode: EdgeMode = EdgeMode.Log,
+    datacenterAsns: Set[String] = Set.empty,
+    rttMs: Double = 400,
+    tls: Vector[TlsRule] = Vector.empty
+)
 
 object EdgeRules {
+
   /** 規則なし。ファイルが無い・読めないときもこれで通す */
   val empty: EdgeRules = EdgeRules()
 }
@@ -48,9 +54,15 @@ object EdgeDefense {
     if (exempted) EdgeDecision(Vector.empty, reject = false, strict = false)
     else {
       val datacenter = Option.when(rules.datacenterAsns.contains(signal.asn))(EdgeFinding.Datacenter)
-      val tls = Option.when(browser && signal.tlsHelloLength.exists(length => rules.tls.exists(_.contradicts(signal.userAgent, length))))(EdgeFinding.DeclarationMismatch)
+      val tls = Option.when(
+        browser && signal.tlsHelloLength.exists(length => rules.tls.exists(_.contradicts(signal.userAgent, length)))
+      )(EdgeFinding.DeclarationMismatch)
       val findings = datacenter.toVector ++ tls
       val enforced = rules.mode == EdgeMode.On
-      EdgeDecision(findings, enforced && findings.nonEmpty, enforced && browser && signal.country == "JP" && signal.rttMs.exists(_ > rules.rttMs))
+      EdgeDecision(
+        findings,
+        enforced && findings.nonEmpty,
+        enforced && browser && signal.country == "JP" && signal.rttMs.exists(_ > rules.rttMs)
+      )
     }
 }

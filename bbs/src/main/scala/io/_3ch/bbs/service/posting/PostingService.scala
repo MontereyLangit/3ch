@@ -3,13 +3,22 @@ package io._3ch.bbs.service.posting
 import io._3ch.bbs.domain.posting.{ArchiveIndexFile, PostRateObservation}
 import io._3ch.bbs.service.posting.ports.PostingAccount
 import io._3ch.bbs.domain.account.{AuthenticationFailure, EdgeDefense, EdgeSignal}
-import io._3ch.bbs.domain.posting.{ClientIdentity, FailureClock, FailureSite, GlobalThread, KeyIp, NusiMark, PostFormLimits, PostRouting, PostingContext, PostingError, PostingIdentity, PostingStage, PostingUser, ReplyThread, ThreadOwner, ThreadPosting, ThreadWriteResult}
-import io._3ch.bbs.domain.posting.moderation.{BypassPoster, ModerationDecision, ModerationInput, PostRateCheck, PostRateIdentity, PostRateSettings, ThreadCreationLimit, ThreadCreationNetwork, ThreadCreationRequest, ThreadCreationSettings}
+import io._3ch.bbs.domain.posting.{
+  ClientIdentity, FailureClock, FailureSite, GlobalThread, KeyIp, NusiMark, PostFormLimits, PostRouting, PostingContext, PostingError,
+  PostingIdentity, PostingStage, PostingUser, ReplyThread, ThreadOwner, ThreadPosting, ThreadWriteResult
+}
+import io._3ch.bbs.domain.posting.moderation.{
+  BypassPoster, ModerationDecision, ModerationInput, PostRateCheck, PostRateIdentity, PostRateSettings, ThreadCreationLimit,
+  ThreadCreationNetwork, ThreadCreationRequest, ThreadCreationSettings
+}
 import io._3ch.bbs.external.web.URL
 import io._3ch.common.domain.{BbsSettings, BoardId, ThreadKey}
 import io._3ch.common.domain.account.Phoebe
 import io._3ch.common.domain.identity.{DateSalt, IdentifierAxes, IdentifierAxis, ShikibetsuFormat, ShikibetsuMode, ShikibetsuSeeds}
-import io._3ch.common.domain.posting.{ArchiveIndexText, CapHandle, MailCommands, DatLineFormatter, NameField, PhoebeAdmission, PhoebeCommand, PostForm, PostKind, SageRule, ThreadPhoebeRequest, UserInfo}
+import io._3ch.common.domain.posting.{
+  ArchiveIndexText, CapHandle, MailCommands, DatLineFormatter, NameField, PhoebeAdmission, PhoebeCommand, PostForm, PostKind, SageRule,
+  ThreadPhoebeRequest, UserInfo
+}
 import io._3ch.common.text.JsNumber
 
 import scala.concurrent.Future
@@ -29,15 +38,24 @@ final class PostingService(ports: PostingPorts, salt: String) {
       checked <- checkRequest(initial(request, saltHash), request)
       read <- readForm(checked, request)
       capped <- processCap(read)
-      _ = GlobalThread.postingError(capped.form.key, capped.form.kind == PostKind.NewThread, capped.cap.isDefined).foreach(reject(_, capped))
+      _ =
+        GlobalThread.postingError(capped.form.key, capped.form.kind == PostKind.NewThread, capped.cap.isDefined).foreach(reject(_, capped))
       (board, boardRead) <- boardSettings(capped)
       threadRead <- threadSettings(boardRead, board)
       identifiedRaw <- identify(threadRead)
       authenticated <- authenticate(identifiedRaw, request)
       identified = identifiedRaw.copy(sessionCookie = authenticated.sessionCookie)
       user = authenticated.user
-      userInfo = UserInfo(if (authEnabled) user.fold("")(_.displayId) else "", identified.identity.host, identified.identity.asn, identified.identity.country, identified.identity.region,
-        identified.identity.city, if (authEnabled && authenticated.device.nonEmpty) authenticated.device else identified.identity.deviceInfo, identified.identity.userAgent)
+      userInfo = UserInfo(
+        if (authEnabled) user.fold("")(_.displayId) else "",
+        identified.identity.host,
+        identified.identity.asn,
+        identified.identity.country,
+        identified.identity.region,
+        identified.identity.city,
+        if (authEnabled && authenticated.device.nonEmpty) authenticated.device else identified.identity.deviceInfo,
+        identified.identity.userAgent
+      )
       account <- capLevel(authenticated, userInfo)
       bypass = BypassPoster(account.roles, identified.cap.isDefined, user.isDefined, account.lv)
       _ = admit(identified, account, request)
@@ -48,48 +66,65 @@ final class PostingService(ports: PostingPorts, salt: String) {
       creationLimit <- threadCreationLimit(sized, request, board.settings, bypass)
       named <- makeShikibetsu(sized, account, request)
       (marked, owner) <- markNusi(named, user, board.settings)
-      decided = marked.copy(sage = SageRule.sage(marked.number, marked.form.mail, marked.form.key, marked.unixtime, marked.settings, ports.random.next()))
+      decided = marked.copy(sage =
+        SageRule.sage(marked.number, marked.form.mail, marked.form.key, marked.unixtime, marked.settings, ports.random.next())
+      )
       rateLimit <- postRateCheck(decided, board.settings, user, bypass, request)
       phoebe <- phoebeCommand(decided, account, board.settings)
-      (written, swallowed) <- updateThread(decided, board, creationLimit, owner, rateLimit, phoebe, admissionOf(account, board.settings), account, userInfo)
+      (written, swallowed) <-
+        updateThread(decided, board, creationLimit, owner, rateLimit, phoebe, admissionOf(account, board.settings), account, userInfo)
       recorded <- if (swallowed) Future.successful(written) else record(written, request, account)
       outcome <- if (swallowed) Future.successful(PostingOutcome.Swallowed(written, headers(written)))
-        else for {
-          _ <- updateSubback(recorded)
-          _ <- updateHeadline(recorded)
-        } yield PostingOutcome.Posted(recorded, headers(recorded))
+      else for {
+        _ <- updateSubback(recorded)
+        _ <- updateHeadline(recorded)
+      } yield PostingOutcome.Posted(recorded, headers(recorded))
     } yield outcome).recover {
       case Rejected(error, context) => PostingOutcome.Rejected(error, context, headers(context))
     }
 
   private def initial(request: PostingRequest, saltHash: String): PostingContext = {
     val now = ports.clock.nowMillis()
-    val identity = PostingIdentity(request.connectingIp, request.connectingIp.getOrElse("null"), request.userAgent, "", request.deviceInformation,
-      request.asn.getOrElse("0000"), request.country.getOrElse("unknown"), request.region.getOrElse("catv?"), request.city.getOrElse(""), saltHash)
+    val identity = PostingIdentity(
+      request.connectingIp,
+      request.connectingIp.getOrElse("null"),
+      request.userAgent,
+      "",
+      request.deviceInformation,
+      request.asn.getOrElse("0000"),
+      request.country.getOrElse("unknown"),
+      request.region.getOrElse("catv?"),
+      request.city.getOrElse(""),
+      saltHash
+    )
     PostingContext(PostForm(), identity, time = now.toString, unixtime = math.floor(now / 1000).toString)
   }
 
-  private def headers(context: PostingContext): Seq[(String, String)] = (context.ponCookie.toSeq ++ context.sessionCookie).map("Set-Cookie" -> _)
+  private def headers(context: PostingContext)
+      : Seq[(String, String)] = (context.ponCookie.toSeq ++ context.sessionCookie).map("Set-Cookie" -> _)
 
   private def authEnabled: Boolean = ports.accounts.isDefined
 
   /** 認証を有効にした環境だけアカウントで投稿者を決める。無効なら従来どおり users から引く */
   private def authenticate(context: PostingContext, request: PostingRequest): Future[PostingAccount] = ports.accounts match {
-    case None => ports.users.current().map(user => PostingAccount(user))
+    case None           => ports.users.current().map(user => PostingAccount(user))
     case Some(accounts) => accounts.authenticate(context.mailCommands, context.capKey, request, context.unixtime.toDouble)
-      .map(_.fold(reason => reject(PostingError.Authentication(reason), context), identity))
+        .map(_.fold(reason => reject(PostingError.Authentication(reason), context), identity))
   }
 
   /** 認証を有効にした環境の書き込み条件。Web 版と !auth はログイン必須、BBS_PHOEBE（スレ設定を優先）は Lv を求める。旧キャップは対象外 */
-  private def admit(context: PostingContext, account: PostingAccount, request: PostingRequest): Unit = if (authEnabled && !account.legacyCap) {
-    if (account.user.isEmpty && (!request.isMonazilla || context.mailCommands.auth)) reject(PostingError.Authentication(AuthenticationFailure.LoginRequired), context)
-    val required = Phoebe.required(context.settings.get("BBS_PHOEBE"))
-    if (!Phoebe.admits(account.lv, required, account.staff)) reject(levelError(account, required), context)
-  }
+  private def admit(context: PostingContext, account: PostingAccount, request: PostingRequest): Unit =
+    if (authEnabled && !account.legacyCap) {
+      if (account.user.isEmpty && (!request.isMonazilla || context.mailCommands.auth))
+        reject(PostingError.Authentication(AuthenticationFailure.LoginRequired), context)
+      val required = Phoebe.required(context.settings.get("BBS_PHOEBE"))
+      if (!Phoebe.admits(account.lv, required, account.staff)) reject(levelError(account, required), context)
+    }
 
   /** Lv 不足の拒否。未ログインならログインを求め、認証済なら必要 Lv を示す */
   private def levelError(account: PostingAccount, required: Int): PostingError =
-    if (account.user.isEmpty) PostingError.Authentication(AuthenticationFailure.LoginRequired) else PostingError.AuthenticationLevel(required)
+    if (account.user.isEmpty) PostingError.Authentication(AuthenticationFailure.LoginRequired)
+    else PostingError.AuthenticationLevel(required)
 
   /** 認証を有効にした環境で、phoebe.cgi の上限ルールに当てはまる投稿の実効 Lv を抑える。アカウントの Lv は変えず、旧キャップは対象外 */
   private def capLevel(account: PostingAccount, userInfo: UserInfo): Future[PostingAccount] =
@@ -112,22 +147,26 @@ final class PostingService(ports: PostingPorts, salt: String) {
     }
 
   /** 成功した投稿をアカウントに記録する。記録の失敗は投稿の成否に含めず、発行し直した Cookie だけを差し替える */
-  private def record(context: PostingContext, request: PostingRequest, account: PostingAccount): Future[PostingContext] = ports.accounts match {
-    case None => Future.successful(context)
-    case Some(accounts) =>
-      Future.unit.flatMap(_ => accounts.posted(context, request, account))
-        .recover { case NonFatal(error) => Try(accounts.recordFailed(error)); None }
-        .map(_.fold(context)(cookie => context.copy(sessionCookie = Some(cookie))))
-  }
+  private def record(context: PostingContext, request: PostingRequest, account: PostingAccount): Future[PostingContext] =
+    ports.accounts match {
+      case None           => Future.successful(context)
+      case Some(accounts) =>
+        Future.unit.flatMap(_ => accounts.posted(context, request, account))
+          .recover { case NonFatal(error) => Try(accounts.recordFailed(error)); None }
+          .map(_.fold(context)(cookie => context.copy(sessionCookie = Some(cookie))))
+    }
 
   private def checkRequest(context: PostingContext, request: PostingRequest): Future[PostingContext] = Future {
     request.validate.foreach(reject(_, context))
-    context.copy(identity = context.identity.copy(userAgent = request.browserUserAgent, browserInfo = request.browserInfo, host = request.host))
+    context.copy(identity =
+      context.identity.copy(userAgent = request.browserUserAgent, browserInfo = request.browserInfo, host = request.host)
+    )
   }
 
   private def readForm(context: PostingContext, request: PostingRequest): Future[PostingContext] = request.body().map { bytes =>
     PostingFormDecoder.decode(bytes, request.isMonazilla).flatMap(PostRouting.route(_, context.unixtime)) match {
-      case Left((error, form)) => reject(error, context.copy(form = if (authEnabled) form.copy(mail = MailCommands.parse(form.mail).plain) else form))
+      case Left((error, form)) =>
+        reject(error, context.copy(form = if (authEnabled) form.copy(mail = MailCommands.parse(form.mail).plain) else form))
       case Right(form) =>
         if (!authEnabled) context.copy(form = form)
         else {
@@ -137,13 +176,19 @@ final class PostingService(ports: PostingPorts, salt: String) {
     }
   }
 
-  private def processCap(context: PostingContext): Future[PostingContext] = (if (authEnabled) context.mailCommands.capPassword else CapHandle.password(context.form.mail)) match {
-    case None => Future.successful(context)
-    case Some(password) =>
-      CapKey.of(ports.hasher, password, context.identity.salt).flatMap(value => ports.caps.find(value).map(cap => (value, cap))).map { case (value, cap) =>
-        context.copy(cap = cap, capKey = Option.when(cap.isDefined)(value), form = cap.fold(context.form)(handle => context.form.copy(name = handle.displayName(context.form.name))))
-      }
-  }
+  private def processCap(context: PostingContext): Future[PostingContext] =
+    (if (authEnabled) context.mailCommands.capPassword else CapHandle.password(context.form.mail)) match {
+      case None           => Future.successful(context)
+      case Some(password) =>
+        CapKey.of(ports.hasher, password, context.identity.salt).flatMap(value => ports.caps.find(value).map(cap => (value, cap))).map {
+          case (value, cap) =>
+            context.copy(
+              cap = cap,
+              capKey = Option.when(cap.isDefined)(value),
+              form = cap.fold(context.form)(handle => context.form.copy(name = handle.displayName(context.form.name)))
+            )
+        }
+    }
 
   private def boardSettings(context: PostingContext): Future[(PostingBoard, PostingContext)] =
     guarded(context, PostingStage.BoardSettings, FailureClock.Time) {
@@ -157,9 +202,15 @@ final class PostingService(ports: PostingPorts, salt: String) {
       if (context.form.kind == PostKind.NewThread) ports.threads.datBeforeCreation(board.id, context.form.key).map { dat =>
         if (dat.nonEmpty) reject(PostingError.DuplicateKey, context)
         context.copy(number = 1, title = context.form.subject)
-      } else ports.threads.readForReply(board.id, context.form.key).map { snapshot =>
+      }
+      else ports.threads.readForReply(board.id, context.form.key).map { snapshot =>
         val thread = ReplyThread.open(snapshot.dat, context.form.bbs, context.form.key).fold(reject(_, context), identity)
-        val replying = context.copy(number = thread.number, title = thread.title, settings = context.settings.merged(snapshot.settings), threadOwner = snapshot.owner)
+        val replying = context.copy(
+          number = thread.number,
+          title = thread.title,
+          settings = context.settings.merged(snapshot.settings),
+          threadOwner = snapshot.owner
+        )
         if (replying.settings.checked("BBS_HEISA")) reject(PostingError.Closed, replying)
         replying
       }
@@ -175,20 +226,28 @@ final class PostingService(ports: PostingPorts, salt: String) {
   private def moderate(context: PostingContext, userInfo: UserInfo, bypass: BypassPoster): Future[PostingContext] = {
     val input = ModerationInput(context.form, userInfo, bypass, context.identity.country, context.number.toDouble, context.settings)
     PostingModeration.check(input, ports.rules).map {
-      case ModerationDecision.Pass(form) => context.copy(form = form)
+      case ModerationDecision.Pass(form)         => context.copy(form = form)
       case ModerationDecision.Deny(denial, form) => reject(PostingError.Moderated(denial), context.copy(form = form))
     }
   }
 
   /** スレ立て規制の材料。BBS_THREAD_PASS で免除される投稿者は判定も記録もせず、設定の誤りでも拒否しない */
-  private def threadCreationLimit(context: PostingContext, request: PostingRequest, boardSettings: BbsSettings, bypass: BypassPoster): Future[Option[ThreadCreationLimit]] =
+  private def threadCreationLimit(
+      context: PostingContext,
+      request: PostingRequest,
+      boardSettings: BbsSettings,
+      bypass: BypassPoster
+  ): Future[Option[ThreadCreationLimit]] =
     if (!context.creating) Future.successful(None)
     else {
       if (BoardId.create(context.form.bbs).isLeft) reject(PostingError.ForbiddenBoard, context)
       if (context.form.key.toLongOption.toRight("").flatMap(ThreadKey.create).isLeft) reject(PostingError.InvalidKey, context)
       if (ThreadCreationSettings.pass(boardSettings).exempts(bypass)) Future.successful(None)
       else {
-        val settings = ThreadCreationSettings.fromSettings(boardSettings).fold(reason => reject(PostingError.InvalidCreationSettings(reason), context), identity)
+        val settings = ThreadCreationSettings.fromSettings(boardSettings).fold(
+          reason => reject(PostingError.InvalidCreationSettings(reason), context),
+          identity
+        )
         val network = ThreadCreationNetwork.group(request.country, request.asn, request.region, settings.asOnly)
         for {
           ipHash <- digest(context, canonicalIp(request.connectingIp.getOrElse("")))
@@ -203,10 +262,19 @@ final class PostingService(ports: PostingPorts, salt: String) {
     val user = account.user
     val identity = context.identity
     val date = DateSalt.window(context.unixtime, context.settings.orElse("BBS_ID_RESET", "86400")).toString
-    val seeds = ShikibetsuSeeds(identity.region, identity.city, identity.asn, identity.userAgent, context.settings.orElse("BBS_ID_GROUP", context.form.bbs), date, identity.salt)
+    val seeds = ShikibetsuSeeds(
+      identity.region,
+      identity.city,
+      identity.asn,
+      identity.userAgent,
+      context.settings.orElse("BBS_ID_GROUP", context.form.bbs),
+      date,
+      identity.salt
+    )
     val hasher = ports.hasher
     def id(seed: String): Future[String] = hasher.sha256Hex(seed).flatMap(hasher.sha1Base64)
-    val shikibetsu = if (context.cap.isDefined) Future.successful("★") else ShikibetsuMode.parse(context.settings.orElse("BBS_ID_SHIKIBETSU", "checked")) match {
+    val shikibetsu = if (context.cap.isDefined) Future.successful("★")
+    else ShikibetsuMode.parse(context.settings.orElse("BBS_ID_SHIKIBETSU", "checked")) match {
       case ShikibetsuMode.Checked =>
         for {
           region <- id(seeds.regionSeed)
@@ -236,13 +304,22 @@ final class PostingService(ports: PostingPorts, salt: String) {
   private def identifierAxes(account: PostingAccount, request: PostingRequest): Future[IdentifierAxes] =
     IdentifierAxes.fromDevice(account.device).filter(_ => authEnabled) match {
       case Some(axes) => Future.successful(axes)
-      case None => ports.agents.load().map { table =>
-        IdentifierAxes.fromAgent(table.profile(request.userAgent), request.userAgent, request.secChUaFullVersionList.getOrElse(request.secChUa), request.acceptLanguage)
-      }
+      case None       => ports.agents.load().map { table =>
+          IdentifierAxes.fromAgent(
+            table.profile(request.userAgent),
+            request.userAgent,
+            request.secChUaFullVersionList.getOrElse(request.secChUa),
+            request.acceptLanguage
+          )
+        }
     }
 
   /** スレ立てなら保存するスレ主を返し、>>1 を含めスレ主なら名前欄に (主) を付ける。キャップは対象外（docs/トリップ・ID廃止とスレ主表示.md §2.4） */
-  private def markNusi(context: PostingContext, user: Option[PostingUser], boardSettings: BbsSettings): Future[(PostingContext, Option[ThreadOwner])] =
+  private def markNusi(
+      context: PostingContext,
+      user: Option[PostingUser],
+      boardSettings: BbsSettings
+  ): Future[(PostingContext, Option[ThreadOwner])] =
     if (context.cap.isDefined) Future.successful((context, None))
     else for {
       ipHash <- digest(context, context.identity.ip.fold("")(KeyIp.of))
@@ -250,15 +327,26 @@ final class PostingService(ports: PostingPorts, salt: String) {
     } yield {
       val poster = ThreadOwner(ipHash, context.shikibetsu, accountHash)
       val owner = if (context.creating) Some(poster) else context.threadOwner()
-      val marked = NusiMark.applies(cap = false, noNusi = context.form.noNusi, boardDisabled = boardSettings.checked("BBS_DISABLE_NUSI"),
-        threadDisabled = context.settings.checked("BBS_DISABLE_NUSI"), owner = owner, poster = poster)
+      val marked = NusiMark.applies(
+        cap = false,
+        noNusi = context.form.noNusi,
+        boardDisabled = boardSettings.checked("BBS_DISABLE_NUSI"),
+        threadDisabled = context.settings.checked("BBS_DISABLE_NUSI"),
+        owner = owner,
+        poster = poster
+      )
       val named = if (marked) context.copy(form = context.form.copy(name = context.form.name + NusiMark.suffix)) else context
       (named, Option.when(context.creating)(poster))
     }
 
   /** 連投規制の材料。判定しない投稿（off・BBS_LIVE・回避レベルで免除）は None。aid は認証主体の accountKey（未認証は空）、キャップの識別子（★）は空にして照合しない */
-  private def postRateCheck(context: PostingContext, boardSettings: BbsSettings, user: Option[PostingUser], bypass: BypassPoster,
-                            request: PostingRequest): Future[Option[PostRateCheck]] = {
+  private def postRateCheck(
+      context: PostingContext,
+      boardSettings: BbsSettings,
+      user: Option[PostingUser],
+      bypass: BypassPoster,
+      request: PostingRequest
+  ): Future[Option[PostRateCheck]] = {
     val settings = PostRateSettings.from(boardSettings, context.settings)
     if (!settings.applies(bypass)) Future.successful(None)
     else for {
@@ -271,45 +359,85 @@ final class PostingService(ports: PostingPorts, salt: String) {
 
   /** 書き込む直前に Thread DO で判定し直す BBS_PHOEBE の条件。認証を有効にしていない環境と旧キャップは判定しない */
   private def admissionOf(account: PostingAccount, boardSettings: BbsSettings): Option[PhoebeAdmission] =
-    Option.when(authEnabled && !account.legacyCap)(PhoebeAdmission(account.lv, account.staff, Phoebe.required(boardSettings.get("BBS_PHOEBE"))))
+    Option.when(authEnabled && !account.legacyCap)(PhoebeAdmission(
+      account.lv,
+      account.staff,
+      Phoebe.required(boardSettings.get("BBS_PHOEBE"))
+    ))
 
   /** 本文先頭の !バルサン・!SETTING:BBS_PHOEBE:n をスレ設定の変更にする。スレ立て人と staff 以外のコマンドは無視して通常の投稿にする */
-  private def phoebeCommand(context: PostingContext, account: PostingAccount, boardSettings: BbsSettings): Future[Option[ThreadPhoebeRequest]] =
+  private def phoebeCommand(
+      context: PostingContext,
+      account: PostingAccount,
+      boardSettings: BbsSettings
+  ): Future[Option[ThreadPhoebeRequest]] =
     PhoebeCommand.parse(context.form.message).filter(_ => authEnabled) match {
-      case None => Future.successful(None)
+      case None          => Future.successful(None)
       case Some(command) =>
         val nusiDisabled = boardSettings.checked("BBS_DISABLE_NUSI") || context.settings.checked("BBS_DISABLE_NUSI")
         val owner = account.user.filter(_ => !nusiDisabled) match {
-          case None => Future.successful(false)
+          case None                        => Future.successful(false)
           case Some(_) if context.creating => Future.successful(true)
-          case Some(user) => digest(context, user.accountKey).map(hash => context.threadOwner().exists(_.ownedBy(hash)))
+          case Some(user)                  => digest(context, user.accountKey).map(hash => context.threadOwner().exists(_.ownedBy(hash)))
         }
         owner.map(command.request(_, account.staff, Phoebe.required(boardSettings.get("BBS_PHOEBE")), account.lv))
     }
 
   /** dat に追記する。連投規制のコピペで吸い込んだら真を返す */
-  private def updateThread(context: PostingContext, board: PostingBoard, creationLimit: Option[ThreadCreationLimit], owner: Option[ThreadOwner],
-                           rateLimit: Option[PostRateCheck], phoebe: Option[ThreadPhoebeRequest], admission: Option[PhoebeAdmission], account: PostingAccount, userInfo: UserInfo): Future[(PostingContext, Boolean)] = {
+  private def updateThread(
+      context: PostingContext,
+      board: PostingBoard,
+      creationLimit: Option[ThreadCreationLimit],
+      owner: Option[ThreadOwner],
+      rateLimit: Option[PostRateCheck],
+      phoebe: Option[ThreadPhoebeRequest],
+      admission: Option[PhoebeAdmission],
+      account: PostingAccount,
+      userInfo: UserInfo
+  ): Future[(PostingContext, Boolean)] = {
     val spaced = context.copy(form = context.form.copy(message = DatLineFormatter.spaceFirstBreak(context.form.message)))
     guarded(spaced, PostingStage.ThreadWrite, FailureClock.Unixtime) {
       val form = spaced.form
       val create = spaced.creating
-      val dat = DatLineFormatter.datLine(form.name, ports.clock.datDate(JsNumber.parseInt(spaced.unixtime)), form.message, if (create) spaced.title else "")
-      val posting = ThreadPosting(bbs = Some(form.bbs), key = Some(form.key), title = Some(spaced.title), sage = spaced.sage,
-        maxThreads = Some(spaced.settings.int("BBS_MAX_MENU_THREAD", "700")), create = create,
-        initialSettings = Option.when(create)(PostRateSettings.copiedToThread(spaced.settings).toThreadSettings), creationLimit = creationLimit, owner = owner,
-        rateLimit = rateLimit, phoebe = phoebe, admission = admission)
+      val dat = DatLineFormatter.datLine(
+        form.name,
+        ports.clock.datDate(JsNumber.parseInt(spaced.unixtime)),
+        form.message,
+        if (create) spaced.title else ""
+      )
+      val posting = ThreadPosting(
+        bbs = Some(form.bbs),
+        key = Some(form.key),
+        title = Some(spaced.title),
+        sage = spaced.sage,
+        maxThreads = Some(spaced.settings.int("BBS_MAX_MENU_THREAD", "700")),
+        create = create,
+        initialSettings = Option.when(create)(PostRateSettings.copiedToThread(spaced.settings).toThreadSettings),
+        creationLimit = creationLimit,
+        owner = owner,
+        rateLimit = rateLimit,
+        phoebe = phoebe,
+        admission = admission
+      )
       ports.threads.addRes(board.id, form.key, dat, DatLineFormatter.logLine(spaced.number.toString, userInfo.text), posting).map {
         case ThreadWriteResult.Written(number, observed) =>
           rateLimit.filter(_ => observed.nonEmpty).foreach { check =>
-            Try(ports.rateLog.record(PostRateObservation(form.bbs, form.key, number, observed, check.identity.ip, check.identity.shiki))).getOrElse(())
+            Try(ports.rateLog.record(PostRateObservation(
+              form.bbs,
+              form.key,
+              number,
+              observed,
+              check.identity.ip,
+              check.identity.shiki
+            ))).getOrElse(())
           }
           (spaced.copy(number = number), false)
-        case ThreadWriteResult.Swallowed(number) => (spaced.copy(number = number), true)
-        case ThreadWriteResult.Refused(rejection) => reject(PostingError.ThreadRefused(rejection, site(spaced, FailureClock.Unixtime, spaced.time)), spaced)
-        case ThreadWriteResult.LevelRequired(required) => reject(levelError(account, required), spaced)
+        case ThreadWriteResult.Swallowed(number)  => (spaced.copy(number = number), true)
+        case ThreadWriteResult.Refused(rejection) =>
+          reject(PostingError.ThreadRefused(rejection, site(spaced, FailureClock.Unixtime, spaced.time)), spaced)
+        case ThreadWriteResult.LevelRequired(required)    => reject(levelError(account, required), spaced)
         case ThreadWriteResult.CreationLimited(rejection) => reject(PostingError.ThreadCreation(rejection), spaced)
-        case ThreadWriteResult.RateLimited(rejection) => reject(PostingError.PostRate(rejection), spaced)
+        case ThreadWriteResult.RateLimited(rejection)     => reject(PostingError.PostRate(rejection), spaced)
       }
     }
   }
@@ -326,7 +454,15 @@ final class PostingService(ports: PostingPorts, salt: String) {
         }
       for {
         current <- ports.archive.read(index)
-        entry = ArchiveIndexText.threadIndex(context.unixtime, form.key, form.subject, form.name, context.shikibetsu, form.message, current.map(_.text))
+        entry = ArchiveIndexText.threadIndex(
+          context.unixtime,
+          form.key,
+          form.subject,
+          form.name,
+          context.shikibetsu,
+          form.message,
+          current.map(_.text)
+        )
         _ <- current match {
           case None =>
             for {
@@ -345,7 +481,14 @@ final class PostingService(ports: PostingPorts, salt: String) {
       val form = context.form
       for {
         current <- ports.archive.readHeadline()
-        text = ArchiveIndexText.headline(context.unixtime, form.bbs, context.settings.get("BBS_TITLE"), form.key, form.message, current.map(_.text))
+        text = ArchiveIndexText.headline(
+          context.unixtime,
+          form.bbs,
+          context.settings.get("BBS_TITLE"),
+          form.key,
+          form.message,
+          current.map(_.text)
+        )
         _ <- ports.archive.writeHeadline(text, current.flatMap(_.etag))
       } yield ()
     }
@@ -357,12 +500,15 @@ final class PostingService(ports: PostingPorts, salt: String) {
   private def guarded[A](context: PostingContext, stage: PostingStage, clock: FailureClock)(f: => Future[A]): Future[A] =
     Future.unit.flatMap(_ => f).recover {
       case e if !e.isInstanceOf[Rejected] =>
-        val time = if (clock == FailureClock.Time || stage == PostingStage.ThreadDataAndSettings || stage == PostingStage.ThreadWrite) context.time else UnsetTime
+        val time = if (clock == FailureClock.Time || stage == PostingStage.ThreadDataAndSettings || stage == PostingStage.ThreadWrite)
+          context.time
+        else UnsetTime
         reject(PostingError.Internal(stage, site(context, clock, time), causeText(e)), context)
     }
 }
 
 object PostingService {
+
   /** 段の途中で拒否したときの理由とその時点の状態。post の中だけで使う */
   private final case class Rejected(error: PostingError, context: PostingContext) extends RuntimeException
 
@@ -379,7 +525,7 @@ object PostingService {
 
   private def causeText(e: Throwable): String = e match {
     case x: js.JavaScriptException => String.valueOf(x.exception)
-    case other => other.toString
+    case other                     => other.toString
   }
 
   private def ponCookie(pon: String, monazilla: Boolean): String =

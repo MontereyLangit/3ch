@@ -60,7 +60,13 @@ object PostingPages {
         element("title")("■ 書き込み確認 ■"),
         RendererShell.clientScript(),
         element("meta", js.Dictionary("httpEquiv" -> "Content-Type", "content" -> ("text/html; charset=" + charset)))(),
-        element("meta", js.Dictionary("name" -> "viewport", "content" -> "width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.6,user-scalable=yes"))()
+        element(
+          "meta",
+          js.Dictionary(
+            "name" -> "viewport",
+            "content" -> "width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.6,user-scalable=yes"
+          )
+        )()
       ),
       element("body", js.Dictionary("bgcolor" -> "#EEEEEE"))(
         raw("span", "<!-- 2ch_X:cookie -->"),
@@ -148,7 +154,13 @@ object PostingPages {
           element("br")(),
           element("br")()
         ),
-        element("a", js.Dictionary("href" -> "https://wiki.3chbbs.com/index.php/%E3%82%A2%E3%82%AF%E3%82%BB%E3%82%B9%E8%A6%8F%E5%88%B6%E4%B8%AD%E3%81%A7%E3%82%82%E6%9B%B8%E3%81%91%E3%82%8B%E6%9D%BF"))("★ アクセス規制中でも書ける板 ★"),
+        element(
+          "a",
+          js.Dictionary(
+            "href" ->
+              "https://wiki.3chbbs.com/index.php/%E3%82%A2%E3%82%AF%E3%82%BB%E3%82%B9%E8%A6%8F%E5%88%B6%E4%B8%AD%E3%81%A7%E3%82%82%E6%9B%B8%E3%81%91%E3%82%8B%E6%9D%BF"
+          )
+        )("★ アクセス規制中でも書ける板 ★"),
         element("br")(),
         element("br")(),
         element("hr")(),
@@ -156,7 +168,13 @@ object PostingPages {
         element("a", js.Dictionary("href" -> ("/test/read.cgi/" + form.bbs + "/" + form.key + "/")))(" GO! "),
         element("br")(),
         "\n自分で解決してみよう! ",
-        element("a", js.Dictionary("href" -> "https://wiki.3chbbs.com/index.php/%E6%9B%B8%E3%81%8D%E8%BE%BC%E3%82%81%E3%81%AA%E3%81%84%E6%99%82%E3%81%AE%E6%97%A9%E8%A6%8B%E8%A1%A8"))("書き込めない時の早見表"),
+        element(
+          "a",
+          js.Dictionary(
+            "href" ->
+              "https://wiki.3chbbs.com/index.php/%E6%9B%B8%E3%81%8D%E8%BE%BC%E3%82%81%E3%81%AA%E3%81%84%E6%99%82%E3%81%AE%E6%97%A9%E8%A6%8B%E8%A1%A8"
+          )
+        )("書き込めない時の早見表"),
         element("br")(),
         "\n分からないことがあったら",
         element("a", js.Dictionary("href" -> "https://www.3ch.io/html/guide/"))("３ちゃんねるガイド"),

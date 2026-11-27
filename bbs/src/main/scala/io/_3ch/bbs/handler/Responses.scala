@@ -14,7 +14,15 @@ object Responses {
   }
 
   /** 本文を指定の文字コードで返す。extra は同名の既存ヘッダを置き換え、同名を複数並べれば複数出す */
-  def plain(text: String, kind: String, encoding: String = "UTF-8", range: String = "", modified: js.Date = new js.Date(), since: String = "", extra: Seq[(String, String)] = Nil): Response = {
+  def plain(
+      text: String,
+      kind: String,
+      encoding: String = "UTF-8",
+      range: String = "",
+      modified: js.Date = new js.Date(),
+      since: String = "",
+      extra: Seq[(String, String)] = Nil
+  ): Response = {
     if since.nonEmpty && modified.getTime() <= new js.Date(since).getTime() then
       return response(null, 304, js.Dictionary("Last-Modified" -> modified.toUTCString()))
     val sjis = encoding == "Shift_JIS"
@@ -28,7 +36,8 @@ object Responses {
       if matched == null then return response("Bad Range Header", 400)
       val start = if matched(1).get.isEmpty then 0d else js.Dynamic.global.parseInt(matched(1), 10).asInstanceOf[Double]
       val end = if matched(2).get.isEmpty then size - 1d else js.Dynamic.global.parseInt(matched(2), 10).asInstanceOf[Double]
-      if start >= size || start > end then return response("Requested Range Not Satisfiable", 416, js.Dictionary("Content-Range" -> s"bytes */$size"))
+      if start >= size || start > end then
+        return response("Requested Range Not Satisfiable", 416, js.Dictionary("Content-Range" -> s"bytes */$size"))
       val last = math.min(end, size - 1d).toInt
       val chunk = bytes.asInstanceOf[js.Dynamic].slice(start, last + 1).asInstanceOf[Uint8Array]
       headers("Content-Type") = if sjis then s"text/$kind;charset=Shift_JIS" else s"text/$kind; charset=UTF-8"

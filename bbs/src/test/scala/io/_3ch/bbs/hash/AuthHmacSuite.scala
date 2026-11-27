@@ -66,10 +66,12 @@ class AuthHmacSuite extends FunSuite {
   private def brokenImport(synchronous: Boolean): Future[Unit] = {
     val subtle = GlobalCrypto.subtle.asInstanceOf[js.Dynamic]
     val original = subtle.importKey
-    subtle.importKey = ((_: js.Any, _: js.Any, _: js.Any, _: js.Any, _: js.Any) => {
-      if (synchronous) throw js.JavaScriptException(new js.Error("crypto failed"))
-      else js.Promise.reject(new js.Error("crypto failed"))
-    }): js.Function5[js.Any, js.Any, js.Any, js.Any, js.Any, js.Promise[js.Any]]
+    subtle.importKey = (
+        (_: js.Any, _: js.Any, _: js.Any, _: js.Any, _: js.Any) => {
+          if (synchronous) throw js.JavaScriptException(new js.Error("crypto failed"))
+          else js.Promise.reject(new js.Error("crypto failed"))
+        }
+    ): js.Function5[js.Any, js.Any, js.Any, js.Any, js.Any, js.Promise[js.Any]]
     (for {
       signed <- AuthHmac.sessionSignature(secret, text)
       valid <- AuthHmac.verifySession(secret, text, signature)

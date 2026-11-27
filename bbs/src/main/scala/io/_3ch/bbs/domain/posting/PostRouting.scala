@@ -20,7 +20,8 @@ object PostRouting {
     */
   def route(form: PostForm, unixtime: String): Either[(PostingError, PostForm), PostForm] = {
     val next = NewThread.exec(form.message)
-    val converted = if (form.key.startsWith("9") && next != null) form.copy(subject = next(1).get, message = next(2).get, key = "") else form
+    val converted =
+      if (form.key.startsWith("9") && next != null) form.copy(subject = next(1).get, message = next(2).get, key = "") else form
     val stripped = converted.copy(
       subject = converted.subject.jsReplace(LineBreak, ""),
       name = converted.name.jsReplace(LineBreak, ""),
@@ -41,7 +42,7 @@ object PostRouting {
       else {
         val created = reply.copy(key = unixtime)
         GlobalThread.command(created.message) match {
-          case None => Right(created)
+          case None                            => Right(created)
           case Some((_, rest)) if rest.isEmpty => Left(PostingError.EmptyMessage -> created)
           case Some((kind, rest)) => Right(created.copy(message = rest, key = GlobalThread.key(kind, unixtime), bbs = GlobalThread.board))
         }

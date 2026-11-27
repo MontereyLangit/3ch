@@ -9,11 +9,17 @@ import scala.util.control.NonFatal
 
 /** 確認メールと再設定メールの固定の文面 */
 object AuthMail {
-  def verification(to: String, link: String): OutgoingMail = OutgoingMail(to, "【3ch】メールアドレスの確認",
-    s"3chのアカウントにこのメールアドレスが登録されました。\n次のリンクを開いて、確認を完了してください（24時間有効）。\n\n$link\n\n心当たりが無い場合は、このメールを破棄してください。\n")
+  def verification(to: String, link: String): OutgoingMail = OutgoingMail(
+    to,
+    "【3ch】メールアドレスの確認",
+    s"3chのアカウントにこのメールアドレスが登録されました。\n次のリンクを開いて、確認を完了してください（24時間有効）。\n\n$link\n\n心当たりが無い場合は、このメールを破棄してください。\n"
+  )
 
-  def reset(to: String, link: String): OutgoingMail = OutgoingMail(to, "【3ch】パスワードの再設定",
-    s"パスワードの再設定を受け付けました。\n次のリンクを開いて、新しいパスワードを設定してください（1時間有効）。\n\n$link\n\n心当たりが無い場合は、このメールを破棄してください。パスワードは変わりません。\n")
+  def reset(to: String, link: String): OutgoingMail = OutgoingMail(
+    to,
+    "【3ch】パスワードの再設定",
+    s"パスワードの再設定を受け付けました。\n次のリンクを開いて、新しいパスワードを設定してください（1時間有効）。\n\n$link\n\n心当たりが無い場合は、このメールを破棄してください。パスワードは変わりません。\n"
+  )
 }
 
 /** パスワードの変更の結果 */
@@ -34,10 +40,15 @@ final class AccountMail(accounts: AccountEmailStore, keys: AuthenticationKeys, m
 
   /** 他のアカウントが認証済みのアドレスなら EmailTaken。自分のアドレスと、持ち主が持たなくなった索引はそのまま受け付ける */
   private def available(aid: String, email: EmailAddress): Future[String] =
-    hmac("email", email.canonical).flatMap(hash => accounts.lookup("email", hash).flatMap {
-      case Some(owner) if owner != aid => stale.reclaim("email", email.canonical, hash, owner).map(freed => if (freed) hash else throw AuthServiceException(AuthServiceFailure.EmailTaken))
-      case _ => Future.successful(hash)
-    })
+    hmac("email", email.canonical).flatMap(hash =>
+      accounts.lookup("email", hash).flatMap {
+        case Some(owner) if owner != aid =>
+          stale.reclaim("email", email.canonical, hash, owner).map(freed =>
+            if (freed) hash else throw AuthServiceException(AuthServiceFailure.EmailTaken)
+          )
+        case _ => Future.successful(hash)
+      }
+    )
 
   /** ID・パスワードのアカウントにアドレスを登録・変更し、確認メールを送る。送信は一アカウント一日三回まで */
   def request(account: AccountDescription, email: EmailAddress, origin: String, now: Double): Future[Unit] =
@@ -61,17 +72,19 @@ final class AccountMail(accounts: AccountEmailStore, keys: AuthenticationKeys, m
     Future.unit.flatMap { _ =>
       if (account.kind != AccountKind.Password) throw AccountStoreException(AccountRejection.KindForbidden)
       accounts.verifyPassword(account.aid, current, keyIp, now).flatMap {
-        case SignInResult.Verified(_) => Future.successful(true)
-        case SignInResult.Failed => Future.successful(false)
+        case SignInResult.Verified(_)     => Future.successful(true)
+        case SignInResult.Failed          => Future.successful(false)
         case SignInResult.Refused(reason) => Future.failed(AccountStoreException(reason))
-        case SignInResult.Unfinished(_) => Future.failed(AccountStoreException(AccountRejection.Pending))
+        case SignInResult.Unfinished(_)   => Future.failed(AccountStoreException(AccountRejection.Pending))
       }
     }
 
   /** 確定した索引の所有者が、まだ値を持っていなければ（確定の途中で止まった）索引を外す。持っていれば残す。読み直せなければ残す */
   private def cleanup(reserved: Boolean, hash: String, canonical: String, aid: String): Future[Unit] =
     if (!reserved) Future.unit
-    else accounts.holds(aid, "email", canonical).flatMap(held => if (held) Future.unit else accounts.remove("email", hash, aid)).recover { case NonFatal(_) => () }
+    else accounts.holds(aid, "email", canonical).flatMap(held => if (held) Future.unit else accounts.remove("email", hash, aid)).recover {
+      case NonFatal(_) => ()
+    }
 
   /**
     * リンクのトークンを確かめ、email 索引を確定してからアドレスを確定させる（Lv3 から）。
@@ -86,9 +99,9 @@ final class AccountMail(accounts: AccountEmailStore, keys: AuthenticationKeys, m
     owner <- accounts.lookup("email", indexHash)
     reserved <- owner match {
       case Some(aid) if aid == link.aid => Future.successful(false)
-      case Some(other) => stale.reclaim("email", email.canonical, indexHash, other).flatMap { freed =>
-        if (freed) reserveEmail(indexHash, link.aid, now) else Future.failed(AuthServiceException(AuthServiceFailure.EmailTaken))
-      }
+      case Some(other)                  => stale.reclaim("email", email.canonical, indexHash, other).flatMap { freed =>
+          if (freed) reserveEmail(indexHash, link.aid, now) else Future.failed(AuthServiceException(AuthServiceFailure.EmailTaken))
+        }
       case None => reserveEmail(indexHash, link.aid, now)
     }
     verified <- accounts.verifyEmail(link.aid, hash, now).recoverWith { case NonFatal(error) =>
@@ -144,18 +157,25 @@ final class AccountMail(accounts: AccountEmailStore, keys: AuthenticationKeys, m
 
 /** ログイン中のパスワードの変更 */
 final class PasswordChange(accounts: AccountEmailStore, hashing: PasswordHashing) {
+
   /** 現在のパスワードを確かめてから置き換え、世代を進める。照合の失敗は失敗計数に含める */
-  def changePassword(account: AccountDescription, current: String, next: Password, keyIp: String, now: Double): Future[PasswordChangeOutcome] =
+  def changePassword(
+      account: AccountDescription,
+      current: String,
+      next: Password,
+      keyIp: String,
+      now: Double
+  ): Future[PasswordChangeOutcome] =
     Future.unit.flatMap { _ =>
       if (account.kind != AccountKind.Password) throw AccountStoreException(AccountRejection.KindForbidden)
       accounts.verifyPassword(account.aid, current, keyIp, now).flatMap {
         case SignInResult.Verified(_) => for {
-          credential <- hashing.create(next, now).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
-          changed <- accounts.setPassword(account.aid, credential, now)
-        } yield PasswordChangeOutcome.Changed(changed)
-        case SignInResult.Failed => Future.successful(PasswordChangeOutcome.Failed)
+            credential <- hashing.create(next, now).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
+            changed <- accounts.setPassword(account.aid, credential, now)
+          } yield PasswordChangeOutcome.Changed(changed)
+        case SignInResult.Failed          => Future.successful(PasswordChangeOutcome.Failed)
         case SignInResult.Refused(reason) => Future.failed(AccountStoreException(reason))
-        case SignInResult.Unfinished(_) => Future.failed(AccountStoreException(AccountRejection.Pending))
+        case SignInResult.Unfinished(_)   => Future.failed(AccountStoreException(AccountRejection.Pending))
       }
     }
 }

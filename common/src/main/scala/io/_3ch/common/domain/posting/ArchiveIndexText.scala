@@ -4,8 +4,17 @@ import io._3ch.common.text.JsText
 
 /** 過去ログ目次（スレ帯の subject.txt と板のスレ帯一覧）と headline.txt の本文 */
 object ArchiveIndexText {
+
   /** スレ帯の目次の先頭に新しいスレを足す。current は今の本文で、1 行目の更新時刻は置き換える */
-  def threadIndex(unixtime: String, key: String, subject: String, name: String, shikibetsu: String, message: String, current: Option[String]): String =
+  def threadIndex(
+      unixtime: String,
+      key: String,
+      subject: String,
+      name: String,
+      shikibetsu: String,
+      message: String,
+      current: Option[String]
+  ): String =
     s"$unixtime\n$key<>$subject<>$name<>$shikibetsu<><>$message\n${body(current)}"
 
   /** 板のスレ帯一覧の先頭に key の帯（上 4 桁）を足す */

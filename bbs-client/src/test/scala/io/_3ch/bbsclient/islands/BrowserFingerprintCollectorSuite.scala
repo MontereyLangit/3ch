@@ -37,8 +37,10 @@ class BrowserFingerprintCollectorSuite extends FunSuite {
     }
     global.updateDynamic("document")(js.Dynamic.literal(createElement = createElement))
     global.updateDynamic("window")(js.Dynamic.literal(
-      navigator = js.Dynamic.literal(userAgent = "UA", hardwareConcurrency = 8, deviceMemory = 0.5, maxTouchPoints = 5, platform = "MacIntel"),
-      screen = js.Dynamic.literal(width = 393, height = 852)))
+      navigator =
+        js.Dynamic.literal(userAgent = "UA", hardwareConcurrency = 8, deviceMemory = 0.5, maxTouchPoints = 5, platform = "MacIntel"),
+      screen = js.Dynamic.literal(width = 393, height = 852)
+    ))
     try {
       check(BrowserFingerprintCollector.collect().asInstanceOf[js.Dynamic])
     } finally {

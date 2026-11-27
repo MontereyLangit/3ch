@@ -30,14 +30,16 @@ class AccountInfrastructureSuite extends FunSuite {
         } else data.get(key.asInstanceOf[String]).map(clone).getOrElse(js.undefined)
         js.Promise.resolve(result)
       }): js.Function1[js.Any, js.Promise[js.Any]],
-      put = ((key: js.Any, value: js.UndefOr[js.Any]) => {
-        if (failWrites) js.Promise.reject(new js.Error("write failed"))
-        else {
-          if (value.isDefined) data.update(key.asInstanceOf[String], clone(value.get))
-          else key.asInstanceOf[js.Dictionary[js.Any]].foreach { case (k, v) => data.update(k, clone(v)) }
-          js.Promise.resolve[js.Any](js.undefined)
-        }
-      }): js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]],
+      put = (
+          (key: js.Any, value: js.UndefOr[js.Any]) => {
+            if (failWrites) js.Promise.reject(new js.Error("write failed"))
+            else {
+              if (value.isDefined) data.update(key.asInstanceOf[String], clone(value.get))
+              else key.asInstanceOf[js.Dictionary[js.Any]].foreach { case (k, v) => data.update(k, clone(v)) }
+              js.Promise.resolve[js.Any](js.undefined)
+            }
+          }
+      ): js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]],
       delete = ((key: String) => {
         val existed = data.contains(key)
         data.subtractOne(key)
@@ -45,7 +47,8 @@ class AccountInfrastructureSuite extends FunSuite {
       }): js.Function1[String, js.Promise[Boolean]]
     )
     val state: DurableObjectState = js.Dynamic.literal(
-      id = js.Dynamic.literal(name = name), storage = storage,
+      id = js.Dynamic.literal(name = name),
+      storage = storage,
       blockConcurrencyWhile = ((callback: js.Function0[js.Promise[js.Any]]) => {
         val result = tail.flatMap(_ => callback().toFuture)
         tail = result.transform(_ => scala.util.Success(()))
@@ -62,7 +65,8 @@ class AccountInfrastructureSuite extends FunSuite {
       _ = assertEquals(results.map(_.code.asInstanceOf[String]).sorted, Vector("", AccountRejection.Exists.code).sorted)
       _ <- Future.sequence(Vector(
         account.issueToken("token1", hash, now + 1).toFuture,
-        account.issueToken("token2", "b" * 64, now + 1).toFuture))
+        account.issueToken("token2", "b" * 64, now + 1).toFuture
+      ))
       saved = AccountCodec.decodeState(storage.data).get
       _ = assertEquals(saved.tokens.count(_.active(now + 1)), 1)
       _ = assertEquals(saved.tokens.head.revokeReason, Some(TokenRevokeReason.Superseded))
@@ -99,7 +103,10 @@ class AccountInfrastructureSuite extends FunSuite {
       _ = assertEquals(saved.tokens.head.revokedAt, None)
       page = AccountCodec.decodeLogPage(storage.data("log:0"))
       _ = assertEquals(page.entries.map(_.result), Vector("authenticated"))
-      _ = assertEquals(AccountCodec.decodeRejections(storage.data(AccountCodec.rejectionsKey)).map(_.result), Vector(AccountRejection.TokenUaMismatch.code))
+      _ = assertEquals(
+        AccountCodec.decodeRejections(storage.data(AccountCodec.rejectionsKey)).map(_.result),
+        Vector(AccountRejection.TokenUaMismatch.code)
+      )
       _ <- Future.traverse((1 to 30).toVector)(i => account.useToken("token1", "c" * 64, "別の専ブラ", now + 2 + i).toFuture)
       _ = assertEquals(AccountCodec.decodeRejections(storage.data(AccountCodec.rejectionsKey)).size, AccountRejectionLog.limit)
       _ = assertEquals(AccountCodec.decodeLogPage(storage.data("log:0")).entries.size, 1)
@@ -111,9 +118,15 @@ class AccountInfrastructureSuite extends FunSuite {
     val removed = scala.collection.mutable.Buffer.empty[(String, String, String)]
     val namespace = js.Dynamic.literal(
       idFromName = ((name: String) => name): js.Function1[String, String],
-      get = ((name: String) => js.Dynamic.literal(remove = ((hash: String, owner: String) => {
-        removed += ((name, hash, owner)); js.Promise.resolve("")
-      }): js.Function2[String, String, js.Promise[String]])): js.Function1[String, js.Dynamic])
+      get = ((name: String) =>
+        js.Dynamic.literal(remove =
+          (
+              (hash: String, owner: String) => {
+                removed += ((name, hash, owner)); js.Promise.resolve("")
+              }
+          ): js.Function2[String, String, js.Promise[String]]
+        )): js.Function1[String, js.Dynamic]
+    )
     val account = new Account(storage.state, js.Dynamic.literal(ACCOUNT_INDEX_DO = namespace))
     for {
       _ <- account.create(AccountCodec.encodeProfile(profile), now).toFuture
@@ -133,8 +146,11 @@ class AccountInfrastructureSuite extends FunSuite {
     for {
       _ <- account.create(AccountCodec.encodeProfile(profile), now).toFuture
       _ = storage.failWrites = true
-      message <- DurableTestKit.rejectionMessage(account.recordPost(now + 1,
-        AccountCodec.encodePost(AccountPost(now + 1)), js.Dynamic.literal()).toFuture)
+      message <- DurableTestKit.rejectionMessage(account.recordPost(
+        now + 1,
+        AccountCodec.encodePost(AccountPost(now + 1)),
+        js.Dynamic.literal()
+      ).toFuture)
       _ = assertEquals(message, "write failed")
       _ = assertEquals(AccountCodec.decodeState(storage.data).get.level.lvPosts, 0)
       _ = assert(!storage.data.contains("logMeta"))
@@ -151,8 +167,11 @@ class AccountInfrastructureSuite extends FunSuite {
     val day = now + 23 * 3600
     for {
       _ <- account.create(AccountCodec.encodeProfile(profile), now).toFuture
-      _ <- (1 to 23).foldLeft(Future.unit)((previous, _) => previous.flatMap(_ =>
-        account.recordPost(day, AccountCodec.encodePost(AccountPost(day)), js.Dynamic.literal()).toFuture.map(_ => ())))
+      _ <- (1 to 23).foldLeft(Future.unit)((previous, _) =>
+        previous.flatMap(_ =>
+          account.recordPost(day, AccountCodec.encodePost(AccountPost(day)), js.Dynamic.literal()).toFuture.map(_ => ())
+        )
+      )
       _ = assertEquals(AccountCodec.decodeState(storage.data).get.level, AccountLevel(2, day))
       fixed <- account.setLevel(5, day).toFuture
       _ = assertEquals(fixed, "")

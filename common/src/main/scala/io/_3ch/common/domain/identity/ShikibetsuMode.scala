@@ -6,14 +6,15 @@ enum ShikibetsuMode {
 }
 
 object ShikibetsuMode {
+
   /** 設定値を読む。知らない値は Hidden */
   def parse(value: String): ShikibetsuMode = value match {
     case "checked" => ShikibetsuMode.Checked
-    case "raw" => ShikibetsuMode.Raw
-    case "ken" => ShikibetsuMode.Ken
-    case "city" => ShikibetsuMode.City
-    case "as" => ShikibetsuMode.As
-    case "phoebe" => ShikibetsuMode.Phoebe
-    case _ => ShikibetsuMode.Hidden
+    case "raw"     => ShikibetsuMode.Raw
+    case "ken"     => ShikibetsuMode.Ken
+    case "city"    => ShikibetsuMode.City
+    case "as"      => ShikibetsuMode.As
+    case "phoebe"  => ShikibetsuMode.Phoebe
+    case _         => ShikibetsuMode.Hidden
   }
 }

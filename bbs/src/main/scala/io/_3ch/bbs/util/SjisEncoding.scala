@@ -93,7 +93,7 @@ object SjisEncoding {
         }
       encodeTable.get(cp) match {
         case Some(bytes) => bytes.foreach(b => out.push(b))
-        case None =>
+        case None        =>
           val ncr = s"&#$cp;"
           var k = 0
           while k < ncr.length do {
@@ -133,7 +133,8 @@ object SjisEncoding {
         } else {
           sb.append('?') // KB-18: 末尾の不完全なリードバイト（v5は無音で捨てる）
           i += 1
-        } else {
+        }
+      else {
         sb.append('?') // KB-18: 未知のバイト（KB-04のIBM拡張行 0xF0-0xFC を含む）
         i += 1
       }

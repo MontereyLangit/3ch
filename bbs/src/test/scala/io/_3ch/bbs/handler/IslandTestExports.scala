@@ -8,6 +8,7 @@ import scala.scalajs.js.annotation.JSExportTopLevel
 
 /** Vite 上で板topの実際の SSR と HonoX の hydration を検証する入口 */
 object IslandTestExports {
+
   /**
    * 実際の板topのサーバー描画 HTML を返す
    * raw -> title,headText,bbs,type,subjectText,time,imgurClientId,now,settings
@@ -17,8 +18,19 @@ object IslandTestExports {
     val o = raw.asInstanceOf[js.Dynamic]
     def text(name: String): String = o.selectDynamic(name).asInstanceOf[js.UndefOr[String]].getOrElse("")
     val settings = o.selectDynamic("settings").asInstanceOf[js.UndefOr[js.Dictionary[String]]].toOption.map(_.toMap).getOrElse(Map.empty)
-    val props = BoardIndexProps(text("title"), text("headText"), BoardId.create(text("bbs")).fold(message => throw new IllegalArgumentException(message), identity), text("type"), BbsSubjects.create(text("subjectText")), settings,
-      text("query"), text("sort"), text("time"), text("imgurClientId"), o.selectDynamic("now").asInstanceOf[Double])
+    val props = BoardIndexProps(
+      text("title"),
+      text("headText"),
+      BoardId.create(text("bbs")).fold(message => throw new IllegalArgumentException(message), identity),
+      text("type"),
+      BbsSubjects.create(text("subjectText")),
+      settings,
+      text("query"),
+      text("sort"),
+      text("time"),
+      text("imgurClientId"),
+      o.selectDynamic("now").asInstanceOf[Double]
+    )
     ReactDOMServer.renderToString(BoardIndexComponent.Component(props))
   }
 }

@@ -15,10 +15,11 @@ object MailCommands {
 
   /** メール欄を読む。キャップのパスワードは最初の # から次の # の手前までで、空白も含める */
   def parse(mail: String): MailCommands = {
-    val token = Option(mail.indexOf(TokenMark)).filter(_ >= 0).map(start => mail.substring(start + TokenMark.length).takeWhile(c => !c.isWhitespace))
+    val token =
+      Option(mail.indexOf(TokenMark)).filter(_ >= 0).map(start => mail.substring(start + TokenMark.length).takeWhile(c => !c.isWhitespace))
     val withoutTokens = removeTokens(mail)
     val plain = withoutTokens.indexOf('#') match {
-      case -1 => withoutTokens
+      case -1    => withoutTokens
       case start =>
         val end = withoutTokens.indexOf('#', start + 1)
         withoutTokens.take(start) + (if (end < 0) "" else withoutTokens.drop(end))

@@ -119,6 +119,7 @@ npm run hx4s:setup     # 依存導入（hx4s をローカル公開 → npm ci �
 npm run v6:build       # sbt bbs/hx4sGenerate codegen/run → vite build（client / workers）→ dist/
 npm run dev            # v6:build 後に wrangler dev --config wrangler.jsonc → http://127.0.0.1:8787
 sbt test               # 単体テスト/現仕様固定テスト（munit。golden 照合を含む）
+sbt scalafmtAll scalafmtSbt  # Scala と sbt ファイルの整形（CI は scalafmtCheckAll scalafmtSbtCheck で確かめる。docs/development.md）
 npm test               # Scala テスト用リンクと生成結果の照合用の生成 → workerd 統合・Islands SSR/hydration・app/ の生成物の照合（要 dist/）
 npm run deploy         # v6:build 後に wrangler deploy --config wrangler.jsonc --minify
 ```

@@ -9,13 +9,15 @@ class TurnstileVerificationSuite extends munit.FunSuite {
   private def mocked(result: js.Any)(body: => Future[Boolean]): Future[Boolean] = {
     val global = HandlerTestKit.global
     val previous = global.fetch
-    global.fetch = ((url: String, init: js.Dynamic) => {
-      assertEquals(url, "https://challenges.cloudflare.com/turnstile/v0/siteverify")
-      assertEquals(init.method.asInstanceOf[String], "POST")
-      val encoded = init.body.asInstanceOf[String]
-      assert(encoded.contains("response=test-token"))
-      js.Promise.resolve(js.Dynamic.literal(ok = true, json = (() => js.Promise.resolve(result)): js.Function0[js.Promise[js.Any]]))
-    }): js.Function2[String, js.Dynamic, js.Promise[js.Dynamic]]
+    global.fetch = (
+        (url: String, init: js.Dynamic) => {
+          assertEquals(url, "https://challenges.cloudflare.com/turnstile/v0/siteverify")
+          assertEquals(init.method.asInstanceOf[String], "POST")
+          val encoded = init.body.asInstanceOf[String]
+          assert(encoded.contains("response=test-token"))
+          js.Promise.resolve(js.Dynamic.literal(ok = true, json = (() => js.Promise.resolve(result)): js.Function0[js.Promise[js.Any]]))
+        }
+    ): js.Function2[String, js.Dynamic, js.Promise[js.Dynamic]]
     body.transform { value => global.fetch = previous; value }
   }
   test("外部 siteverify の成功と同一ホストだけを認証する") {

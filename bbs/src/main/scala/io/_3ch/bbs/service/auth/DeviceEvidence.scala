@@ -6,6 +6,7 @@ import scala.util.Try
 
 /** 検証済みの端末申告と、サーバーが受信したヒント */
 final case class DeviceEvidence(fingerprint: Option[ClientFingerprint], hints: ClientHints) {
+
   /** 規制照合用の18桁。全欠損なら空文字 */
   def deviceIdentifier: String = DeviceFingerprintHasher.hash(fingerprint, hints.model)
 
@@ -51,23 +52,40 @@ object DeviceEvidence {
       val value = record(raw)
       val screen = text(value, "screen", 32)
       if (screen.nonEmpty && !screen.matches("[1-9][0-9]{0,5}x[1-9][0-9]{0,5}")) invalid()
-      Some(ClientFingerprint(text(value, "os", 4096), integer(value, "cores", 0, 65535), integer(value, "ram", 0, 65535),
-        screen, decimal(value, "dpr", 1d, 100d), integer(value, "colorDepth", 24, 128),
-        text(value, "webgl", 4096), text(value, "fonts", 4096), boolean(value, "touch"), text(value, "arch", 256)))
+      Some(ClientFingerprint(
+        text(value, "os", 4096),
+        integer(value, "cores", 0, 65535),
+        integer(value, "ram", 0, 65535),
+        screen,
+        decimal(value, "dpr", 1d, 100d),
+        integer(value, "colorDepth", 24, 128),
+        text(value, "webgl", 4096),
+        text(value, "fonts", 4096),
+        boolean(value, "touch"),
+        text(value, "arch", 256)
+      ))
     }
   }
 
   /** 受信ヘッダのヒントだけを使い、本文に含まれるヒントは採用しない */
-  def decode(raw: js.Any, hints: ClientHints, headerUserAgent: String,
-    profiles: Vector[IosDeviceProfile] = Vector.empty): Either[DeviceRejection, DeviceEvidence] = {
+  def decode(
+      raw: js.Any,
+      hints: ClientHints,
+      headerUserAgent: String,
+      profiles: Vector[IosDeviceProfile] = Vector.empty
+  ): Either[DeviceRejection, DeviceEvidence] = {
     Try(fingerprint(raw)).toEither.left.map(_ => DeviceRejection.Fingerprint).flatMap { fp =>
       DeviceFingerprintCheck.validate(fp, hints, headerUserAgent, profiles).map(_ => DeviceEvidence(fp, hints))
     }
   }
 
   /** フォーム中のJSON文字列から端末情報を読む */
-  def fromJson(raw: String, hints: ClientHints, headerUserAgent: String,
-    profiles: Vector[IosDeviceProfile] = Vector.empty): Either[DeviceRejection, DeviceEvidence] = {
+  def fromJson(
+      raw: String,
+      hints: ClientHints,
+      headerUserAgent: String,
+      profiles: Vector[IosDeviceProfile] = Vector.empty
+  ): Either[DeviceRejection, DeviceEvidence] = {
     if (raw.isEmpty) decode(js.undefined, hints, headerUserAgent, profiles)
     else if (raw.length > 20000) Left(DeviceRejection.Fingerprint)
     else Try(js.JSON.parse(raw)).toEither.left.map(_ => DeviceRejection.Fingerprint)

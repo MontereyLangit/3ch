@@ -24,7 +24,8 @@ object PasswordCredentialCodec {
     if (!encoded.matches(s"[0-9a-f]{${size * 2}}")) invalid()
     encoded.grouped(2).map(Integer.parseInt(_, 16).toByte).toVector
   }
-  private def hex(value: Vector[Byte]): String = value.iterator.map(byte => Integer.toHexString((byte.toInt & 255) | 256).substring(1)).mkString
+  private def hex(value: Vector[Byte]): String =
+    value.iterator.map(byte => Integer.toHexString((byte.toInt & 255) | 256).substring(1)).mkString
 
   private def integer(value: js.Any): Int = {
     val number = time(value)
@@ -38,7 +39,10 @@ object PasswordCredentialCodec {
       key -> LoginSource(integer(field(source, "count")), time(field(source, "since")), optionalTime(field(source, "lockedUntil")))
     }.toMap
     val account = field(value, "account")
-    val state = LoginThrottle(sources, LoginAccountFailures(integer(field(account, "count")), time(field(account, "since")), optionalTime(field(account, "lockedUntil"))))
+    val state = LoginThrottle(
+      sources,
+      LoginAccountFailures(integer(field(account, "count")), time(field(account, "since")), optionalTime(field(account, "lockedUntil")))
+    )
     if (!state.valid) invalid()
     state
   }
@@ -51,15 +55,24 @@ object PasswordCredentialCodec {
     }
     val account = js.Dynamic.literal(count = value.account.count, since = value.account.since)
     value.account.lockedUntil.foreach(until => account.lockedUntil = until)
-    js.Dynamic.literal(sources = js.Dictionary(value.sources.toSeq.map { case (key, entry) => key -> source(entry).asInstanceOf[js.Any] }*), account = account)
+    js.Dynamic.literal(
+      sources = js.Dictionary(value.sources.toSeq.map { case (key, entry) => key -> source(entry).asInstanceOf[js.Any] }*),
+      account = account
+    )
   }
 
   /** 必須項目の型・長さ・計数状態を検証する。欠損値を初期設定で補わない */
   def decode(value: js.Any): PasswordCredential = {
     val iterations = time(field(value, "iterations"))
     if (iterations < 1 || iterations > PasswordCredential.currentIterations) invalid()
-    val credential = PasswordCredential(PasswordAlgorithm.parse(text(field(value, "algo"))).getOrElse(invalid()), iterations.toInt,
-      bytes(field(value, "salt"), 16), bytes(field(value, "hash"), 32), time(field(value, "updatedAt")), decodeThrottle(field(value, "throttle")))
+    val credential = PasswordCredential(
+      PasswordAlgorithm.parse(text(field(value, "algo"))).getOrElse(invalid()),
+      iterations.toInt,
+      bytes(field(value, "salt"), 16),
+      bytes(field(value, "hash"), 32),
+      time(field(value, "updatedAt")),
+      decodeThrottle(field(value, "throttle"))
+    )
     if (!credential.valid) invalid()
     credential
   }
@@ -67,7 +80,13 @@ object PasswordCredentialCodec {
   /** 有効な資格情報だけを保存形式にする。平文パスワードは受け取らない */
   def encode(value: PasswordCredential): js.Dynamic = {
     if (value == null || !value.valid) invalid()
-    js.Dynamic.literal(algo = value.algo.code, iterations = value.iterations, salt = hex(value.salt), hash = hex(value.hash), updatedAt = value.updatedAt,
-      throttle = encodeThrottle(value.throttle))
+    js.Dynamic.literal(
+      algo = value.algo.code,
+      iterations = value.iterations,
+      salt = hex(value.salt),
+      hash = hex(value.hash),
+      updatedAt = value.updatedAt,
+      throttle = encodeThrottle(value.throttle)
+    )
   }
 }

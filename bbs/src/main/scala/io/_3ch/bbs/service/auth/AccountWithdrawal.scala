@@ -17,7 +17,8 @@ final class AccountWithdrawal(accounts: AccountWithdrawalStore, directory: CapDi
   def withdraw(account: AccountDescription, now: Double): Future[Unit] = for {
     withdrawn <- accounts.withdraw(account.aid, account.generation, now)
     _ <- withdrawn.loginId.fold(Future.unit)(removeIndex("login", _, account.aid))
-    _ <- withdrawn.email.flatMap(EmailAddress.parse(_).toOption).fold(Future.unit)(email => removeIndex("email", email.canonical, account.aid))
+    _ <-
+      withdrawn.email.flatMap(EmailAddress.parse(_).toOption).fold(Future.unit)(email => removeIndex("email", email.canonical, account.aid))
     _ <- withdrawn.googleSubHash.fold(Future.unit)(accounts.remove("google", _, account.aid).recover { case NonFatal(_) => () })
     _ <- Future.traverse(withdrawn.caps)(key => directory.delete(key).recover { case NonFatal(_) => () })
   } yield ()

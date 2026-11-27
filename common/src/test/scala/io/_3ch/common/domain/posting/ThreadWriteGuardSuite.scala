@@ -27,7 +27,17 @@ class ThreadWriteGuardSuite extends munit.FunSuite {
 
   test("BBS_HEISA はちょうど BBS_HEISA=checked の項目があれば停止。後で上書きしても停止のまま") {
     val closed = Seq("BBS_HEISA=checked", "A=1<>BBS_HEISA=checked<>", "BBS_HEISA=checked<>BBS_HEISA=<>", "X=<<>BBS_HEISA=checked<>>Y=<>")
-    val open = Seq("", "BBS_HEISA=", "BBS_HEISA= checked<>", " BBS_HEISA=checked<>", "BBS_HEISA =checked<>", "BBS_HEISA=CHECKED", "BBS_HEISA=checked\n", "xBBS_HEISA=checked", "BBS_HEISA=checked<x")
+    val open = Seq(
+      "",
+      "BBS_HEISA=",
+      "BBS_HEISA= checked<>",
+      " BBS_HEISA=checked<>",
+      "BBS_HEISA =checked<>",
+      "BBS_HEISA=CHECKED",
+      "BBS_HEISA=checked\n",
+      "xBBS_HEISA=checked",
+      "BBS_HEISA=checked<x"
+    )
     closed.foreach(s => assert(ThreadWriteGuard.closed(s), s))
     open.foreach(s => assert(!ThreadWriteGuard.closed(s), s))
   }

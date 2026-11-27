@@ -18,14 +18,14 @@ object BoardRepository {
     * @return スレ一覧
     */
   def getSubjects(board: BoardId, e: WorkerEnv): Future[BbsSubjects] = {
-     val stub = e.BOARD_DO
-       .get(e.BOARD_DO.idFromName(board.value))
-       .asInstanceOf[BoardDoStub]
- 
-     stub.getSubject()
-       .toFuture
-       .map(t => BbsSubjects.create(t))
-   }
+    val stub = e.BOARD_DO
+      .get(e.BOARD_DO.idFromName(board.value))
+      .asInstanceOf[BoardDoStub]
+
+    stub.getSubject()
+      .toFuture
+      .map(t => BbsSubjects.create(t))
+  }
 
   /**
     * 板のDurable Objectから全板共通スレ(924板)と該当板のスレ一覧を取得し結合して返す

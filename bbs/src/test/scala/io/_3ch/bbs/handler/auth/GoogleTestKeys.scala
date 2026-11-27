@@ -31,8 +31,12 @@ object GoogleTestKeys {
   private def subtle: js.Dynamic = js.Dynamic.global.crypto.subtle
 
   def generate(kid: String): Future[GoogleTestKeys] = {
-    val algorithm = js.Dynamic.literal(name = "RSASSA-PKCS1-v1_5", modulusLength = 2048,
-      publicExponent = new Uint8Array(js.Array[Short](1, 0, 1)), hash = "SHA-256")
+    val algorithm = js.Dynamic.literal(
+      name = "RSASSA-PKCS1-v1_5",
+      modulusLength = 2048,
+      publicExponent = new Uint8Array(js.Array[Short](1, 0, 1)),
+      hash = "SHA-256"
+    )
     subtle.generateKey(algorithm, true, js.Array("sign", "verify")).asInstanceOf[js.Promise[js.Dynamic]].toFuture.flatMap { pair =>
       subtle.exportKey("jwk", pair.publicKey).asInstanceOf[js.Promise[js.Dynamic]].toFuture.map { jwk =>
         jwk.kid = kid
@@ -43,6 +47,14 @@ object GoogleTestKeys {
 
   /** Google の ID トークンと同じ形のクレーム */
   def claims(sub: String, nonce: String, now: Double, aud: String = "test-client.apps.googleusercontent.com"): js.Dynamic =
-    js.Dynamic.literal(iss = "https://accounts.google.com", aud = aud, sub = sub, exp = now + 3600, iat = now, nonce = nonce,
-      email = "user@example.com", email_verified = true)
+    js.Dynamic.literal(
+      iss = "https://accounts.google.com",
+      aud = aud,
+      sub = sub,
+      exp = now + 3600,
+      iat = now,
+      nonce = nonce,
+      email = "user@example.com",
+      email_verified = true
+    )
 }

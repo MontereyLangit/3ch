@@ -32,7 +32,11 @@ object BoardHandler {
    * 無効な板名の場合404
    * 404画面に板名をそのまま出力するので、HTMLエスケープすること
    */
-  private def notFound(path: String): Response = Responses.response(PublicText.respond404(path.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")), 404, js.Dictionary("content-type" -> "text/html;charset=UTF-8"))
+  private def notFound(path: String): Response = Responses.response(
+    PublicText.respond404(path.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")),
+    404,
+    js.Dictionary("content-type" -> "text/html;charset=UTF-8")
+  )
 
   private def render(c: HonoContextFacade, board: BoardId): js.Promise[Response] = {
     val bbs = board.value
@@ -58,11 +62,22 @@ object BoardHandler {
         val sort = c.req.query("sort").filter(Set("new", "speed", "res")).getOrElse("new")
         c.renderPage(
           BoardIndexComponent.Component(BoardIndexProps(
-            title, headText, board, viewType, subjects, boardSettings.value,
-            c.req.query("q").getOrElse(""), sort, math.floor(js.Date.now() / 1000).toLong.toString,
+            title,
+            headText,
+            board,
+            viewType,
+            subjects,
+            boardSettings.value,
+            c.req.query("q").getOrElse(""),
+            sort,
+            math.floor(js.Date.now() / 1000).toLong.toString,
             c.env.IMGUR_CLIENT_ID.getOrElse(""),
-            authEnabled = authEnabled, session = session.map(_.view), returnPath = s"/$bbs/"
-          )).rawElement, props).toFuture
+            authEnabled = authEnabled,
+            session = session.map(_.view),
+            returnPath = s"/$bbs/"
+          )).rawElement,
+          props
+        ).toFuture
       }
     } yield {
       if authEnabled then {

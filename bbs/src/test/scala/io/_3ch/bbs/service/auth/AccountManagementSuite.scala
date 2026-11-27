@@ -49,18 +49,19 @@ class AccountManagementSuite extends FunSuite {
         history = next
         counts
       }
-      def reserve(kind: String, hash: String, aid: String, now: Double, tokenId: Option[String]): Future[Boolean] = result("reserve:" + kind) {
-        if (conflict) false
-        else {
-          AccountIndexEntry.register(entries.get(kind -> hash), aid, now, tokenId, AccountIndexKind.parse(kind).get) match {
-            case Left(_) => false
-            case Right(entry) =>
-              entries.update(kind -> hash, entry)
-              if (loseReservation) throw new IllegalStateException("lost reservation")
-              true
+      def reserve(kind: String, hash: String, aid: String, now: Double, tokenId: Option[String]): Future[Boolean] =
+        result("reserve:" + kind) {
+          if (conflict) false
+          else {
+            AccountIndexEntry.register(entries.get(kind -> hash), aid, now, tokenId, AccountIndexKind.parse(kind).get) match {
+              case Left(_)      => false
+              case Right(entry) =>
+                entries.update(kind -> hash, entry)
+                if (loseReservation) throw new IllegalStateException("lost reservation")
+                true
+            }
           }
         }
-      }
       def confirm(kind: String, hash: String, aid: String, now: Double): Future[Unit] = result("confirm:" + kind) {
         entries.update(kind -> hash, entries(kind -> hash).confirm(aid, now).toOption.get)
         if (loseConfirmation) throw new IllegalStateException("lost confirmation")
@@ -68,7 +69,10 @@ class AccountManagementSuite extends FunSuite {
       def remove(kind: String, hash: String, aid: String): Future[Unit] = result("remove:" + kind) {
         if (cleanupFailure) throw new IllegalStateException("cleanup failed")
         entries.get(kind -> hash).foreach { entry =>
-          entry.remove(AccountIndexKind.parse(kind).get, aid).fold(reason => throw new IllegalStateException(reason.code), _ => entries.remove(kind -> hash))
+          entry.remove(
+            AccountIndexKind.parse(kind).get,
+            aid
+          ).fold(reason => throw new IllegalStateException(reason.code), _ => entries.remove(kind -> hash))
         }
       }
       def holds(aid: String, kind: String, value: String): Future[Boolean] = Future.successful(true)
@@ -99,14 +103,17 @@ class AccountManagementSuite extends FunSuite {
     def issuer: TokenIssuing = new TokenIssuing(store, keys)
     def error[A](future: Future[A]): Future[String] = future.transform {
       case scala.util.Failure(error) => scala.util.Success(error.getMessage)
-      case scala.util.Success(_) => scala.util.Failure(new AssertionError("expected failure"))
+      case scala.util.Success(_)     => scala.util.Failure(new AssertionError("expected failure"))
     }
   }
 
   test("認証計数の後に UID を予約して作成・端末登録・確定する") {
     val fixture = new Fixture
     fixture.service.verify(device, keyIp, now).map { account =>
-      assertEquals(fixture.trace.toVector, Vector("rate:deviceHash:" + device, "rate:verify", "reserve:uid", "create", "bind", "confirm:uid"))
+      assertEquals(
+        fixture.trace.toVector,
+        Vector("rate:deviceHash:" + device, "rate:verify", "reserve:uid", "create", "bind", "confirm:uid")
+      )
       assertEquals(account.agreementVersion, "v2")
       assertEquals(fixture.states(account.aid).devices.map(_.hash), Vector(device))
       assert(fixture.entries.values.forall(_.confirmed))

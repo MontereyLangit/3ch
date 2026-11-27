@@ -5,7 +5,13 @@ object NusiMark {
   val suffix: String = " </b>(主)<b>"
 
   /** キャップ・!no・板とスレの BBS_DISABLE_NUSI のどれにも当たらず、投稿者がスレ主と一致すれば付ける */
-  def applies(cap: Boolean, noNusi: Boolean, boardDisabled: Boolean, threadDisabled: Boolean,
-              owner: Option[ThreadOwner], poster: ThreadOwner): Boolean =
+  def applies(
+      cap: Boolean,
+      noNusi: Boolean,
+      boardDisabled: Boolean,
+      threadDisabled: Boolean,
+      owner: Option[ThreadOwner],
+      poster: ThreadOwner
+  ): Boolean =
     !cap && !noNusi && !boardDisabled && !threadDisabled && owner.exists(_.matches(poster))
 }

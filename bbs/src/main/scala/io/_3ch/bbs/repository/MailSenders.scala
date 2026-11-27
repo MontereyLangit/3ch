@@ -9,6 +9,7 @@ import scala.scalajs.js
 
 /** メールの送信先の設定。どれも無ければ None で、メール認証と再設定を止める */
 object MailSenders {
+
   /** MAIL_SENDER（send を持つ service binding）を使う。提供元を選んだら MAIL_API_KEY を読む実装をここに足す */
   def from(env: WorkerEnv): Option[MailSender] =
     env.MAIL_SENDER.toOption.filter(b => b != null && js.typeOf(b.asInstanceOf[js.Dynamic].send) == "function").map(binding)

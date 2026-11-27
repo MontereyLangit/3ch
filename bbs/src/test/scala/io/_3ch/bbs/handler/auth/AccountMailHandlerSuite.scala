@@ -9,7 +9,13 @@ import scala.scalajs.js.JSConverters.*
 
 class AccountMailHandlerSuite extends munit.FunSuite {
   private def register(id: String, email: String = "") =
-    Seq("id" -> id, "password" -> "correct horse", "password2" -> "correct horse", "agreement" -> "v1", "cf-turnstile-response" -> "accepted") ++
+    Seq(
+      "id" -> id,
+      "password" -> "correct horse",
+      "password2" -> "correct horse",
+      "agreement" -> "v1",
+      "cf-turnstile-response" -> "accepted"
+    ) ++
       (if (email.nonEmpty) Seq("email" -> email) else Nil)
   private def now: Double = math.floor(js.Date.now() / 1000)
 
@@ -78,7 +84,11 @@ class AccountMailHandlerSuite extends munit.FunSuite {
         _ = t.mailFails = false
         cookie = t.cookie(registered, "__Host-ch3s_sid").get
         sends <- (1 to 3).foldLeft(Future.successful(Vector.empty[Int])) { (done, _) =>
-          done.flatMap(list => t.send(t.post("/auth/email", Seq("email" -> "taro@example.com", "current" -> "correct horse"), cookie = cookie)).map(r => list :+ r.status))
+          done.flatMap(list =>
+            t.send(t.post("/auth/email", Seq("email" -> "taro@example.com", "current" -> "correct horse"), cookie = cookie)).map(r =>
+              list :+ r.status
+            )
+          )
         }
       } yield {
         assertEquals(sends, Vector(200, 200, 429))
@@ -98,7 +108,8 @@ class AccountMailHandlerSuite extends munit.FunSuite {
         _ = assertEquals(changed.status, 200)
         aid = t.kit.accountNames.head
         panel <- t.kit.account(aid).inspect().toFuture
-        _ = assertEquals((panel.email.asInstanceOf[String], panel.pendingEmail.asInstanceOf[String]), ("old@example.com", "new@example.com"))
+        _ =
+          assertEquals((panel.email.asInstanceOf[String], panel.pendingEmail.asInstanceOf[String]), ("old@example.com", "new@example.com"))
         verified <- t.send(t.post("/auth/email/verify", Seq("token" -> t.mailedToken())))
         verifiedBody <- t.body(verified)
         oldHash <- t.index("email", "old@example.com")
@@ -115,7 +126,8 @@ class AccountMailHandlerSuite extends munit.FunSuite {
 
   test("再設定は結果を区別せずに返し、メール認証済みで役割の無いアカウントにだけ送る") {
     val t = new AuthSignInTestKit(mail = true)
-    def request(id: String, ip: String = "192.0.2.50") = t.send(t.post("/auth/reset/request", Seq("id" -> id, "cf-turnstile-response" -> "accepted"), ip = ip))
+    def request(id: String, ip: String = "192.0.2.50") =
+      t.send(t.post("/auth/reset/request", Seq("id" -> id, "cf-turnstile-response" -> "accepted"), ip = ip))
     t.run {
       for {
         registered <- t.send(t.post("/auth/register", register("taro_2026", "taro@example.com")))
@@ -134,8 +146,16 @@ class AccountMailHandlerSuite extends munit.FunSuite {
         reset <- t.send(t.post("/auth/reset", Seq("token" -> token, "password" -> "brand new pass", "password2" -> "brand new pass")))
         _ = assertEquals(reset.status, 200)
         reused <- t.send(t.post("/auth/reset", Seq("token" -> token, "password" -> "another pass1", "password2" -> "another pass1")))
-        old <- t.send(t.post("/auth/login", Seq("id" -> "taro_2026", "password" -> "correct horse", "cf-turnstile-response" -> "accepted"), ip = "192.0.2.52"))
-        fresh <- t.send(t.post("/auth/login", Seq("id" -> "taro_2026", "password" -> "brand new pass", "cf-turnstile-response" -> "accepted"), ip = "192.0.2.52"))
+        old <- t.send(t.post(
+          "/auth/login",
+          Seq("id" -> "taro_2026", "password" -> "correct horse", "cf-turnstile-response" -> "accepted"),
+          ip = "192.0.2.52"
+        ))
+        fresh <- t.send(t.post(
+          "/auth/login",
+          Seq("id" -> "taro_2026", "password" -> "brand new pass", "cf-turnstile-response" -> "accepted"),
+          ip = "192.0.2.52"
+        ))
         stale <- t.send(t.get("/auth/session", cookie = t.cookie(registered, "__Host-ch3s_sid").get))
         staleBody <- t.body(stale)
       } yield {
@@ -149,7 +169,8 @@ class AccountMailHandlerSuite extends munit.FunSuite {
 
   test("役割のあるアカウントには再設定のメールを送らず、申請は接続元ごとに一日三回まで") {
     val t = new AuthSignInTestKit(mail = true)
-    def request(id: String) = t.send(t.post("/auth/reset/request", Seq("id" -> id, "cf-turnstile-response" -> "accepted"), ip = "192.0.2.60"))
+    def request(id: String) =
+      t.send(t.post("/auth/reset/request", Seq("id" -> id, "cf-turnstile-response" -> "accepted"), ip = "192.0.2.60"))
     t.run {
       for {
         _ <- t.send(t.post("/auth/register", register("taro_2026", "taro@example.com")))
@@ -157,7 +178,9 @@ class AccountMailHandlerSuite extends munit.FunSuite {
         aid = t.kit.accountNames.head
         actor <- t.admin()
         _ <- t.kit.account(aid).setRoles(js.Array(AccountRole.Delete.code), actor, now).toFuture
-        statuses <- (1 to 4).foldLeft(Future.successful(Vector.empty[Int]))((done, _) => done.flatMap(list => request("taro_2026").map(r => list :+ r.status)))
+        statuses <- (1 to 4).foldLeft(Future.successful(Vector.empty[Int]))((done, _) =>
+          done.flatMap(list => request("taro_2026").map(r => list :+ r.status))
+        )
       } yield {
         assertEquals(statuses, Vector(200, 200, 200, 429))
         assertEquals(t.outbox.size, 1)
@@ -171,9 +194,17 @@ class AccountMailHandlerSuite extends munit.FunSuite {
       for {
         registered <- t.send(t.post("/auth/register", register("taro_2026")))
         cookie = t.cookie(registered, "__Host-ch3s_sid").get
-        wrong <- t.send(t.post("/auth/password", Seq("current" -> "wrong password", "password" -> "brand new pass", "password2" -> "brand new pass"), cookie = cookie))
+        wrong <- t.send(t.post(
+          "/auth/password",
+          Seq("current" -> "wrong password", "password" -> "brand new pass", "password2" -> "brand new pass"),
+          cookie = cookie
+        ))
         _ = assertEquals(wrong.status, 401)
-        changed <- t.send(t.post("/auth/password", Seq("current" -> "correct horse", "password" -> "brand new pass", "password2" -> "brand new pass"), cookie = cookie))
+        changed <- t.send(t.post(
+          "/auth/password",
+          Seq("current" -> "correct horse", "password" -> "brand new pass", "password2" -> "brand new pass"),
+          cookie = cookie
+        ))
         _ = assertEquals(changed.status, 200)
         next = t.cookie(changed, "__Host-ch3s_sid").get
         old <- t.send(t.get("/auth/session", cookie = cookie)).flatMap(t.body)
@@ -181,7 +212,11 @@ class AccountMailHandlerSuite extends munit.FunSuite {
         aid = t.kit.accountNames.find(_ != "dummy").get
         actor <- t.admin()
         _ <- t.kit.account(aid).setRoles(js.Array(AccountRole.Delete.code), actor, now).toFuture
-        short <- t.send(t.post("/auth/password", Seq("current" -> "brand new pass", "password" -> "fifteen chars!!", "password2" -> "fifteen chars!!"), cookie = next))
+        short <- t.send(t.post(
+          "/auth/password",
+          Seq("current" -> "brand new pass", "password" -> "fifteen chars!!", "password2" -> "fifteen chars!!"),
+          cookie = next
+        ))
         shortBody <- t.body(short)
       } yield {
         assertEquals(old, null)
@@ -216,7 +251,11 @@ class AccountMailHandlerSuite extends munit.FunSuite {
         change = t.mailedToken()
         _ <- t.send(t.post("/auth/reset/request", Seq("id" -> "taro_2026", "cf-turnstile-response" -> "accepted"), ip = "192.0.2.70"))
         reset = t.mailedToken()
-        changed <- t.send(t.post("/auth/password", Seq("current" -> "correct horse", "password" -> "brand new pass", "password2" -> "brand new pass"), cookie = cookie))
+        changed <- t.send(t.post(
+          "/auth/password",
+          Seq("current" -> "correct horse", "password" -> "brand new pass", "password2" -> "brand new pass"),
+          cookie = cookie
+        ))
         _ = assertEquals(changed.status, 200)
         staleChange <- t.send(t.post("/auth/email/verify", Seq("token" -> change)))
         staleReset <- t.send(t.post("/auth/reset", Seq("token" -> reset, "password" -> "another pass1", "password2" -> "another pass1")))
@@ -250,14 +289,20 @@ class AccountMailHandlerSuite extends munit.FunSuite {
         _ <- t.send(t.post("/auth/email/verify", Seq("token" -> t.mailedToken())))
         _ <- t.send(t.post("/auth/token/issue", Nil, cookie = cookie))
         aid = t.kit.accountNames.find(_ != "dummy").get
-        changed <- t.send(t.post("/auth/password", Seq("current" -> "correct horse", "password" -> "brand new pass", "password2" -> "brand new pass"), cookie = cookie))
+        changed <- t.send(t.post(
+          "/auth/password",
+          Seq("current" -> "correct horse", "password" -> "brand new pass", "password2" -> "brand new pass"),
+          cookie = cookie
+        ))
         afterChange <- t.kit.account(aid).inspect().toFuture
         _ <- t.send(t.post("/auth/reset/request", Seq("id" -> "taro_2026", "cf-turnstile-response" -> "accepted"), ip = "192.0.2.72"))
-        reset <- t.send(t.post("/auth/reset", Seq("token" -> t.mailedToken(), "password" -> "another pass1", "password2" -> "another pass1")))
+        reset <-
+          t.send(t.post("/auth/reset", Seq("token" -> t.mailedToken(), "password" -> "another pass1", "password2" -> "another pass1")))
         afterReset <- t.kit.account(aid).inspect().toFuture
       } yield {
         assertEquals((changed.status, reset.status), (200, 200))
-        def revoked(panel: js.Dynamic) = panel.tokens.asInstanceOf[js.Array[js.Dynamic]].toVector.map(token => !js.isUndefined(token.revokedAt))
+        def revoked(panel: js.Dynamic) =
+          panel.tokens.asInstanceOf[js.Array[js.Dynamic]].toVector.map(token => !js.isUndefined(token.revokedAt))
         assertEquals(revoked(afterChange), Vector(false))
         assertEquals(revoked(afterReset), Vector(true))
       }
@@ -275,7 +320,10 @@ class AccountMailHandlerSuite extends munit.FunSuite {
         target <- service.emailTarget(link, now)
         gone <- service.emailTarget(link.copy(secret = "x" * 43), now).failed
       } yield {
-        assertEquals((target.uid, target.email.map(io._3ch.common.domain.account.EmailAddress.mask)), ("taro_2026", Some("t***@example.com")))
+        assertEquals(
+          (target.uid, target.email.map(io._3ch.common.domain.account.EmailAddress.mask)),
+          ("taro_2026", Some("t***@example.com"))
+        )
         assert(gone.isInstanceOf[io._3ch.bbs.domain.account.AccountStoreException])
       }
     }

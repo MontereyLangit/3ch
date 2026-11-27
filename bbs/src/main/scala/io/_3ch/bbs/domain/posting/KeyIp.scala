@@ -2,6 +2,7 @@ package io._3ch.bbs.domain.posting
 
 /** スレ主判定の IP キー。IPv4 はそのまま、IPv6 は展開した先頭 4 ブロック（/64）を小文字 16 進で返す */
 object KeyIp {
+
   /** IP キーを返す。IPv6 として読めなければ小文字にしただけの値を返す */
   def of(ip: String): String =
     if (!ip.contains(":")) ip
@@ -15,7 +16,7 @@ object KeyIp {
     }
 
   private def expand(ip: String): Option[List[Int]] = ip.split("::", -1) match {
-    case Array(all) => groups(all).filter(_.length == 8)
+    case Array(all)        => groups(all).filter(_.length == 8)
     case Array(head, tail) =>
       for {
         h <- groups(head)

@@ -9,7 +9,7 @@ enum PhoebeCommand {
 
   /** 求める Lv */
   def level: Int = this match {
-    case Balsan => 3
+    case Balsan     => 3
     case Setting(n) => n
   }
 
@@ -29,13 +29,16 @@ object PhoebeCommand {
     else if (message.startsWith(SettingText)) {
       val rest = message.drop(SettingText.length)
       val digits = rest.takeWhile(c => c >= '0' && c <= '9')
-      Option.when(digits.nonEmpty && digits.length <= 2 && digits.toInt <= Phoebe.MaxLevel && ended(rest.drop(digits.length)))(Setting(digits.toInt))
+      Option.when(
+        digits.nonEmpty && digits.length <= 2 && digits.toInt <= Phoebe.MaxLevel && ended(rest.drop(digits.length))
+      )(Setting(digits.toInt))
     } else None
   }
 }
 
 /** Thread DO でスレ設定の BBS_PHOEBE を書き換える要求。boardLevel はスレ設定に値が無いときの現在値 */
 final case class ThreadPhoebeRequest(level: Int, lower: Boolean, boardLevel: Int) {
+
   /** スレ設定の現在の値から書き込む値を決める。上げるときと、下げてよい要求で下げるときだけ Some */
   def next(threadValue: Option[String]): Option[Int] = {
     val current = threadValue.fold(boardLevel)(value => Phoebe.required(Some(value)))

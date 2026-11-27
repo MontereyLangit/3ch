@@ -26,10 +26,23 @@ trait CryptoKey extends js.Object
 
 @js.native
 trait SubtleCrypto extends js.Object {
-  def importKey(format: String, keyData: Uint8Array, algorithm: js.Object, extractable: Boolean, keyUsages: js.Array[String]): js.Promise[CryptoKey] = js.native
+  def importKey(
+      format: String,
+      keyData: Uint8Array,
+      algorithm: js.Object,
+      extractable: Boolean,
+      keyUsages: js.Array[String]
+  ): js.Promise[CryptoKey] = js.native
+
   /** JWK 形式の鍵を読み込む */
   @JSName("importKey")
-  def importJwk(format: String, keyData: js.Object, algorithm: js.Object, extractable: Boolean, keyUsages: js.Array[String]): js.Promise[CryptoKey] = js.native
+  def importJwk(
+      format: String,
+      keyData: js.Object,
+      algorithm: js.Object,
+      extractable: Boolean,
+      keyUsages: js.Array[String]
+  ): js.Promise[CryptoKey] = js.native
   def verify(algorithm: js.Object, key: CryptoKey, signature: Uint8Array, data: Uint8Array): js.Promise[Boolean] = js.native
   def sign(algorithm: String, key: CryptoKey, data: Uint8Array): js.Promise[ArrayBuffer] = js.native
   def digest(algorithm: String, data: Uint8Array): js.Promise[ArrayBuffer] = js.native

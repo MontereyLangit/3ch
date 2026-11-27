@@ -15,12 +15,22 @@ import scala.scalajs.js.URIUtils
  */
 object PostingFormIsland {
 
-  final case class Props(bbs: BoardId, time: String, threadKey: Option[ThreadKey], imgurClientId: String, commands: List[ThreadCommand],
-    authEnabled: Boolean = false, session: Option[SessionView] = None, requiredLevel: Int = 0, returnPath: String = "/") {
+  final case class Props(
+      bbs: BoardId,
+      time: String,
+      threadKey: Option[ThreadKey],
+      imgurClientId: String,
+      commands: List[ThreadCommand],
+      authEnabled: Boolean = false,
+      session: Option[SessionView] = None,
+      requiredLevel: Int = 0,
+      returnPath: String = "/"
+  ) {
     def draftKey: String = s"${bbs.value}/${threadKey.fold("new")(_.value.toString)}"
   }
 
   object Props {
+
     /** 板名・スレキーが不正なら None */
     def fromJs(raw: PostingFormProps): Option[Props] = {
       val threadKey = raw.threadKey.toOption.map(ThreadKey.parse(_).toOption)
@@ -28,8 +38,17 @@ object PostingFormIsland {
       for {
         bbs <- BoardId.create(raw.bbs).toOption
         key <- threadKey.fold[Option[Option[ThreadKey]]](Option(None))(_.map(Option(_)))
-      } yield Props(bbs, raw.time, key, raw.imgurClientId, commands, raw.authEnabled,
-        raw.session.toOption.map(AuthClient.sessionView), raw.requiredLevel, raw.returnPath)
+      } yield Props(
+        bbs,
+        raw.time,
+        key,
+        raw.imgurClientId,
+        commands,
+        raw.authEnabled,
+        raw.session.toOption.map(AuthClient.sessionView),
+        raw.requiredLevel,
+        raw.returnPath
+      )
     }
   }
 
@@ -54,28 +73,54 @@ object PostingFormIsland {
   }
 
   private def textInput(name: String, value: String, size: Int, setField: (String, String) => Callback, extra: TagMod = TagMod.empty) = {
-    <.input(^.className := controlClass, ^.`type` := "text", ^.name := name, ^.size := size, ^.value := value,
-      ^.onChange ==> ((e: ReactEventFromInput) => setField(name, e.target.value)), extra)
+    <.input(
+      ^.className := controlClass,
+      ^.`type` := "text",
+      ^.name := name,
+      ^.size := size,
+      ^.value := value,
+      ^.onChange ==> ((e: ReactEventFromInput) => setField(name, e.target.value)),
+      extra
+    )
   }
 
   private def commandHelper(commands: List[ThreadCommand], fields: PostingFields, toggleCommand: ThreadCommand => Callback) = {
-    <.div(^.className := "my-1 flex flex-wrap items-center gap-1 text-xs", VdomAttr("data-command-helper") := "",
+    <.div(
+      ^.className := "my-1 flex flex-wrap items-center gap-1 text-xs",
+      VdomAttr("data-command-helper") := "",
       <.span("コマンド"),
       commands.toVdomArray { command =>
         val pressed = fields.get(command.field).exists(_.contains(command.text))
-        <.button(^.key := command.text,
+        <.button(
+          ^.key := command.text,
           ^.className := "cursor-pointer border border-[#d6dce3] bg-white px-2 py-0.5 aria-pressed:border-[#f66] aria-pressed:font-bold",
-          ^.`type` := "button", ^.title := command.description, VdomAttr("aria-pressed") := pressed.toString,
-          VdomAttr("data-command") := command.text, VdomAttr("data-command-field") := command.field,
-          ^.onClick --> toggleCommand(command), command.label)
-      })
+          ^.`type` := "button",
+          ^.title := command.description,
+          VdomAttr("aria-pressed") := pressed.toString,
+          VdomAttr("data-command") := command.text,
+          VdomAttr("data-command-field") := command.field,
+          ^.onClick --> toggleCommand(command),
+          command.label
+        )
+      }
+    )
   }
 
   private def imgurUpload(upload: ImgurUpload) = {
-    <.div(^.className := "my-1 text-xs",
-      <.label("画像：", <.input(^.key := upload.fileKey, ^.`type` := "file", ^.accept := "image/*", VdomAttr("data-imgur-upload") := "",
-        ^.onChange ==> upload.chooseFile)),
-      <.span(^.className := "ml-2", VdomAttr("data-imgur-status") := "", VdomAttr("aria-live") := "polite", upload.status))
+    <.div(
+      ^.className := "my-1 text-xs",
+      <.label(
+        "画像：",
+        <.input(
+          ^.key := upload.fileKey,
+          ^.`type` := "file",
+          ^.accept := "image/*",
+          VdomAttr("data-imgur-upload") := "",
+          ^.onChange ==> upload.chooseFile
+        )
+      ),
+      <.span(^.className := "ml-2", VdomAttr("data-imgur-status") := "", VdomAttr("aria-live") := "polite", upload.status)
+    )
   }
 
   private val buttonClass = s"$controlClass cursor-pointer disabled:cursor-wait"
@@ -87,27 +132,62 @@ object PostingFormIsland {
   private final val SubmitButton = ScalaFnComponent[String] { label =>
     for {
       status <- useFormStatus
-    } yield <.button(^.className := buttonClass, ^.`type` := "submit", ^.name := "submit", ^.value := "書き込む", ^.disabled := status.pending, label)
+    } yield <.button(
+      ^.className := buttonClass,
+      ^.`type` := "submit",
+      ^.name := "submit",
+      ^.value := "書き込む",
+      ^.disabled := status.pending,
+      label
+    )
   }
 
   private final val ResendButton = ScalaFnComponent[Unit] { _ =>
     for {
       status <- useFormStatus
-    } yield <.button(^.className := buttonClass, ^.`type` := "submit", ^.name := "submit", ^.value := "書き込む", ^.disabled := status.pending,
-      VdomAttr("data-cookie-resend") := "", "上記を承諾して書き込む")
+    } yield <.button(
+      ^.className := buttonClass,
+      ^.`type` := "submit",
+      ^.name := "submit",
+      ^.value := "書き込む",
+      ^.disabled := status.pending,
+      VdomAttr("data-cookie-resend") := "",
+      "上記を承諾して書き込む"
+    )
   }
 
   private def resultView(result: SubmitResult): VdomNode = result match {
-    case SubmitResult.Idle => EmptyVdom
+    case SubmitResult.Idle           => EmptyVdom
     case SubmitResult.Level(message) =>
-      <.p(^.className := "my-1 text-[#f00]", ^.role := "alert", message, " ", <.a(^.href := "/auth/account?upgrade=1", ^.className := "text-[#06f]", "アカウント設定へ"))
+      <.p(
+        ^.className := "my-1 text-[#f00]",
+        ^.role := "alert",
+        message,
+        " ",
+        <.a(^.href := "/auth/account?upgrade=1", ^.className := "text-[#06f]", "アカウント設定へ")
+      )
     case SubmitResult.Error(message) =>
-      <.p(^.className := "my-1 whitespace-pre-wrap font-bold text-[#f00]", VdomAttr("data-post-result") := "error", ^.role := "alert", message)
+      <.p(
+        ^.className := "my-1 whitespace-pre-wrap font-bold text-[#f00]",
+        VdomAttr("data-post-result") := "error",
+        ^.role := "alert",
+        message
+      )
     case SubmitResult.Unknown(message) =>
-      <.p(^.className := "my-1 whitespace-pre-wrap font-bold text-[#f00]", VdomAttr("data-post-result") := "unknown", ^.role := "alert", message)
+      <.p(
+        ^.className := "my-1 whitespace-pre-wrap font-bold text-[#f00]",
+        VdomAttr("data-post-result") := "unknown",
+        ^.role := "alert",
+        message
+      )
     case SubmitResult.Cookie(summary, terms) =>
-      <.div(^.className := "my-1 text-xs", VdomAttr("data-post-result") := "cookie",
-        <.p(^.className := "m-0 whitespace-pre-wrap", summary), <.p(^.className := "my-2 whitespace-pre-wrap", terms), ResendButton())
+      <.div(
+        ^.className := "my-1 text-xs",
+        VdomAttr("data-post-result") := "cookie",
+        <.p(^.className := "m-0 whitespace-pre-wrap", summary),
+        <.p(^.className := "my-2 whitespace-pre-wrap", terms),
+        ResendButton()
+      )
   }
 
   private def appendLink(message: String, url: String): String = {
@@ -126,36 +206,80 @@ object PostingFormIsland {
       def toggleCommand(command: ThreadCommand): Callback = {
         fields.get(command.field) match {
           case Some(current) if command.text != "" => fields.setField(command.field, toggledValue(command, current))
-          case _ => Callback.empty
+          case _                                   => Callback.empty
         }
       }
 
       val imgurAttr = if props.imgurClientId.nonEmpty then VdomAttr("data-imgur-client-id") := props.imgurClientId else TagMod.empty
       val showCommands = props.threadKey.isEmpty && props.commands.nonEmpty
 
-      <.form(^.className := "posting-form mt-2 mb-3 ml-[2em] text-base [&_label]:inline-block [&_label]:max-w-full max-[660px]:ml-3",
-        ^.acceptCharset := "UTF-8", submit.action,
-        VdomAttr("data-draft-key") := props.draftKey, imgurAttr,
+      <.form(
+        ^.className := "posting-form mt-2 mb-3 ml-[2em] text-base [&_label]:inline-block [&_label]:max-w-full max-[660px]:ml-3",
+        ^.acceptCharset := "UTF-8",
+        submit.action,
+        VdomAttr("data-draft-key") := props.draftKey,
+        imgurAttr,
         resultView(submit.result),
-        <.fieldset(^.className := "m-0 min-w-0 border-0 p-0",
-          <.details(^.open := fields.detailsOpen, <.summary("名前・E-mail"),
+        <.fieldset(
+          ^.className := "m-0 min-w-0 border-0 p-0",
+          <.details(
+            ^.open := fields.detailsOpen,
+            <.summary("名前・E-mail"),
             <.label("名前：", textInput("FROM", fields.from, 24, fields.setField)),
-            <.label(" E-mail：", textInput("mail", fields.mail, 24, fields.setField))),
+            <.label(" E-mail：", textInput("mail", fields.mail, 24, fields.setField))
+          ),
           props.threadKey.fold[VdomNode](
-            <.label("タイトル：", textInput("subject", fields.subject, 80, fields.setField, ^.required := true)))(_ => EmptyVdom),
-          if props.authEnabled && session.isEmpty then <.p(^.className := "my-2 text-sm", "書き込みには認証・登録が必要です。", <.a(^.className := "text-[#06f]", ^.href := s"/auth/?return=${URIUtils.encodeURIComponent(props.returnPath)}", "認証・登録へ")) else EmptyVdom,
-          if props.authEnabled && session.exists(_.lv < props.requiredLevel) then <.p(^.className := "my-2 text-sm", s"このスレはLv${props.requiredLevel}以上", " ", <.a(^.className := "text-[#06f]", ^.href := "/auth/account?upgrade=1", "アカウント設定へ")) else EmptyVdom,
-          if props.authEnabled && session.isDefined then <.label(^.className := "my-2 block! text-sm", <.input(^.`type` := "checkbox", ^.name := "showid", ^.value := "1", ^.checked := showId.value,
-            ^.onChange ==> ((e: ReactEventFromInput) => showId.setState(e.target.checked))), " ユーザーIDを名前欄に出す") else EmptyVdom,
+            <.label("タイトル：", textInput("subject", fields.subject, 80, fields.setField, ^.required := true))
+          )(_ => EmptyVdom),
+          if props.authEnabled && session.isEmpty then
+            <.p(
+              ^.className := "my-2 text-sm",
+              "書き込みには認証・登録が必要です。",
+              <.a(^.className := "text-[#06f]", ^.href := s"/auth/?return=${URIUtils.encodeURIComponent(props.returnPath)}", "認証・登録へ")
+            )
+          else EmptyVdom,
+          if props.authEnabled && session.exists(_.lv < props.requiredLevel) then
+            <.p(
+              ^.className := "my-2 text-sm",
+              s"このスレはLv${props.requiredLevel}以上",
+              " ",
+              <.a(^.className := "text-[#06f]", ^.href := "/auth/account?upgrade=1", "アカウント設定へ")
+            )
+          else EmptyVdom,
+          if props.authEnabled && session.isDefined then
+            <.label(
+              ^.className := "my-2 block! text-sm",
+              <.input(
+                ^.`type` := "checkbox",
+                ^.name := "showid",
+                ^.value := "1",
+                ^.checked := showId.value,
+                ^.onChange ==> ((e: ReactEventFromInput) => showId.setState(e.target.checked))
+              ),
+              " ユーザーIDを名前欄に出す"
+            )
+          else EmptyVdom,
           SubmitButton(if props.threadKey.isEmpty then "新規スレッド作成" else "書き込む"),
           if showCommands then commandHelper(props.commands, fields, toggleCommand) else EmptyVdom,
-          <.label(^.className := "message-label block!", "本文", <.textarea(^.className := s"$controlClass block w-full resize-y",
-            ^.name := "MESSAGE", ^.rows := 8, ^.cols := 80, ^.required := true, ^.value := fields.message,
-            ^.onChange ==> ((e: ReactEventFromTextArea) => fields.setField("MESSAGE", e.target.value)))),
+          <.label(
+            ^.className := "message-label block!",
+            "本文",
+            <.textarea(
+              ^.className := s"$controlClass block w-full resize-y",
+              ^.name := "MESSAGE",
+              ^.rows := 8,
+              ^.cols := 80,
+              ^.required := true,
+              ^.value := fields.message,
+              ^.onChange ==> ((e: ReactEventFromTextArea) => fields.setField("MESSAGE", e.target.value))
+            )
+          ),
           if props.imgurClientId.nonEmpty then imgurUpload(upload) else EmptyVdom,
           <.input(^.`type` := "hidden", ^.name := "bbs", ^.value := props.bbs.value),
           <.input(^.`type` := "hidden", ^.name := "time", ^.value := props.time),
-          props.threadKey.map(_.value.toString).toVdomArray(key => <.input(^.key := key, ^.`type` := "hidden", ^.name := "key", ^.value := key))
+          props.threadKey.map(_.value.toString).toVdomArray(key =>
+            <.input(^.key := key, ^.`type` := "hidden", ^.name := "key", ^.value := key)
+          )
         )
       )
     }

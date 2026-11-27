@@ -31,13 +31,14 @@ object DurableTestKit {
         } else {
           val k = key.asInstanceOf[String]
           js.Promise.resolve[js.Any](data.get(k).map(clone).getOrElse(js.undefined.asInstanceOf[js.Any]))
-        }
-      ): js.Function1[js.Any, js.Promise[js.Any]],
-      put = ((key: js.Any, value: js.UndefOr[js.Any]) => {
-        if value.isDefined then data.update(key.asInstanceOf[String], clone(value.get))
-        else key.asInstanceOf[js.Dictionary[js.Any]].foreach((k, v) => data.update(k, clone(v)))
-        js.Promise.resolve[js.Any](js.undefined)
-      }): js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]],
+        }): js.Function1[js.Any, js.Promise[js.Any]],
+      put = (
+          (key: js.Any, value: js.UndefOr[js.Any]) => {
+            if value.isDefined then data.update(key.asInstanceOf[String], clone(value.get))
+            else key.asInstanceOf[js.Dictionary[js.Any]].foreach((k, v) => data.update(k, clone(v)))
+            js.Promise.resolve[js.Any](js.undefined)
+          }
+      ): js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]],
       delete = ((key: js.Any) => {
         val k = key.asInstanceOf[String]
         val existed = data.contains(k)
@@ -140,36 +141,49 @@ object DurableTestKit {
           get = ((key: String) =>
             js.Promise.resolve[js.Any](r2.get(key) match {
               case Some((text, etag)) =>
-                val body = js.Dynamic.literal(text = (() => js.Promise.resolve[js.Any](text)): js.Function0[js.Promise[js.Any]], etag = etag)
+                val body =
+                  js.Dynamic.literal(text = (() => js.Promise.resolve[js.Any](text)): js.Function0[js.Promise[js.Any]], etag = etag)
                 r2GetHook(key)
                 body
               case None => null.asInstanceOf[js.Any]
-            }
-            )
-          ): js.Function1[String, js.Promise[js.Any]],
-          put = ((key: String, value: js.Any, opts: js.UndefOr[js.Dynamic]) => js.Promise.resolve[js.Any](r2Put(key, value, opts))): js.Function3[String, js.Any, js.UndefOr[js.Dynamic], js.Promise[js.Any]]
+            })): js.Function1[String, js.Promise[js.Any]],
+          put = (
+              (key: String, value: js.Any, opts: js.UndefOr[js.Dynamic]) => js.Promise.resolve[js.Any](r2Put(key, value, opts))
+          ): js.Function3[String, js.Any, js.UndefOr[js.Dynamic], js.Promise[js.Any]]
         ),
         CAP = js.Dynamic.literal(
-          get = ((key: String) => js.Promise.resolve[js.Any](capStore.get(key) match {
-            case Some(v) => v
-            case None => null.asInstanceOf[js.Any]
-          })): js.Function1[String, js.Promise[js.Any]],
-          put = ((key: String, value: String) => { capStore.update(key, value); js.Promise.resolve[js.Any](js.undefined) }): js.Function2[String, String, js.Promise[js.Any]],
-          delete = ((key: String) => { capStore.subtractOne(key); js.Promise.resolve[js.Any](js.undefined) }): js.Function1[String, js.Promise[js.Any]]
+          get = ((key: String) =>
+            js.Promise.resolve[js.Any](capStore.get(key) match {
+              case Some(v) => v
+              case None    => null.asInstanceOf[js.Any]
+            })): js.Function1[String, js.Promise[js.Any]],
+          put = (
+              (key: String, value: String) => { capStore.update(key, value); js.Promise.resolve[js.Any](js.undefined) }
+          ): js.Function2[String, String, js.Promise[js.Any]],
+          delete = ((key: String) => { capStore.subtractOne(key); js.Promise.resolve[js.Any](js.undefined) }): js.Function1[
+            String,
+            js.Promise[js.Any]
+          ]
         ),
         ASSETS = js.Dynamic.literal(
           fetch = ((req: js.Dynamic) => {
             val pathname = js.Dynamic.newInstance(js.Dynamic.global.URL)(req.url).pathname.asInstanceOf[String]
             val file = NodePath.join(publicDir(), "." + pathname)
             val response =
-              if NodeFs.existsSync(file) then js.Dynamic.newInstance(js.Dynamic.global.Response)(NodeFs.readFileSync(file, "utf8"), js.Dynamic.literal(headers = js.Dynamic.literal("content-type" -> "text/html; charset=utf-8")))
+              if NodeFs.existsSync(file) then
+                js.Dynamic.newInstance(js.Dynamic.global.Response)(
+                  NodeFs.readFileSync(file, "utf8"),
+                  js.Dynamic.literal(headers = js.Dynamic.literal("content-type" -> "text/html; charset=utf-8"))
+                )
               else js.Dynamic.newInstance(js.Dynamic.global.Response)("Not Found", js.Dynamic.literal(status = 404))
             js.Promise.resolve[js.Any](response)
           }): js.Function1[js.Dynamic, js.Promise[js.Any]]
         ),
         salt = "test-salt-12345"
       )
-      e.updateDynamic("THREAD_DO")(namespace(name => threadInstances.getOrElseUpdate(name, new Thread(fakeState(), e.asInstanceOf[WorkerEnv]))))
+      e.updateDynamic("THREAD_DO")(namespace(name =>
+        threadInstances.getOrElseUpdate(name, new Thread(fakeState(), e.asInstanceOf[WorkerEnv]))
+      ))
       e.updateDynamic("BOARD_DO")(namespace(name => boardInstances.getOrElseUpdate(name, new Board(fakeState(), e.asInstanceOf[js.Any]))))
       e.updateDynamic("ACCOUNT_DO")(namespace(name => accountInstances.getOrElseUpdate(name, new Account(fakeState(name), e))))
       e.updateDynamic("ACCOUNT_INDEX_DO")(namespace(name => indexInstances.getOrElseUpdate(name, new AccountIndex(fakeState(name), e))))
@@ -179,6 +193,7 @@ object DurableTestKit {
 
     /** KV (`CAP`) にキャップを登録する（キー: パスワードハッシュ、値: 表示名）。 */
     def putCap(key: String, name: String): Unit = capStore.update(key, name)
+
     /** KV (`CAP`) の値 */
     def capValue(key: String): Option[String] = capStore.get(key)
 
@@ -221,7 +236,7 @@ object DurableTestKit {
   /** `js.JavaScriptException(new js.Error(msg))` からメッセージ文字列を取り出す（Posting.scala の errorText と同じ発想）。 */
   def messageOf(e: Throwable): String = e match {
     case x: js.JavaScriptException => x.exception.asInstanceOf[js.Dynamic].message.asInstanceOf[String]
-    case other => other.getMessage
+    case other                     => other.getMessage
   }
 
   /** node:assert の `assert.rejects` 相当。成功時は失敗させ、失敗時はそのメッセージを返す。 */

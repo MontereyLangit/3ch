@@ -49,7 +49,7 @@ object ArchiveIndexRepository {
   def store(e: WorkerEnv): ArchiveIndexStore = new ArchiveIndexStore {
     private def path(file: ArchiveIndexFile): String = file match {
       case ArchiveIndexFile.ThreadIndex(bbs, key) => subjectFile(bbs, key)
-      case ArchiveIndexFile.BandList(bbs) => archiveListFile(bbs)
+      case ArchiveIndexFile.BandList(bbs)         => archiveListFile(bbs)
     }
     def read(file: ArchiveIndexFile): Future[Option[StoredIndex]] = ArchiveIndexRepository.read(path(file), e)
     def write(file: ArchiveIndexFile, value: String, etag: Option[String]): Future[Boolean] = writeIndex(path(file), value, etag, e)

@@ -31,8 +31,14 @@ object TurnstileVerification {
       val body = Seq("secret" -> secret, "response" -> token, "remoteip" -> ip).map { case (key, value) =>
         key + "=" + js.URIUtils.encodeURIComponent(value)
       }.mkString("&")
-      VerificationFetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", js.Dynamic.literal(
-        method = "POST", headers = js.Dictionary("Content-Type" -> "application/x-www-form-urlencoded"), body = body)).toFuture.flatMap { response =>
+      VerificationFetch(
+        "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+        js.Dynamic.literal(
+          method = "POST",
+          headers = js.Dictionary("Content-Type" -> "application/x-www-form-urlencoded"),
+          body = body
+        )
+      ).toFuture.flatMap { response =>
         if (!response.ok) Future.successful(false)
         else response.json().toFuture.map(result => result.success && result.hostname.contains(hostname))
       }.recover { case NonFatal(_) => false }

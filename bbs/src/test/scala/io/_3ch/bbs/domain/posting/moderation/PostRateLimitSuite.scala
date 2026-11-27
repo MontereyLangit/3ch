@@ -31,7 +31,11 @@ class PostRateLimitSuite extends FunSuite {
   test("Samba24 は秒数以内の同一投稿者で拒否し、残り秒数を切り上げて返す") {
     val history = Seq(entry("a", t0 - 3.5), entry("a", t0 - 8))
     assertEquals(PostRateLimit.checkBoard(board(samba24 = 10), history, who("a"), t0), Some(PostRateRejection.Samba24(7)))
-    assertEquals(PostRateLimit.checkBoard(board(samba24 = 10), Seq(entry("a", t0 - 10)), who("a"), t0), Some(PostRateRejection.Samba24(1)), "ちょうど境界も対象")
+    assertEquals(
+      PostRateLimit.checkBoard(board(samba24 = 10), Seq(entry("a", t0 - 10)), who("a"), t0),
+      Some(PostRateRejection.Samba24(1)),
+      "ちょうど境界も対象"
+    )
     assertEquals(PostRateLimit.checkBoard(board(samba24 = 10), Seq(entry("a", t0 - 10.5)), who("a"), t0), None)
     assertEquals(PostRateLimit.checkBoard(board(samba24 = 0), history, who("a"), t0), None)
     assertEquals(PostRateLimit.checkBoard(board(samba24 = 10), history, who("b"), t0), None)
@@ -44,9 +48,17 @@ class PostRateLimitSuite extends FunSuite {
     assertEquals(check(PostRateIdentity("other", "shiki", "")), None)
     assertEquals(check(PostRateIdentity("ip", "other", "")), Some(PostRateRejection.Samba24(8)))
     assertEquals(check(PostRateIdentity("other", "other", "aid")), Some(PostRateRejection.Samba24(8)))
-    assertEquals(check(PostRateIdentity("ip", "other", ""), keys = Set(PostRateKey.Shiki)), Some(PostRateRejection.Samba24(8)), "照合キーの設定は見ない")
+    assertEquals(
+      check(PostRateIdentity("ip", "other", ""), keys = Set(PostRateKey.Shiki)),
+      Some(PostRateRejection.Samba24(8)),
+      "照合キーの設定は見ない"
+    )
     assertEquals(check(PostRateIdentity()), None)
-    assertEquals(PostRateLimit.checkBoard(board(samba24 = 10), Seq(Entry(t0, PostRateIdentity())), PostRateIdentity(), t0), None, "空の値は照合しない")
+    assertEquals(
+      PostRateLimit.checkBoard(board(samba24 = 10), Seq(Entry(t0, PostRateIdentity())), PostRateIdentity(), t0),
+      None,
+      "空の値は照合しない"
+    )
   }
 
   test("広域連投規制は秒数以内に識別子が一致すれば拒否し、残り秒数を切り上げて返す") {
@@ -86,7 +98,10 @@ class PostRateLimitSuite extends FunSuite {
   test("広域連投規制は識別子が空なら照合しない") {
     val history = Seq(Entry(t0, PostRateIdentity("other", "", "")))
     assertEquals(PostRateLimit.checkBoard(board(fr = 10), history, PostRateIdentity("ip", "", ""), t0), None)
-    assertEquals(PostRateLimit.checkBoard(board(fr = 10), Seq(Entry(t0, PostRateIdentity("other", "shiki", ""))), PostRateIdentity("ip", "", ""), t0), None)
+    assertEquals(
+      PostRateLimit.checkBoard(board(fr = 10), Seq(Entry(t0, PostRateIdentity("other", "shiki", ""))), PostRateIdentity("ip", "", ""), t0),
+      None
+    )
   }
 
   test("ごんたくれ、Samba24、広域連投規制の順に判定する") {
@@ -102,7 +117,12 @@ class PostRateLimitSuite extends FunSuite {
     assert(PostRateLimit.checkBoard(board(timeclose = 1), sameIp, identity, t0).isDefined)
     assertEquals(PostRateLimit.checkBoard(board(timeclose = 1, keys = Set(PostRateKey.Shiki)), sameIp, identity, t0), None)
     assertEquals(PostRateLimit.checkBoard(board(timeclose = 1), Seq(Entry(t0, PostRateIdentity())), PostRateIdentity(), t0), None)
-    assert(PostRateLimit.checkBoard(board(timeclose = 1, keys = Set(PostRateKey.Account)), Seq(Entry(t0, PostRateIdentity(aid = "x"))), PostRateIdentity(aid = "x"), t0).isDefined)
+    assert(PostRateLimit.checkBoard(
+      board(timeclose = 1, keys = Set(PostRateKey.Account)),
+      Seq(Entry(t0, PostRateIdentity(aid = "x"))),
+      PostRateIdentity(aid = "x"),
+      t0
+    ).isDefined)
   }
 
   test("照合キーの設定は id と知らない値を無視し、何も残らなければ既定") {
@@ -139,7 +159,10 @@ class PostRateLimitSuite extends FunSuite {
 
   test("拒否コードは文字列と往復する") {
     val all = Seq(PostRateRejection.Gontakure, PostRateRejection.Samba24(7), PostRateRejection.Fr(3), PostRateRejection.ThreadRentou)
-    assertEquals(all.map(_.code), Seq("post-rate:board:gontakure", "post-rate:board:samba24:7", "post-rate:board:fr:3", "post-rate:thread:rentou"))
+    assertEquals(
+      all.map(_.code),
+      Seq("post-rate:board:gontakure", "post-rate:board:samba24:7", "post-rate:board:fr:3", "post-rate:thread:rentou")
+    )
     all.foreach(rejection => assertEquals(PostRateRejection.fromCode(rejection.code), Some(rejection)))
     assertEquals(PostRateRejection.fromCode("post-rate:board:samba24:x"), None)
     assertEquals(PostRateRejection.fromCode("post-rate:board:fr:0"), None)

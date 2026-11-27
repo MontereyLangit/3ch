@@ -11,8 +11,14 @@ class GoogleHandlerSuite extends FunSuite {
   private def location(response: Response): URL = new URL(response.headers.get("Location"), "https://www.3ch.io")
 
   /** 開始から callback までを通し、callback の応答を返す */
-  private def roundTrip(t: AuthSignInTestKit, keys: GoogleTestKeys, sub: String, fields: Seq[(String, String)],
-    nonce: Option[String] = None, state: Option[String] = None): Future[Response] = for {
+  private def roundTrip(
+      t: AuthSignInTestKit,
+      keys: GoogleTestKeys,
+      sub: String,
+      fields: Seq[(String, String)],
+      nonce: Option[String] = None,
+      state: Option[String] = None
+  ): Future[Response] = for {
     started <- t.send(t.post("/auth/google/start", fields))
     _ = assertEquals(started.status, 302)
     authorize = location(started)
@@ -20,7 +26,8 @@ class GoogleHandlerSuite extends FunSuite {
     _ = { t.jwks = js.Dynamic.literal(keys = js.Array(keys.jwk)) }
     token <- keys.token(GoogleTestKeys.claims(sub, nonce.getOrElse(authorize.searchParams.get("nonce")), math.floor(js.Date.now() / 1000)))
     _ = { t.idToken = token }
-    callback <- t.send(t.get(s"/auth/google/callback/?code=test-code&state=${state.getOrElse(authorize.searchParams.get("state"))}", cookie = oauth))
+    callback <-
+      t.send(t.get(s"/auth/google/callback/?code=test-code&state=${state.getOrElse(authorize.searchParams.get("state"))}", cookie = oauth))
   } yield callback
 
   test("開始は state・nonce・PKCE を署名付き Cookie に保存して Google へ送る") {
@@ -29,8 +36,14 @@ class GoogleHandlerSuite extends FunSuite {
       t.send(t.post("/auth/google/start", Seq("uid" -> "hanako", "agreement" -> "v1", "return" -> "/sample/"))).map { response =>
         val url = location(response)
         assertEquals(url.origin + url.pathname, "https://accounts.google.com/o/oauth2/v2/auth")
-        Seq("client_id" -> "test-client.apps.googleusercontent.com", "redirect_uri" -> "https://www.3ch.io/auth/google/callback/",
-          "response_type" -> "code", "scope" -> "openid email", "code_challenge_method" -> "S256", "prompt" -> "select_account").foreach {
+        Seq(
+          "client_id" -> "test-client.apps.googleusercontent.com",
+          "redirect_uri" -> "https://www.3ch.io/auth/google/callback/",
+          "response_type" -> "code",
+          "scope" -> "openid email",
+          "code_challenge_method" -> "S256",
+          "prompt" -> "select_account"
+        ).foreach {
           case (name, value) => assertEquals(url.searchParams.get(name), value, name)
         }
         assert(url.searchParams.get("code_challenge").matches("[A-Za-z0-9_-]{43}"))
@@ -101,7 +114,10 @@ class GoogleHandlerSuite extends FunSuite {
         _ = { t.jwks = js.Dynamic.literal(keys = js.Array(keys.jwk)) }
         token <- keys.token(GoogleTestKeys.claims("109876543210", authorize.searchParams.get("nonce"), math.floor(js.Date.now() / 1000)))
         _ = { t.idToken = token; t.env.asInstanceOf[js.Dynamic].AGREEMENT_VERSION = "v2" }
-        callback <- t.send(t.get(s"/auth/google/callback/?code=test-code&state=${authorize.searchParams.get("state")}", cookie = t.cookie(started, "__Host-ch3s_oauth").get))
+        callback <- t.send(t.get(
+          s"/auth/google/callback/?code=test-code&state=${authorize.searchParams.get("state")}",
+          cookie = t.cookie(started, "__Host-ch3s_oauth").get
+        ))
       } yield {
         assertEquals(callback.headers.get("Location"), "/auth/?error=agreement&return=%2F")
         assertEquals(t.kit.accountNames, Set.empty[String])

@@ -14,6 +14,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
 object ThreadRepository {
+
   /** 板とスレキーに対応する Thread DO のスタブ */
   def stub(board: BoardId, key: String, e: WorkerEnv): ThreadDoStub = e.THREAD_DO.get(e.THREAD_DO.idFromName(s"${board.value}/$key"))
 
@@ -22,7 +23,14 @@ object ThreadRepository {
     stub(board, key, e).getSettings().toFuture.map(BbsSettings.parse(_, "<>"))
 
   /** dat 行と log 行を追記し、確定したレス番号を返す。スレの状態・スレ立て規制・連投規制による拒否は結果で返し、それ以外の障害は Future の失敗 */
-  def addRes(board: BoardId, key: String, datLine: String, logLine: String, posting: ThreadPosting, e: WorkerEnv): Future[ThreadWriteResult] =
+  def addRes(
+      board: BoardId,
+      key: String,
+      datLine: String,
+      logLine: String,
+      posting: ThreadPosting,
+      e: WorkerEnv
+  ): Future[ThreadWriteResult] =
     stub(board, key, e).addRes(datLine, logLine, PostingCodec.encode(posting)).toFuture
       .map { result =>
         if (result.swallowed) ThreadWriteResult.Swallowed(result.count)
@@ -40,7 +48,13 @@ object ThreadRepository {
       val settings = getSettings(board, key, e)
       val owner = thread.getOwner().toFuture
       dat.zip(settings).zip(owner).map { case ((d, s), o) =>
-        ThreadSnapshot(d, s, () => if (js.DynamicImplicits.truthValue(o.asInstanceOf[js.Dynamic])) Some(ThreadOwnerCodec.decode(o.asInstanceOf[js.Dynamic])) else None)
+        ThreadSnapshot(
+          d,
+          s,
+          () =>
+            if (js.DynamicImplicits.truthValue(o.asInstanceOf[js.Dynamic])) Some(ThreadOwnerCodec.decode(o.asInstanceOf[js.Dynamic]))
+            else None
+        )
       }
     }
 
@@ -53,7 +67,7 @@ object ThreadRepository {
     def unapply(error: Throwable): Option[ThreadWriteResult] = {
       val text = error match {
         case x: js.JavaScriptException => String.valueOf(x.exception)
-        case other => other.toString
+        case other                     => other.toString
       }
       val code = text.stripPrefix("Error: ")
       ThreadWriteRejection.fromCode(code).map(ThreadWriteResult.Refused(_))

@@ -9,14 +9,17 @@ class AccountCapSuite extends FunSuite {
   private val profile = AccountProfile(aid, "user1234", AccountKind.Google, now, None, now, "v1", googleSubHash = Some("a" * 64))
   private def owner(roles: AccountRole*): AccountState =
     AccountState.create(profile, now).flatMap(_.activate(now)).flatMap(_.setRoles(Roles(roles.toSet))).toOption.get
-  private def cap(id: String, hash: String, issuedBy: String = aid, strong: Boolean = false): AccountCap = AccountCap(id, "管理人", hash, strong, issuedBy, now)
+  private def cap(id: String, hash: String, issuedBy: String = aid, strong: Boolean = false): AccountCap =
+    AccountCap(id, "管理人", hash, strong, issuedBy, now)
 
   test("キャップ名は前後の空白を除いて 1〜16 文字、HTML とキャップ・トリップの印と制御文字を拒否する") {
     assertEquals(CapName.parse(" 削除人 "), Right("削除人"))
     assertEquals(CapName.parse("a" * 16), Right("a" * 16))
     assertEquals(CapName.parse("a" * 17), Left(CapNameRejection.Length))
     assertEquals(CapName.parse("   "), Left(CapNameRejection.Length))
-    Seq("<b>", "a&b", "x★", "y◆", "#pass", "名＠前", "a\nb", "a​b").foreach(name => assertEquals(CapName.parse(name), Left(CapNameRejection.Character), name))
+    Seq("<b>", "a&b", "x★", "y◆", "#pass", "名＠前", "a\nb", "a​b").foreach(name =>
+      assertEquals(CapName.parse(name), Left(CapNameRejection.Character), name)
+    )
     assertEquals(cap("c", "h", strong = true).storedName, "管理人★")
     assertEquals(cap("c", "h").storedName, "管理人")
   }
@@ -24,7 +27,10 @@ class AccountCapSuite extends FunSuite {
   test("クライアント ID と不正な名前のキャップは登録しない") {
     val client = AccountState.create(profile.copy(kind = AccountKind.Client, googleSubHash = None), now).toOption.get
     assertEquals(client.bindCap(cap("c1", "h1"), issuerIsAdmin = true, now), Left(AccountRejection.RolesForbidden))
-    assertEquals(owner(AccountRole.Cap).bindCap(cap("c1", "h1").copy(name = "<b>"), issuerIsAdmin = false, now), Left(AccountRejection.Invalid))
+    assertEquals(
+      owner(AccountRole.Cap).bindCap(cap("c1", "h1").copy(name = "<b>"), issuerIsAdmin = false, now),
+      Left(AccountRejection.Invalid)
+    )
   }
 
   test("自分で発行したキャップは役割を全て外すと使えず、admin が発行したものは使える") {
@@ -38,8 +44,12 @@ class AccountCapSuite extends FunSuite {
   test("自分で発行した強キャップは使う時点で admin が要り、降格すると使えず、ほかの admin が発行したものは使える") {
     val own = owner(AccountRole.Admin).bindCap(cap("s1", "hs", strong = true), issuerIsAdmin = true, now).toOption.get
     assert(own.describeForCap(aid, "hs", now).isRight)
-    assertEquals(own.setRoles(Roles(Set(AccountRole.Delete))).toOption.get.describeForCap(aid, "hs", now), Left(AccountRejection.CapRevoked))
-    val fromAdmin = owner(AccountRole.Delete).bindCap(cap("s2", "hs2", issuedBy = admin, strong = true), issuerIsAdmin = true, now).toOption.get
+    assertEquals(
+      own.setRoles(Roles(Set(AccountRole.Delete))).toOption.get.describeForCap(aid, "hs", now),
+      Left(AccountRejection.CapRevoked)
+    )
+    val fromAdmin =
+      owner(AccountRole.Delete).bindCap(cap("s2", "hs2", issuedBy = admin, strong = true), issuerIsAdmin = true, now).toOption.get
     assert(fromAdmin.describeForCap(aid, "hs2", now).isRight)
   }
 
@@ -51,8 +61,13 @@ class AccountCapSuite extends FunSuite {
     assertEquals(next.describeForCap(aid, "h1", now + 5), Left(AccountRejection.CapRevoked))
     assert(next.describeForCap(aid, "h2", now + 5).isRight)
     assertEquals(next.reissueCap("c1", "c3", "h3", aid, issuerIsAdmin = false, now + 6), Left(AccountRejection.CapRevoked))
-    val strong = owner(AccountRole.Regulate).bindCap(cap("s1", "hs", issuedBy = admin, strong = true), issuerIsAdmin = true, now).toOption.get
-    assertEquals(strong.reissueCap("s1", "s2", "hs2", aid, issuerIsAdmin = false, now), Left(AccountRejection.RolesForbidden), "強キャップの再発行は admin だけ")
+    val strong =
+      owner(AccountRole.Regulate).bindCap(cap("s1", "hs", issuedBy = admin, strong = true), issuerIsAdmin = true, now).toOption.get
+    assertEquals(
+      strong.reissueCap("s1", "s2", "hs2", aid, issuerIsAdmin = false, now),
+      Left(AccountRejection.RolesForbidden),
+      "強キャップの再発行は admin だけ"
+    )
   }
 
   test("失効の記録は新しい 20 件まで残し、キャップごとの書き込みを新しい順に返す") {

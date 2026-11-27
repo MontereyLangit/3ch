@@ -4,6 +4,7 @@ import scala.concurrent.Future
 
 /** 投稿処理で使うハッシュ。Web Crypto で非同期 */
 trait Hasher {
+
   /** SHA-1 の Base64 の先頭 27 文字 */
   def sha1Base64(value: String): Future[String]
 

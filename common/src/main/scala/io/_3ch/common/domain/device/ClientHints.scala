@@ -2,13 +2,14 @@ package io._3ch.common.domain.device
 
 /** サーバーが受信した UA Client Hints。mobileHeaderPresent は有効な ?0・?1 が届いたか */
 final case class ClientHints(
-  platform: String = "",
-  platformVersion: String = "",
-  model: String = "",
-  cpuArch: String = "",
-  mobile: Boolean = false,
-  mobileHeaderPresent: Boolean = false
+    platform: String = "",
+    platformVersion: String = "",
+    model: String = "",
+    cpuArch: String = "",
+    mobile: Boolean = false,
+    mobileHeaderPresent: Boolean = false
 ) {
+
   /** platform・版・機種・CPUのヒントが全て空か */
   def isEmpty: Boolean = platform.isEmpty && platformVersion.isEmpty && model.isEmpty && cpuArch.isEmpty
 
@@ -30,8 +31,12 @@ final case class ClientHints(
     val declared = fingerprint.fold("")(fp => DeviceStrings.trim(fp.os))
     val userAgent = DeviceText.lowercase(if (declared.nonEmpty) declared else DeviceStrings.trim(headerUserAgent))
     val expectedPrefix = Map("windows" -> "win", "macos" -> "mac").get(platformLower)
-    val markers = Map("android" -> List("android"), "windows" -> List("windows"),
-      "macos" -> List("mac os", "macintosh"), "linux" -> List("linux", "x11")).get(platformLower)
+    val markers = Map(
+      "android" -> List("android"),
+      "windows" -> List("windows"),
+      "macos" -> List("mac os", "macintosh"),
+      "linux" -> List("linux", "x11")
+    ).get(platformLower)
     if (platformLower.isEmpty) None
     else if (navigatorPlatform.nonEmpty && !claimsIos && List("iphone", "ipad").exists(navigatorPlatform.contains)) Some(Rule.R4)
     else if (navigatorPlatform.nonEmpty && expectedPrefix.exists(prefix => !navigatorPlatform.startsWith(prefix))) Some(Rule.R5)
@@ -42,6 +47,7 @@ final case class ClientHints(
 }
 
 object ClientHints {
+
   /** 申告値と受信ヘッダが矛盾した規則 */
   enum Rule { case R4, R5, R6, R7 }
 
@@ -52,7 +58,13 @@ object ClientHints {
       if (value.length >= 2 && value.head == '"' && value.last == '"') DeviceStrings.trim(value.substring(1, value.length - 1)) else value
     }
     val mobileValue = unquote(mobile)
-    ClientHints(unquote(platform), unquote(platformVersion), unquote(model), unquote(cpuArch),
-      mobileValue == "?1", mobileValue == "?1" || mobileValue == "?0")
+    ClientHints(
+      unquote(platform),
+      unquote(platformVersion),
+      unquote(model),
+      unquote(cpuArch),
+      mobileValue == "?1",
+      mobileValue == "?1" || mobileValue == "?0"
+    )
   }
 }

@@ -64,7 +64,8 @@ class GoogleIdTokensSuite extends FunSuite {
   }
 
   test("JWKS は RSA の署名用の鍵だけを読む") {
-    val raw = """{"keys":[{"kid":"a","kty":"RSA","alg":"RS256","use":"sig","n":"nn","e":"AQAB"},{"kid":"b","kty":"EC","n":"x","e":"y"},{"kid":"c","kty":"RSA","alg":"RS512","n":"x","e":"y"},{"kty":"RSA","n":"x","e":"y"}]}"""
+    val raw =
+      """{"keys":[{"kid":"a","kty":"RSA","alg":"RS256","use":"sig","n":"nn","e":"AQAB"},{"kid":"b","kty":"EC","n":"x","e":"y"},{"kid":"c","kty":"RSA","alg":"RS512","n":"x","e":"y"},{"kty":"RSA","n":"x","e":"y"}]}"""
     assertEquals(GoogleIdTokens.parseKeys(raw), Vector(RsaPublicKey("a", "nn", "AQAB")))
     assertEquals(GoogleIdTokens.parseKeys("[]"), Vector.empty)
     assertEquals(GoogleIdTokens.claims("""{"iss":"accounts.google.com","aud":["a"],"sub":"1","exp":1,"iat":1,"nonce":"n"}"""), None)

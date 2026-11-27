@@ -56,11 +56,15 @@ class SessionReaderSuite extends FunSuite {
   test("fromRequest は Account のバインディングが無くても表示情報を読める") {
     for {
       cookie <- signed(claims.copy(expiresAt = (js.Date.now() / 1000).toLong + 3600))
-      request = js.Dynamic.literal(headers = js.Dynamic.literal(get = ((_: String) => cookie): js.Function1[String, String])).asInstanceOf[Request]
+      request =
+        js.Dynamic.literal(headers = js.Dynamic.literal(get = ((_: String) => cookie): js.Function1[String, String])).asInstanceOf[Request]
       env = AuthTestEnv.env()
       result <- SessionReader.fromRequest(request, env)
       missing <- SessionReader.fromRequest(request, js.Dynamic.literal().asInstanceOf[WorkerEnv])
-      context = js.Dynamic.literal(req = js.Dynamic.literal(header = ((_: String) => cookie): js.Function1[String, String]), env = env).asInstanceOf[HonoContextFacade]
+      context = js.Dynamic.literal(
+        req = js.Dynamic.literal(header = ((_: String) => cookie): js.Function1[String, String]),
+        env = env
+      ).asInstanceOf[HonoContextFacade]
       hono <- SessionReader.fromRequest(context)
       _ = assertEquals(hono, result)
       _ = assertEquals(result, Some(SessionSnapshot(claims.aid, claims.uid, claims.lv)))
@@ -80,7 +84,15 @@ class SessionReaderSuite extends FunSuite {
   }
 
   test("HTTP は localhost にだけ発行し、鍵なし・期限切れ・不正な claims は発行しない") {
-    val urls = Seq("https://example.test/", "http://localhost:8787/", "http://example.test/", "http://127.0.0.1:8787/", "http://localhost.example.test/", "ftp://localhost/", "invalid")
+    val urls = Seq(
+      "https://example.test/",
+      "http://localhost:8787/",
+      "http://example.test/",
+      "http://127.0.0.1:8787/",
+      "http://localhost.example.test/",
+      "ftp://localhost/",
+      "invalid"
+    )
     for {
       results <- Future.traverse(urls)(SessionCookies.issue(claims, secret, _, now))
       _ = assertEquals(results.map(_.isDefined), Seq(true, true, false, false, false, false, false))

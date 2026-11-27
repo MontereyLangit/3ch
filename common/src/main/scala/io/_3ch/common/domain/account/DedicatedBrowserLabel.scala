@@ -6,8 +6,9 @@ object DedicatedBrowserLabel {
   def of(userAgent: String): String = {
     val remainder = userAgent.trim.stripPrefix("Monazilla/1.00")
     val product = Product.findFirstMatchIn(remainder).map(found => found.group(1) + " " + found.group(2)).getOrElse("専用ブラウザ")
-    val os = Seq("Windows" -> "Windows", "Android" -> "Android", "iPhone" -> "iOS", "iPad" -> "iPadOS", "Macintosh" -> "macOS", "Linux" -> "Linux")
-      .collectFirst { case (marker, name) if remainder.contains(marker) => name }
+    val os =
+      Seq("Windows" -> "Windows", "Android" -> "Android", "iPhone" -> "iOS", "iPad" -> "iPadOS", "Macintosh" -> "macOS", "Linux" -> "Linux")
+        .collectFirst { case (marker, name) if remainder.contains(marker) => name }
     product + os.fold("")(" · " + _)
   }
 }

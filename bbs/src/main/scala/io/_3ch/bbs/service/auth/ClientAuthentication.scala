@@ -11,10 +11,13 @@ enum AuthServiceFailure(val code: String) {
   case Invalid extends AuthServiceFailure("auth:invalid")
   case RateLimited extends AuthServiceFailure("auth:rate")
   case Unavailable extends AuthServiceFailure("auth:unavailable")
+
   /** ユーザー ID が使用済み・予約語・予約中 */
   case Taken extends AuthServiceFailure("auth:id:taken")
+
   /** メールアドレスが他のアカウントで使われている */
   case EmailTaken extends AuthServiceFailure("auth:email:taken")
+
   /** 確認メールを送れなかった */
   case MailFailed extends AuthServiceFailure("auth:mail:failed")
 }
@@ -23,25 +26,40 @@ enum AuthServiceFailure(val code: String) {
 final case class AuthServiceException(failure: AuthServiceFailure) extends RuntimeException(failure.code)
 
 /** 投稿同意・Turnstile・端末申告を確認した後の計数とアカウント登録 */
-final class ClientAuthentication(accounts: AccountManagementStore, keys: AuthenticationKeys, agreementVersion: String, review: AbuseReviewLog = AbuseReviewLog.none) {
+final class ClientAuthentication(
+    accounts: AccountManagementStore,
+    keys: AuthenticationKeys,
+    agreementVersion: String,
+    review: AbuseReviewLog = AbuseReviewLog.none
+) {
+
   /** 既存の本人なら端末と同意だけを更新し、未登録なら UID を予約して作成する。strict なら乱造検知の閾値を半分にする */
-  def verify(deviceHash: String, keyIp: String, now: Double, existing: Option[AccountDescription] = None, strict: Boolean = false): Future[AccountDescription] =
+  def verify(
+      deviceHash: String,
+      keyIp: String,
+      now: Double,
+      existing: Option[AccountDescription] = None,
+      strict: Boolean = false
+  ): Future[AccountDescription] =
     Future.unit.flatMap { _ =>
-      if (!AccountProfile.validTime(now) || !DedicatedBrowserTokens.validHash(keyIp) || agreementVersion.isEmpty ||
-        (deviceHash.nonEmpty && !deviceHash.matches("[pgu](?:[0-9a-f]{18}|[0-9a-f]{16})"))) {
+      if (
+        !AccountProfile.validTime(now) || !DedicatedBrowserTokens.validHash(keyIp) || agreementVersion.isEmpty ||
+        (deviceHash.nonEmpty && !deviceHash.matches("[pgu](?:[0-9a-f]{18}|[0-9a-f]{16})"))
+      ) {
         throw AuthServiceException(AuthServiceFailure.Invalid)
       }
-      val counted = accounts.rate(keyIp, if (deviceHash.isEmpty) AuthRateHistory.anonymousDevice else "deviceHash:" + deviceHash, now).map(_ => ())
+      val counted =
+        accounts.rate(keyIp, if (deviceHash.isEmpty) AuthRateHistory.anonymousDevice else "deviceHash:" + deviceHash, now).map(_ => ())
       for {
         _ <- counted
         counts <- accounts.rate(keyIp, "verify", now)
         _ <- flagged(keyIp, AbuseReason.ofVerify(counts, strict), counts, now)
         account <- existing match {
-          case None => createClient(deviceHash, keyIp, now, 8)
+          case None          => createClient(deviceHash, keyIp, now, 8)
           case Some(account) => for {
-            _ <- accounts.bindDevice(account.aid, deviceHash, keyIp, now)
-            _ <- accounts.agree(account.aid, agreementVersion, now)
-          } yield account.copy(agreedAt = now, agreementVersion = agreementVersion)
+              _ <- accounts.bindDevice(account.aid, deviceHash, keyIp, now)
+              _ <- accounts.agree(account.aid, agreementVersion, now)
+            } yield account.copy(agreedAt = now, agreementVersion = agreementVersion)
         }
       } yield account
     }
@@ -58,21 +76,31 @@ final class ClientAuthentication(accounts: AccountManagementStore, keys: Authent
       val aid = keys.aid()
       val uid = keys.uid()
       keys.index("uid", uid).flatMap {
-        case None => Future.failed(AuthServiceException(AuthServiceFailure.Unavailable))
+        case None       => Future.failed(AuthServiceException(AuthServiceFailure.Unavailable))
         case Some(hash) => accounts.reserve("uid", hash, aid, now).recoverWith { case NonFatal(error) =>
-          accounts.remove("uid", hash, aid).recover { case NonFatal(_) => () }.flatMap(_ => Future.failed(error))
-        }.flatMap {
-          case false => createClient(deviceHash, keyIp, now, attempts - 1)
-          case true =>
-            (for {
-              created <- accounts.create(AccountProfile(aid, uid, AccountKind.Client, now,
-                Some(now + AccountProfile.clientLifetime), now, agreementVersion), now)
-              _ <- accounts.bindDevice(aid, deviceHash, keyIp, now)
-              _ <- accounts.confirm("uid", hash, aid, now)
-            } yield created).recoverWith { case NonFatal(error) =>
-              accounts.remove("uid", hash, aid).recover { case NonFatal(_) => () }.flatMap(_ => Future.failed(error))
-            }
-        }
+            accounts.remove("uid", hash, aid).recover { case NonFatal(_) => () }.flatMap(_ => Future.failed(error))
+          }.flatMap {
+            case false => createClient(deviceHash, keyIp, now, attempts - 1)
+            case true  =>
+              (for {
+                created <- accounts.create(
+                  AccountProfile(
+                    aid,
+                    uid,
+                    AccountKind.Client,
+                    now,
+                    Some(now + AccountProfile.clientLifetime),
+                    now,
+                    agreementVersion
+                  ),
+                  now
+                )
+                _ <- accounts.bindDevice(aid, deviceHash, keyIp, now)
+                _ <- accounts.confirm("uid", hash, aid, now)
+              } yield created).recoverWith { case NonFatal(error) =>
+                accounts.remove("uid", hash, aid).recover { case NonFatal(_) => () }.flatMap(_ => Future.failed(error))
+              }
+          }
       }
     }
   }

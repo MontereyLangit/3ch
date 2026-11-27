@@ -31,7 +31,10 @@ class AccountRolesSuite extends FunSuite {
 
   test("役割を変えられるのは admin だけで、クライアント ID には付けない") {
     val target = google(AccountRole.Cap)
-    assertEquals(target.assignRoles(roles(AccountRole.Delete), roles(AccountRole.Admin), now).map(_.roles), Right(roles(AccountRole.Delete)))
+    assertEquals(
+      target.assignRoles(roles(AccountRole.Delete), roles(AccountRole.Admin), now).map(_.roles),
+      Right(roles(AccountRole.Delete))
+    )
     assertEquals(target.assignRoles(roles(AccountRole.Delete), roles(AccountRole.Regulate), now), Left(AccountRejection.Forbidden))
     assertEquals(google(AccountRole.Admin).assignRoles(roles(), roles(AccountRole.Delete), now), Left(AccountRejection.Forbidden))
     assertEquals(google(AccountRole.Admin).assignRoles(roles(), roles(AccountRole.Admin), now).map(_.roles), Right(roles()))
@@ -64,7 +67,11 @@ class AccountRolesSuite extends FunSuite {
     val pendingAdmin = AdminSeat("a" * 64, AccountIndexEntry(other, now - 10), activeAdmin = true)
     val expiredAdmin = AdminSeat("b" * 64, AccountIndexEntry(other, now - 600), activeAdmin = true)
     assertEquals(FirstAdminClaim.claim(Vector(pendingAdmin), aid, now, breakGlass = false), Left(AccountRejection.Forbidden))
-    assertEquals(FirstAdminClaim.claim(Vector(expiredAdmin), aid, now, breakGlass = false), Left(AccountRejection.Forbidden), "期限切れの予約でも admin なら外さない")
+    assertEquals(
+      FirstAdminClaim.claim(Vector(expiredAdmin), aid, now, breakGlass = false),
+      Left(AccountRejection.Forbidden),
+      "期限切れの予約でも admin なら外さない"
+    )
     assertEquals(FirstAdminClaim.claim(Vector(expiredAdmin), aid, now, breakGlass = true).map(_._1), Right(Vector.empty[String]))
     val mine = AdminSeat("c" * 64, AccountIndexEntry(aid, now - 100, confirmed = true), activeAdmin = true)
     assert(!FirstAdminClaim.otherAdminExists(Vector(mine), aid))
@@ -81,7 +88,10 @@ class AccountRolesSuite extends FunSuite {
     assertEquals(FirstAdminClaim.claim(Vector.empty, aid, now, breakGlass = false), Right((Vector.empty, AccountIndexEntry(aid, now))))
     assertEquals(FirstAdminClaim.claim(Vector(active), aid, now, breakGlass = false), Left(AccountRejection.Forbidden))
     assertEquals(FirstAdminClaim.claim(Vector(pending), aid, now, breakGlass = false), Left(AccountRejection.Forbidden))
-    assertEquals(FirstAdminClaim.claim(Vector(inactive, expired, own), aid, now, breakGlass = false).map(_._1), Right(Vector("b" * 64, "d" * 64)))
+    assertEquals(
+      FirstAdminClaim.claim(Vector(inactive, expired, own), aid, now, breakGlass = false).map(_._1),
+      Right(Vector("b" * 64, "d" * 64))
+    )
     assertEquals(FirstAdminClaim.claim(Vector(active, pending), aid, now, breakGlass = true).map(_._2), Right(AccountIndexEntry(aid, now)))
     assertEquals(FirstAdminClaim.claim(Vector.empty, "short", now, breakGlass = false), Left(AccountRejection.Invalid))
   }

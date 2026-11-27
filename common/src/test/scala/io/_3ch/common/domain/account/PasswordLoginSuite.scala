@@ -4,14 +4,17 @@ import munit.FunSuite
 
 class PasswordLoginSuite extends FunSuite {
   private val now = 2000000000d
-  private val profile = AccountProfile("abcdefghijklmnop", "user1234", AccountKind.Password, now, None, now, "v1", loginId = Some("user1234"))
-  private val credential = PasswordCredential(PasswordAlgorithm.Pbkdf2Sha256, 100000, Vector.fill(16)(1.toByte), Vector.fill(32)(2.toByte), now)
+  private val profile =
+    AccountProfile("abcdefghijklmnop", "user1234", AccountKind.Password, now, None, now, "v1", loginId = Some("user1234"))
+  private val credential =
+    PasswordCredential(PasswordAlgorithm.Pbkdf2Sha256, 100000, Vector.fill(16)(1.toByte), Vector.fill(32)(2.toByte), now)
   private val ip = "a" * 64
   private val other = "b" * 64
   private def ready: AccountState = AccountState.create(profile, now, Some(credential)).flatMap(_.activate(now)).toOption.get
 
-  private def fail(state: AccountState, keyIp: String, times: Int): AccountState =
-    (1 to times).foldLeft(state)((s, i) => s.afterPasswordAttempt(keyIp, matched = false, now + i).toOption.get._1)
+  private def fail(state: AccountState, keyIp: String, times: Int): AccountState = (1 to times).foldLeft(state)((s, i) =>
+    s.afterPasswordAttempt(keyIp, matched = false, now + i).toOption.get._1
+  )
 
   test("資格情報と一緒に作成し、確定するまで認証に使わない") {
     val pending = AccountState.create(profile, now, Some(credential)).toOption.get
@@ -21,7 +24,10 @@ class PasswordLoginSuite extends FunSuite {
     assertEquals(ready.activate(now + 1), Right(ready))
     assertEquals(AccountState.create(profile, now).toOption.get.activate(now), Left(AccountRejection.Invalid))
     assertEquals(AccountState.create(profile, now, Some(credential.copy(updatedAt = now + 1))), Left(AccountRejection.Invalid))
-    assertEquals(AccountState.create(profile.copy(kind = AccountKind.Client, loginId = None, uid = "abcd1234"), now, Some(credential)), Left(AccountRejection.Invalid))
+    assertEquals(
+      AccountState.create(profile.copy(kind = AccountKind.Client, loginId = None, uid = "abcd1234"), now, Some(credential)),
+      Left(AccountRejection.Invalid)
+    )
   }
 
   test("一致すればその接続元の失敗を消し、不一致は失敗として数える") {
@@ -66,7 +72,13 @@ class PasswordLoginSuite extends FunSuite {
   }
 
   test("Google は sub の HMAC を持って確定し、一致したときだけ情報を返す") {
-    val google = profile.copy(kind = AccountKind.Google, loginId = None, googleSubHash = Some("c" * 64), email = Some("user@example.com"), emailVerifiedAt = Some(now))
+    val google = profile.copy(
+      kind = AccountKind.Google,
+      loginId = None,
+      googleSubHash = Some("c" * 64),
+      email = Some("user@example.com"),
+      emailVerifiedAt = Some(now)
+    )
     val pending = AccountState.create(google, now).toOption.get
     assertEquals(pending.describeGoogle("c" * 64, now), Left(AccountRejection.Pending))
     val active = pending.activate(now).toOption.get

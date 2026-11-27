@@ -13,6 +13,7 @@ private[islands] object AccountPostView {
 
   /** 有限の数値なら Some */
   def number(value: js.UndefOr[Double]): Option[Double] = value.toOption.filter(_.isFinite)
+
   /** UNIX 秒を日本時間で出す。値が無ければ空 */
   def time(value: js.UndefOr[Double]): String = number(value).filter(_ > 0).fold("")(JstTime.dateTime)
 
@@ -22,9 +23,12 @@ private[islands] object AccountPostView {
     val key = raw.key
     val resNum = raw.resNum
     val path = s"/test/read.cgi/${URIUtils.encodeURIComponent(bbs)}/${URIUtils.encodeURIComponent(key)}/$resNum"
-    <.div(^.className := "mt-2 text-xs", <.span(^.className := "mr-2 text-[#697785]", time(raw.t)),
+    <.div(
+      ^.className := "mt-2 text-xs",
+      <.span(^.className := "mr-2 text-[#697785]", time(raw.t)),
       <.a(^.href := path, ^.className := "text-[#06f] hover:underline", s"$bbs › ${SubjectText.decode(raw.title)} >>$resNum"),
       <.span(^.className := "ml-2 text-[#697785]", raw.network),
-      <.p(^.className := "mt-1 whitespace-pre-wrap", SubjectText.decode(raw.excerpt)))
+      <.p(^.className := "mt-1 whitespace-pre-wrap", SubjectText.decode(raw.excerpt))
+    )
   }
 }

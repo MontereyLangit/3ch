@@ -13,17 +13,32 @@ class ThreadCreationSuite extends FunSuite {
   private val ordinaryError = "thread-creation:narrow:ip"
 
   private def limit(identity: String, count: Int = 2): js.Dynamic = js.Dynamic.literal(
-    ip = identity, userAgent = s"ua-$identity", networkGroup = s"network-$identity", title = s"title-$identity",
-    tatesugi = count, tatesugiResetSeconds = 3600, junban = 0, junbanResetSeconds = 3600)
+    ip = identity,
+    userAgent = s"ua-$identity",
+    networkGroup = s"network-$identity",
+    title = s"title-$identity",
+    tatesugi = count,
+    tatesugiResetSeconds = 3600,
+    junban = 0,
+    junbanResetSeconds = 3600
+  )
 
   private def posting(key: String, identity: String, create: Boolean = true): js.Dynamic = js.Dynamic.literal(
-    bbs = "board", key = key, create = create, title = "title", sage = false, creationLimit = limit(identity))
+    bbs = "board",
+    key = key,
+    create = create,
+    title = "title",
+    sage = false,
+    creationLimit = limit(identity)
+  )
 
   test("simultaneous reservations cannot both pass the same identity") {
     val board = DurableTestKit.newEnv().board("board")
     for {
-      results <- Future.sequence(Seq(board.reserveThreadCreation("1", limit("a")).toFuture,
-        board.reserveThreadCreation("2", limit("a")).toFuture))
+      results <- Future.sequence(Seq(
+        board.reserveThreadCreation("1", limit("a")).toFuture,
+        board.reserveThreadCreation("2", limit("a")).toFuture
+      ))
       _ = assertEquals(results.count(_.isEmpty), 1)
       _ = assertEquals(results.count(_ == ordinaryError), 1)
     } yield ()
@@ -43,11 +58,17 @@ class ThreadCreationSuite extends FunSuite {
   test("a reply bypasses creation regulation while a rejected creation writes no dat") {
     val env = DurableTestKit.newEnv()
     for {
-      first <- env.thread("board/2000000001").addRes("name<><>date<> body <>title", "1<>log", posting("2000000001", "a")).toFuture.map(_.count)
+      first <-
+        env.thread("board/2000000001").addRes("name<><>date<> body <>title", "1<>log", posting("2000000001", "a")).toFuture.map(_.count)
       _ = assertEquals(first, 1)
-      reply <- env.thread("board/2000000001").addRes("name<><>date<> reply <>", "1<>log", posting("2000000001", "a", false)).toFuture.map(_.count)
+      reply <-
+        env.thread("board/2000000001").addRes("name<><>date<> reply <>", "1<>log", posting("2000000001", "a", false)).toFuture.map(_.count)
       _ = assertEquals(reply, 2)
-      error <- DurableTestKit.rejectionMessage(env.thread("board/2000000002").addRes("name<><>date<> body <>title", "1<>log", posting("2000000002", "a")).toFuture)
+      error <- DurableTestKit.rejectionMessage(env.thread("board/2000000002").addRes(
+        "name<><>date<> body <>title",
+        "1<>log",
+        posting("2000000002", "a")
+      ).toFuture)
       _ = assertEquals(error, ordinaryError)
       dat <- env.thread("board/2000000002").getDat().toFuture
       _ = assertEquals(dat, "")
@@ -59,12 +80,15 @@ class ThreadCreationSuite extends FunSuite {
     val instance = env.threadInstance("board/2000000001")
     val storage = instance.state.storage.asInstanceOf[js.Dynamic]
     val originalPut = storage.put.asInstanceOf[js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]]]
-    storage.updateDynamic("put")(((key: js.Any, value: js.UndefOr[js.Any]) => {
-      if !js.isUndefined(key.asInstanceOf[js.Dynamic].dat) then js.Promise.reject(new js.Error("write failed"))
-      else originalPut(key, value)
-    }): js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]])
+    storage.updateDynamic("put")((
+        (key: js.Any, value: js.UndefOr[js.Any]) => {
+          if !js.isUndefined(key.asInstanceOf[js.Dynamic].dat) then js.Promise.reject(new js.Error("write failed"))
+          else originalPut(key, value)
+        }
+    ): js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]])
     for {
-      error <- DurableTestKit.rejectionMessage(instance.addRes("name<><>date<> body <>title", "1<>log", posting("2000000001", "a")).toFuture)
+      error <-
+        DurableTestKit.rejectionMessage(instance.addRes("name<><>date<> body <>title", "1<>log", posting("2000000001", "a")).toFuture)
       _ = assertEquals(error, "write failed")
       allowed <- env.board("board").reserveThreadCreation("2000000002", limit("a")).toFuture
       _ = assertEquals(allowed, "")
@@ -75,9 +99,14 @@ class ThreadCreationSuite extends FunSuite {
     val env = DurableTestKit.newEnv()
     val board = env.board("board")
     board.asInstanceOf[js.Dynamic].updateDynamic("updateThread")(
-      ((_: js.Any, _: js.Any, _: js.Any) => js.Promise.reject(new js.Error("subject failed"))): js.Function3[js.Any, js.Any, js.Any, js.Any])
+      ((_: js.Any, _: js.Any, _: js.Any) => js.Promise.reject(new js.Error("subject failed"))): js.Function3[js.Any, js.Any, js.Any, js.Any]
+    )
     for {
-      error <- DurableTestKit.rejectionMessage(env.thread("board/2000000001").addRes("name<><>date<> body <>title", "1<>log", posting("2000000001", "a")).toFuture)
+      error <- DurableTestKit.rejectionMessage(env.thread("board/2000000001").addRes(
+        "name<><>date<> body <>title",
+        "1<>log",
+        posting("2000000001", "a")
+      ).toFuture)
       _ = assertEquals(error, "subject failed")
       dat <- env.thread("board/2000000001").getDat().toFuture
       _ = assert(dat.nonEmpty)
@@ -110,9 +139,11 @@ class ThreadCreationSuite extends FunSuite {
     val env = DurableTestKit.newEnv()
     val board = env.board("board")
     board.asInstanceOf[js.Dynamic].updateDynamic("completeThreadCreation")(
-      ((_: String) => js.Promise.reject(new js.Error("completion failed"))): js.Function1[String, js.Promise[Unit]])
+      ((_: String) => js.Promise.reject(new js.Error("completion failed"))): js.Function1[String, js.Promise[Unit]]
+    )
     for {
-      count <- env.thread("board/2000000001").addRes("name<><>date<> body <>title", "1<>log", posting("2000000001", "a")).toFuture.map(_.count)
+      count <-
+        env.thread("board/2000000001").addRes("name<><>date<> body <>title", "1<>log", posting("2000000001", "a")).toFuture.map(_.count)
       _ = assertEquals(count, 1)
       dat <- env.thread("board/2000000001").getDat().toFuture
       _ = assert(dat.nonEmpty)
@@ -125,11 +156,26 @@ class ThreadCreationSuite extends FunSuite {
 
   test("history keeps the existing storage format") {
     val instance = DurableTestKit.newEnv().boardInstance("board")
-    val original = js.Dynamic.literal(key = "1", timestampSeconds = 2000000000.5, title = "title-a", ip = "a", userAgent = "ua-a",
-      networkGroup = "network-a", pending = false, window = 3, expiresAt = 2000000120.0)
-    assertEquals(js.JSON.stringify(ThreadCreationCodec.encodeRecord(ThreadCreationCodec.decodeRecord(original))), js.JSON.stringify(original))
+    val original = js.Dynamic.literal(
+      key = "1",
+      timestampSeconds = 2000000000.5,
+      title = "title-a",
+      ip = "a",
+      userAgent = "ua-a",
+      networkGroup = "network-a",
+      pending = false,
+      window = 3,
+      expiresAt = 2000000120.0
+    )
+    assertEquals(
+      js.JSON.stringify(ThreadCreationCodec.encodeRecord(ThreadCreationCodec.decodeRecord(original))),
+      js.JSON.stringify(original)
+    )
     for {
-      _ <- instance.state.storage.put(js.Dictionary[js.Any]("threadCreationPageCount" -> 1, "threadCreationHistory:0" -> js.Array(original))).toFuture
+      _ <- instance.state.storage.put(js.Dictionary[js.Any](
+        "threadCreationPageCount" -> 1,
+        "threadCreationHistory:0" -> js.Array(original)
+      )).toFuture
       blocked <- instance.reserveThreadCreation("2", limit("a")).toFuture
       _ = assertEquals(blocked, ordinaryError)
       page <- instance.state.storage.get[js.Array[js.Dynamic]]("threadCreationHistory:0").toFuture
@@ -140,7 +186,9 @@ class ThreadCreationSuite extends FunSuite {
   test("creation RPC failures reject outside the concurrency gate") {
     var gateRejections = 0
     val state = js.Dynamic.literal(
-      storage = js.Dynamic.literal(get = ((_: String) => js.Promise.reject(new js.Error("storage failed"))): js.Function1[String, js.Promise[js.Any]]),
+      storage = js.Dynamic.literal(get =
+        ((_: String) => js.Promise.reject(new js.Error("storage failed"))): js.Function1[String, js.Promise[js.Any]]
+      ),
       blockConcurrencyWhile = ((callback: js.Function0[js.Promise[js.Any]]) => {
         callback().toFuture.recoverWith { case error =>
           gateRejections += 1

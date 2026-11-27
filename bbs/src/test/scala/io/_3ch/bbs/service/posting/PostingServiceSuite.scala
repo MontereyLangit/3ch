@@ -1,9 +1,18 @@
 package io._3ch.bbs.service.posting
 
 import io._3ch.bbs.domain.posting.{StoredIndex, ArchiveIndexFile, PostRateObservation, ThreadSnapshot}
-import io._3ch.bbs.service.posting.ports.{EdgeRuleStore, PhoebeRuleStore, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostingAccount, PostingAccounts, PostingUserSource, Random, RuleStore, SettingsStore, ThreadStore, UserAgentTableStore}
-import io._3ch.bbs.domain.posting.{BrokenLogKind, FailureClock, FailureSite, ModerationDenial, PostingError, PostingStage, PostingUser, ThreadOwner, ThreadPosting, ThreadWriteResult, UserAgentRule, UserAgentTable}
-import io._3ch.bbs.domain.posting.moderation.{PhoebeCapRules, ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, PostRateFinding, PostRateIdentity, PostRateLevel, PostRateRejection, ThreadCreationRejection, ThreadCreationRateLimit}
+import io._3ch.bbs.service.posting.ports.{
+  EdgeRuleStore, PhoebeRuleStore, ArchiveIndexStore, CapStore, Clock, Hasher, PostRateLog, PostingAccount, PostingAccounts,
+  PostingUserSource, Random, RuleStore, SettingsStore, ThreadStore, UserAgentTableStore
+}
+import io._3ch.bbs.domain.posting.{
+  BrokenLogKind, FailureClock, FailureSite, ModerationDenial, PostingError, PostingStage, PostingUser, ThreadOwner, ThreadPosting,
+  ThreadWriteResult, UserAgentRule, UserAgentTable
+}
+import io._3ch.bbs.domain.posting.moderation.{
+  PhoebeCapRules, ModerationRuleFile, ModerationRuleSet, ModerationRuleSource, PostRateFinding, PostRateIdentity, PostRateLevel,
+  PostRateRejection, ThreadCreationRejection, ThreadCreationRateLimit
+}
 import io._3ch.bbs.handler.PostingText
 import io._3ch.bbs.domain.account.{EdgeDecision, EdgeMode, EdgeRules, EdgeSignal}
 import io._3ch.bbs.external.web.TextEncoder
@@ -26,21 +35,22 @@ class PostingServiceSuite extends FunSuite {
 
   /** 呼ばれた順に記録するメモリ上のポート */
   private final class Fake(
-    boardSettings: String = "BBS_TITLE=看板\n",
-    threadDat: String = ExistingDat,
-    threadSettings: String = "",
-    owner: Option[ThreadOwner] = None,
-    rules: Map[ModerationRuleFile, String] = Map.empty,
-    caps: Map[String, String] = Map.empty,
-    user: Option[PostingUser] = None,
-    authSource: Option[PostingAccounts] = None,
-    roll: Double = 0.5,
-    write: ThreadPosting => Future[ThreadWriteResult] = posting => Future.successful(ThreadWriteResult.Written(if (posting.create) 1 else 2)),
-    indexWritten: Boolean = true,
-    record: PostRateObservation => Unit = _ => (),
-    agents: UserAgentTableStore = UserAgentTableStore.empty,
-    edge: EdgeRuleStore = EdgeRuleStore.empty,
-    phoebe: String = ""
+      boardSettings: String = "BBS_TITLE=看板\n",
+      threadDat: String = ExistingDat,
+      threadSettings: String = "",
+      owner: Option[ThreadOwner] = None,
+      rules: Map[ModerationRuleFile, String] = Map.empty,
+      caps: Map[String, String] = Map.empty,
+      user: Option[PostingUser] = None,
+      authSource: Option[PostingAccounts] = None,
+      roll: Double = 0.5,
+      write: ThreadPosting => Future[ThreadWriteResult] =
+        posting => Future.successful(ThreadWriteResult.Written(if (posting.create) 1 else 2)),
+      indexWritten: Boolean = true,
+      record: PostRateObservation => Unit = _ => (),
+      agents: UserAgentTableStore = UserAgentTableStore.empty,
+      edge: EdgeRuleStore = EdgeRuleStore.empty,
+      phoebe: String = ""
   ) {
     val calls: mutable.Buffer[String] = mutable.Buffer.empty
     val postings: mutable.Buffer[(String, String, ThreadPosting)] = mutable.Buffer.empty
@@ -53,7 +63,11 @@ class PostingServiceSuite extends FunSuite {
       threads = new ThreadStore {
         def datBeforeCreation(board: BoardId, key: String): Future[String] = called(s"threads.datBeforeCreation ${board.value}/$key")("")
         def readForReply(board: BoardId, key: String): Future[ThreadSnapshot] =
-          called(s"threads.readForReply ${board.value}/$key")(ThreadSnapshot(threadDat, BbsSettings.parse(threadSettings, "<>"), () => { calls += "owner"; owner }))
+          called(s"threads.readForReply ${board.value}/$key")(ThreadSnapshot(
+            threadDat,
+            BbsSettings.parse(threadSettings, "<>"),
+            () => { calls += "owner"; owner }
+          ))
         def addRes(board: BoardId, key: String, datLine: String, logLine: String, posting: ThreadPosting): Future[ThreadWriteResult] = {
           calls += s"threads.addRes ${board.value}/$key"
           postings += ((datLine, logLine, posting))
@@ -61,11 +75,14 @@ class PostingServiceSuite extends FunSuite {
         }
       },
       settings = new SettingsStore {
-        def boardSettings(board: BoardId): Future[BbsSettings] = called(s"settings ${board.value}")(BbsSettings.create(Fake.this.boardSettings, board))
+        def boardSettings(board: BoardId): Future[BbsSettings] =
+          called(s"settings ${board.value}")(BbsSettings.create(Fake.this.boardSettings, board))
       },
       rules = new RuleStore {
         def load(file: ModerationRuleFile): Future[ModerationRuleSource] = called(s"rules ${file.path}") {
-          rules.get(file).fold(ModerationRuleSource.Missing)(text => ModerationRuleSource.Loaded(ModerationRuleSet.parse(text).toOption.get))
+          rules.get(file).fold(ModerationRuleSource.Missing)(text =>
+            ModerationRuleSource.Loaded(ModerationRuleSet.parse(text).toOption.get)
+          )
         }
       },
       caps = new CapStore {
@@ -110,13 +127,30 @@ class PostingServiceSuite extends FunSuite {
     )
 
     def post(fields: (String, String)*)(headers: PostingRequest => PostingRequest = identity): Future[PostingOutcome] = {
-      val values = ListMap("FROM" -> "", "mail" -> "", "MESSAGE" -> "本文", "subject" -> "題名", "bbs" -> "sample", "key" -> "", "time" -> "1") ++ fields
+      val values =
+        ListMap("FROM" -> "", "mail" -> "", "MESSAGE" -> "本文", "subject" -> "題名", "bbs" -> "sample", "key" -> "", "time" -> "1") ++ fields
       val text = (values.toSeq :+ ("submit" -> "書き込む")).map((k, v) => s"$k=${js.URIUtils.encodeURIComponent(v)}").mkString("&")
       val request = PostingRequest(
-        method = "POST", contentType = "application/x-www-form-urlencoded", referer = "https://www.3ch.io/", userAgent = "Mozilla/5.0 (Test)",
-        secChUa = "", secChUaFullVersionList = None, accept = "", acceptLanguage = "", acceptEncoding = "", deviceInformation = "", clientIp = "",
-        connectingIp = Some("192.0.2.1"), forwardedFor = "", forwarded = "", via = "", cookie = "",
-        asn = Some("2516"), country = Some("JP"), region = Some("Tokyo"), city = Some("Chiyoda"),
+        method = "POST",
+        contentType = "application/x-www-form-urlencoded",
+        referer = "https://www.3ch.io/",
+        userAgent = "Mozilla/5.0 (Test)",
+        secChUa = "",
+        secChUaFullVersionList = None,
+        accept = "",
+        acceptLanguage = "",
+        acceptEncoding = "",
+        deviceInformation = "",
+        clientIp = "",
+        connectingIp = Some("192.0.2.1"),
+        forwardedFor = "",
+        forwarded = "",
+        via = "",
+        cookie = "",
+        asn = Some("2516"),
+        country = Some("JP"),
+        region = Some("Tokyo"),
+        city = Some("Chiyoda"),
         body = () => { calls += "body"; Future.successful(new TextEncoder().encode(text)) }
       )
       new PostingService(ports, "salt").post(headers(request))
@@ -127,23 +161,41 @@ class PostingServiceSuite extends FunSuite {
 
   private def rejected(outcome: PostingOutcome): PostingOutcome.Rejected = outcome match {
     case r: PostingOutcome.Rejected => r
-    case other => fail(s"拒否されなかった: $other")
+    case other                      => fail(s"拒否されなかった: $other")
   }
 
   private val salt = "s2(salt)"
   private val pon = s"PON=s1(s2(192.0.2.1$salt)); Max-Age=63072000; path=/; Secure; HttpOnly"
 
-  private final class AuthSource(user: Option[PostingUser] = None, failRecord: Boolean = false, device: String = "p012345678901234567",
-    refreshed: Option[String] = None, lv: Int = 1, staff: Boolean = false, roles: Set[AccountRole] = Set.empty, createdAt: Double = 0) extends PostingAccounts {
+  private final class AuthSource(
+      user: Option[PostingUser] = None,
+      failRecord: Boolean = false,
+      device: String = "p012345678901234567",
+      refreshed: Option[String] = None,
+      lv: Int = 1,
+      staff: Boolean = false,
+      roles: Set[AccountRole] = Set.empty,
+      createdAt: Double = 0
+  ) extends PostingAccounts {
     var records = 0
     var recordFailures = 0
     val received: mutable.Buffer[(io._3ch.common.domain.posting.MailCommands, Option[String])] = mutable.Buffer.empty
     def authenticate(commands: io._3ch.common.domain.posting.MailCommands, capKey: Option[String], request: PostingRequest, now: Double) = {
       received += (commands -> capKey)
-      Future.successful(Right(PostingAccount(user, if (user.isEmpty) 0 else lv, device, sessionCookie = Some("auth=present"),
-        roles = Roles(if (staff) roles + AccountRole.Delete else roles), createdAt = createdAt)))
+      Future.successful(Right(PostingAccount(
+        user,
+        if (user.isEmpty) 0 else lv,
+        device,
+        sessionCookie = Some("auth=present"),
+        roles = Roles(if (staff) roles + AccountRole.Delete else roles),
+        createdAt = createdAt
+      )))
     }
-    def posted(context: io._3ch.bbs.domain.posting.PostingContext, request: PostingRequest, account: PostingAccount): Future[Option[String]] = {
+    def posted(
+        context: io._3ch.bbs.domain.posting.PostingContext,
+        request: PostingRequest,
+        account: PostingAccount
+    ): Future[Option[String]] = {
       records += 1
       if (failRecord) Future.failed(new IllegalStateException("unavailable")) else Future.successful(refreshed)
     }
@@ -241,11 +293,24 @@ class PostingServiceSuite extends FunSuite {
   test("スレ立ては段の順にポートを呼び、確定したレス番号と Set-Cookie を返す") {
     val fake = Fake()
     fake.post()().map { outcome =>
-      assertEquals(fake.calls.toList, List(
-        "body", "settings sample", "threads.datBeforeCreation sample/1700000000", "users", "rules deny.cgi", "rules ngwords.cgi",
-        "threads.addRes sample/1700000000", "archive.read ThreadIndex(sample,1700000000)", "archive.read BandList(sample)",
-        "archive.write BandList(sample)", "archive.write ThreadIndex(sample,1700000000)", "archive.readHeadline", "archive.writeHeadline"
-      ))
+      assertEquals(
+        fake.calls.toList,
+        List(
+          "body",
+          "settings sample",
+          "threads.datBeforeCreation sample/1700000000",
+          "users",
+          "rules deny.cgi",
+          "rules ngwords.cgi",
+          "threads.addRes sample/1700000000",
+          "archive.read ThreadIndex(sample,1700000000)",
+          "archive.read BandList(sample)",
+          "archive.write BandList(sample)",
+          "archive.write ThreadIndex(sample,1700000000)",
+          "archive.readHeadline",
+          "archive.writeHeadline"
+        )
+      )
       outcome match {
         case PostingOutcome.Posted(context, headers) =>
           assertEquals(headers, Seq("Set-Cookie" -> pon))
@@ -289,10 +354,21 @@ class PostingServiceSuite extends FunSuite {
     val owner = ThreadOwner("other", "", "")
     val fake = Fake(threadSettings = "BBS_TITLE=スレ<>X=1<>", owner = Some(owner))
     fake.post(reply()*)().map { outcome =>
-      assertEquals(fake.calls.toList, List(
-        "body", "settings sample", "threads.readForReply sample/1699990000", "users", "rules deny.cgi", "rules ngwords.cgi", "owner",
-        "threads.addRes sample/1699990000", "archive.readHeadline", "archive.writeHeadline"
-      ))
+      assertEquals(
+        fake.calls.toList,
+        List(
+          "body",
+          "settings sample",
+          "threads.readForReply sample/1699990000",
+          "users",
+          "rules deny.cgi",
+          "rules ngwords.cgi",
+          "owner",
+          "threads.addRes sample/1699990000",
+          "archive.readHeadline",
+          "archive.writeHeadline"
+        )
+      )
       val context = outcome.context
       assertEquals(context.number, 2)
       assertEquals(context.title, "既存スレ")
@@ -385,7 +461,9 @@ class PostingServiceSuite extends FunSuite {
   }
 
   test("スレ立て規制の拒否は ThreadCreation にし、過去ログ目次を書かない") {
-    val fake = Fake(write = _ => Future.successful(ThreadWriteResult.CreationLimited(ThreadCreationRejection.Narrow(ThreadCreationRateLimit.Reason.Ip))))
+    val fake = Fake(write =
+      _ => Future.successful(ThreadWriteResult.CreationLimited(ThreadCreationRejection.Narrow(ThreadCreationRateLimit.Reason.Ip)))
+    )
     fake.post()().map { outcome =>
       assertEquals(rejected(outcome).error, PostingError.ThreadCreation(ThreadCreationRejection.Narrow(ThreadCreationRateLimit.Reason.Ip)))
       assert(!fake.calls.exists(_.startsWith("archive")))
@@ -396,7 +474,14 @@ class PostingServiceSuite extends FunSuite {
     val fake = Fake(write = _ => Future.failed(js.JavaScriptException(new js.Error("down"))))
     fake.post("MESSAGE" -> "a\nb")().map { outcome =>
       val r = rejected(outcome)
-      assertEquals(r.error, PostingError.Internal(PostingStage.ThreadWrite, FailureSite(FailureClock.Unixtime, "1700000000000", "sample", "1700000000", "1"), "Error: down"))
+      assertEquals(
+        r.error,
+        PostingError.Internal(
+          PostingStage.ThreadWrite,
+          FailureSite(FailureClock.Unixtime, "1700000000000", "sample", "1700000000", "1"),
+          "Error: down"
+        )
+      )
       assertEquals(r.context.form.message, "a <br> b")
     }
   }
@@ -404,7 +489,10 @@ class PostingServiceSuite extends FunSuite {
   test("過去ログ目次の競合は時刻を undefined にして拒否する（KB-39）") {
     val fake = Fake(indexWritten = false)
     fake.post()().map { outcome =>
-      assertEquals(rejected(outcome).error, PostingError.ArchiveConflict("kakologList", FailureSite(FailureClock.Unixtime, "undefined", "sample", "1700000000", "1")))
+      assertEquals(
+        rejected(outcome).error,
+        PostingError.ArchiveConflict("kakologList", FailureSite(FailureClock.Unixtime, "undefined", "sample", "1700000000", "1"))
+      )
       assert(!fake.calls.contains("archive.readHeadline"))
     }
   }
@@ -462,7 +550,10 @@ class PostingServiceSuite extends FunSuite {
   }
 
   test("板単位の件数と秒数は板設定だけ、スレ単位はスレ設定を優先して読む") {
-    val fake = Fake(boardSettings = "BBS_SAMBA24=20\nBBS_FR_SECOND=4\nBBS_THREAD_RENTOU=3\n", threadSettings = "BBS_SAMBA24=0<>BBS_FR_SECOND=0<>timecount=1<>BBS_THREAD_RENTOU=7<>")
+    val fake = Fake(
+      boardSettings = "BBS_SAMBA24=20\nBBS_FR_SECOND=4\nBBS_THREAD_RENTOU=3\n",
+      threadSettings = "BBS_SAMBA24=0<>BBS_FR_SECOND=0<>timecount=1<>BBS_THREAD_RENTOU=7<>"
+    )
     fake.post(reply()*)().map { _ =>
       val check = fake.postings.head._3.rateLimit.get
       assertEquals((check.board.samba24, check.board.fr, check.board.timecount, check.thread.count), (20, 4, 18, 7))
@@ -479,8 +570,12 @@ class PostingServiceSuite extends FunSuite {
   }
 
   test("BBS_FR_LEVEL が 0 か空なら規制したまま、板には広域連投規制を判定しない印を付けて渡す（fr は保持のため板設定のまま）") {
-    val cases = Seq("BBS_FR_LEVEL=0\n" -> (PostRateLevel.Enforce(None), (4, false)), "BBS_FR_LEVEL=\n" -> (PostRateLevel.Enforce(None), (4, false)),
-      "" -> (PostRateLevel.Enforce(Some(1)), (4, true)), "BBS_FR_LEVEL=30\n" -> (PostRateLevel.Enforce(Some(30)), (4, true)))
+    val cases = Seq(
+      "BBS_FR_LEVEL=0\n" -> (PostRateLevel.Enforce(None), (4, false)),
+      "BBS_FR_LEVEL=\n" -> (PostRateLevel.Enforce(None), (4, false)),
+      "" -> (PostRateLevel.Enforce(Some(1)), (4, true)),
+      "BBS_FR_LEVEL=30\n" -> (PostRateLevel.Enforce(Some(30)), (4, true))
+    )
     Future.traverse(cases) { case (text, _) =>
       val fake = Fake(boardSettings = text + "BBS_FR_SECOND=4\n")
       fake.post(reply()*)().map { _ =>
@@ -494,7 +589,19 @@ class PostingServiceSuite extends FunSuite {
     Future.traverse(Seq("checked", "raw", "ken", "city", "as", "hidden")) { mode =>
       val fake = Fake(boardSettings = s"BBS_ID_SHIKIBETSU=$mode\n")
       fake.post(reply()*)().map(_ => mode -> fake.postings.head._3.rateLimit.map(_.identity.shiki.nonEmpty))
-    }.map(results => assertEquals(results, Seq("checked" -> Some(true), "raw" -> Some(false), "ken" -> Some(false), "city" -> Some(false), "as" -> Some(false), "hidden" -> Some(false))))
+    }.map(results =>
+      assertEquals(
+        results,
+        Seq(
+          "checked" -> Some(true),
+          "raw" -> Some(false),
+          "ken" -> Some(false),
+          "city" -> Some(false),
+          "as" -> Some(false),
+          "hidden" -> Some(false)
+        )
+      )
+    )
   }
 
   test("キャップを判定するときは識別子（★）を照合値にしない") {
@@ -511,7 +618,8 @@ class PostingServiceSuite extends FunSuite {
       Fake(boardSettings = "BBS_LIVE=checked\n") -> Seq.empty[(String, String)],
       Fake(boardSettings = "BBS_LIVE=1\n") -> Seq.empty[(String, String)],
       Fake(caps = Map("pass" -> "管理人")) -> Seq("mail" -> "#!pass"),
-      Fake(boardSettings = "BBS_RENTOU_PASS=login\n", user = Some(PostingUser("account", "alice"))) -> Seq.empty[(String, String)])
+      Fake(boardSettings = "BBS_RENTOU_PASS=login\n", user = Some(PostingUser("account", "alice"))) -> Seq.empty[(String, String)]
+    )
     Future.traverse(cases) { case (fake, fields) => fake.post(fields*)().map(_ => fake.postings.head._3.rateLimit) }
       .map(results => assertEquals(results, Seq.fill(cases.size)(None)))
   }
@@ -537,8 +645,12 @@ class PostingServiceSuite extends FunSuite {
     val capRole = Some(new AuthSource(member, roles = Set(AccountRole.Cap)))
     val named = Fake(caps = Map("pass" -> "管理人"), authSource = capRole)
     val plain = Fake(authSource = capRole)
-    val strict = Fake(boardSettings = "BBS_THREAD_PASS=staff\nBBS_RENTOU_PASS=staff\n", caps = Map("pass" -> "管理人"), authSource = capRole,
-      rules = Map(ModerationRuleFile.Access -> "<><><>mark<>staff\n"))
+    val strict = Fake(
+      boardSettings = "BBS_THREAD_PASS=staff\nBBS_RENTOU_PASS=staff\n",
+      caps = Map("pass" -> "管理人"),
+      authSource = capRole,
+      rules = Map(ModerationRuleFile.Access -> "<><><>mark<>staff\n")
+    )
     for {
       _ <- named.post("mail" -> "#!pass")()
       _ <- plain.post()()
@@ -556,9 +668,17 @@ class PostingServiceSuite extends FunSuite {
       Fake(boardSettings = "BBS_THREAD_PASS=login\n", authSource = Some(new AuthSource(member))) -> None,
       Fake(boardSettings = "BBS_THREAD_PASS=l10\n", authSource = Some(new AuthSource(member, lv = 10))) -> None,
       Fake(boardSettings = "BBS_THREAD_PASS=l10\n", authSource = Some(new AuthSource(member, lv = 9))) -> Some(true),
-      Fake(boardSettings = "BBS_THREAD_PASS=admin\nBBS_THREAD_TATESUGI=bad\n", authSource = Some(new AuthSource(member, roles = Set(AccountRole.Admin)))) -> None,
-      Fake(boardSettings = "BBS_THREAD_PASS=unknown\n", caps = Map("pass" -> "管理人")) -> None)
-    Future.traverse(cases) { case (fake, _) => fake.post("mail" -> (if (fake eq cases.last._1) "#!pass" else ""))().map(_ => fake.postings.headOption.map(_._3.creationLimit.isDefined)) }
+      Fake(
+        boardSettings = "BBS_THREAD_PASS=admin\nBBS_THREAD_TATESUGI=bad\n",
+        authSource = Some(new AuthSource(member, roles = Set(AccountRole.Admin)))
+      ) -> None,
+      Fake(boardSettings = "BBS_THREAD_PASS=unknown\n", caps = Map("pass" -> "管理人")) -> None
+    )
+    Future.traverse(cases) { case (fake, _) =>
+      fake.post("mail" -> (if (fake eq cases.last._1) "#!pass" else ""))().map(_ =>
+        fake.postings.headOption.map(_._3.creationLimit.isDefined)
+      )
+    }
       .map(results => assertEquals(results, cases.map(_._2.orElse(Some(false)))))
   }
 
@@ -567,7 +687,8 @@ class PostingServiceSuite extends FunSuite {
       Fake(boardSettings = "BBS_RENTOU_PASS=l10\n", authSource = Some(new AuthSource(member, lv = 10))) -> false,
       Fake(boardSettings = "BBS_RENTOU_PASS=l10\n", authSource = Some(new AuthSource(member, lv = 9))) -> true,
       Fake(boardSettings = "BBS_RENTOU_PASS=admin\n", authSource = Some(new AuthSource(member, roles = Set(AccountRole.Delete)))) -> true,
-      Fake(boardSettings = "BBS_RENTOU_PASS=admin\n", authSource = Some(new AuthSource(member, roles = Set(AccountRole.Admin)))) -> false)
+      Fake(boardSettings = "BBS_RENTOU_PASS=admin\n", authSource = Some(new AuthSource(member, roles = Set(AccountRole.Admin)))) -> false
+    )
     Future.traverse(cases) { case (fake, _) => fake.post()().map(_ => fake.postings.head._3.rateLimit.isDefined) }
       .map(results => assertEquals(results, cases.map(_._2)))
   }
@@ -586,7 +707,8 @@ class PostingServiceSuite extends FunSuite {
       ("BBS_PHOEBE=0\n", "BBS_PHOEBE=5<>", 4, false),
       ("BBS_PHOEBE=abc\n", "", 1, true),
       ("BBS_PHOEBE=11\n", "", 1, true),
-      ("BBS_PHOEBE=3\n", "", 3, true))
+      ("BBS_PHOEBE=3\n", "", 3, true)
+    )
     Future.traverse(cases) { case (board, thread, lv, admitted) =>
       val fake = Fake(boardSettings = board, threadSettings = thread, authSource = Some(new AuthSource(member, lv = lv)))
       fake.post(reply()*)().map(outcome => (outcome.isInstanceOf[PostingOutcome.Rejected], admitted))
@@ -618,10 +740,14 @@ class PostingServiceSuite extends FunSuite {
     val old = Now / 1000 - 8 * 86400
     for {
       denied <- Fake(authSource = Some(new AuthSource(member, lv = 2, createdAt = old)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
-      fresh <- Fake(authSource = Some(new AuthSource(member, lv = 10, createdAt = Now / 1000 - 86400)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
+      fresh <- Fake(
+        authSource = Some(new AuthSource(member, lv = 10, createdAt = Now / 1000 - 86400)),
+        edge = edgeRules(EdgeMode.On)
+      ).post(reply()*)()
       logged <- Fake(authSource = Some(new AuthSource(member, lv = 1)), edge = edgeRules(EdgeMode.Log)).post(reply()*)()
       trusted <- Fake(authSource = Some(new AuthSource(member, lv = 3, createdAt = old)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
-      other <- Fake(authSource = Some(new AuthSource(member, lv = 1)), edge = edgeRules(EdgeMode.On)).post(reply()*)(_.copy(asn = Some("17676")))
+      other <-
+        Fake(authSource = Some(new AuthSource(member, lv = 1)), edge = edgeRules(EdgeMode.On)).post(reply()*)(_.copy(asn = Some("17676")))
       disabled <- Fake(edge = edgeRules(EdgeMode.On)).post(reply()*)()
     } yield {
       assertEquals(rejected(denied).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.Datacenter))
@@ -634,20 +760,44 @@ class PostingServiceSuite extends FunSuite {
     val old = Now / 1000 - 8 * 86400
     for {
       staff <- Fake(authSource = Some(new AuthSource(member, lv = 1, staff = true)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
-      capRole <- Fake(authSource = Some(new AuthSource(member, lv = 1, roles = Set(AccountRole.Cap))), edge = edgeRules(EdgeMode.On)).post(reply()*)()
-      signed <- Fake(caps = Map("pass" -> "管理人"), authSource = Some(new AuthSource(member, lv = 1)), edge = edgeRules(EdgeMode.On)).post(reply("mail" -> "#!pass")*)()
-      beforeCap <- Fake(phoebe = "<>1\n", authSource = Some(new AuthSource(member, lv = 10, createdAt = old)), edge = edgeRules(EdgeMode.On)).post(reply()*)()
+      capRole <- Fake(
+        authSource = Some(new AuthSource(member, lv = 1, roles = Set(AccountRole.Cap))),
+        edge = edgeRules(EdgeMode.On)
+      ).post(reply()*)()
+      signed <- Fake(
+        caps = Map("pass" -> "管理人"),
+        authSource = Some(new AuthSource(member, lv = 1)),
+        edge = edgeRules(EdgeMode.On)
+      ).post(reply("mail" -> "#!pass")*)()
+      beforeCap <- Fake(
+        phoebe = "<>1\n",
+        authSource = Some(new AuthSource(member, lv = 10, createdAt = old)),
+        edge = edgeRules(EdgeMode.On)
+      ).post(reply()*)()
     } yield {
-      assertEquals(rejected(capRole).error, PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.Datacenter), "cap だけの役割は免除しない")
+      assertEquals(
+        rejected(capRole).error,
+        PostingError.Authentication(io._3ch.bbs.domain.account.AuthenticationFailure.Datacenter),
+        "cap だけの役割は免除しない"
+      )
       Seq(staff, signed, beforeCap).foreach(outcome => assert(!outcome.isInstanceOf[PostingOutcome.Rejected], outcome.toString))
     }
   }
 
   test("phoebe.cgi の上限ルールは当てはまる投稿の実効 Lv を抑え、BBS_PHOEBE と識別子の D に使う") {
     for {
-      capped <- Fake(boardSettings = "BBS_PHOEBE=3\n", phoebe = "# 上限\nAS2516-<>2\n", authSource = Some(new AuthSource(member, lv = 5))).post(reply()*)()
-      other <- Fake(boardSettings = "BBS_PHOEBE=3\n", phoebe = "AS9999-<>2\n", authSource = Some(new AuthSource(member, lv = 5))).post(reply()*)()
-      lowest = Fake(boardSettings = "BBS_ID_SHIKIBETSU=phoebe\n", phoebe = "UID:user_a <>7\n<>4\n", authSource = Some(new AuthSource(member, lv = 10)))
+      capped <- Fake(
+        boardSettings = "BBS_PHOEBE=3\n",
+        phoebe = "# 上限\nAS2516-<>2\n",
+        authSource = Some(new AuthSource(member, lv = 5))
+      ).post(reply()*)()
+      other <-
+        Fake(boardSettings = "BBS_PHOEBE=3\n", phoebe = "AS9999-<>2\n", authSource = Some(new AuthSource(member, lv = 5))).post(reply()*)()
+      lowest = Fake(
+        boardSettings = "BBS_ID_SHIKIBETSU=phoebe\n",
+        phoebe = "UID:user_a <>7\n<>4\n",
+        authSource = Some(new AuthSource(member, lv = 10))
+      )
       _ <- lowest.post(reply()*)()
       disabled <- Fake(boardSettings = "BBS_PHOEBE=3\n", phoebe = "<>0\n").post(reply()*)()
     } yield {
@@ -681,12 +831,15 @@ class PostingServiceSuite extends FunSuite {
       Fake(owner = ownedThread, authSource = Some(new AuthSource())),
       Fake(boardSettings = "BBS_DISABLE_NUSI=checked\n", owner = ownedThread, authSource = Some(new AuthSource(member))),
       Fake(threadSettings = "BBS_DISABLE_NUSI=checked<>", owner = ownedThread, authSource = Some(new AuthSource(member))),
-      Fake(owner = ownedThread, user = member))
+      Fake(owner = ownedThread, user = member)
+    )
     val monazilla: PostingRequest => PostingRequest = _.copy(userAgent = "Monazilla/1.00 Test/1.0")
-    Future.traverse(cases)(fake => fake.post(reply("MESSAGE" -> "!バルサン")*)(monazilla).map { outcome =>
-      assert(!outcome.isInstanceOf[PostingOutcome.Rejected])
-      phoebeOf(fake)
-    }).map(results => assertEquals(results, Seq.fill(cases.size)(None)))
+    Future.traverse(cases)(fake =>
+      fake.post(reply("MESSAGE" -> "!バルサン")*)(monazilla).map { outcome =>
+        assert(!outcome.isInstanceOf[PostingOutcome.Rejected])
+        phoebeOf(fake)
+      }
+    ).map(results => assertEquals(results, Seq.fill(cases.size)(None)))
   }
 
   test("staff はスレ立て人でなくても !SETTING で下げられ、ログインしたスレ立てではスレ立て人として扱う") {
@@ -745,8 +898,12 @@ class PostingServiceSuite extends FunSuite {
   }
 
   private val phoebeBoard = "BBS_ID_SHIKIBETSU=phoebe\n"
-  private val windowsTable: UserAgentTableStore = () => Future.successful(UserAgentTable(
-    UserAgentRule.create("\\(Test\\)", "", "Windows 11").toSeq, Nil, UserAgentRule.create("Mozilla", "", "PC").toSeq))
+  private val windowsTable: UserAgentTableStore = () =>
+    Future.successful(UserAgentTable(
+      UserAgentRule.create("\\(Test\\)", "", "Windows 11").toSeq,
+      Nil,
+      UserAgentRule.create("Mozilla", "", "PC").toSeq
+    ))
   private def seed(value: String, axis: String): String = s"$value|${axis}sample19676s2(salt)"
   private def nameOf(fake: Fake): String = fake.postings.head._1.split("<>")(0)
 
@@ -764,11 +921,19 @@ class PostingServiceSuite extends FunSuite {
   }
 
   test("phoebe 書式の認証済は端末ハッシュを軸に分け、D に Lv を出して 10 は *") {
-    val fake = Fake(boardSettings = phoebeBoard, agents = () => Future.failed(new IllegalStateException("表は読まない")),
-      authSource = Some(new AuthSource(member, device = "p0123456789abcdef01", lv = 10)))
+    val fake = Fake(
+      boardSettings = phoebeBoard,
+      agents = () => Future.failed(new IllegalStateException("表は読まない")),
+      authSource = Some(new AuthSource(member, device = "p0123456789abcdef01", lv = 10))
+    )
     fake.post(reply()*)().map { _ =>
       assert(nameOf(fake).endsWith("*)<b>"), nameOf(fake))
-      assertEquals(Seq("0123" -> "E", "456789" -> "F", "abcd" -> "G", "ef" -> "Z", "01" -> "X").count { case (v, a) => fake.sha256Inputs.contains(seed(v, a)) }, 5)
+      assertEquals(
+        Seq("0123" -> "E", "456789" -> "F", "abcd" -> "G", "ef" -> "Z", "01" -> "X").count { case (v, a) =>
+          fake.sha256Inputs.contains(seed(v, a))
+        },
+        5
+      )
     }
   }
 
@@ -814,7 +979,10 @@ class PostingServiceSuite extends FunSuite {
     val fake = Fake(write = _ => Future.successful(ThreadWriteResult.Written(2, findings)))
     fake.post(reply()*)().map { outcome =>
       assert(outcome.isInstanceOf[PostingOutcome.Posted], outcome.toString)
-      assertEquals(fake.observations.toList, List(PostRateObservation("sample", "1699990000", 2, findings, s"s2(192.0.2.1:$salt)", s"s2(${outcome.context.shikibetsu}:$salt)")))
+      assertEquals(
+        fake.observations.toList,
+        List(PostRateObservation("sample", "1699990000", 2, findings, s"s2(192.0.2.1:$salt)", s"s2(${outcome.context.shikibetsu}:$salt)"))
+      )
       assert(fake.calls.contains("archive.writeHeadline"))
     }
   }

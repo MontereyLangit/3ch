@@ -42,8 +42,14 @@ class PostRateFlowSuite extends FunSuite {
 
   test("試行モードの記録はスレ・板・コピペの順に集め、知らない板のコードは捨てる") {
     val judged = ThreadJudgement(None, Some(PostRateRejection.ThreadRentou))
-    assertEquals(PostRateFlow.conclude(log, reply = true, judged, "post-rate:board:samba24:5", dat, line), Verdict.Store(Seq(
-      PostRateFinding.Rejected(PostRateRejection.ThreadRentou), PostRateFinding.Rejected(PostRateRejection.Samba24(5)), PostRateFinding.Copipe)))
+    assertEquals(
+      PostRateFlow.conclude(log, reply = true, judged, "post-rate:board:samba24:5", dat, line),
+      Verdict.Store(Seq(
+        PostRateFinding.Rejected(PostRateRejection.ThreadRentou),
+        PostRateFinding.Rejected(PostRateRejection.Samba24(5)),
+        PostRateFinding.Copipe
+      ))
+    )
     assertEquals(PostRateFlow.conclude(log, reply = true, ThreadJudgement(None, None), "unknown", dat, other), Verdict.Store(Nil))
   }
 

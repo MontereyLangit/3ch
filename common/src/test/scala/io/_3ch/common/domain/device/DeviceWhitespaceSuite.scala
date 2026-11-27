@@ -24,19 +24,37 @@ class DeviceWhitespaceSuite extends FunSuite {
   }
 
   test("モデルのUnicode空白だけを原本通りに取り除いて9軸ハッシュを作る") {
-    val base = ClientFingerprint(os = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0", cores = 8, ram = 8,
-      screen = "1920x1080", dpr = 1, colorDepth = 24, webgl = "ANGLE (NVIDIA GeForce RTX 3080)",
-      fonts = "Arial,Courier,Georgia", touch = false, arch = "Win32")
+    val base = ClientFingerprint(
+      os = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0",
+      cores = 8,
+      ram = 8,
+      screen = "1920x1080",
+      dpr = 1,
+      colorDepth = 24,
+      webgl = "ANGLE (NVIDIA GeForce RTX 3080)",
+      fonts = "Arial,Courier,Georgia",
+      touch = false,
+      arch = "Win32"
+    )
     rows("fingerprint").foreach { row =>
-      assertEquals(DeviceFingerprintHasher.hash(base, row.field("model").asString), row.field("expected").asString, row.field("name").asString)
+      assertEquals(
+        DeviceFingerprintHasher.hash(base, row.field("model").asString),
+        row.field("expected").asString,
+        row.field("name").asString
+      )
     }
   }
 
   test("引用符の内外のUnicode空白とUAの代替材料を原本通りに照合する") {
     rows("hints").foreach { row =>
       def text(key: String): String = row.field(key).asString
-      val hints = ClientHints.fromHeaders(text("platform"), "\u00a0\"\u300015.0.0\u3000\"\u00a0",
-        "\u00a0\"\u3000Pixel 9\u3000\"\u00a0", "\u00a0\"\u3000arm\u3000\"\u00a0", text("mobile"))
+      val hints = ClientHints.fromHeaders(
+        text("platform"),
+        "\u00a0\"\u300015.0.0\u3000\"\u00a0",
+        "\u00a0\"\u3000Pixel 9\u3000\"\u00a0",
+        "\u00a0\"\u3000arm\u3000\"\u00a0",
+        text("mobile")
+      )
       assertEquals(hints.platform, text("decodedPlatform"), text("name"))
       assertEquals(hints.platformVersion, "15.0.0")
       assertEquals(hints.model, "Pixel 9")
@@ -50,14 +68,21 @@ class DeviceWhitespaceSuite extends FunSuite {
 
   test("UAの完全一致と材料欠損の判定にKotlinの空白範囲を使う") {
     rows("declarations").foreach { row =>
-      assertEquals(ClientDeclarationCheck.userAgentMismatched(row.field("header").asString,
-        Some(ClientFingerprint(os = row.field("declared").asString))), bool(row.field("mismatched")), row.field("name").asString)
+      assertEquals(
+        ClientDeclarationCheck.userAgentMismatched(
+          row.field("header").asString,
+          Some(ClientFingerprint(os = row.field("declared").asString))
+        ),
+        bool(row.field("mismatched")),
+        row.field("name").asString
+      )
     }
   }
 
   test("粒度の欠損判定とiOSヒントもUnicode空白を除いて照合する") {
     rows("granularity").foreach { row =>
-      val fingerprint = Some(ClientFingerprint(os = row.field("ua").asString, touch = bool(row.field("touch")), webgl = row.field("webgl").asString))
+      val fingerprint =
+        Some(ClientFingerprint(os = row.field("ua").asString, touch = bool(row.field("touch")), webgl = row.field("webgl").asString))
       val hints = ClientHints(platform = row.field("platform").asString)
       assertEquals(DeviceGranularity.detect(fingerprint, hints).code.toString, row.field("expected").asString, row.field("name").asString)
     }

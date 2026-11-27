@@ -14,10 +14,23 @@ class ThreadCreationHistorySuite extends FunSuite {
   private def request(who: String, group: String = ""): ThreadCreationRequest =
     ThreadCreationRequest(ClientIdentity(who, s"ua-$who", if group.isEmpty then s"network-$who" else group), s"title-$who")
 
-  private def reserve(history: ThreadCreationHistory, key: String, request: ThreadCreationRequest, settings: Settings, now: Double = t0): ThreadCreationHistory =
+  private def reserve(
+      history: ThreadCreationHistory,
+      key: String,
+      request: ThreadCreationRequest,
+      settings: Settings,
+      now: Double = t0
+  ): ThreadCreationHistory =
     history.reserve(key, request, settings, now, 8000).fold(rejection => fail(s"unexpected rejection: ${rejection.code}"), identity)
 
-  private def rejection(history: ThreadCreationHistory, key: String, request: ThreadCreationRequest, settings: Settings, now: Double = t0, capacity: Int = 8000): Option[ThreadCreationRejection] =
+  private def rejection(
+      history: ThreadCreationHistory,
+      key: String,
+      request: ThreadCreationRequest,
+      settings: Settings,
+      now: Double = t0,
+      capacity: Int = 8000
+  ): Option[ThreadCreationRejection] =
     history.reserve(key, request, settings, now, capacity).left.toOption
 
   private def keys(history: ThreadCreationHistory): Vector[String] = history.records.map(_.key)
@@ -89,9 +102,15 @@ class ThreadCreationHistorySuite extends FunSuite {
     def history(identity: ClientIdentity, title: String): ThreadCreationHistory =
       ThreadCreationHistory(Vector(ThreadCreationRecord("1", t0, title, identity, 1, t0, ThreadCreationStatus.Completed)))
     assertEquals(rejection(history(who.identity, who.title), "2", who, s), Some(ThreadCreationRejection.Narrow(Reason.Ip)))
-    assertEquals(rejection(history(who.identity.copy(ip = "x"), who.title), "2", who, s), Some(ThreadCreationRejection.Narrow(Reason.Title)))
+    assertEquals(
+      rejection(history(who.identity.copy(ip = "x"), who.title), "2", who, s),
+      Some(ThreadCreationRejection.Narrow(Reason.Title))
+    )
     assertEquals(rejection(history(who.identity.copy(ip = "x"), "x"), "2", who, s), Some(ThreadCreationRejection.Broad(Reason.UserAgent)))
-    assertEquals(rejection(history(ClientIdentity("x", "x", "network-a"), "x"), "2", who, s), Some(ThreadCreationRejection.Broad(Reason.NetworkGroup)))
+    assertEquals(
+      rejection(history(ClientIdentity("x", "x", "network-a"), "x"), "2", who, s),
+      Some(ThreadCreationRejection.Broad(Reason.NetworkGroup))
+    )
   }
 
   test("有効な予約は個別に判定する") {
@@ -120,7 +139,8 @@ class ThreadCreationHistorySuite extends FunSuite {
   }
 
   test("拒否コードは往復できる") {
-    val all = Seq(ThreadCreationRejection.Capacity) ++ Reason.values.toSeq.flatMap(r => Seq(ThreadCreationRejection.Narrow(r), ThreadCreationRejection.Broad(r)))
+    val all = Seq(ThreadCreationRejection.Capacity) ++
+      Reason.values.toSeq.flatMap(r => Seq(ThreadCreationRejection.Narrow(r), ThreadCreationRejection.Broad(r)))
     all.foreach(value => assertEquals(ThreadCreationRejection.fromCode(value.code), Some(value)))
     assertEquals(all.map(_.code).distinct.size, all.size)
     assertEquals(ThreadCreationRejection.fromCode("write failed"), None)

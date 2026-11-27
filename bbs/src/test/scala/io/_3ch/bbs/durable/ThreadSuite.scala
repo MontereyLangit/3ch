@@ -13,7 +13,12 @@ class ThreadSuite extends FunSuite {
   import DurableTestKit.{newEnv, seed, rejectionMessage}
 
   private val dat = "name<><>date<>message<>title\n"
-  private def moveInput(bbs: String = "source", key: String = "1800000000", targetBoard: String = "target", targetKey: String = "1800000001"): js.Dynamic =
+  private def moveInput(
+      bbs: String = "source",
+      key: String = "1800000000",
+      targetBoard: String = "target",
+      targetKey: String = "1800000001"
+  ): js.Dynamic =
     js.Dynamic.literal(bbs = bbs, key = key, targetBoard = targetBoard, targetKey = targetKey)
 
   test("削除は本文・投稿者ログを保持し、旧R2データを復活させない（dat/legacyLog/settingsを完全一致で確認）") {
@@ -25,7 +30,10 @@ class ThreadSuite extends FunSuite {
     val expectedDat = "name<><>2023/11/15(水) 07:13:20 ID:one<> text <>legacy title\n"
     for {
       before <- source.inspect("source", key).toFuture
-      _ = assertEquals(before.legacyLog.toOption, Some("legacy title\nBBS_HEISA=checked\n1<>name<><>1700000000<>ID:one<>text<>IP:192.0.2.1\n"))
+      _ = assertEquals(
+        before.legacyLog.toOption,
+        Some("legacy title\nBBS_HEISA=checked\n1<>name<><>1700000000<>ID:one<>text<>IP:192.0.2.1\n")
+      )
       _ = assertEquals(before.settings.toOption, Some("BBS_HEISA=checked"))
       _ = assertEquals(before.dat.toOption, Some(expectedDat))
       _ <- source.moderate("delete", js.Dynamic.literal(bbs = "source", key = key)).toFuture
@@ -47,9 +55,18 @@ class ThreadSuite extends FunSuite {
     val boardTargetOriginal = env.board("target").asInstanceOf[js.Dynamic]
     val originalUpdateThread = boardTargetOriginal.updateThread
     for {
-      _ <- seed(sourceInstance, "dat" -> dat, "log" -> "1<>IP:192.0.2.1\n", "legacyLog" -> "old private log", "settings" -> "BBS_HEISA=checked", "stopped" -> true)
+      _ <- seed(
+        sourceInstance,
+        "dat" -> dat,
+        "log" -> "1<>IP:192.0.2.1\n",
+        "legacyLog" -> "old private log",
+        "settings" -> "BBS_HEISA=checked",
+        "stopped" -> true
+      )
       // Board.updateThread を一時的に失敗させ、移動の後半だけが失敗するケースを再現する。
-      _ = boardTargetOriginal.updateThread = ((_: js.Any, _: js.Any, _: js.Any) => js.Promise.reject(new js.Error("temporary failure"))): js.Function3[js.Any, js.Any, js.Any, js.Any]
+      _ = boardTargetOriginal.updateThread = (
+          (_: js.Any, _: js.Any, _: js.Any) => js.Promise.reject(new js.Error("temporary failure"))
+      ): js.Function3[js.Any, js.Any, js.Any, js.Any]
       failMsg <- rejectionMessage(source.moderate("move", moveInput()).toFuture)
       _ = assert(failMsg.contains("temporary failure"), failMsg)
       datAfterFail <- source.getDat().toFuture
@@ -88,9 +105,10 @@ class ThreadSuite extends FunSuite {
       originalReceiveMove = destDynamic.receiveMove
       // 素の関数参照を切り離して呼ぶと `this`(=destInstance)が失われクラスメソッド内の `this.state`
       // 参照が壊れるため、`Function.prototype.call` で明示的に `this` を渡して元の実装を呼ぶ。
-      _ = destDynamic.receiveMove = ((data: js.Any, src: js.Any) =>
-        originalReceiveMove.call(destDynamic, data, src).asInstanceOf[js.Promise[js.Any]].toFuture
-          .flatMap(_ => Future.failed[js.Any](js.JavaScriptException(new js.Error("lost response")))).toJSPromise
+      _ = destDynamic.receiveMove = (
+          (data: js.Any, src: js.Any) =>
+            originalReceiveMove.call(destDynamic, data, src).asInstanceOf[js.Promise[js.Any]].toFuture
+              .flatMap(_ => Future.failed[js.Any](js.JavaScriptException(new js.Error("lost response")))).toJSPromise
       ): js.Function2[js.Any, js.Any, js.Promise[js.Any]]
       moveMsg <- rejectionMessage(source.moderate("move", moveInput()).toFuture)
       _ = assert(moveMsg.contains("lost response"), moveMsg)
@@ -105,7 +123,8 @@ class ThreadSuite extends FunSuite {
 
   private val owner = js.Dynamic.literal(ip = "iphash", shikibetsu = "JP.xx", account = "")
   private def createWith(env: DurableTestKit.Env, name: String, key: String, extra: js.Dynamic): js.Promise[ThreadAddResult] = {
-    val posting = js.Dynamic.literal(bbs = name.takeWhile(_ != '/'), key = key, title = "title", create = true, sage = false, maxThreads = 700d)
+    val posting =
+      js.Dynamic.literal(bbs = name.takeWhile(_ != '/'), key = key, title = "title", create = true, sage = false, maxThreads = 700d)
     js.Object.assign(posting.asInstanceOf[js.Object], extra.asInstanceOf[js.Object])
     env.thread(name).addRes("name<><>date<> body <>title", "1<>log", posting)
   }
@@ -123,7 +142,11 @@ class ThreadSuite extends FunSuite {
     val env = newEnv()
     for {
       _ <- createWith(env, "source/1800000000", "1800000000", js.Dynamic.literal()).toFuture
-      _ <- env.thread("source/1800000000").addRes("r<><><><>", "2<>log", js.Dynamic.literal(bbs = "source", key = "1800000000", title = "title", create = false, owner = owner)).toFuture
+      _ <- env.thread("source/1800000000").addRes(
+        "r<><><><>",
+        "2<>log",
+        js.Dynamic.literal(bbs = "source", key = "1800000000", title = "title", create = false, owner = owner)
+      ).toFuture
       stored <- env.thread("source/1800000000").getOwner().toFuture
       _ = assert(stored == null || js.isUndefined(stored), "ownerなしで作成したスレに後からownerは付かない")
     } yield ()
@@ -168,7 +191,10 @@ class ThreadSuite extends FunSuite {
       _ <- destination.setDat(dat).toFuture
       failures <- Future.sequence(Seq(
         source.moderate("move", moveInput()).toFuture.failed,
-        destination.moderate("move", js.Dynamic.literal(bbs = "target", key = "1800000001", targetBoard = "source", targetKey = "1800000000")).toFuture.failed
+        destination.moderate(
+          "move",
+          js.Dynamic.literal(bbs = "target", key = "1800000001", targetBoard = "source", targetKey = "1800000000")
+        ).toFuture.failed
       ))
       _ = failures.foreach(e => assert(DurableTestKit.messageOf(e).contains("使用済み"), DurableTestKit.messageOf(e)))
       sourceDat <- source.getDat().toFuture
@@ -206,14 +232,25 @@ class ThreadSuite extends FunSuite {
     env.putR2("source/thread/1700/1700000000.cgi", "legacy title\n\n1<>name<><>1700000000<>ID:one<>text<>IP:192.0.2.1\n")
     val source = env.thread("source/1700000000")
     for {
-      count <- source.addRes("second<><><><>", "2<>log", js.Dynamic.literal(bbs = "source", key = "1700000000", title = "legacy title", create = false)).toFuture.map(_.count)
+      count <- source.addRes(
+        "second<><><><>",
+        "2<>log",
+        js.Dynamic.literal(bbs = "source", key = "1700000000", title = "legacy title", create = false)
+      ).toFuture.map(_.count)
       _ = assertEquals(count, 2)
       newDat <- source.getDat().toFuture
       _ = assertEquals(newDat, "name<><>2023/11/15(水) 07:13:20 ID:one<> text <>legacy title\nsecond<><><><>\n")
       newLog <- source.getLog().toFuture
       _ = assertEquals(newLog, "2<>log\n")
-      _ = env.putR2("source/thread/1700/1700000001.cgi", "legacy title\nBBS_HEISA=checked\n1<>name<><>1700000000<>ID:one<>text<>IP:192.0.2.1\n")
-      blockedMsg <- rejectionMessage(env.thread("source/1700000001").addRes("second<><><><>", "2<>log", js.Dynamic.literal(bbs = "source", key = "1700000001", create = false)).toFuture)
+      _ = env.putR2(
+        "source/thread/1700/1700000001.cgi",
+        "legacy title\nBBS_HEISA=checked\n1<>name<><>1700000000<>ID:one<>text<>IP:192.0.2.1\n"
+      )
+      blockedMsg <- rejectionMessage(env.thread("source/1700000001").addRes(
+        "second<><><><>",
+        "2<>log",
+        js.Dynamic.literal(bbs = "source", key = "1700000001", create = false)
+      ).toFuture)
       _ = assertEquals(blockedMsg, "thread-write:closed")
     } yield ()
   }
@@ -245,8 +282,12 @@ class ThreadSuite extends FunSuite {
     val env = newEnv()
     val instance = env.threadInstance("board1/4")
     val thread = env.thread("board1/4")
-    def reply(level: Int, lower: Boolean, board: Int = 0): js.Dynamic = js.Dynamic.literal(bbs = "board1", key = "4", create = false,
-      commands = js.Dynamic.literal(phoebe = js.Dynamic.literal(level = level, lower = lower, board = board)))
+    def reply(level: Int, lower: Boolean, board: Int = 0): js.Dynamic = js.Dynamic.literal(
+      bbs = "board1",
+      key = "4",
+      create = false,
+      commands = js.Dynamic.literal(phoebe = js.Dynamic.literal(level = level, lower = lower, board = board))
+    )
     for {
       _ <- seed(instance, "dat" -> dat, "settings" -> "FOO=bar<>BBS_HEISA=<>BAR=baz")
       _ <- thread.addRes("r<><>d<> !バルサン <>", "2<>log", reply(3, lower = false)).toFuture
@@ -268,8 +309,12 @@ class ThreadSuite extends FunSuite {
     val instance = env.threadInstance("board1/7")
     val thread = env.thread("board1/7")
     val dat = "1<>x<><>msg<>title\n"
-    def reply(lv: Int, exempt: Boolean = false, board: Int = 0): js.Dynamic = js.Dynamic.literal(bbs = "board1", key = "7", create = false,
-      phoebeAdmission = js.Dynamic.literal(lv = lv, exempt = exempt, board = board))
+    def reply(lv: Int, exempt: Boolean = false, board: Int = 0): js.Dynamic = js.Dynamic.literal(
+      bbs = "board1",
+      key = "7",
+      create = false,
+      phoebeAdmission = js.Dynamic.literal(lv = lv, exempt = exempt, board = board)
+    )
     for {
       _ <- seed(instance, "dat" -> dat, "log" -> "", "settings" -> "BBS_PHOEBE=3<>")
       refused <- rejectionMessage(thread.addRes("r<><>d<> 本文 <>", "2<>log", reply(2)).toFuture)
@@ -283,16 +328,35 @@ class ThreadSuite extends FunSuite {
       absent <- thread.addRes("r<><>d<> 判定なし <>", "4<>log", js.Dynamic.literal(bbs = "board1", key = "7", create = false)).toFuture
       _ = assertEquals(absent.count, 4)
       _ <- seed(env.threadInstance("board1/8"), "dat" -> dat, "log" -> "")
-      byBoard <- rejectionMessage(env.thread("board1/8").addRes("r<><>d<> 板 <>", "2<>log",
-        js.Dynamic.literal(bbs = "board1", key = "8", create = false, phoebeAdmission = js.Dynamic.literal(lv = 4, exempt = false, board = 5))).toFuture)
+      byBoard <- rejectionMessage(env.thread("board1/8").addRes(
+        "r<><>d<> 板 <>",
+        "2<>log",
+        js.Dynamic.literal(
+          bbs = "board1",
+          key = "8",
+          create = false,
+          phoebeAdmission = js.Dynamic.literal(lv = 4, exempt = false, board = 5)
+        )
+      ).toFuture)
     } yield assertEquals(byBoard, "thread-write:level:5", "スレ設定に値が無ければ板の値で判定する")
   }
 
   test("スレ立てのコマンドは初期スレ設定に重ね、板の値より上げない要求はスレ設定に書かない") {
     val env = newEnv()
-    def create(key: String, board: Int): Future[ThreadAddResult] = env.thread(s"board1/$key").addRes("n<><>d<> !バルサン <>t", "1<>log",
-      js.Dynamic.literal(bbs = "board1", key = key, title = "t", create = true, sage = false, maxThreads = 700d, initialSettings = "BBS_TITLE=板<>",
-        commands = js.Dynamic.literal(phoebe = js.Dynamic.literal(level = 3, lower = false, board = board)))).toFuture
+    def create(key: String, board: Int): Future[ThreadAddResult] = env.thread(s"board1/$key").addRes(
+      "n<><>d<> !バルサン <>t",
+      "1<>log",
+      js.Dynamic.literal(
+        bbs = "board1",
+        key = key,
+        title = "t",
+        create = true,
+        sage = false,
+        maxThreads = 700d,
+        initialSettings = "BBS_TITLE=板<>",
+        commands = js.Dynamic.literal(phoebe = js.Dynamic.literal(level = 3, lower = false, board = board))
+      )
+    ).toFuture
     for {
       _ <- create("5", 0)
       first <- env.thread("board1/5").getSettings().toFuture
@@ -331,7 +395,10 @@ class ThreadSuite extends FunSuite {
     val row2 = "Name2<><>2023/01/01(日) 00:00:05 ID:yyy<> original message2 <>"
     for {
       _ <- seed(instance, "dat" -> (row1 + "\n" + row2 + "\n"))
-      _ <- thread.moderate("editRes", js.Dynamic.literal(bbs = "board1", key = "4", number = "2", name = "New<Name>", mail = "test@example.com", message = "line1\nline2")).toFuture
+      _ <- thread.moderate(
+        "editRes",
+        js.Dynamic.literal(bbs = "board1", key = "4", number = "2", name = "New<Name>", mail = "test@example.com", message = "line1\nline2")
+      ).toFuture
       after <- thread.getDat().toFuture
       _ = assertEquals(after, row1 + "\n" + "New&lt;Name&gt;<>test@example.com<>2023/01/01(日) 00:00:05 ID:yyy<>line1 <br> line2<>" + "\n")
       // "edited" は inspect() が返すキー一覧（dat/log/legacyLog/settings/hidden/stopped/movedTo/
@@ -363,7 +430,10 @@ class ThreadSuite extends FunSuite {
       _ <- seed(instance, "dat" -> "1<>x<><>msg<>title\n")
       msg <- rejectionMessage(thread.moderate("deleteRes", js.Dynamic.literal(bbs = "board1", key = "6", number = "2")).toFuture)
       _ = assertEquals(msg, "レス番号が不正です。")
-      msg0 <- rejectionMessage(thread.moderate("editRes", js.Dynamic.literal(bbs = "board1", key = "6", number = "0", name = "a", mail = "", message = "b")).toFuture)
+      msg0 <- rejectionMessage(thread.moderate(
+        "editRes",
+        js.Dynamic.literal(bbs = "board1", key = "6", number = "0", name = "a", mail = "", message = "b")
+      ).toFuture)
       _ = assertEquals(msg0, "レス番号が不正です。")
     } yield ()
   }
@@ -393,7 +463,11 @@ class ThreadSuite extends FunSuite {
     // Scala側はDO越しに生のnullが来ても同じ結果になるよう、posting.isDefined(=「undefinedでない」)
     // ではなく「nullでもundefinedでもない」ことをチェックする。
     for {
-      countWithNull <- thread.asInstanceOf[js.Dynamic].addRes("1<>a<><>msg<>title", "1<>log", null.asInstanceOf[js.Any]).asInstanceOf[js.Promise[ThreadAddResult]].toFuture.map(_.count)
+      countWithNull <- thread.asInstanceOf[js.Dynamic].addRes(
+        "1<>a<><>msg<>title",
+        "1<>log",
+        null.asInstanceOf[js.Any]
+      ).asInstanceOf[js.Promise[ThreadAddResult]].toFuture.map(_.count)
       _ = assertEquals(countWithNull, 1)
       datWithNull <- thread.getDat().toFuture
       _ = assertEquals(datWithNull, "1<>a<><>msg<>title\n")
@@ -409,7 +483,16 @@ class ThreadSuite extends FunSuite {
     val env = newEnv()
     val instance = env.threadInstance("board1/10")
     val thread = env.thread("board1/10")
-    val creation = js.Dynamic.literal(ip = "ip", userAgent = "ua", networkGroup = "net", title = "t", tatesugi = 1, tatesugiResetSeconds = 3600, junban = 0, junbanResetSeconds = 3600)
+    val creation = js.Dynamic.literal(
+      ip = "ip",
+      userAgent = "ua",
+      networkGroup = "net",
+      title = "t",
+      tatesugi = 1,
+      tatesugiResetSeconds = 3600,
+      junban = 0,
+      junbanResetSeconds = 3600
+    )
     def create(key: String) = js.Dynamic.literal(bbs = "board1", key = key, title = "t", create = true, creationLimit = creation)
     for {
       _ <- seed(instance, "settings" -> "BBS_HEISA=checked<>")
@@ -426,8 +509,18 @@ class ThreadSuite extends FunSuite {
   }
 
   private def rateLimit(level: String = "", ip: String = "ip-a", samba24: Int = 0, threadRentou: Int = 40): js.Dynamic = js.Dynamic.literal(
-    level = level, ip = ip, shiki = s"shiki-$ip", aid = "", timecount = 18, timeclose = 10, samba24 = samba24, fr = 0,
-    threadRentou = threadRentou, threadRentouReset = 3600, keys = "ip,shiki,aid")
+    level = level,
+    ip = ip,
+    shiki = s"shiki-$ip",
+    aid = "",
+    timecount = 18,
+    timeclose = 10,
+    samba24 = samba24,
+    fr = 0,
+    threadRentou = threadRentou,
+    threadRentouReset = 3600,
+    keys = "ip,shiki,aid"
+  )
   private def rated(key: String, limit: js.Dynamic, create: Boolean = false): js.Dynamic =
     js.Dynamic.literal(bbs = "board1", key = key, title = "t", create = create, rateLimit = limit)
 
@@ -436,7 +529,11 @@ class ThreadSuite extends FunSuite {
     val instance = env.threadInstance("board1/1800000020")
     for {
       _ <- seed(instance, "dat" -> "n<><>d<> 同じ <>t\n", "log" -> "1<>log\n")
-      result <- env.thread("board1/1800000020").addRes("n<><>d<> 同じ <>", "2<>log", js.Dynamic.literal(bbs = "board1", key = "1800000020", create = false)).toFuture
+      result <- env.thread("board1/1800000020").addRes(
+        "n<><>d<> 同じ <>",
+        "2<>log",
+        js.Dynamic.literal(bbs = "board1", key = "1800000020", create = false)
+      ).toFuture
       _ = assertEquals((result.count, result.swallowed, result.observed.toList), (2, false, Nil))
       recent <- instance.state.storage.get[js.Any]("recentPosts").toFuture
       _ = assert(recent.isEmpty)
@@ -451,18 +548,24 @@ class ThreadSuite extends FunSuite {
     val storage = instance.state.storage.asInstanceOf[js.Dynamic]
     val original = storage.put.asInstanceOf[js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]]]
     var keys = List.empty[List[String]]
-    storage.updateDynamic("put")(((key: js.Any, value: js.UndefOr[js.Any]) => {
-      if !value.isDefined then keys = keys :+ key.asInstanceOf[js.Dictionary[js.Any]].keys.toList.sorted
-      original(key, value)
-    }): js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]])
+    storage.updateDynamic("put")((
+        (key: js.Any, value: js.UndefOr[js.Any]) => {
+          if !value.isDefined then keys = keys :+ key.asInstanceOf[js.Dictionary[js.Any]].keys.toList.sorted
+          original(key, value)
+        }
+    ): js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]])
     for {
-      result <- env.thread("board1/1800000021").addRes("n<><>d<> 本文 <>t", "1<>log", rated("1800000021", rateLimit(), create = true)).toFuture
+      result <-
+        env.thread("board1/1800000021").addRes("n<><>d<> 本文 <>t", "1<>log", rated("1800000021", rateLimit(), create = true)).toFuture
       _ = assertEquals(result.count, 1)
       _ = assertEquals(keys, List(List("dat", "log", "modifiedAt", "recentPosts", "settings")))
       recent <- instance.state.storage.get[js.Array[js.Dynamic]]("recentPosts").toFuture
       _ = assertEquals(recent.get.toList.map(_.ip.asInstanceOf[String]), List("ip-a"))
       page <- env.boardInstance("board1").state.storage.get[js.Array[js.Dynamic]]("postRateHistory:0").toFuture
-      _ = assertEquals(page.get.toList.map(p => (p.key.asInstanceOf[String].startsWith("1800000021:"), p.status.asInstanceOf[String])), List((true, "completed")))
+      _ = assertEquals(
+        page.get.toList.map(p => (p.key.asInstanceOf[String].startsWith("1800000021:"), p.status.asInstanceOf[String])),
+        List((true, "completed"))
+      )
     } yield ()
   }
 
@@ -471,14 +574,19 @@ class ThreadSuite extends FunSuite {
     val first = "n<><>d<> 同じ本文 <>t\n"
     for {
       _ <- seed(env.threadInstance("board1/1800000022"), "dat" -> first, "log" -> "1<>log\n")
-      swallowed <- env.thread("board1/1800000022").addRes("m<><>e<> 同じ本文 <>", "2<>log", rated("1800000022", rateLimit(ip = "ip-b"))).toFuture
+      swallowed <-
+        env.thread("board1/1800000022").addRes("m<><>e<> 同じ本文 <>", "2<>log", rated("1800000022", rateLimit(ip = "ip-b"))).toFuture
       _ = assertEquals((swallowed.count, swallowed.swallowed, swallowed.observed.toList), (2, true, Nil))
       dat <- env.thread("board1/1800000022").getDat().toFuture
       log <- env.thread("board1/1800000022").getLog().toFuture
       _ = assertEquals((dat, log), (first, "1<>log\n"))
       page <- env.boardInstance("board1").state.storage.get[js.Array[js.Dynamic]]("postRateHistory:0").toFuture
       _ = assertEquals(page.get.toList.map(_.status.asInstanceOf[String]), List("completed"), "吸い込んだ投稿も連投履歴に数える")
-      logged <- env.thread("board1/1800000022").addRes("m<><>e<> 同じ本文 <>", "2<>log", rated("1800000022", rateLimit(level = "log", ip = "ip-c"))).toFuture
+      logged <- env.thread("board1/1800000022").addRes(
+        "m<><>e<> 同じ本文 <>",
+        "2<>log",
+        rated("1800000022", rateLimit(level = "log", ip = "ip-c"))
+      ).toFuture
       _ = assertEquals((logged.count, logged.swallowed, logged.observed.toList), (2, false, List("post-rate:thread:copipe")))
       after <- env.thread("board1/1800000022").getDat().toFuture
       _ = assertEquals(after, first + "m<><>e<> 同じ本文 <>\n")
@@ -488,14 +596,30 @@ class ThreadSuite extends FunSuite {
   test("スレ単位の連投は on なら板に予約せず拒否し、>>1 には適用しない") {
     val env = newEnv()
     for {
-      _ <- env.thread("board1/1800000023").addRes("n<><>d<> 1 <>t", "1<>log", rated("1800000023", rateLimit(threadRentou = 1), create = true)).toFuture
-      rejected <- rejectionMessage(env.thread("board1/1800000023").addRes("n<><>d<> 2 <>", "2<>log", rated("1800000023", rateLimit(threadRentou = 1))).toFuture)
+      _ <- env.thread("board1/1800000023").addRes(
+        "n<><>d<> 1 <>t",
+        "1<>log",
+        rated("1800000023", rateLimit(threadRentou = 1), create = true)
+      ).toFuture
+      rejected <- rejectionMessage(env.thread("board1/1800000023").addRes(
+        "n<><>d<> 2 <>",
+        "2<>log",
+        rated("1800000023", rateLimit(threadRentou = 1))
+      ).toFuture)
       _ = assertEquals(rejected, "post-rate:thread:rentou")
       page <- env.boardInstance("board1").state.storage.get[js.Array[js.Dynamic]]("postRateHistory:0").toFuture
       _ = assertEquals(page.get.length, 1)
-      logged <- env.thread("board1/1800000023").addRes("n<><>d<> 2 <>", "2<>log", rated("1800000023", rateLimit(level = "log", threadRentou = 1))).toFuture
+      logged <- env.thread("board1/1800000023").addRes(
+        "n<><>d<> 2 <>",
+        "2<>log",
+        rated("1800000023", rateLimit(level = "log", threadRentou = 1))
+      ).toFuture
       _ = assertEquals(logged.observed.toList, List("post-rate:thread:rentou"))
-      other <- env.thread("board1/1800000023").addRes("n<><>d<> 3 <>", "3<>log", rated("1800000023", rateLimit(ip = "ip-z", threadRentou = 1))).toFuture
+      other <- env.thread("board1/1800000023").addRes(
+        "n<><>d<> 3 <>",
+        "3<>log",
+        rated("1800000023", rateLimit(ip = "ip-z", threadRentou = 1))
+      ).toFuture
       _ = assertEquals(other.count, 3)
     } yield ()
   }
@@ -509,7 +633,11 @@ class ThreadSuite extends FunSuite {
       rated("1800000026", limit)
     }
     for {
-      _ <- env.thread("board1/1800000026").addRes("n<><>d<> 1 <>t", "1<>log", rated("1800000026", rateLimit(level = "1"), create = true)).toFuture
+      _ <- env.thread("board1/1800000026").addRes(
+        "n<><>d<> 1 <>t",
+        "1<>log",
+        rated("1800000026", rateLimit(level = "1"), create = true)
+      ).toFuture
       allowed <- env.thread("board1/1800000026").addRes("n<><>d<> 2 <>", "2<>log", sameShiki("0", "ip-b")).toFuture
       _ = assertEquals(allowed.count, 2)
       rejected <- rejectionMessage(env.thread("board1/1800000026").addRes("n<><>d<> 3 <>", "3<>log", sameShiki("", "ip-c")).toFuture)
@@ -519,15 +647,29 @@ class ThreadSuite extends FunSuite {
 
   test("板単位で拒否したスレ立てはスレ立て規制の予約を取り消し、dat を書かない") {
     val env = newEnv()
-    val creation = js.Dynamic.literal(ip = "ip", userAgent = "ua", networkGroup = "net", title = "t", tatesugi = 1, tatesugiResetSeconds = 3600, junban = 0, junbanResetSeconds = 3600)
+    val creation = js.Dynamic.literal(
+      ip = "ip",
+      userAgent = "ua",
+      networkGroup = "net",
+      title = "t",
+      tatesugi = 1,
+      tatesugiResetSeconds = 3600,
+      junban = 0,
+      junbanResetSeconds = 3600
+    )
     def create(key: String, other: String = "ip-b") = {
       val posting = rated(key, rateLimit(ip = other, samba24 = 10), create = true)
       posting.creationLimit = creation
       posting
     }
     for {
-      _ <- env.board("board1").reservePost("x:1", js.Dynamic.literal(ip = "ip-a", shiki = "", aid = ""), js.Dynamic.literal(timecount = 18, timeclose = 10, samba24 = 10, keys = "ip", enforce = true)).toFuture
-      rejected <- rejectionMessage(env.thread("board1/1800000024").addRes("n<><>d<> 1 <>t", "1<>log", create("1800000024", "ip-a")).toFuture)
+      _ <- env.board("board1").reservePost(
+        "x:1",
+        js.Dynamic.literal(ip = "ip-a", shiki = "", aid = ""),
+        js.Dynamic.literal(timecount = 18, timeclose = 10, samba24 = 10, keys = "ip", enforce = true)
+      ).toFuture
+      rejected <-
+        rejectionMessage(env.thread("board1/1800000024").addRes("n<><>d<> 1 <>t", "1<>log", create("1800000024", "ip-a")).toFuture)
       _ = assert(rejected.startsWith("post-rate:board:samba24:"), rejected)
       dat <- env.thread("board1/1800000024").getDat().toFuture
       _ = assertEquals(dat, "")

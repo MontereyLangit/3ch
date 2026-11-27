@@ -31,19 +31,43 @@ object SiteHeaderIsland {
       header <- AutoHideHeader.useAutoHideHeader
     } yield {
       val hiddenClass = if header.hidden then " header-hidden" else ""
-      <.header(^.className := s"$headerClass$hiddenClass", ^.onFocus --> header.onFocus,
+      <.header(
+        ^.className := s"$headerClass$hiddenClass",
+        ^.onFocus --> header.onFocus,
         ^.onBlur ==> header.onBlur,
-        <.a(^.href := "/", ^.className := "site-logo ml-[15px] shrink-0", ^.aria.label := "３ちゃんねる ホーム",
-          <.img(^.src := "/static/3ch_logo.png", ^.alt := "３ちゃんねる", ^.className := "inline-block h-[30px] align-middle")),
-        <.nav(^.aria.label := "メインメニュー",
-          <.a(^.href := "/", "ホーム"), <.span("|"), <.a(^.href := "/bbsmenu.html", "板一覧"), <.span("|"),
-          <.a(^.href := "#board-search", ^.onClick ==> focusSearch, "検索")),
-        if raw.authEnabled then <.nav(^.className := "account-nav ml-auto", ^.aria.label := "アカウント", AccountNavIsland.Component(raw)) else
-          <.nav(^.className := "account-nav ml-auto", ^.aria.label := "アカウント",
-          <.span(^.title := "準備中", "認証・登録"), <.span("|"), <.span(<.span(^.title := "準備中", "ログイン"),
-            <.button(^.`type` := "button", ^.className := "dropBtnSetting settingDrop cursor-pointer border-0 bg-transparent p-0", ^.title := "準備中",
-              ^.aria.label := "アカウントメニュー", VdomAttr("aria-expanded") := "false",
-              <.img(^.src := "/static/icon_extend.png", ^.alt := "", ^.className := "dropBtnSetting ml-[5px] mb-[2px] inline"))))
+        <.a(
+          ^.href := "/",
+          ^.className := "site-logo ml-[15px] shrink-0",
+          ^.aria.label := "３ちゃんねる ホーム",
+          <.img(^.src := "/static/3ch_logo.png", ^.alt := "３ちゃんねる", ^.className := "inline-block h-[30px] align-middle")
+        ),
+        <.nav(
+          ^.aria.label := "メインメニュー",
+          <.a(^.href := "/", "ホーム"),
+          <.span("|"),
+          <.a(^.href := "/bbsmenu.html", "板一覧"),
+          <.span("|"),
+          <.a(^.href := "#board-search", ^.onClick ==> focusSearch, "検索")
+        ),
+        if raw.authEnabled then <.nav(^.className := "account-nav ml-auto", ^.aria.label := "アカウント", AccountNavIsland.Component(raw))
+        else
+          <.nav(
+            ^.className := "account-nav ml-auto",
+            ^.aria.label := "アカウント",
+            <.span(^.title := "準備中", "認証・登録"),
+            <.span("|"),
+            <.span(
+              <.span(^.title := "準備中", "ログイン"),
+              <.button(
+                ^.`type` := "button",
+                ^.className := "dropBtnSetting settingDrop cursor-pointer border-0 bg-transparent p-0",
+                ^.title := "準備中",
+                ^.aria.label := "アカウントメニュー",
+                VdomAttr("aria-expanded") := "false",
+                <.img(^.src := "/static/icon_extend.png", ^.alt := "", ^.className := "dropBtnSetting ml-[5px] mb-[2px] inline")
+              )
+            )
+          )
       ).withRef(header.ref)
     }
   }

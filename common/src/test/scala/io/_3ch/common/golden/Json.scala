@@ -26,6 +26,7 @@ sealed trait JsonValue {
     case other            => throw new IllegalArgumentException(s"not a number: $other")
   }
   def isNull: Boolean = this == JsonValue.Null
+
   /** golden生成スクリプトが JS の `undefined` を表すために使うタグ付きオブジェクト `{"$type":"undefined"}` か判定する。 */
   def isUndefinedMarker: Boolean = this match {
     case JsonValue.Obj(m) => m.get("$type").exists(_ == JsonValue.Str("undefined"))
@@ -105,7 +106,8 @@ object Json {
         val value = parseValue()
         m = m + (key -> value)
         skipWs()
-        if (i < s.length && peek == ',') { i += 1 } else { continue = false }
+        if (i < s.length && peek == ',') { i += 1 }
+        else { continue = false }
       }
       skipWs()
       expect('}')
@@ -126,7 +128,8 @@ object Json {
         val v = parseValue()
         buf += v
         skipWs()
-        if (i < s.length && peek == ',') { i += 1; skipWs() } else { continue = false }
+        if (i < s.length && peek == ',') { i += 1; skipWs() }
+        else { continue = false }
       }
       skipWs()
       expect(']')
@@ -140,7 +143,8 @@ object Json {
       while (continue) {
         if (i >= s.length) throw new IllegalArgumentException("unterminated string")
         val c = s.charAt(i)
-        if (c == '"') { i += 1; continue = false } else if (c == '\\') {
+        if (c == '"') { i += 1; continue = false }
+        else if (c == '\\') {
           i += 1
           val esc = s.charAt(i)
           esc match {
@@ -152,7 +156,7 @@ object Json {
             case 'n'  => sb.append('\n'); i += 1
             case 'r'  => sb.append('\r'); i += 1
             case 't'  => sb.append('\t'); i += 1
-            case 'u' =>
+            case 'u'  =>
               val hex = s.substring(i + 1, i + 5)
               sb.append(Integer.parseInt(hex, 16).toChar)
               i += 5
@@ -169,7 +173,10 @@ object Json {
     private def parseNumber(): JsonValue.Num = {
       val start = i
       if (i < s.length && (s.charAt(i) == '-' || s.charAt(i) == '+')) i += 1
-      while (i < s.length && (s.charAt(i).isDigit || s.charAt(i) == '.' || s.charAt(i) == 'e' || s.charAt(i) == 'E' || s.charAt(i) == '+' || s.charAt(i) == '-')) i += 1
+      while (
+        i < s.length &&
+        (s.charAt(i).isDigit || s.charAt(i) == '.' || s.charAt(i) == 'e' || s.charAt(i) == 'E' || s.charAt(i) == '+' || s.charAt(i) == '-')
+      ) i += 1
       val numStr = s.substring(start, i)
       JsonValue.Num(numStr.toDouble)
     }

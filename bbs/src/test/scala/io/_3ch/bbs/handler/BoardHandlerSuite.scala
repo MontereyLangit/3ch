@@ -18,7 +18,9 @@ class BoardHandlerSuite extends munit.FunSuite {
     val app = new RenderApp()
     app.use("*", ReactRendererMiddleware(props => Main.renderShell(props.children, props.title, "/static/client.js")))
     app.get("/:bbs/", context => BoardHandler.index(context))
-    app.request(path, js.Dynamic.literal().asInstanceOf[js.Object], env.worker.asInstanceOf[js.Object]).toFuture.flatMap(res => text(res.asInstanceOf[js.Dynamic]))
+    app.request(path, js.Dynamic.literal().asInstanceOf[js.Object], env.worker.asInstanceOf[js.Object]).toFuture.flatMap(res =>
+      text(res.asInstanceOf[js.Dynamic])
+    )
   }
 
   test("板top: 板名が[a-zA-Z0-9]{1,16}でなければ404を返し、板名はエスケープして本文へ出す") {

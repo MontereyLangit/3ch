@@ -16,8 +16,15 @@ enum ModerationRuleProblem {
 final case class ModerationRuleError(line: Int, problem: ModerationRuleProblem)
 
 /** deny.cgi / ngwords.cgi の 1 行。板・対象・NG ワードは JavaScript の正規表現で、空欄は全対象。bypass はこの行を免除される段階 */
-final class ModerationRule private (board: js.RegExp, target: js.RegExp, word: js.RegExp, val action: ModerationAction, val isWord: Boolean,
-  val bypass: BypassLevel) {
+final class ModerationRule private (
+    board: js.RegExp,
+    target: js.RegExp,
+    word: js.RegExp,
+    val action: ModerationAction,
+    val isWord: Boolean,
+    val bypass: BypassLevel
+) {
+
   /** 板名と投稿者情報が一致し、照合する文字列のどれかが NG ワードに一致するか */
   def matches(bbs: String, userInfo: String, contents: Seq[String]): Boolean =
     board.test(bbs) && target.test(userInfo) && contents.exists(word.test)
@@ -44,9 +51,9 @@ object ModerationRule {
 
   private def action(value: String): Option[ModerationAction] = value match {
     case "" | "deny" | "md5" => Some(ModerationAction.Deny)
-    case "mark" => Some(ModerationAction.Mark)
-    case "TateDame" => Some(ModerationAction.TateDame)
-    case _ => None
+    case "mark"              => Some(ModerationAction.Mark)
+    case "TateDame"          => Some(ModerationAction.TateDame)
+    case _                   => None
   }
 }
 

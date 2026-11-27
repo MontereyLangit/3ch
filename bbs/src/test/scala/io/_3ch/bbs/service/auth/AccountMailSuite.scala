@@ -33,20 +33,27 @@ class AccountMailSuite extends FunSuite {
     var removeFails = false
     def rate(key: String, kind: String, now: Double) = repository.rate(key, kind, now)
     def lookup(kind: String, hash: String) = repository.lookup(kind, hash)
-    def reserve(kind: String, hash: String, aid: String, now: Double, tokenId: Option[String]) = repository.reserve(kind, hash, aid, now, tokenId)
+    def reserve(kind: String, hash: String, aid: String, now: Double, tokenId: Option[String]) =
+      repository.reserve(kind, hash, aid, now, tokenId)
     def confirm(kind: String, hash: String, aid: String, now: Double) = repository.confirm(kind, hash, aid, now)
     def remove(kind: String, hash: String, aid: String) =
       if (removeFails && kind == "email") Future.failed(new IllegalStateException("remove down")) else repository.remove(kind, hash, aid)
     def releaseReservation(kind: String, hash: String, aid: String) = repository.releaseReservation(kind, hash, aid)
     def holds(aid: String, kind: String, value: String) = repository.holds(aid, kind, value)
-    def issuePending(aid: String, kind: PendingKind, hash: String, email: Option[String], now: Double) = repository.issuePending(aid, kind, hash, email, now)
-    def checkPending(aid: String, kind: PendingKind, hash: String, now: Double): Future[PendingCheck] = repository.checkPending(aid, kind, hash, now)
+    def issuePending(aid: String, kind: PendingKind, hash: String, email: Option[String], now: Double) =
+      repository.issuePending(aid, kind, hash, email, now)
+    def checkPending(aid: String, kind: PendingKind, hash: String, now: Double): Future[PendingCheck] =
+      repository.checkPending(aid, kind, hash, now)
     def verifyEmail(aid: String, hash: String, now: Double): Future[EmailVerified] = verifyFails match {
-      case Some(applied) => (if (applied) repository.verifyEmail(aid, hash, now) else Future.unit).flatMap(_ => Future.failed(new IllegalStateException("verify lost")))
+      case Some(applied) => (if (applied) repository.verifyEmail(aid, hash, now) else Future.unit).flatMap(_ =>
+          Future.failed(new IllegalStateException("verify lost"))
+        )
       case None => repository.verifyEmail(aid, hash, now)
     }
-    def resetPassword(aid: String, hash: String, credential: PasswordCredential, now: Double) = repository.resetPassword(aid, hash, credential, now)
-    def verifyPassword(aid: String, password: String, keyIpHash: String, now: Double): Future[SignInResult] = repository.verifyPassword(aid, password, keyIpHash, now)
+    def resetPassword(aid: String, hash: String, credential: PasswordCredential, now: Double) =
+      repository.resetPassword(aid, hash, credential, now)
+    def verifyPassword(aid: String, password: String, keyIpHash: String, now: Double): Future[SignInResult] =
+      repository.verifyPassword(aid, password, keyIpHash, now)
     def setPassword(aid: String, credential: PasswordCredential, now: Double) = repository.setPassword(aid, credential, now)
   }
 
@@ -68,7 +75,8 @@ class AccountMailSuite extends FunSuite {
         PendingLink.parse("token=([a-z0-9]{16}\\.[A-Za-z0-9_-]{43})".r.findFirstMatchIn(outbox.last.text).map(_.group(1)).get).get
       }
 
-    def owner(address: String): Future[Option[String]] = keys.index("email", EmailAddress.parse(address).toOption.get.canonical).flatMap(hash => repository.lookup("email", hash.get))
+    def owner(address: String): Future[Option[String]] =
+      keys.index("email", EmailAddress.parse(address).toOption.get.canonical).flatMap(hash => repository.lookup("email", hash.get))
   }
 
   test("確認が確定前に失敗したら新しく取った email 索引を外し、確定した後で応答を失ったなら残す") {

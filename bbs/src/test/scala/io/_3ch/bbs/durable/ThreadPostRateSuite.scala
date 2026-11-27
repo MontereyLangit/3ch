@@ -12,12 +12,37 @@ class ThreadPostRateSuite extends FunSuite {
   private val key = "2000000001"
   private val first = "n<><>d<> 最初の本文 <>t\n"
   private def rate(level: String = "1", threadCount: Int = 40): js.Dynamic = js.Dynamic.literal(
-    level = level, ip = "ip-a", shiki = "shiki-a", aid = "", timecount = 18, timeclose = 10, samba24 = 0, fr = 0,
-    threadRentou = threadCount, threadRentouReset = 3600, keys = "ip,shiki,aid")
+    level = level,
+    ip = "ip-a",
+    shiki = "shiki-a",
+    aid = "",
+    timecount = 18,
+    timeclose = 10,
+    samba24 = 0,
+    fr = 0,
+    threadRentou = threadCount,
+    threadRentouReset = 3600,
+    keys = "ip,shiki,aid"
+  )
   private def creation: js.Dynamic = js.Dynamic.literal(
-    ip = "ip-a", userAgent = "ua-a", networkGroup = "net-a", title = "t", tatesugi = 1, tatesugiResetSeconds = 3600, junban = 0, junbanResetSeconds = 3600)
+    ip = "ip-a",
+    userAgent = "ua-a",
+    networkGroup = "net-a",
+    title = "t",
+    tatesugi = 1,
+    tatesugiResetSeconds = 3600,
+    junban = 0,
+    junbanResetSeconds = 3600
+  )
   private def posting(level: String = "1", create: Boolean = false, threadCount: Int = 40): js.Dynamic =
-    js.Dynamic.literal(bbs = "board", key = key, title = "t", create = create, creationLimit = creation, rateLimit = rate(level, threadCount))
+    js.Dynamic.literal(
+      bbs = "board",
+      key = key,
+      title = "t",
+      create = create,
+      creationLimit = creation,
+      rateLimit = rate(level, threadCount)
+    )
 
   test("off は RPC に材料があっても判定も履歴保存もしない") {
     val env = newEnv()
@@ -57,10 +82,12 @@ class ThreadPostRateSuite extends FunSuite {
     val instance = env.threadInstance(s"board/$key")
     val storage = instance.state.storage.asInstanceOf[js.Dynamic]
     val original = storage.put.asInstanceOf[js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]]]
-    storage.put = ((fields: js.Any, value: js.UndefOr[js.Any]) => {
-      if (js.isUndefined(fields.asInstanceOf[js.Dynamic].dat)) original(fields, value)
-      else js.Promise.reject(new js.Error("write failed"))
-    }): js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]]
+    storage.put = (
+        (fields: js.Any, value: js.UndefOr[js.Any]) => {
+          if (js.isUndefined(fields.asInstanceOf[js.Dynamic].dat)) original(fields, value)
+          else js.Promise.reject(new js.Error("write failed"))
+        }
+    ): js.Function2[js.Any, js.UndefOr[js.Any], js.Promise[js.Any]]
     for {
       message <- rejectionMessage(instance.addRes("n<><>d<> 本文 <>t", "1<>log", posting(create = true)).toFuture)
       _ = assertEquals(message, "write failed")
@@ -78,10 +105,12 @@ class ThreadPostRateSuite extends FunSuite {
     val env = newEnv()
     val board = env.boardInstance("board").asInstanceOf[js.Dynamic]
     val original = board.reservePost
-    board.reservePost = ((id: String, identity: js.Dynamic, settings: js.Dynamic) => {
-      original.call(board, id, identity, settings).asInstanceOf[js.Promise[String]].toFuture
-        .flatMap(_ => Future.failed[String](js.JavaScriptException(new js.Error("lost response")))).toJSPromise
-    }): js.Function3[String, js.Dynamic, js.Dynamic, js.Promise[String]]
+    board.reservePost = (
+        (id: String, identity: js.Dynamic, settings: js.Dynamic) => {
+          original.call(board, id, identity, settings).asInstanceOf[js.Promise[String]].toFuture
+            .flatMap(_ => Future.failed[String](js.JavaScriptException(new js.Error("lost response")))).toJSPromise
+        }
+    ): js.Function3[String, js.Dynamic, js.Dynamic, js.Promise[String]]
     for {
       message <- rejectionMessage(env.thread(s"board/$key").addRes("n<><>d<> 本文 <>t", "1<>log", posting(create = true)).toFuture)
       _ = assertEquals(message, "lost response")
@@ -98,10 +127,12 @@ class ThreadPostRateSuite extends FunSuite {
     val env = newEnv()
     val board = env.boardInstance("board").asInstanceOf[js.Dynamic]
     val original = board.reserveThreadCreation
-    board.reserveThreadCreation = ((id: String, limit: js.Dynamic) => {
-      original.call(board, id, limit).asInstanceOf[js.Promise[String]].toFuture
-        .flatMap(_ => Future.failed[String](js.JavaScriptException(new js.Error("lost response")))).toJSPromise
-    }): js.Function2[String, js.Dynamic, js.Promise[String]]
+    board.reserveThreadCreation = (
+        (id: String, limit: js.Dynamic) => {
+          original.call(board, id, limit).asInstanceOf[js.Promise[String]].toFuture
+            .flatMap(_ => Future.failed[String](js.JavaScriptException(new js.Error("lost response")))).toJSPromise
+        }
+    ): js.Function2[String, js.Dynamic, js.Promise[String]]
     for {
       message <- rejectionMessage(env.thread(s"board/$key").addRes("n<><>d<> 本文 <>t", "1<>log", posting(create = true)).toFuture)
       _ = assertEquals(message, "lost response")
@@ -116,7 +147,9 @@ class ThreadPostRateSuite extends FunSuite {
   test("試行モードは板の予約が失敗しても書き込みを続ける") {
     val env = newEnv()
     val board = env.boardInstance("board").asInstanceOf[js.Dynamic]
-    board.reservePost = ((_: String, _: js.Dynamic, _: js.Dynamic) => js.Promise.reject(new js.Error("unavailable"))): js.Function3[String, js.Dynamic, js.Dynamic, js.Promise[String]]
+    board.reservePost = (
+        (_: String, _: js.Dynamic, _: js.Dynamic) => js.Promise.reject(new js.Error("unavailable"))
+    ): js.Function3[String, js.Dynamic, js.Dynamic, js.Promise[String]]
     for {
       result <- env.thread(s"board/$key").addRes("n<><>d<> 本文 <>t", "1<>log", posting(level = "log", create = true)).toFuture
       _ = assertEquals((result.count, result.swallowed, result.observed.toList), (1, false, Nil))

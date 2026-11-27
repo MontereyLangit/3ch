@@ -6,6 +6,7 @@ import scala.concurrent.Future
 
 /** クライアント ID からの移行に使うアカウント操作。拒否は AccountStoreException の Future の失敗で返す */
 trait AccountConversionStore extends IndexHoldings {
+
   /** key ごとの認証要求を一件数え、直近一時間・一日の件数を返す */
   def rate(key: String, kind: String, now: Double): Future[AuthRateCounts]
   def lookup(kind: String, hash: String): Future[Option[String]]

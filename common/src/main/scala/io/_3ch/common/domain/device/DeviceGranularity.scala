@@ -11,6 +11,7 @@ enum DeviceGranularity(val code: Char) {
 }
 
 object DeviceGranularity {
+
   /** 保存された1文字の粒度を読む */
   def fromCode(code: Char): Option[DeviceGranularity] = values.find(_.code == code)
 

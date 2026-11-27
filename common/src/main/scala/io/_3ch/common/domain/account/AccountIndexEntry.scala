@@ -42,9 +42,18 @@ object AccountIndexEntry {
   val reservationLifetime: Double = 600
 
   /** 未登録か予約から10分を過ぎた未確定値だけを取得する。token 索引にはキー ID を必須とする */
-  def register(previous: Option[AccountIndexEntry], aid: String, now: Double, tokenId: Option[String], kind: AccountIndexKind): Either[AccountRejection, AccountIndexEntry] = {
-    if (!aid.matches("[a-z0-9]{16}") || !AccountProfile.validTime(now) ||
-      (kind == AccountIndexKind.Token && !tokenId.exists(DedicatedBrowserTokens.validId)) || (kind != AccountIndexKind.Token && tokenId.isDefined)) Left(AccountRejection.Invalid)
+  def register(
+      previous: Option[AccountIndexEntry],
+      aid: String,
+      now: Double,
+      tokenId: Option[String],
+      kind: AccountIndexKind
+  ): Either[AccountRejection, AccountIndexEntry] = {
+    if (
+      !aid.matches("[a-z0-9]{16}") || !AccountProfile.validTime(now) ||
+      (kind == AccountIndexKind.Token && !tokenId.exists(DedicatedBrowserTokens.validId)) ||
+      (kind != AccountIndexKind.Token && tokenId.isDefined)
+    ) Left(AccountRejection.Invalid)
     else if (previous.exists(_.reserved(now))) Left(AccountRejection.IndexConflict)
     else Right(AccountIndexEntry(aid, now, tokenId = tokenId))
   }
@@ -55,6 +64,7 @@ final case class AdminSeat(hash: String, entry: AccountIndexEntry, activeAdmin: 
 
 /** 初回の管理者の確保。有効な admin が居ない間か、非常用期間だけ予約できる */
 object FirstAdminClaim {
+
   /** 非常用期間の上限（秒）。これより先の期限は無視する */
   val breakGlassWindow: Double = 86400
 
@@ -66,7 +76,12 @@ object FirstAdminClaim {
     * 外す索引のハッシュと、aid の予約を返す。有効な admin か他人の期限内の予約があれば、非常用期間を除いて拒否する。
     * admin でなくなった所有者の確定済みの値と、期限切れの予約は外す
     */
-  def claim(seats: Vector[AdminSeat], aid: String, now: Double, breakGlass: Boolean): Either[AccountRejection, (Vector[String], AccountIndexEntry)] = {
+  def claim(
+      seats: Vector[AdminSeat],
+      aid: String,
+      now: Double,
+      breakGlass: Boolean
+  ): Either[AccountRejection, (Vector[String], AccountIndexEntry)] = {
     if (!aid.matches("[a-z0-9]{16}") || !AccountProfile.validTime(now)) Left(AccountRejection.Invalid)
     else {
       val stale = seats.filter(seat => !seat.activeAdmin && (seat.entry.confirmed || !seat.entry.reserved(now)))

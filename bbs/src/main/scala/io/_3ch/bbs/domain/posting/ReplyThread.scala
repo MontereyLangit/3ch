@@ -4,6 +4,7 @@ package io._3ch.bbs.domain.posting
 final case class ReplyThread(title: String, number: Int)
 
 object ReplyThread {
+
   /** 旧形式のログのパス。スレが無いときの文言に出す */
   def logFile(bbs: String, key: String): String = s"$bbs/thread/${key.take(4)}/$key.cgi"
 

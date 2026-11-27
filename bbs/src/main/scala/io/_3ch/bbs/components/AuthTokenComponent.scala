@@ -12,9 +12,11 @@ final case class AuthTokenProps(reset: Boolean, token: String, enabled: Boolean,
 /** メールのリンクから開く確認・再設定の画面 */
 object AuthTokenComponent {
   final val Component = ScalaFnComponent[AuthTokenProps] { props =>
-    <.div(^.className := "min-h-screen bg-[#fafafa] text-sm text-[#333]",
+    <.div(
+      ^.className := "min-h-screen bg-[#fafafa] text-sm text-[#333]",
       HeaderComponent.AuthComponent(HeaderProps(authEnabled = true)),
-      <.main(^.className := "mx-auto max-w-3xl p-4",
+      <.main(
+        ^.className := "mx-auto max-w-3xl p-4",
         <.h1(^.className := "mb-3 text-lg font-bold", if props.reset then "パスワードの再設定" else "メールアドレスの確認"),
         IslandComponents.AuthTokenJs(new islands.AuthTokenProps {
           val mode = if props.reset then "reset" else "email"
@@ -22,7 +24,9 @@ object AuthTokenComponent {
           val enabled = props.enabled
           val uid = props.uid
           val email = props.email
-        })),
-      FooterComponent.Component())
+        })
+      ),
+      FooterComponent.Component()
+    )
   }
 }

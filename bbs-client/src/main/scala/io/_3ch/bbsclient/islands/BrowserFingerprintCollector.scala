@@ -6,8 +6,23 @@ import scala.util.Try
 
 /** 認証用の端末情報を採取する。取得できない軸は既定値にする */
 object BrowserFingerprintCollector {
-  private final val FontCandidates = Vector("MS Gothic", "MS Mincho", "Meiryo", "Yu Gothic", "Hiragino Kaku Gothic ProN",
-    "Hiragino Mincho ProN", "Noto Sans CJK JP", "Osaka", "Segoe UI", "Roboto", "Arial", "Courier New", "Georgia", "Tahoma", "Verdana")
+  private final val FontCandidates = Vector(
+    "MS Gothic",
+    "MS Mincho",
+    "Meiryo",
+    "Yu Gothic",
+    "Hiragino Kaku Gothic ProN",
+    "Hiragino Mincho ProN",
+    "Noto Sans CJK JP",
+    "Osaka",
+    "Segoe UI",
+    "Roboto",
+    "Arial",
+    "Courier New",
+    "Georgia",
+    "Tahoma",
+    "Verdana"
+  )
   private final val FontBaseFamilies = Vector("monospace", "sans-serif", "serif")
   private final val FontProbeText = "mmmmmmmmmmlliWWMMWW漢字ぁアg"
   private final val FontProbeSize = "72px"
@@ -58,6 +73,9 @@ object BrowserFingerprintCollector {
     screen = Try(s"${dom.window.screen.width}x${dom.window.screen.height}").getOrElse(""),
     dpr = Try(number(dom.window.asInstanceOf[js.Dynamic].devicePixelRatio, 1d)).getOrElse(1d),
     colorDepth = Try(number(dom.window.screen.asInstanceOf[js.Dynamic].colorDepth, 24).toInt).getOrElse(24),
-    webgl = renderer(), fonts = fonts(), touch = navigatorNumber("maxTouchPoints", 0) > 0,
-    arch = Try(Option(dom.window.navigator.platform).getOrElse("")).getOrElse(""))
+    webgl = renderer(),
+    fonts = fonts(),
+    touch = navigatorNumber("maxTouchPoints", 0) > 0,
+    arch = Try(Option(dom.window.navigator.platform).getOrElse("")).getOrElse("")
+  )
 }

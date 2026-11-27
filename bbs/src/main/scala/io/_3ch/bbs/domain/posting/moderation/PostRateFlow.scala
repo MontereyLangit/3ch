@@ -4,6 +4,7 @@ import io._3ch.bbs.domain.posting.moderation.PostRateLimit.Entry
 
 /** Thread.addRes の連投規制の組み合わせ（返信のみの判定、規制モードと試行モードの違い、コピペの吸い込み）。DO はこの結果に従って保存する */
 object PostRateFlow {
+
   /** スレ単位の判定結果。refusal は規制モードで拒否する理由、observed は試行モードで記録だけする理由 */
   final case class ThreadJudgement(refusal: Option[PostRateRejection], observed: Option[PostRateRejection])
 
@@ -27,7 +28,8 @@ object PostRateFlow {
   def conclude(check: PostRateCheck, reply: Boolean, thread: ThreadJudgement, boardCode: String, dat: String, datLine: String): Verdict = {
     val copipe = reply && PostRateLimit.copipe(dat, datLine)
     if (copipe && check.enforce) Verdict.Swallow
-    else Verdict.Store(thread.observed.map(PostRateFinding.Rejected(_)).toSeq ++ PostRateFinding.fromCode(boardCode) ++ Option.when(copipe)(PostRateFinding.Copipe))
+    else Verdict.Store(thread.observed.map(PostRateFinding.Rejected(_)).toSeq ++ PostRateFinding.fromCode(boardCode) ++
+      Option.when(copipe)(PostRateFinding.Copipe))
   }
 
   /** 新しい投稿を足した直近の投稿 */

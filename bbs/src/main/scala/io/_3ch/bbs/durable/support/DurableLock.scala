@@ -13,7 +13,7 @@ object DurableLock {
     state.blockConcurrencyWhile[js.Dynamic](() =>
       Future.unit.flatMap(_ => body).map(value => js.Dynamic.literal(value = value.asInstanceOf[js.Any])).recover {
         case error: js.JavaScriptException => js.Dynamic.literal(failed = true, error = error.exception.asInstanceOf[js.Dynamic].message)
-        case error => js.Dynamic.literal(failed = true, error = error.getMessage)
+        case error                         => js.Dynamic.literal(failed = true, error = error.getMessage)
       }.toJSPromise
     ).toFuture.map { result =>
       if result.failed.asInstanceOf[js.UndefOr[Boolean]].contains(true) then {

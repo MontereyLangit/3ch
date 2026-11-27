@@ -9,14 +9,20 @@ class AccountIndexAndRateSuite extends FunSuite {
 
   test("期限切れ予約を取り直した後は以前の所有者が確定も削除もできない") {
     val pending = AccountIndexEntry.register(None, first, now, None, AccountIndexKind.Uid).toOption.get
-    assertEquals(AccountIndexEntry.register(Some(pending), second, now + 599, None, AccountIndexKind.Uid), Left(AccountRejection.IndexConflict))
+    assertEquals(
+      AccountIndexEntry.register(Some(pending), second, now + 599, None, AccountIndexKind.Uid),
+      Left(AccountRejection.IndexConflict)
+    )
     val reclaimed = AccountIndexEntry.register(Some(pending), second, now + 600, None, AccountIndexKind.Uid).toOption.get
     assertEquals(reclaimed.confirm(first, now + 601), Left(AccountRejection.IndexOwnership))
     assertEquals(reclaimed.remove(AccountIndexKind.Uid, first), Left(AccountRejection.IndexOwnership))
     assertEquals(pending.confirm(second, now + 600), Left(AccountRejection.IndexOwnership))
     val confirmed = reclaimed.confirm(second, now + 601).toOption.get
     assertEquals(confirmed.remove(AccountIndexKind.Uid, second), Left(AccountRejection.IndexPermanent))
-    assertEquals(AccountIndexEntry.register(Some(confirmed), first, now + 999999, None, AccountIndexKind.Uid), Left(AccountRejection.IndexConflict))
+    assertEquals(
+      AccountIndexEntry.register(Some(confirmed), first, now + 999999, None, AccountIndexKind.Uid),
+      Left(AccountRejection.IndexConflict)
+    )
   }
 
   test("予約が期限切れでも、他の所有者に取られていなければ同じ所有者は確定できる") {
@@ -34,10 +40,15 @@ class AccountIndexAndRateSuite extends FunSuite {
   }
 
   test("認証計数は境界の古い履歴を捨てて同じ端末を一回だけ数える") {
-    val history = AuthRateHistory(Vector(AuthRateEvent("verify", now - 86400), AuthRateEvent("verify", now - 3600),
-      AuthRateEvent("verify", now - 3599), AuthRateEvent("login", now - 1),
-      AuthRateEvent("deviceHash:p" + "a" * 18, now - 20), AuthRateEvent("deviceHash:p" + "a" * 18, now - 10),
-      AuthRateEvent("deviceHash:g" + "b" * 18, now - 1)))
+    val history = AuthRateHistory(Vector(
+      AuthRateEvent("verify", now - 86400),
+      AuthRateEvent("verify", now - 3600),
+      AuthRateEvent("verify", now - 3599),
+      AuthRateEvent("login", now - 1),
+      AuthRateEvent("deviceHash:p" + "a" * 18, now - 20),
+      AuthRateEvent("deviceHash:p" + "a" * 18, now - 10),
+      AuthRateEvent("deviceHash:g" + "b" * 18, now - 1)
+    ))
     val (next, counts) = history.hit("verify", now).toOption.get
     assertEquals(counts, AuthRateCounts(2, 3, 2))
     assert(!next.events.exists(_.t == now - 86400))
@@ -47,7 +58,9 @@ class AccountIndexAndRateSuite extends FunSuite {
   }
 
   test("上限に達した種類は記録を増やさず、閾値を超えた件数を返し続ける") {
-    val full = (0 until AuthRateHistory.kindLimit).foldLeft(AuthRateHistory())((history, i) => history.hit("login", now - 80000 + i).toOption.get._1)
+    val full = (0 until AuthRateHistory.kindLimit).foldLeft(AuthRateHistory())((history, i) =>
+      history.hit("login", now - 80000 + i).toOption.get._1
+    )
     assertEquals(full.events.size, AuthRateHistory.kindLimit)
     val (same, counts) = full.hit("login", now).toOption.get
     assertEquals(same.events.size, AuthRateHistory.kindLimit)
@@ -86,7 +99,8 @@ class AccountIndexAndRateSuite extends FunSuite {
     assertEquals(entry.release(entry.aid), Right(()))
     assertEquals(entry.release("qrstuvwxyz012345"), Left(AccountRejection.IndexOwnership))
     assertEquals(confirmed.release(entry.aid), Left(AccountRejection.IndexPermanent))
-    assert(entry.claimedBy(entry.aid, now + 599) && !entry.claimedBy(entry.aid, now + 600) && confirmed.claimedBy(entry.aid, now + 9999) && !entry.claimedBy("qrstuvwxyz012345", now))
+    assert(entry.claimedBy(entry.aid, now + 599) && !entry.claimedBy(entry.aid, now + 600) && confirmed.claimedBy(entry.aid, now + 9999) &&
+      !entry.claimedBy("qrstuvwxyz012345", now))
   }
 
   test("乱造検知は verify 回数と相異なる端末数の両方で制限する") {

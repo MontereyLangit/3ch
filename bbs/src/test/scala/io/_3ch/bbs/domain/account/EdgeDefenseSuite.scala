@@ -9,12 +9,21 @@ class EdgeDefenseSuite extends munit.FunSuite {
   private val home = EdgeSignal("2516", "JP", Some(30), Some(1800), "Mozilla/5.0 Chrome/130.0")
 
   test("データセンターの AS は拒否し、TLS の矛盾はブラウザ向けのエンドポイントでだけ見る") {
-    assertEquals(EdgeDefense.check(rules, home, browser = true, exempted = false), EdgeDecision(Vector.empty, reject = false, strict = false))
-    assertEquals(EdgeDefense.check(rules, home.copy(asn = "16509"), browser = false, exempted = false).rejection, Some(EdgeFinding.Datacenter))
+    assertEquals(
+      EdgeDefense.check(rules, home, browser = true, exempted = false),
+      EdgeDecision(Vector.empty, reject = false, strict = false)
+    )
+    assertEquals(
+      EdgeDefense.check(rules, home.copy(asn = "16509"), browser = false, exempted = false).rejection,
+      Some(EdgeFinding.Datacenter)
+    )
     val mismatch = home.copy(tlsHelloLength = Some(300))
     assertEquals(EdgeDefense.check(rules, mismatch, browser = true, exempted = false).rejection, Some(EdgeFinding.DeclarationMismatch))
     assertEquals(EdgeDefense.check(rules, mismatch, browser = false, exempted = false).findings, Vector.empty)
-    assertEquals(EdgeDefense.check(rules, mismatch.copy(userAgent = "Firefox/130"), browser = true, exempted = false).findings, Vector.empty)
+    assertEquals(
+      EdgeDefense.check(rules, mismatch.copy(userAgent = "Firefox/130"), browser = true, exempted = false).findings,
+      Vector.empty
+    )
     assertEquals(EdgeDefense.check(rules, home.copy(tlsHelloLength = None), browser = true, exempted = false).findings, Vector.empty)
   }
 
@@ -33,9 +42,23 @@ class EdgeDefenseSuite extends munit.FunSuite {
 
   test("試行モードと規則なしでは RTT が閾値を超えても乱造検知を厳しくしない") {
     val slow = home.copy(rttMs = Some(900))
-    assertEquals(EdgeDefense.check(rules.copy(mode = EdgeMode.Log), slow, browser = true, exempted = false), EdgeDecision(Vector.empty, reject = false, strict = false))
-    assertEquals(EdgeDefense.check(EdgeRules.empty, slow, browser = true, exempted = false), EdgeDecision(Vector.empty, reject = false, strict = false))
-    assertEquals(EdgeDefense.check(rules.copy(mode = EdgeMode.Log), slow.copy(asn = "16509", tlsHelloLength = Some(300)), browser = true, exempted = false).strict, false)
+    assertEquals(
+      EdgeDefense.check(rules.copy(mode = EdgeMode.Log), slow, browser = true, exempted = false),
+      EdgeDecision(Vector.empty, reject = false, strict = false)
+    )
+    assertEquals(
+      EdgeDefense.check(EdgeRules.empty, slow, browser = true, exempted = false),
+      EdgeDecision(Vector.empty, reject = false, strict = false)
+    )
+    assertEquals(
+      EdgeDefense.check(
+        rules.copy(mode = EdgeMode.Log),
+        slow.copy(asn = "16509", tlsHelloLength = Some(300)),
+        browser = true,
+        exempted = false
+      ).strict,
+      false
+    )
   }
 
   test("免除は Lv3 以上で作成から7日以上") {
@@ -46,7 +69,9 @@ class EdgeDefenseSuite extends munit.FunSuite {
   }
 
   test("edge-rules.json を読み、知らない値は既定にし、壊れていれば規則なしにする") {
-    val parsed = EdgeRuleRepository.parse("""{"mode":"on","datacenterAsns":[16509,"14618","x"],"rttMs":300,"tls":[{"ua":"Chrome/","min":500,"max":2000}]}""")
+    val parsed = EdgeRuleRepository.parse(
+      """{"mode":"on","datacenterAsns":[16509,"14618","x"],"rttMs":300,"tls":[{"ua":"Chrome/","min":500,"max":2000}]}"""
+    )
     assertEquals((parsed.mode, parsed.datacenterAsns, parsed.rttMs, parsed.tls.size), (EdgeMode.On, Set("16509", "14618"), 300d, 1))
     assertEquals(EdgeRuleRepository.parse("""{"mode":"block"}""").mode, EdgeMode.Log)
     assertEquals(EdgeRuleRepository.parse("{broken"), EdgeRules.empty)

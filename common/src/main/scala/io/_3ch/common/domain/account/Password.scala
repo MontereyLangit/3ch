@@ -5,6 +5,7 @@ enum PasswordRejection {
   case InvalidUnicode
   case Length
   case ContainsLoginId
+
   /** 役割のあるアカウントで 16 文字に満たない */
   case RoleLength
 }
@@ -13,7 +14,7 @@ enum PasswordRejection {
 final class Password private (val value: String) {
   override def equals(other: Any): Boolean = other match {
     case that: Password => value == that.value
-    case _ => false
+    case _              => false
   }
   override def hashCode(): Int = value.hashCode
   override def toString: String = "Password(<redacted>)"

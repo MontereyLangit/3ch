@@ -11,7 +11,8 @@ class ModerationRuleRepositorySuite extends FunSuite {
   private def env(get: String => js.Promise[js.Any]): WorkerEnv =
     js.Dynamic.literal(ch3www = js.Dynamic.literal(get = get: js.Function1[String, js.Promise[js.Any]])).asInstanceOf[WorkerEnv]
 
-  private def stored(text: js.Function0[js.Promise[js.Any]]): js.Promise[js.Any] = js.Promise.resolve[js.Any](js.Dynamic.literal(text = text))
+  private def stored(text: js.Function0[js.Promise[js.Any]]): js.Promise[js.Any] =
+    js.Promise.resolve[js.Any](js.Dynamic.literal(text = text))
 
   test("ファイル名どおりに読み、無ければ Missing") {
     val requested = js.Array[String]()

@@ -9,6 +9,7 @@ trait AbuseReviewLog {
 }
 
 object AbuseReviewLog {
+
   /** 何も記録しない */
   val none: AbuseReviewLog = (_, _, _, _) => Future.unit
 }

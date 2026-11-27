@@ -7,9 +7,14 @@ import scala.scalajs.js
 class PasswordCredentialCodecSuite extends FunSuite {
   private val now = 2000000000d
   private val ip = "a" * 64
-  private val credential = PasswordCredential(PasswordAlgorithm.Pbkdf2Sha256, 100000,
-    Vector.tabulate(16)(i => (i * 17).toByte), Vector.tabulate(32)(i => (255 - i).toByte), now,
-    LoginThrottle(Map(ip -> LoginSource(3, now - 1, Some(now + 100))), LoginAccountFailures(3, now - 1, Some(now + 100))))
+  private val credential = PasswordCredential(
+    PasswordAlgorithm.Pbkdf2Sha256,
+    100000,
+    Vector.tabulate(16)(i => (i * 17).toByte),
+    Vector.tabulate(32)(i => (255 - i).toByte),
+    now,
+    LoginThrottle(Map(ip -> LoginSource(3, now - 1, Some(now + 100))), LoginAccountFailures(3, now - 1, Some(now + 100)))
+  )
 
   test("資格情報と失敗計数を小文字の16進数で保存して元のバイト列へ戻す") {
     val encoded = PasswordCredentialCodec.encode(credential)
@@ -32,10 +37,22 @@ class PasswordCredentialCodecSuite extends FunSuite {
   }
 
   test("未知の方式・反復数の境界外・壊れたソルトやハッシュ・不正時刻を拒否する") {
-    val invalid = Vector[(String, js.Any)]("algo" -> "unknown", "iterations" -> 0, "iterations" -> -1,
-      "iterations" -> 1.5, "iterations" -> 100001, "iterations" -> "100000", "salt" -> ("A" * 32),
-      "salt" -> ("a" * 30), "hash" -> ("a" * 63), "hash" -> ("g" * 64), "hash" -> js.Array(1, 2),
-      "updatedAt" -> -1, "updatedAt" -> 1.5, "updatedAt" -> Double.NaN)
+    val invalid = Vector[(String, js.Any)](
+      "algo" -> "unknown",
+      "iterations" -> 0,
+      "iterations" -> -1,
+      "iterations" -> 1.5,
+      "iterations" -> 100001,
+      "iterations" -> "100000",
+      "salt" -> ("A" * 32),
+      "salt" -> ("a" * 30),
+      "hash" -> ("a" * 63),
+      "hash" -> ("g" * 64),
+      "hash" -> js.Array(1, 2),
+      "updatedAt" -> -1,
+      "updatedAt" -> 1.5,
+      "updatedAt" -> Double.NaN
+    )
     invalid.foreach { case (field, value) =>
       val encoded = PasswordCredentialCodec.encode(credential)
       encoded.updateDynamic(field)(value)
@@ -59,10 +76,14 @@ class PasswordCredentialCodecSuite extends FunSuite {
       js.Dynamic.literal(sources = js.Dictionary[js.Any](ip -> js.Dynamic.literal(since = now)), account = account),
       js.Dynamic.literal(sources = js.Dictionary[js.Any](ip -> js.Dynamic.literal(count = 0, since = now)), account = account),
       js.Dynamic.literal(sources = js.Dictionary[js.Any](ip -> js.Dynamic.literal(count = 1.5, since = now)), account = account),
-      js.Dynamic.literal(sources = js.Dictionary[js.Any](ip -> js.Dynamic.literal(count = 1, since = now, lockedUntil = "2000000100")), account = account),
+      js.Dynamic.literal(
+        sources = js.Dictionary[js.Any](ip -> js.Dynamic.literal(count = 1, since = now, lockedUntil = "2000000100")),
+        account = account
+      ),
       js.Dynamic.literal(sources = js.Dictionary[js.Any]("raw-ip" -> source), account = account),
       js.Dynamic.literal(sources = js.Dictionary[js.Any](), account = js.Dynamic.literal(count = 101, since = now)),
-      js.Dynamic.literal(sources = js.Dictionary[js.Any](), account = js.Dynamic.literal(since = now)))
+      js.Dynamic.literal(sources = js.Dictionary[js.Any](), account = js.Dynamic.literal(since = now))
+    )
     invalid.foreach { throttle =>
       val encoded = PasswordCredentialCodec.encode(credential)
       encoded.throttle = throttle
@@ -75,6 +96,8 @@ class PasswordCredentialCodecSuite extends FunSuite {
     assertEquals(PasswordCredentialCodec.decode(PasswordCredentialCodec.encode(empty)), empty)
     intercept[Throwable](PasswordCredentialCodec.encode(null))
     intercept[Throwable](PasswordCredentialCodec.encode(credential.copy(salt = Vector.empty)))
-    intercept[Throwable](PasswordCredentialCodec.encode(credential.copy(throttle = LoginThrottle(sources = Map("raw-ip" -> LoginSource(1, now))))))
+    intercept[Throwable](PasswordCredentialCodec.encode(credential.copy(throttle =
+      LoginThrottle(sources = Map("raw-ip" -> LoginSource(1, now)))
+    )))
   }
 }

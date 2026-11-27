@@ -8,7 +8,12 @@ object AuthTestEnv {
   val secret: String = "test-auth-secret-0123456789abcdefghij"
 
   def env(values: (String, js.Any)*): WorkerEnv = {
-    val raw = js.Dynamic.literal(AUTH_SECRET = secret, AGREEMENT_VERSION = "v1", TURNSTILE_SITE_KEY = "test-site-key", TURNSTILE_SECRET_KEY = "test-server-key")
+    val raw = js.Dynamic.literal(
+      AUTH_SECRET = secret,
+      AGREEMENT_VERSION = "v1",
+      TURNSTILE_SITE_KEY = "test-site-key",
+      TURNSTILE_SECRET_KEY = "test-server-key"
+    )
     values.foreach { case (name, value) => raw.updateDynamic(name)(value) }
     raw.asInstanceOf[WorkerEnv]
   }
