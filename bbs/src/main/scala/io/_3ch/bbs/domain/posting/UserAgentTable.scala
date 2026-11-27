@@ -9,8 +9,11 @@ import scala.util.matching.Regex
 /** UA 解析表の一行。pattern に一致したら label の $1〜$9 を捕捉した文字列に置き換えて返す */
 final class UserAgentRule private (pattern: js.RegExp, label: String) {
   def apply(userAgent: String): Option[String] = Option(pattern.exec(userAgent)).map { found =>
-    UserAgentRule.Group.replaceAllIn(label, group =>
-      Regex.quoteReplacement(found.lift(group.group(1).toInt).flatMap(_.toOption).flatMap(Option(_)).getOrElse("")))
+    UserAgentRule.Group.replaceAllIn(
+      label,
+      group =>
+        Regex.quoteReplacement(found.lift(group.group(1).toInt).flatMap(_.toOption).flatMap(Option(_)).getOrElse(""))
+    )
   }
 }
 
@@ -35,6 +38,7 @@ final case class UserAgentTable(os: Seq[UserAgentRule], browser: Seq[UserAgentRu
 }
 
 object UserAgentTable {
+
   /** 一つの表（os・browser・device）に読み込む行数の上限 */
   val MaxRulesPerList: Int = 100
 

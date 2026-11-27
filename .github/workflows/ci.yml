@@ -66,6 +66,9 @@ jobs:
         env:
           HX4S_DIR: ${{ github.workspace }}/target/hx4s
 
+      - name: sbt scalafmtCheckAll scalafmtSbtCheck
+        run: sbt scalafmtCheckAll scalafmtSbtCheck
+
       - name: npm run v6:build
         run: npm run v6:build
 

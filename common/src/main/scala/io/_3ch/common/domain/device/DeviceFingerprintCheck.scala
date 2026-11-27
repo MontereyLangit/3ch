@@ -8,8 +8,12 @@ object DeviceFingerprintCheck {
   private val IosVersion = "(?i)(?:CPU (?:iPhone )?OS|iPhone OS) ([0-9]+)(?:[_ .]|$)".r
 
   /** 材料や既知プロファイルがないときは、その照合だけを飛ばす */
-  def validate(fingerprint: Option[ClientFingerprint], hints: ClientHints, headerUserAgent: String,
-    profiles: Vector[IosDeviceProfile] = Vector.empty): Either[DeviceRejection, Unit] = {
+  def validate(
+      fingerprint: Option[ClientFingerprint],
+      hints: ClientHints,
+      headerUserAgent: String,
+      profiles: Vector[IosDeviceProfile] = Vector.empty
+  ): Either[DeviceRejection, Unit] = {
     val logicalMismatch = fingerprint.exists { fp =>
       DeviceInfo(fp.os, fp.os, fp.webgl).isLogicalMismatched || iosProfileMismatched(fp, profiles)
     }

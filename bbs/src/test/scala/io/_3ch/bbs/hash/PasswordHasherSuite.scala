@@ -20,7 +20,8 @@ class PasswordHasherSuite extends FunSuite {
   private def withMethod[A](target: js.Dynamic, name: String, replacement: js.Any)(body: => Future[A]): Future[A] = {
     val previous = target.selectDynamic(name)
     target.updateDynamic(name)(replacement)
-    val pending = try body catch {
+    val pending = try body
+    catch {
       case error: Throwable => target.updateDynamic(name)(previous); throw error
     }
     pending.transform { result => target.updateDynamic(name)(previous); result }
@@ -93,16 +94,31 @@ class PasswordHasherSuite extends FunSuite {
 
   test("不正な資格情報・時刻・null入力は暗号APIを呼ぶ前に拒否する") {
     var imports = 0
-    val rejected = ((_: js.Any, _: js.Any, _: js.Any, _: js.Any, _: js.Any) => {
-      imports += 1
-      js.Promise.reject(new js.Error("unexpected import"))
-    }): js.Function5[js.Any, js.Any, js.Any, js.Any, js.Any, js.Promise[js.Any]]
+    val rejected = (
+        (_: js.Any, _: js.Any, _: js.Any, _: js.Any, _: js.Any) => {
+          imports += 1
+          js.Promise.reject(new js.Error("unexpected import"))
+        }
+    ): js.Function5[js.Any, js.Any, js.Any, js.Any, js.Any, js.Promise[js.Any]]
     withMethod(subtle, "importKey", rejected) {
-      val invalid = Seq(null, credential.copy(algo = null), credential.copy(iterations = 0), credential.copy(iterations = 100001),
-        credential.copy(salt = Vector.empty), credential.copy(salt = Vector.fill(17)(0.toByte)), credential.copy(salt = null),
-        credential.copy(hash = Vector.empty), credential.copy(hash = Vector.fill(31)(0.toByte)), credential.copy(hash = Vector.fill(33)(0.toByte)),
-        credential.copy(hash = null), credential.copy(updatedAt = -1), credential.copy(updatedAt = 0.5), credential.copy(updatedAt = Double.NaN),
-        credential.copy(throttle = null), credential.copy(throttle = LoginThrottle(sources = Map("raw-ip" -> io._3ch.common.domain.account.LoginSource(1, now)))))
+      val invalid = Seq(
+        null,
+        credential.copy(algo = null),
+        credential.copy(iterations = 0),
+        credential.copy(iterations = 100001),
+        credential.copy(salt = Vector.empty),
+        credential.copy(salt = Vector.fill(17)(0.toByte)),
+        credential.copy(salt = null),
+        credential.copy(hash = Vector.empty),
+        credential.copy(hash = Vector.fill(31)(0.toByte)),
+        credential.copy(hash = Vector.fill(33)(0.toByte)),
+        credential.copy(hash = null),
+        credential.copy(updatedAt = -1),
+        credential.copy(updatedAt = 0.5),
+        credential.copy(updatedAt = Double.NaN),
+        credential.copy(throttle = null),
+        credential.copy(throttle = LoginThrottle(sources = Map("raw-ip" -> io._3ch.common.domain.account.LoginSource(1, now))))
+      )
       for {
         results <- Future.traverse(invalid)(PasswordHasher.verify(password, _))
         times <- Future.traverse(Seq(-1d, 0.5, Double.NaN, Double.PositiveInfinity))(PasswordHasher.create(password, _))
@@ -123,13 +139,17 @@ class PasswordHasherSuite extends FunSuite {
       withMethod(subtle, method, js.undefined)(assertUnavailable())
     }
     test(s"$method の同期例外でも利用不能を返す") {
-      val failed = ((_: js.Any, _: js.Any, _: js.Any, _: js.Any, _: js.Any) => {
-        throw js.JavaScriptException(new js.Error("crypto failed"))
-      }): js.Function5[js.Any, js.Any, js.Any, js.Any, js.Any, js.Promise[js.Any]]
+      val failed = (
+          (_: js.Any, _: js.Any, _: js.Any, _: js.Any, _: js.Any) => {
+            throw js.JavaScriptException(new js.Error("crypto failed"))
+          }
+      ): js.Function5[js.Any, js.Any, js.Any, js.Any, js.Any, js.Promise[js.Any]]
       withMethod(subtle, method, failed)(assertUnavailable())
     }
     test(s"$method の Promise 拒否でも利用不能を返す") {
-      val failed = ((_: js.Any, _: js.Any, _: js.Any, _: js.Any, _: js.Any) => js.Promise.reject(new js.Error("crypto failed"))): js.Function5[js.Any, js.Any, js.Any, js.Any, js.Any, js.Promise[js.Any]]
+      val failed = (
+          (_: js.Any, _: js.Any, _: js.Any, _: js.Any, _: js.Any) => js.Promise.reject(new js.Error("crypto failed"))
+      ): js.Function5[js.Any, js.Any, js.Any, js.Any, js.Any, js.Promise[js.Any]]
       withMethod(subtle, method, failed)(assertUnavailable())
     }
   }
@@ -147,7 +167,9 @@ class PasswordHasherSuite extends FunSuite {
   }
 
   test("暗号APIが32バイト以外を返したら照合・発行を通さない") {
-    val invalid = ((_: js.Any, _: js.Any, _: js.Any) => js.Promise.resolve(new Uint8Array(31).buffer)): js.Function3[js.Any, js.Any, js.Any, js.Promise[js.Any]]
+    val invalid = (
+        (_: js.Any, _: js.Any, _: js.Any) => js.Promise.resolve(new Uint8Array(31).buffer)
+    ): js.Function3[js.Any, js.Any, js.Any, js.Promise[js.Any]]
     withMethod(subtle, "deriveBits", invalid)(assertUnavailable())
   }
 }

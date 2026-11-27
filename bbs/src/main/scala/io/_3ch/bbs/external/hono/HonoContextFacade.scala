@@ -19,6 +19,7 @@ type HonoContextFacade = Context[WorkerEnv, RenderProps]
 /** hx4s の Context が使う scalajs-dom の Request / Response を、3ch の Fetch facade（external.web）として読む境界 */
 object HonoContextFacade {
   extension (c: HonoContextFacade) {
+
     /** c.req.raw */
     def request: Request = c.req.raw.asInstanceOf[Request]
 

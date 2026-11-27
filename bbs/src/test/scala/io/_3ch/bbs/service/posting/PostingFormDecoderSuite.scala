@@ -28,8 +28,14 @@ class PostingFormDecoderSuite extends FunSuite {
   }
 
   test("submit が無ければ NoSubmit、Web からの Shift_JIS は SjisFromWeb") {
-    assertEquals(PostingFormDecoder.decode(new TextEncoder().encode("MESSAGE=x"), isMonazilla = false), Left(PostingError.NoSubmit -> PostForm()))
-    assertEquals(PostingFormDecoder.decode(sjis("MESSAGE" -> "x"), isMonazilla = false), Left(PostingError.SjisFromWeb -> PostForm(isSJIS = true)))
+    assertEquals(
+      PostingFormDecoder.decode(new TextEncoder().encode("MESSAGE=x"), isMonazilla = false),
+      Left(PostingError.NoSubmit -> PostForm())
+    )
+    assertEquals(
+      PostingFormDecoder.decode(sjis("MESSAGE" -> "x"), isMonazilla = false),
+      Left(PostingError.SjisFromWeb -> PostForm(isSJIS = true))
+    )
   }
 
   test("Monazilla の Shift_JIS は復号する") {
@@ -51,7 +57,10 @@ class PostingFormDecoderSuite extends FunSuite {
     intercept[js.JavaScriptException](PostingFormDecoder.decode(malformed, isMonazilla = false))
     val missingSubmit = new TextEncoder().encode("MESSAGE=%GG")
     assertEquals(PostingFormDecoder.decode(missingSubmit, isMonazilla = false), Left(PostingError.NoSubmit -> PostForm()))
-    assertEquals(PostingFormDecoder.decode(new TextEncoder().encode("MESSAGE=%GG&submit=x"), isMonazilla = false), Left(PostingError.SjisFromWeb -> PostForm(isSJIS = true)))
+    assertEquals(
+      PostingFormDecoder.decode(new TextEncoder().encode("MESSAGE=%GG&submit=x"), isMonazilla = false),
+      Left(PostingError.SjisFromWeb -> PostForm(isSJIS = true))
+    )
   }
 
   test("Shift_JISの不正percentは文字として残す") {

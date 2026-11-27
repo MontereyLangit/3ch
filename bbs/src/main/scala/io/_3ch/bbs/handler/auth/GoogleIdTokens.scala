@@ -27,8 +27,10 @@ private object GoogleFetch extends js.Object {
 
 /** Google のトークンエンドポイントと JWKS を呼ぶ口。テストでは差し替える */
 trait GoogleEndpoints {
+
   /** 認可コードを ID トークンに交換する。失敗は None */
   def exchange(code: String, verifier: String, redirectUri: String): Future[Option[String]]
+
   /** 署名鍵の一覧。refresh なら保存した鍵を使わず取り直す */
   def keys(refresh: Boolean): Future[Vector[RsaPublicKey]]
 }
@@ -36,13 +38,25 @@ trait GoogleEndpoints {
 /** fetch で Google を呼ぶ。JWKS は Cache-Control の max-age の間、この isolate に保持する */
 final class GoogleHttpEndpoints(settings: GoogleSettings) extends GoogleEndpoints {
   def exchange(code: String, verifier: String, redirectUri: String): Future[Option[String]] = {
-    val body = Seq("code" -> code, "client_id" -> settings.clientId, "client_secret" -> settings.clientSecret, "redirect_uri" -> redirectUri,
-      "grant_type" -> "authorization_code", "code_verifier" -> verifier).map { case (key, value) => key + "=" + js.URIUtils.encodeURIComponent(value) }.mkString("&")
-    GoogleFetch(GoogleIdTokens.TokenUrl, js.Dynamic.literal(method = "POST",
-      headers = js.Dictionary("Content-Type" -> "application/x-www-form-urlencoded"), body = body)).toFuture.flatMap { response =>
+    val body = Seq(
+      "code" -> code,
+      "client_id" -> settings.clientId,
+      "client_secret" -> settings.clientSecret,
+      "redirect_uri" -> redirectUri,
+      "grant_type" -> "authorization_code",
+      "code_verifier" -> verifier
+    ).map { case (key, value) => key + "=" + js.URIUtils.encodeURIComponent(value) }.mkString("&")
+    GoogleFetch(
+      GoogleIdTokens.TokenUrl,
+      js.Dynamic.literal(
+        method = "POST",
+        headers = js.Dictionary("Content-Type" -> "application/x-www-form-urlencoded"),
+        body = body
+      )
+    ).toFuture.flatMap { response =>
       if (!response.ok) Future.successful(None)
       else response.text().toFuture.map { text =>
-        Try(js.JSON.parse(text).asInstanceOf[js.Dynamic].selectDynamic("id_token")).toOption
+        Try(js.JSON.parse(text).selectDynamic("id_token")).toOption
           .filter(value => js.typeOf(value) == "string").map(_.asInstanceOf[String])
       }
     }.recover { case NonFatal(_) => None }
@@ -50,15 +64,17 @@ final class GoogleHttpEndpoints(settings: GoogleSettings) extends GoogleEndpoint
 
   def keys(refresh: Boolean): Future[Vector[RsaPublicKey]] = GoogleHttpEndpoints.cached.filter(_ => !refresh) match {
     case Some(keys) => Future.successful(keys)
-    case None => GoogleFetch(GoogleIdTokens.CertsUrl, js.Dynamic.literal(method = "GET")).toFuture.flatMap { response =>
-      if (!response.ok) Future.successful(Vector.empty)
-      else response.text().toFuture.map { text =>
-        val keys = GoogleIdTokens.parseKeys(text)
-        val maxAge = Option(response.headers.get("Cache-Control")).flatMap(value => "max-age=([0-9]{1,7})".r.findFirstMatchIn(value)).map(_.group(1).toDouble)
-        GoogleHttpEndpoints.store(keys, maxAge.getOrElse(0d))
-        keys
-      }
-    }.recover { case NonFatal(_) => Vector.empty }
+    case None       => GoogleFetch(GoogleIdTokens.CertsUrl, js.Dynamic.literal(method = "GET")).toFuture.flatMap { response =>
+        if (!response.ok) Future.successful(Vector.empty)
+        else response.text().toFuture.map { text =>
+          val keys = GoogleIdTokens.parseKeys(text)
+          val maxAge = Option(
+            response.headers.get("Cache-Control")
+          ).flatMap(value => "max-age=([0-9]{1,7})".r.findFirstMatchIn(value)).map(_.group(1).toDouble)
+          GoogleHttpEndpoints.store(keys, maxAge.getOrElse(0d))
+          keys
+        }
+      }.recover { case NonFatal(_) => Vector.empty }
   }
 }
 object GoogleHttpEndpoints {
@@ -86,7 +102,7 @@ object GoogleIdTokens {
     Option.when(js.typeOf(v) == "number" && v.asInstanceOf[Double].isFinite)(v.asInstanceOf[Double])
   }
   private def record(raw: String): Option[js.Dynamic] = Try(js.JSON.parse(raw)).toOption
-    .filter(v => v != null && js.typeOf(v) == "object" && !js.Array.isArray(v)).map(_.asInstanceOf[js.Dynamic])
+    .filter(v => v != null && js.typeOf(v) == "object" && !js.Array.isArray(v))
 
   /** JWKS の RS256 の鍵だけを読む */
   def parseKeys(raw: String): Vector[RsaPublicKey] = record(raw).flatMap { value =>
@@ -114,25 +130,35 @@ object GoogleIdTokens {
       exp <- number(v, "exp")
       iat <- number(v, "iat")
       nonce <- text(v, "nonce")
-    } yield GoogleIdClaims(iss, aud, sub, exp, iat, nonce, text(v, "email").filter(_.length <= 254),
-      (js.typeOf(verified) == "boolean" && verified.asInstanceOf[Boolean]) || (js.typeOf(verified) == "string" && verified.asInstanceOf[String] == "true"))
+    } yield GoogleIdClaims(
+      iss,
+      aud,
+      sub,
+      exp,
+      iat,
+      nonce,
+      text(v, "email").filter(_.length <= 254),
+      (js.typeOf(verified) == "boolean" && verified.asInstanceOf[Boolean]) ||
+        (js.typeOf(verified) == "string" && verified.asInstanceOf[String] == "true")
+    )
   }
 
   /** 署名を検証し、鍵の ID が見つからなければ一度だけ鍵を取り直す */
   def verify(token: String, endpoints: GoogleEndpoints, now: Double, nonce: String, clientId: String): Future[Option[GoogleIdentity]] =
     JwtRs256.parse(token).flatMap(parts => record(parts.header).map(parts -> _)) match {
-      case Some((parts, header)) if text(header, "alg").contains("RS256") => text(header, "kid") match {
-        case None => Future.successful(None)
-        case Some(kid) =>
-          def find(refresh: Boolean): Future[Option[RsaPublicKey]] = endpoints.keys(refresh).map(_.find(_.kid == kid))
-          find(false).flatMap(found => if (found.isDefined) Future.successful(found) else find(true)).flatMap {
-            case None => Future.successful(None)
-            case Some(key) => JwtRs256.verify(parts, key).map { valid =>
-              if (!valid) None
-              else claims(parts.payload).flatMap(c => GoogleIdToken.verifyClaims(c, now, nonce, clientId).toOption)
+      case Some((parts, header)) if text(header, "alg").contains("RS256") =>
+        text(header, "kid") match {
+          case None      => Future.successful(None)
+          case Some(kid) =>
+            def find(refresh: Boolean): Future[Option[RsaPublicKey]] = endpoints.keys(refresh).map(_.find(_.kid == kid))
+            find(false).flatMap(found => if (found.isDefined) Future.successful(found) else find(true)).flatMap {
+              case None      => Future.successful(None)
+              case Some(key) => JwtRs256.verify(parts, key).map { valid =>
+                  if (!valid) None
+                  else claims(parts.payload).flatMap(c => GoogleIdToken.verifyClaims(c, now, nonce, clientId).toOption)
+                }
             }
-          }
-      }
+        }
       case _ => Future.successful(None)
     }
 }

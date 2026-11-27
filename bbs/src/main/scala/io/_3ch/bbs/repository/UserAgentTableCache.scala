@@ -14,7 +14,7 @@ final class UserAgentTableCache(ttlMillis: Double, now: () => Double) {
 
   def get(fetch: () => Future[UserAgentTable]): Future[UserAgentTable] = table match {
     case Some(cached) if now() - checkedAt < ttlMillis => Future.successful(cached)
-    case _ =>
+    case _                                             =>
       Future.unit.flatMap(_ => fetch()).map { loaded =>
         table = Some(loaded)
         checkedAt = now()

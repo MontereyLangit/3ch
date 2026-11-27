@@ -78,10 +78,13 @@ class HonoRenderSuite extends munit.FunSuite {
   test("Scalaハンドラは導入済みReactレンダラミドルウェア経由でUTF-8レイアウトを描画する") {
     val app = new RenderApp()
     app.use("*", ReactRendererMiddleware(props => Main.renderShell(props.children, props.title, "/static/client.js")))
-    app.get("/", context => {
-      val props = new RenderProps { title = "題名 <&>" }
-      context.renderPage(<.main("日本語 <&>").rawElement, props)
-    })
+    app.get(
+      "/",
+      context => {
+        val props = new RenderProps { title = "題名 <&>" }
+        context.renderPage(<.main("日本語 <&>").rawElement, props)
+      }
+    )
     app.request("/").toFuture.flatMap { response =>
       val res = response.asInstanceOf[js.Dynamic]
       text(res).map { html =>
@@ -102,7 +105,7 @@ class HonoRenderSuite extends munit.FunSuite {
     context.setRenderer((_, _) => js.Promise.reject(failure))
     context.renderPage(<.main("本文").rawElement).toFuture.failed.map {
       case js.JavaScriptException(error) => assert(error == failure)
-      case error => fail(s"Unexpected rejection: $error")
+      case error                         => fail(s"Unexpected rejection: $error")
     }
   }
 

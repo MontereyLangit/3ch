@@ -21,7 +21,8 @@ class AuthEdgeSuite extends munit.FunSuite {
         body <- t.body(denied)
         _ = assertEquals((denied.status, body.code.asInstanceOf[String]), (403, "auth:edge:datacenter"))
         _ = assertEquals(t.external.size, 0)
-        login <- t.send(from(t.post("/auth/login", Seq("id" -> "taro_2026", "password" -> "x" * 8, "cf-turnstile-response" -> "accepted")), 16509))
+        login <-
+          t.send(from(t.post("/auth/login", Seq("id" -> "taro_2026", "password" -> "x" * 8, "cf-turnstile-response" -> "accepted")), 16509))
         _ = assertEquals(login.status, 403)
         home <- t.send(from(t.post("/auth/verify", verify), 2516))
         _ = assertEquals(home.status, 200)
@@ -43,15 +44,21 @@ class AuthEdgeSuite extends munit.FunSuite {
         again <- t.send(t.post("/auth/verify", verify, ip = "192.0.2.77"))
         review <- t.kit.worker.AUTH_RATE_DO.get(t.kit.worker.AUTH_RATE_DO.idFromName("review")).flagged().toFuture
         _ <- Future.traverse((1 to 5).toVector)(_ => rate.hit("register", now).toFuture)
-        register <- t.send(t.post("/auth/register", Seq("id" -> "taro_2026", "password" -> "correct horse", "password2" -> "correct horse") ++ verify, ip = "192.0.2.77"))
+        register <- t.send(t.post(
+          "/auth/register",
+          Seq("id" -> "taro_2026", "password" -> "correct horse", "password2" -> "correct horse") ++ verify,
+          ip = "192.0.2.77"
+        ))
         afterRegister <- t.kit.worker.AUTH_RATE_DO.get(t.kit.worker.AUTH_RATE_DO.idFromName("review")).flagged().toFuture
       } yield {
         assertEquals((limited.status, again.status, register.status), (429, 429, 429))
-        assertEquals(review.toVector.map(f => (f.keyIpHash.asInstanceOf[String], f.reason.asInstanceOf[String], f.count.asInstanceOf[Int])), Vector((key, "verify", 2)))
+        assertEquals(
+          review.toVector.map(f => (f.keyIpHash.asInstanceOf[String], f.reason.asInstanceOf[String], f.count.asInstanceOf[Int])),
+          Vector((key, "verify", 2))
+        )
         assertEquals(afterRegister.toVector.map(_.reason.asInstanceOf[String]).sorted, Vector("register", "verify"))
         assertEquals(t.kit.accountNames, Set.empty[String])
       }
     }
   }
 }
-

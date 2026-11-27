@@ -1,6 +1,9 @@
 package io._3ch.bbs.repository
 
-import io._3ch.bbs.domain.account.{CapReissue, PendingCheck, EmailVerified, SignInResult, TokenReference, TokenProof, TokenAuthentication, CapAuthentication, AccountStoreException, WithdrawnAccount}
+import io._3ch.bbs.domain.account.{
+  CapReissue, PendingCheck, EmailVerified, SignInResult, TokenReference, TokenProof, TokenAuthentication, CapAuthentication,
+  AccountStoreException, WithdrawnAccount
+}
 import io._3ch.bbs.service.auth.ports.*
 import io._3ch.bbs.durable.codec.{AccountCodec, PasswordCredentialCodec}
 import io._3ch.bbs.external.cloudflare.{AccountDoStub, AccountIndexDoStub, WorkerEnv}
@@ -12,23 +15,50 @@ import scala.scalajs.js.JSConverters.*
 
 /** 本人画面に出す専ブラキーの投稿記録。本文は四十文字以内の抜粋 */
 final case class AccountTokenPostView(t: Double, bbs: String, key: String, title: String, resNum: Int, excerpt: String, network: String)
+
 /** 別の UA からキーが使われようとした時刻と専ブラ表示名 */
 final case class AccountTokenWarningView(t: Double, uaLabel: String)
+
 /** キーの使用状況と履歴。キー平文・照合ハッシュ・生 UA は含めない */
-final case class AccountTokenView(id: String, label: String, issuedAt: Double = 0, expiresAt: Double = 0,
-  boundAt: Option[Double] = None, lastUsedAt: Option[Double] = None, revokedAt: Option[Double] = None,
-  revokeReason: Option[String] = None, replacedTokenAt: Option[Double] = None,
-  recentPosts: Vector[AccountTokenPostView] = Vector.empty, warnings: Vector[AccountTokenWarningView] = Vector.empty)
+final case class AccountTokenView(
+    id: String,
+    label: String,
+    issuedAt: Double = 0,
+    expiresAt: Double = 0,
+    boundAt: Option[Double] = None,
+    lastUsedAt: Option[Double] = None,
+    revokedAt: Option[Double] = None,
+    revokeReason: Option[String] = None,
+    replacedTokenAt: Option[Double] = None,
+    recentPosts: Vector[AccountTokenPostView] = Vector.empty,
+    warnings: Vector[AccountTokenWarningView] = Vector.empty
+)
+
 /** 本人画面に出すキャップと直近の書き込み。照合値とパスワードは含めない */
-final case class AccountCapView(id: String, name: String, strong: Boolean, issuedAt: Double, revokedAt: Option[Double] = None,
-  recentPosts: Vector[AccountTokenPostView] = Vector.empty)
+final case class AccountCapView(
+    id: String,
+    name: String,
+    strong: Boolean,
+    issuedAt: Double,
+    revokedAt: Option[Double] = None,
+    recentPosts: Vector[AccountTokenPostView] = Vector.empty
+)
+
 /** 本人向けのアカウント情報とキー一覧。使用枠には有効な紐付け済みキーだけを数える */
-final case class AccountPanel(account: AccountDescription, tokens: Vector[AccountTokenView], activeCount: Int = 0, deviceCount: Int = 0,
-  caps: Vector[AccountCapView] = Vector.empty, email: Option[String] = None, pendingEmail: Option[String] = None)
+final case class AccountPanel(
+    account: AccountDescription,
+    tokens: Vector[AccountTokenView],
+    activeCount: Int = 0,
+    deviceCount: Int = 0,
+    caps: Vector[AccountCapView] = Vector.empty,
+    email: Option[String] = None,
+    pendingEmail: Option[String] = None
+)
 
 /** アカウント RPC の値をアプリケーションの型に変換する */
-final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountManagementStore with AccountSignInStore with AccountRoleStore with AccountCapStore
-  with AccountEmailStore with AccountConversionStore with AccountWithdrawalStore {
+final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountManagementStore with AccountSignInStore with AccountRoleStore
+    with AccountCapStore
+    with AccountEmailStore with AccountConversionStore with AccountWithdrawalStore {
   private def account(aid: String): AccountDoStub = env.ACCOUNT_DO.get(env.ACCOUNT_DO.idFromName(aid))
   private def index(kind: String): AccountIndexDoStub = env.ACCOUNT_INDEX_DO.get(env.ACCOUNT_INDEX_DO.idFromName(kind))
   private def raw(value: js.Promise[?]): Future[js.Any] = value.asInstanceOf[js.Promise[js.Any]].toFuture
@@ -77,11 +107,23 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
       val expires = optionalTime(v, "expiresAt")
       val roles = Roles(array(v, "roles").map(value => AccountRole.parse(string(value)).getOrElse(invalid())).toSet)
       val version = text(v, "agreementVersion")
-      if (accountAid != expectedAid || !uid.matches("[a-z0-9_]{3,16}") || version.isEmpty || !roles.permitted(kind) ||
+      if (
+        accountAid != expectedAid || !uid.matches("[a-z0-9_]{3,16}") || version.isEmpty || !roles.permitted(kind) ||
         (kind == AccountKind.Client && (!uid.matches("[a-z0-9]{8}") || expires.isEmpty)) ||
-        (kind != AccountKind.Client && expires.isDefined)) invalid()
-      Right(AccountDescription(accountAid, uid, kind, integer(v.selectDynamic("generation").asInstanceOf[js.Any]), expires,
-        integer(v.selectDynamic("lv").asInstanceOf[js.Any], 10), roles, time(v, "agreedAt"), version, optionalTime(v, "createdAt").getOrElse(0d)))
+        (kind != AccountKind.Client && expires.isDefined)
+      ) invalid()
+      Right(AccountDescription(
+        accountAid,
+        uid,
+        kind,
+        integer(v.selectDynamic("generation").asInstanceOf[js.Any]),
+        expires,
+        integer(v.selectDynamic("lv").asInstanceOf[js.Any], 10),
+        roles,
+        time(v, "agreedAt"),
+        version,
+        optionalTime(v, "createdAt").getOrElse(0d)
+      ))
     }
   }
   private def checked(code: js.Any): Unit = {
@@ -89,17 +131,31 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
     if (value.nonEmpty) throw AccountStoreException(rejection(value))
   }
   def describe(aid: String, generation: Int, now: Double, token: Option[TokenProof]): Future[Either[AccountRejection, AccountDescription]] =
-    account(aid).describeForPosting(aid, generation, now, token.map(_.tokenId).orUndefined, token.map(_.uaHash).orUndefined).toFuture.map(decode(_, aid))
+    account(aid).describeForPosting(
+      aid,
+      generation,
+      now,
+      token.map(_.tokenId).orUndefined,
+      token.map(_.uaHash).orUndefined
+    ).toFuture.map(decode(_, aid))
   def token(hash: String): Future[Either[AccountRejection, Option[TokenReference]]] = index("token").lookup(hash).toFuture.map { v =>
     val code = text(v, "code")
-    if (code == "auth:index:missing") Right(None) else if (code.nonEmpty) Left(rejection(code))
+    if (code == "auth:index:missing") Right(None)
+    else if (code.nonEmpty) Left(rejection(code))
     else Right(Some(TokenReference(aid(text(v, "aid")), identifier(text(v, "tokenId")))))
   }
-  def useToken(reference: TokenReference, uaHash: String, uaLabel: String, now: Double): Future[Either[AccountRejection, TokenAuthentication]] =
-    account(reference.aid).useToken(reference.tokenId, uaHash, uaLabel, now).toFuture.map(v => decode(v, reference.aid).map { description =>
-      if (identifier(text(v, "tokenId")) != reference.tokenId) invalid()
-      TokenAuthentication(description, reference.tokenId)
-    })
+  def useToken(
+      reference: TokenReference,
+      uaHash: String,
+      uaLabel: String,
+      now: Double
+  ): Future[Either[AccountRejection, TokenAuthentication]] =
+    account(reference.aid).useToken(reference.tokenId, uaHash, uaLabel, now).toFuture.map(v =>
+      decode(v, reference.aid).map { description =>
+        if (identifier(text(v, "tokenId")) != reference.tokenId) invalid()
+        TokenAuthentication(description, reference.tokenId)
+      }
+    )
   def capOwner(hash: String): Future[Either[AccountRejection, Option[String]]] = index("cap").lookup(hash).toFuture.map { v =>
     val code = text(v, "code")
     if (code == "auth:index:missing") Right(None) else if (code.nonEmpty) Left(rejection(code)) else Right(Some(aid(text(v, "aid"))))
@@ -120,17 +176,23 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
   def holds(aid: String, kind: String, value: String): Future[Boolean] = account(aid).holds(kind, value).toFuture
   def create(profile: AccountProfile, now: Double): Future[AccountDescription] = create(profile, now, None)
   def create(profile: AccountProfile, now: Double, credential: Option[PasswordCredential]): Future[AccountDescription] =
-    account(profile.aid).create(AccountCodec.encodeProfile(profile), now, credential.map(PasswordCredentialCodec.encode).orUndefined).toFuture.map(v =>
-      decode(v, profile.aid).fold(reason => throw AccountStoreException(reason), identity))
+    account(profile.aid).create(
+      AccountCodec.encodeProfile(profile),
+      now,
+      credential.map(PasswordCredentialCodec.encode).orUndefined
+    ).toFuture.map(v =>
+      decode(v, profile.aid).fold(reason => throw AccountStoreException(reason), identity)
+    )
   def lookup(kind: String, hash: String): Future[Option[String]] = index(kind).lookup(hash).toFuture.map { v =>
     val code = text(v, "code")
     if (code == "auth:index:missing") None else { checked(code); Some(aid(text(v, "aid"))) }
   }
   def activate(aid: String, now: Double): Future[AccountDescription] = account(aid).activate(now).toFuture.map(v =>
-    decode(v, aid).fold(reason => throw AccountStoreException(reason), identity))
+    decode(v, aid).fold(reason => throw AccountStoreException(reason), identity)
+  )
   private def signIn(v: js.Dynamic, expectedAid: String): SignInResult = text(v, "code") match {
     case code if code == AccountRejection.LoginFailed.code => SignInResult.Failed
-    case code if code == AccountRejection.Pending.code =>
+    case code if code == AccountRejection.Pending.code     =>
       val uid = text(v, "uid")
       if (!uid.matches("[a-z0-9_]{3,16}")) invalid()
       SignInResult.Unfinished(uid)
@@ -140,7 +202,8 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
     account(aid).verifyPassword(password, keyIpHash, now).toFuture.map(signIn(_, aid))
   def describeGoogle(aid: String, subHash: String, now: Double): Future[SignInResult] =
     account(aid).describeGoogle(subHash, now).toFuture.map(signIn(_, aid))
-  private def described(aid: String)(v: js.Dynamic): AccountDescription = decode(v, aid).fold(reason => throw AccountStoreException(reason), identity)
+  private def described(aid: String)(v: js.Dynamic): AccountDescription =
+    decode(v, aid).fold(reason => throw AccountStoreException(reason), identity)
   def issuePending(aid: String, kind: PendingKind, hash: String, email: Option[String], now: Double): Future[Option[String]] =
     account(aid).issuePending(kind.code, hash, email.orUndefined, now).toFuture.map { v =>
       checked(text(v, "code"))
@@ -161,28 +224,42 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
     val stub = account(aid)
     val result = target match {
       case AccountConversion.ToPassword(credential) =>
-        stub.convert(AccountKind.Password.code, uid, generation, now, PasswordCredentialCodec.encode(credential), js.undefined, js.undefined)
-      case AccountConversion.ToGoogle(subHash, email) => stub.convert(AccountKind.Google.code, uid, generation, now, js.undefined, subHash, email.orUndefined)
+        stub.convert(
+          AccountKind.Password.code,
+          uid,
+          generation,
+          now,
+          PasswordCredentialCodec.encode(credential),
+          js.undefined,
+          js.undefined
+        )
+      case AccountConversion.ToGoogle(subHash, email) =>
+        stub.convert(AccountKind.Google.code, uid, generation, now, js.undefined, subHash, email.orUndefined)
     }
     result.toFuture.map(described(aid))
   }
-  def withdraw(aid: String, generation: Int, now: Double): Future[WithdrawnAccount] = account(aid).withdraw(generation, now).toFuture.map { v =>
-    checked(text(v, "code"))
-    WithdrawnAccount(optionalText(v, "loginId"), optionalText(v, "email"), optionalText(v, "googleSubHash"), array(v, "caps").map(string))
-  }
+  def withdraw(aid: String, generation: Int, now: Double): Future[WithdrawnAccount] =
+    account(aid).withdraw(generation, now).toFuture.map { v =>
+      checked(text(v, "code"))
+      WithdrawnAccount(optionalText(v, "loginId"), optionalText(v, "email"), optionalText(v, "googleSubHash"), array(v, "caps").map(string))
+    }
   def setPassword(aid: String, credential: PasswordCredential, now: Double): Future[AccountDescription] =
     account(aid).setPassword(PasswordCredentialCodec.encode(credential), now).toFuture.map(described(aid))
-  def bindDevice(aid: String, device: String, keyIp: String, now: Double): Future[Unit] = raw(account(aid).bindDevice(device, keyIp, now)).map(checked)
+  def bindDevice(aid: String, device: String, keyIp: String, now: Double): Future[Unit] =
+    raw(account(aid).bindDevice(device, keyIp, now)).map(checked)
   def logout(aid: String, generation: Int, now: Double): Future[Unit] = raw(account(aid).bumpGeneration(now)).map { next =>
     if (integer(next) <= generation) throw AccountStoreException(AccountRejection.Generation)
   }
   def agree(aid: String, version: String, now: Double): Future[Unit] = raw(account(aid).agree(version, now)).map(checked)
-  def issueToken(aid: String, tokenId: String, hash: String, now: Double): Future[AccountDescription] = account(aid).issueToken(tokenId, hash, now).toFuture.map(v =>
-    decode(v, aid).map { description =>
-      if (identifier(text(v, "tokenId")) != tokenId) invalid()
-      description
-    }.fold(reason => throw AccountStoreException(reason), identity))
+  def issueToken(aid: String, tokenId: String, hash: String, now: Double): Future[AccountDescription] =
+    account(aid).issueToken(tokenId, hash, now).toFuture.map(v =>
+      decode(v, aid).map { description =>
+        if (identifier(text(v, "tokenId")) != tokenId) invalid()
+        description
+      }.fold(reason => throw AccountStoreException(reason), identity)
+    )
   def revokeToken(aid: String, tokenId: String, now: Double): Future[Unit] = raw(account(aid).revokeToken(tokenId, now)).map(checked)
+
   /** Lv を固定する。None で固定を外す */
   def setLevel(aid: String, lvOverride: Option[Int], now: Double): Future[Unit] =
     raw(account(aid).setLevel(lvOverride.orUndefined, now)).map(checked)
@@ -192,7 +269,15 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
     checked(text(v, "code"))
     text(v, "hash")
   }
-  def reissueCap(aid: String, capId: String, nextId: String, nextHash: String, issuedBy: String, issuerIsAdmin: Boolean, now: Double): Future[CapReissue] =
+  def reissueCap(
+      aid: String,
+      capId: String,
+      nextId: String,
+      nextHash: String,
+      issuedBy: String,
+      issuerIsAdmin: Boolean,
+      now: Double
+  ): Future[CapReissue] =
     account(aid).reissueCap(capId, nextId, nextHash, issuedBy, issuerIsAdmin, now).toFuture.map { v =>
       checked(text(v, "code"))
       val strong = record(v).selectDynamic("strong").asInstanceOf[js.Any]
@@ -200,15 +285,22 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
       CapReissue(text(v, "hash"), text(v, "name") + (if (strong.asInstanceOf[Boolean]) "★" else ""))
     }
   private def codes(roles: Roles): js.Array[String] = roles.values.toVector.map(_.code).sorted.toJSArray
-  def setRoles(aid: String, roles: Roles, actorAid: String, now: Double): Future[Unit] = raw(account(aid).setRoles(codes(roles), actorAid, now)).map(checked)
+  def setRoles(aid: String, roles: Roles, actorAid: String, now: Double): Future[Unit] =
+    raw(account(aid).setRoles(codes(roles), actorAid, now)).map(checked)
   def grantFirstAdmin(hash: String, aid: String, now: Double): Future[Unit] = raw(account(aid).grantFirstAdmin(hash, now)).map(checked)
   def isAdmin(aid: String, now: Double): Future[Boolean] = account(aid).adminStatus(now).toFuture
-  def surrender(hash: String, aid: String, now: Double): Future[Unit] = raw(index(AccountIndexKind.Admin.code).surrender(hash, aid, now)).map(checked)
+  def surrender(hash: String, aid: String, now: Double): Future[Unit] =
+    raw(index(AccountIndexKind.Admin.code).surrender(hash, aid, now)).map(checked)
   def claimFirstAdmin(hash: String, aid: String, now: Double, breakGlass: Boolean): Future[Unit] =
     raw(index(AccountIndexKind.Admin.code).claimFirstAdmin(hash, aid, now, breakGlass)).map(checked)
   def recordPost(aid: String, post: AccountPost, observation: AccountObservation): Future[AccountDescription] =
-    account(aid).recordPost(post.t, AccountCodec.encodePost(post), js.Dynamic.literal(deviceHash = observation.deviceHash, keyIpHash = observation.keyIpHash)).toFuture.map(v =>
-      decode(v, aid).fold(reason => throw AccountStoreException(reason), identity))
+    account(aid).recordPost(
+      post.t,
+      AccountCodec.encodePost(post),
+      js.Dynamic.literal(deviceHash = observation.deviceHash, keyIpHash = observation.keyIpHash)
+    ).toFuture.map(v =>
+      decode(v, aid).fold(reason => throw AccountStoreException(reason), identity)
+    )
   def inspect(aid: String): Future[AccountPanel] = account(aid).inspect().toFuture.map { value =>
     val code = text(value, "code")
     checked(code)
@@ -219,10 +311,17 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
         val post = record(raw)
         val excerpt = text(post, "excerpt")
         if (excerpt.length > 40) invalid()
-        AccountTokenPostView(time(post, "t"), text(post, "bbs"), text(post, "key"), text(post, "title"),
-          integer(post.selectDynamic("resNum").asInstanceOf[js.Any]), excerpt, text(post, "network"))
+        AccountTokenPostView(
+          time(post, "t"),
+          text(post, "bbs"),
+          text(post, "key"),
+          text(post, "title"),
+          integer(post.selectDynamic("resNum").asInstanceOf[js.Any]),
+          excerpt,
+          text(post, "network")
+        )
       }
-      if (posts.size > 5) invalid()
+      if (posts.sizeIs > 5) invalid()
       posts
     }
     val tokens = array(value, "tokens").map { raw =>
@@ -231,17 +330,30 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
       val reason = optionalText(token, "revokeReason")
       if (reason.exists(code => TokenRevokeReason.parse(code).isEmpty)) invalid()
       val posts = recentPosts(token)
-      val warnings = rejections.filter(log => optionalText(log, "tokenId").contains(id) && text(log, "result") == AccountRejection.TokenUaMismatch.code)
-        .map(log => AccountTokenWarningView(time(log, "t"), text(log, "uaLabel"))).sortBy(w => -w.t)
-      val view = AccountTokenView(id, optionalText(token, "uaLabel").getOrElse(""), time(token, "issuedAt"), time(token, "expiresAt"),
-        optionalTime(token, "boundAt"), optionalTime(token, "lastUsedAt"), optionalTime(token, "revokedAt"), reason,
-        optionalTime(token, "replacedTokenAt"), posts, warnings)
-      if (view.expiresAt <= view.issuedAt || view.revokedAt.isDefined != view.revokeReason.isDefined ||
+      val warnings =
+        rejections.filter(log => optionalText(log, "tokenId").contains(id) && text(log, "result") == AccountRejection.TokenUaMismatch.code)
+          .map(log => AccountTokenWarningView(time(log, "t"), text(log, "uaLabel"))).sortBy(w => -w.t)
+      val view = AccountTokenView(
+        id,
+        optionalText(token, "uaLabel").getOrElse(""),
+        time(token, "issuedAt"),
+        time(token, "expiresAt"),
+        optionalTime(token, "boundAt"),
+        optionalTime(token, "lastUsedAt"),
+        optionalTime(token, "revokedAt"),
+        reason,
+        optionalTime(token, "replacedTokenAt"),
+        posts,
+        warnings
+      )
+      if (
+        view.expiresAt <= view.issuedAt || view.revokedAt.isDefined != view.revokeReason.isDefined ||
         Vector(view.boundAt, view.lastUsedAt, view.revokedAt, view.replacedTokenAt).flatten.exists(_ < view.issuedAt) ||
-        (view.replacedTokenAt.isDefined && view.boundAt.isEmpty)) invalid()
+        (view.replacedTokenAt.isDefined && view.boundAt.isEmpty)
+      ) invalid()
       view
     }
-    if (tokens.map(_.id).distinct.size != tokens.size) invalid()
+    if (tokens.map(_.id).distinct.sizeIs != tokens.size) invalid()
     val activeCount = tokens.count(token => token.boundAt.isDefined && token.revokedAt.isEmpty)
     if (activeCount > DedicatedBrowserTokens.boundLimit) invalid()
     val caps = array(value, "caps").map { raw =>
@@ -251,17 +363,33 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
         if (js.typeOf(v) != "boolean") invalid()
         v.asInstanceOf[Boolean]
       }
-      AccountCapView(identifier(text(cap, "capId")), text(cap, "name"), flag("strong"), time(cap, "issuedAt"), optionalTime(cap, "revokedAt"),
-        recentPosts(cap))
+      AccountCapView(
+        identifier(text(cap, "capId")),
+        text(cap, "name"),
+        flag("strong"),
+        time(cap, "issuedAt"),
+        optionalTime(cap, "revokedAt"),
+        recentPosts(cap)
+      )
     }
-    AccountPanel(description, tokens, activeCount, integer(value.selectDynamic("deviceCount").asInstanceOf[js.Any], 10), caps,
-      optionalText(value, "email"), optionalText(value, "pendingEmail"))
+    AccountPanel(
+      description,
+      tokens,
+      activeCount,
+      integer(value.selectDynamic("deviceCount").asInstanceOf[js.Any], 10),
+      caps,
+      optionalText(value, "email"),
+      optionalText(value, "pendingEmail")
+    )
   }
   def rate(key: String, kind: String, now: Double): Future[AuthRateCounts] =
     env.AUTH_RATE_DO.get(env.AUTH_RATE_DO.idFromName(key)).hit(kind, now).toFuture.map { v =>
       checked(text(v, "code"))
-      val counts = AuthRateCounts(integer(v.selectDynamic("hour").asInstanceOf[js.Any]), integer(v.selectDynamic("day").asInstanceOf[js.Any]),
-        integer(v.selectDynamic("distinctDevices24h").asInstanceOf[js.Any]))
+      val counts = AuthRateCounts(
+        integer(v.selectDynamic("hour").asInstanceOf[js.Any]),
+        integer(v.selectDynamic("day").asInstanceOf[js.Any]),
+        integer(v.selectDynamic("distinctDevices24h").asInstanceOf[js.Any])
+      )
       if (counts.hour > counts.day) invalid()
       counts
     }

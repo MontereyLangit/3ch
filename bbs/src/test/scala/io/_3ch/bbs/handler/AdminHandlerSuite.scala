@@ -26,8 +26,14 @@ class AdminHandlerSuite extends FunSuite {
     val url = "https://example.test/admin/board?bbs=sample"
     val auth = Seq("authorization" -> basic("admin:test"))
     def save(asn: String): Future[js.Dynamic] = {
-      val fields = Seq("action" -> "saveCreationLimit", "BBS_THREAD_TATESUGI" -> "5", "BBS_THREAD_TATESUGI_RESET" -> "120",
-        "BBS_THREAD_JUNBAN" -> "2", "BBS_THREAD_JUNBAN_RESET" -> "60", "BBS_THREAD_JUNBAN_AS_ONLY" -> asn)
+      val fields = Seq(
+        "action" -> "saveCreationLimit",
+        "BBS_THREAD_TATESUGI" -> "5",
+        "BBS_THREAD_TATESUGI_RESET" -> "120",
+        "BBS_THREAD_JUNBAN" -> "2",
+        "BBS_THREAD_JUNBAN_RESET" -> "60",
+        "BBS_THREAD_JUNBAN_AS_ONLY" -> asn
+      )
       val body = fields.map((k, v) => s"$k=${js.URIUtils.encodeURIComponent(v)}").mkString("&")
       admin(request(url, auth, method = "POST", body = body), raw)
     }
@@ -57,7 +63,12 @@ class AdminHandlerSuite extends FunSuite {
     raw.ADMIN_PASSWORD = "test"
     env.putR2("deny.cgi", "<><><>deny")
     def save(path: String, rules: String): Future[(Int, String)] = {
-      val req = request(s"https://example.test$path", Seq("authorization" -> basic("admin:test")), method = "POST", body = s"rules=${js.URIUtils.encodeURIComponent(rules)}")
+      val req = request(
+        s"https://example.test$path",
+        Seq("authorization" -> basic("admin:test")),
+        method = "POST",
+        body = s"rules=${js.URIUtils.encodeURIComponent(rules)}"
+      )
       admin(req, raw).flatMap(res => text(res).map(status(res) -> _))
     }
     for {
@@ -79,7 +90,12 @@ class AdminHandlerSuite extends FunSuite {
     val raw = env.worker.asInstanceOf[js.Dynamic]
     raw.ADMIN_PASSWORD = "test"
     def save(path: String, rules: String): Future[(Int, String)] = {
-      val req = request(s"https://example.test$path", Seq("authorization" -> basic("admin:test")), method = "POST", body = s"rules=${js.URIUtils.encodeURIComponent(rules)}")
+      val req = request(
+        s"https://example.test$path",
+        Seq("authorization" -> basic("admin:test")),
+        method = "POST",
+        body = s"rules=${js.URIUtils.encodeURIComponent(rules)}"
+      )
       admin(req, raw).flatMap(res => text(res).map(status(res) -> _))
     }
     val accepted = "<><><>deny\n<>AS1-<><>deny<>staff\n<><>語<>mark<>admin\n<><><>TateDame<>"
@@ -105,9 +121,13 @@ class AdminHandlerSuite extends FunSuite {
     env.onR2Get { key =>
       if (key == "sample/SETTING.TXT" && !injected) { injected = true; env.putR2(key, concurrent) }
     }
-    val body = "action=saveCreationLimit&BBS_THREAD_TATESUGI=5&BBS_THREAD_TATESUGI_RESET=120&BBS_THREAD_JUNBAN=2&BBS_THREAD_JUNBAN_RESET=60&BBS_THREAD_JUNBAN_AS_ONLY="
+    val body =
+      "action=saveCreationLimit&BBS_THREAD_TATESUGI=5&BBS_THREAD_TATESUGI_RESET=120&BBS_THREAD_JUNBAN=2&BBS_THREAD_JUNBAN_RESET=60&BBS_THREAD_JUNBAN_AS_ONLY="
     for {
-      res <- admin(request("https://example.test/admin/board?bbs=sample", Seq("authorization" -> basic("admin:test")), method = "POST", body = body), raw)
+      res <- admin(
+        request("https://example.test/admin/board?bbs=sample", Seq("authorization" -> basic("admin:test")), method = "POST", body = body),
+        raw
+      )
       html <- text(res)
     } yield {
       assertEquals(status(res), 400)
@@ -123,15 +143,24 @@ class AdminHandlerSuite extends FunSuite {
     val settings = "BBS_TITLE=残す板名\nBBS_THREAD_TATESUGI=3/86400\n"
     env.putR2("sample/SETTING.TXT", settings)
     env.putR2("sample/head.txt", "残す案内")
-    val fields = Seq("BBS_THREAD_TATESUGI" -> "5", "BBS_THREAD_TATESUGI_RESET" -> "120",
-      "BBS_THREAD_JUNBAN" -> "2", "BBS_THREAD_JUNBAN_RESET" -> "60", "BBS_THREAD_JUNBAN_AS_ONLY" -> "2516")
+    val fields = Seq(
+      "BBS_THREAD_TATESUGI" -> "5",
+      "BBS_THREAD_TATESUGI_RESET" -> "120",
+      "BBS_THREAD_JUNBAN" -> "2",
+      "BBS_THREAD_JUNBAN_RESET" -> "60",
+      "BBS_THREAD_JUNBAN_AS_ONLY" -> "2516"
+    )
     val cases = for ((name, _) <- fields; separator <- Seq("\r", "\n", "\r\n")) yield (name, separator)
     cases.foldLeft(Future.unit) { case (previous, (target, separator)) =>
       previous.flatMap { _ =>
-        val body = (("action" -> "saveCreationLimit") +: fields.map { (name, value) =>
-          name -> (if (name == target) value + separator + "BBS_TITLE=書換" else value)
-        }).map((name, value) => s"$name=${js.URIUtils.encodeURIComponent(value)}").mkString("&")
-        admin(request("https://example.test/admin/board?bbs=sample", Seq("authorization" -> basic("admin:test")), method = "POST", body = body), raw).map { result =>
+        val body =
+          (("action" -> "saveCreationLimit") +: fields.map { (name, value) =>
+            name -> (if (name == target) value + separator + "BBS_TITLE=書換" else value)
+          }).map((name, value) => s"$name=${js.URIUtils.encodeURIComponent(value)}").mkString("&")
+        admin(
+          request("https://example.test/admin/board?bbs=sample", Seq("authorization" -> basic("admin:test")), method = "POST", body = body),
+          raw
+        ).map { result =>
           assertEquals(status(result), 400, s"$target: ${js.JSON.stringify(separator)}")
           assertEquals(env.r2Text("sample/SETTING.TXT"), Some(settings))
           assertEquals(env.r2Text("sample/head.txt"), Some("残す案内"))
@@ -149,7 +178,10 @@ class AdminHandlerSuite extends FunSuite {
     env.putR2("sample/head.txt", "残す案内")
     val body = Seq("action" -> "save", "head" -> "書換後の案内", "settings" -> "BBS_THREAD_TATESUGI=invalid\n")
       .map((name, value) => s"$name=${js.URIUtils.encodeURIComponent(value)}").mkString("&")
-    admin(request("https://example.test/admin/board?bbs=sample", Seq("authorization" -> basic("admin:test")), method = "POST", body = body), raw).map { result =>
+    admin(
+      request("https://example.test/admin/board?bbs=sample", Seq("authorization" -> basic("admin:test")), method = "POST", body = body),
+      raw
+    ).map { result =>
       assertEquals(status(result), 400)
       assertEquals(env.r2Text("sample/SETTING.TXT"), Some(settings))
       assertEquals(env.r2Text("sample/head.txt"), Some("残す案内"))
@@ -183,7 +215,10 @@ class AdminHandlerSuite extends FunSuite {
     )
     val authorization = basic("admin:test")
     def post(headers: (String, String)*): Future[Int] =
-      admin(request("https://example.test/admin/menu", Seq("authorization" -> authorization) ++ headers, method = "POST", body = "html=menu"), env).map(status)
+      admin(
+        request("https://example.test/admin/menu", Seq("authorization" -> authorization) ++ headers, method = "POST", body = "html=menu"),
+        env
+      ).map(status)
     for {
       noOrigin <- post()
       _ = assertEquals(noOrigin, 303)
@@ -208,7 +243,9 @@ class AdminHandlerSuite extends FunSuite {
     env.updateDynamic("ADMIN_PASSWORD")("test")
     val authorization = basic("admin:test")
     def get(path: String): Future[(Int, String)] =
-      admin(request("https://example.test" + path, Seq("authorization" -> authorization)), env).flatMap(res => text(res).map(status(res) -> _))
+      admin(request("https://example.test" + path, Seq("authorization" -> authorization)), env).flatMap(res =>
+        text(res).map(status(res) -> _)
+      )
     def check(plain: String, slashed: String): Future[Unit] =
       for {
         a <- get(plain)
@@ -223,7 +260,10 @@ class AdminHandlerSuite extends FunSuite {
       _ <- check("/admin/access", "/admin/access/")
       _ <- check("/admin/ngwords", "/admin/ngwords/")
       _ <- check("/admin/board?bbs=sample", "/admin/board/?bbs=sample")
-      post <- admin(request("https://example.test/admin/menu/?x=1", Seq("authorization" -> authorization), method = "POST", body = "html=slash"), env)
+      post <- admin(
+        request("https://example.test/admin/menu/?x=1", Seq("authorization" -> authorization), method = "POST", body = "html=slash"),
+        env
+      )
       _ = assertEquals(status(post), 303)
       _ = assertEquals(header(post, "location"), Some("/admin/menu?x=1"))
       _ = assertEquals(kit.r2Text("bbsmenu.html"), Some("slash"))

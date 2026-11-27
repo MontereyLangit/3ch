@@ -16,6 +16,9 @@ class PostingUserSuite extends FunSuite {
   }
 
   test("表示IDの & < > \" ' はエスケープする") {
-    assertEquals(PostingUser.nameSuffix(Some(PostingUser("k", "<a&\"b'>")), showId = true, cap = false), " </b>(@&lt;a&amp;&quot;b&apos;&gt;)<b>")
+    assertEquals(
+      PostingUser.nameSuffix(Some(PostingUser("k", "<a&\"b'>")), showId = true, cap = false),
+      " </b>(@&lt;a&amp;&quot;b&apos;&gt;)<b>"
+    )
   }
 }

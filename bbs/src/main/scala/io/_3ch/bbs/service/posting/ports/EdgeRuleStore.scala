@@ -10,6 +10,7 @@ trait EdgeRuleStore {
 }
 
 object EdgeRuleStore {
+
   /** 規則を持たず、何も記録しない */
   val empty: EdgeRuleStore = new EdgeRuleStore {
     def load(): Future[EdgeRules] = Future.successful(EdgeRules.empty)

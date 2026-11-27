@@ -21,6 +21,7 @@ object ThreadListIsland {
   final case class Props(bbs: BoardId, viewType: String, subjectText: String, query: String, sort: String, now: Double)
 
   object Props {
+
     /** 板名が不正なら None */
     def fromJs(raw: ThreadListProps): Option[Props] =
       BoardId.create(raw.bbs).toOption.map(bbs => Props(bbs, raw.`type`, raw.subjectText, raw.query, raw.sort, raw.now))
@@ -70,10 +71,15 @@ object ThreadListIsland {
   }
 
   private val heading: VdomElement = {
-    <.div(^.className := s"list-head $rowGrid px-4 py-3 text-xs", <.span("スレッド名"), <.span(^.className := "max-[660px]:hidden", "スレ立て"),
+    <.div(
+      ^.className := s"list-head $rowGrid px-4 py-3 text-xs",
+      <.span("スレッド名"),
+      <.span(^.className := "max-[660px]:hidden", "スレ立て"),
       <.span(^.className := "when max-[660px]:hidden", "最終更新"),
-      <.span(^.className := "speed numeric text-right max-[660px]:hidden", "勢い"), <.span(^.className := "numeric text-right", "新着"),
-      <.span(^.className := "numeric text-right", "レス"))
+      <.span(^.className := "speed numeric text-right max-[660px]:hidden", "勢い"),
+      <.span(^.className := "numeric text-right", "新着"),
+      <.span(^.className := "numeric text-right", "レス")
+    )
   }
 
   /** 他タブの localStorage 変更を seen へ反映 */
@@ -92,16 +98,23 @@ object ThreadListIsland {
     val key = rowKey(props.bbs, thread)
     val newClass = if thread.key.value.toString.startsWith("924") then "new numeric cap-update text-right font-bold text-[#d00]"
     else "new numeric text-right font-bold text-black"
-    <.div(^.key := thread.key.value.toString, ^.className := s"list-row relative cursor-pointer $rowGrid px-4 py-[11px] text-[13px] hover:bg-[#fafdff]",
-      VdomAttr("data-thread-key") := key, VdomAttr("data-res") := thread.resNum.toString,
+    <.div(
+      ^.key := thread.key.value.toString,
+      ^.className := s"list-row relative cursor-pointer $rowGrid px-4 py-[11px] text-[13px] hover:bg-[#fafdff]",
+      VdomAttr("data-thread-key") := key,
+      VdomAttr("data-res") := thread.resNum.toString,
       VdomAttr("data-common") := common.toString,
-      <.div(<.a(^.href := s"/test/read.cgi/${URIUtils.encodeURIComponent(threadBoard)}/${thread.key.value}/",
-        ^.className := "thread-link text-black no-underline after:absolute after:inset-0 after:content-[''] hover:text-[#2464b5]",
-        ^.onClick --> markSeen(key, thread.resNum),
-        VdomAttr.Event.mouse("onAuxClick") ==> (
-          (e: ReactMouseEventFromHtml) => if e.button == 1 then markSeen(key, thread.resNum) else Callback.empty),
-        SubjectText.decode(thread.title.value)),
-        <.div(^.className := "sub hidden text-xs text-[#697785] max-[660px]:block", s"勢い $rate")),
+      <.div(
+        <.a(
+          ^.href := s"/test/read.cgi/${URIUtils.encodeURIComponent(threadBoard)}/${thread.key.value}/",
+          ^.className := "thread-link text-black no-underline after:absolute after:inset-0 after:content-[''] hover:text-[#2464b5]",
+          ^.onClick --> markSeen(key, thread.resNum),
+          VdomAttr.Event.mouse("onAuxClick") ==>
+            ((e: ReactMouseEventFromHtml) => if e.button == 1 then markSeen(key, thread.resNum) else Callback.empty),
+          SubjectText.decode(thread.title.value)
+        ),
+        <.div(^.className := "sub hidden text-xs text-[#697785] max-[660px]:block", s"勢い $rate")
+      ),
       <.span(^.className := "created tabular-nums text-[#aaa] max-[660px]:hidden", if common then "—" else created(thread)),
       <.span(^.className := "when modified text-[#ff9025] max-[660px]:hidden", "—"),
       <.span(^.className := "speed numeric text-right tabular-nums text-[#cc3d3d] max-[660px]:hidden", rate),
@@ -114,23 +127,39 @@ object ThreadListIsland {
     val query = props.query.toLowerCase
     val filtered = state.subjects.value.filter(t => SubjectText.decode(t.title.value).toLowerCase.contains(query))
     val sorted = props.sort match {
-      case "res" => filtered.sortBy(t => -t.resNum)
+      case "res"   => filtered.sortBy(t => -t.resNum)
       case "speed" => filtered.sortBy(t => -speed(t, state.now))
-      case _ => filtered
+      case _       => filtered
     }
     val (commonThreads, threads) = sorted.partition(isCommon)
-    <.div(^.className := "subback",
-      <.details(^.className :=
-        """common-threads my-2 border-t border-[#dce1e6] [&>summary]:px-4 [&>summary]:py-[9px]
-          | [&>summary>span]:ml-2.5 [&>summary>span]:text-xs [&>summary>span]:text-[#4d4d4d] max-[660px]:[&>summary]:px-[9px]""".stripMargin.replace("\n", ""),
+    <.div(
+      ^.className := "subback",
+      <.details(
+        ^.className :=
+          """common-threads my-2 border-t border-[#dce1e6] [&>summary]:px-4 [&>summary]:py-[9px]
+          | [&>summary>span]:ml-2.5 [&>summary>span]:text-xs [&>summary>span]:text-[#4d4d4d] max-[660px]:[&>summary]:px-[9px]""".stripMargin.replace(
+            "\n",
+            ""
+          ),
         <.summary(<.b("全板共通スレ"), <.span(s"${commonThreads.size}件")),
-        heading, commonThreads.toVdomArray(row(_, props, state, true, markSeen)),
-        if commonThreads.isEmpty then <.p(^.className := "empty-state m-2 text-xs text-[#697785]", "全板共通スレはありません。") else EmptyVdom),
-      <.div(^.className := "thread-list mt-[5px] border-t border-[#dcdcdc]", heading,
-        <.div(^.className := s"list-row $rowGrid px-4 py-[11px] text-[13px] hover:bg-[#fafdff]", <.a(^.className := "text-[#06f] hover:underline",
-          ^.href := s"/${URIUtils.encodeURIComponent(props.bbs.value)}/kako/", "↩過去ログ倉庫")),
+        heading,
+        commonThreads.toVdomArray(row(_, props, state, true, markSeen)),
+        if commonThreads.isEmpty then <.p(^.className := "empty-state m-2 text-xs text-[#697785]", "全板共通スレはありません。") else EmptyVdom
+      ),
+      <.div(
+        ^.className := "thread-list mt-[5px] border-t border-[#dcdcdc]",
+        heading,
+        <.div(
+          ^.className := s"list-row $rowGrid px-4 py-[11px] text-[13px] hover:bg-[#fafdff]",
+          <.a(
+            ^.className := "text-[#06f] hover:underline",
+            ^.href := s"/${URIUtils.encodeURIComponent(props.bbs.value)}/kako/",
+            "↩過去ログ倉庫"
+          )
+        ),
         threads.toVdomArray(row(_, props, state, false, markSeen)),
-        if threads.isEmpty then <.p(^.className := "empty-state m-2 text-xs text-[#697785]", "該当するスレッドはありません。") else EmptyVdom),
+        if threads.isEmpty then <.p(^.className := "empty-state m-2 text-xs text-[#697785]", "該当するスレッドはありません。") else EmptyVdom
+      ),
       <.p(^.className := "list-note m-2 text-xs text-[#697785]", "(最終更新日時は準備中)")
     )
   }
@@ -161,9 +190,11 @@ object ThreadListIsland {
         }
       })
     } yield {
+
       /** 表示中の既読数を更新し、localStorageへ保存する */
       def markSeen(key: String, count: Int): Callback = {
-        state.modState(s => s.copy(seen = s.seen.updated(key, count.toString))) >> Callback(BrowserStorage.write(s"$SeenPrefix$key", count.toString))
+        state.modState(s => s.copy(seen = s.seen.updated(key, count.toString))) >>
+          Callback(BrowserStorage.write(s"$SeenPrefix$key", count.toString))
       }
 
       /** リロード -> /<板>/subject.txtをSJISで取得 */
@@ -197,15 +228,32 @@ object ThreadListIsland {
         }
       }
 
-      <.div(^.id := "thread-list",
-        <.div(^.className := "newposts border-b-2 border-[#e0e0e0] py-0.5 text-center",
-          <.button(^.className :=
-            """inline-flex cursor-pointer items-center gap-0.5 border-0 bg-transparent p-1 text-base text-[#0187e8]
+      <.div(
+        ^.id := "thread-list",
+        <.div(
+          ^.className := "newposts border-b-2 border-[#e0e0e0] py-0.5 text-center",
+          <.button(
+            ^.className :=
+              """inline-flex cursor-pointer items-center gap-0.5 border-0 bg-transparent p-1 text-base text-[#0187e8]
               | hover:underline disabled:cursor-wait""".stripMargin,
-            ^.`type` := "button", VdomAttr("data-board-reload") := "", ^.disabled := state.value.loading, ^.onClick --> reload,
+            ^.`type` := "button",
+            VdomAttr("data-board-reload") := "",
+            ^.disabled := state.value.loading,
+            ^.onClick --> reload,
             "リロード",
-            <.img(^.src := "/static/reload.svg", ^.alt := "", ^.className := (if state.value.loading then "inline size-4 animate-spin" else "inline size-4"))),
-          <.span(^.className := "block text-xs text-[#777]", VdomAttr("data-board-reload-status") := "", VdomAttr("aria-live") := "polite", state.value.status)),
+            <.img(
+              ^.src := "/static/reload.svg",
+              ^.alt := "",
+              ^.className := (if state.value.loading then "inline size-4 animate-spin" else "inline size-4")
+            )
+          ),
+          <.span(
+            ^.className := "block text-xs text-[#777]",
+            VdomAttr("data-board-reload-status") := "",
+            VdomAttr("aria-live") := "polite",
+            state.value.status
+          )
+        ),
         if props.viewType == "subback" then subback(props, state.value, markSeen)
         else <.div(^.className := "thread-feed", <.p(^.className := "coming-soon m-2 py-6 text-center text-[#697785]", "Coming Soon…"))
       )

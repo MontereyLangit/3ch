@@ -28,7 +28,7 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
       val keys = (0 until count.getOrElse(0)).map(creationPageKey)
       Future.sequence(keys.grouped(128).map { batch =>
         state.storage.get(batch.toJSArray).toFuture.map { values =>
-          batch.flatMap(key => values.get(key).toSeq.flatMap(_.asInstanceOf[js.Array[js.Dynamic]].toSeq))
+          batch.flatMap(key => values.get(key).toList.flatMap(_.asInstanceOf[js.Array[js.Dynamic]].toSeq))
         }
       }.toVector).map(pages => ThreadCreationHistory(pages.flatten.map(ThreadCreationCodec.decodeRecord)))
     }
@@ -40,7 +40,9 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
       val values = js.Dictionary[js.Any](creationPageCountKey -> pages.size)
       pages.zipWithIndex.foreach { case (page, index) => values(creationPageKey(index)) = page.toJSArray }
       state.storage.put(values).toFuture.flatMap { _ =>
-        Future.sequence((pages.size until previousCount.getOrElse(0)).map(index => state.storage.delete(creationPageKey(index)).toFuture)).map(_ => ())
+        Future.sequence((pages.size until previousCount.getOrElse(0)).map(index =>
+          state.storage.delete(creationPageKey(index)).toFuture
+        )).map(_ => ())
       }
     }
   }
@@ -83,10 +85,12 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
       .flatMap(meta => load(PostRateHistory(meta.fold(PostRateHistory.InitialMeta)(PostRateCodec.decodeMeta), Vector.empty)))
   }
 
-  private def postRatePage(page: PostRatePage): (String, js.Any) = postRatePageKey(page.number) -> page.records.map(PostRateCodec.encodeRecord).toJSArray
+  private def postRatePage(page: PostRatePage): (String, js.Any) = postRatePageKey(page.number) ->
+    page.records.map(PostRateCodec.encodeRecord).toJSArray
 
   /** key の記録を含むページまで新しい方から読む */
-  private def postRateHistoryWith(key: String): Future[PostRateHistory] = postRateHistory(history => if history.pageOf(key).isDefined then None else history.older)
+  private def postRateHistoryWith(key: String): Future[PostRateHistory] =
+    postRateHistory(history => if history.pageOf(key).isDefined then None else history.older)
 
   /**
    * 連投規制の判定と予約を直列化する。許可は空文字、拒否は [[PostRateRejection.code]] を返す。
@@ -99,18 +103,24 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
     postRateHistory(_.nextPage(boardSettings, now)).flatMap { history =>
       val reservation = history.reserve(key, identity, boardSettings, enforce, now)
       val saved = reservation.saved.fold(Future.unit) { updated =>
-        state.storage.put(js.Dictionary[js.Any](postRateMetaKey -> PostRateCodec.encodeMeta(updated.meta), postRatePage(updated.pages.head))).toFuture
+        state.storage.put(js.Dictionary[js.Any](
+          (postRateMetaKey -> PostRateCodec.encodeMeta(updated.meta)) +: updated.pages.take(1).map(postRatePage)*
+        )).toFuture
       }
       saved.map(_ => reservation.rejection.fold("")(_.code))
     }
   }.toJSPromise
 
   def completePost(key: String): js.Promise[Unit] = DurableLock.serialized(state) {
-    postRateHistoryWith(key).flatMap(_.complete(key).fold(Future.unit)(page => state.storage.put(js.Dictionary[js.Any](postRatePage(page))).toFuture))
+    postRateHistoryWith(key).flatMap(_.complete(key).fold(Future.unit)(page =>
+      state.storage.put(js.Dictionary[js.Any](postRatePage(page))).toFuture
+    ))
   }.toJSPromise
 
   def cancelPost(key: String): js.Promise[Unit] = DurableLock.serialized(state) {
-    postRateHistoryWith(key).flatMap(_.cancel(key).fold(Future.unit)(page => state.storage.put(js.Dictionary[js.Any](postRatePage(page))).toFuture))
+    postRateHistoryWith(key).flatMap(_.cancel(key).fold(Future.unit)(page =>
+      state.storage.put(js.Dictionary[js.Any](postRatePage(page))).toFuture
+    ))
   }.toJSPromise
 
   /**
@@ -131,7 +141,8 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
         "subjectList" -> (if lines.isEmpty then "" else lines.mkString("\n") + "\n"),
         "removed" -> (if removed.contains(key) then removed else removed.concat(js.Array(key)))
       )).toFuture
-    } yield ()).toJSPromise)
+    } yield ()).toJSPromise
+  )
 
   /**
    * スレッド一覧を更新します。
@@ -139,7 +150,11 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
    * @param sage - sage投稿の場合はtrue
    * @param maxThreads - 板の最大スレッド数
    */
-  def updateThread(data: js.Dynamic, sage: js.UndefOr[Boolean] = js.undefined, maxThreads: js.UndefOr[Double] = js.undefined): js.Promise[Unit] =
+  def updateThread(
+      data: js.Dynamic,
+      sage: js.UndefOr[Boolean] = js.undefined,
+      maxThreads: js.UndefOr[Double] = js.undefined
+  ): js.Promise[Unit] =
     state.blockConcurrencyWhile(() => updateThreadUnlocked(data, sage, maxThreads))
 
   private def updateThreadUnlocked(data: js.Dynamic, sage: js.UndefOr[Boolean], maxThreads: js.UndefOr[Double]): js.Promise[Unit] =
@@ -155,7 +170,7 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
       } else js.Dynamic.global.String(data.title).asInstanceOf[String]
       val line = s"$key.dat<>$title (${js.Dynamic.global.String(data.resNum).asInstanceOf[String]})"
       // 既存スレ更新でsageの場合レス数のみ更新
-      if index >= 0 && js.Dynamic.global.Boolean(sage).asInstanceOf[Boolean] then lines = lines.updated(index, line)
+      if index >= 0 && js.Dynamic.global.Boolean(sage).asInstanceOf[Boolean] then lines = lines.patch(index, Seq(line), 1)
       else {
         // 先頭に持ってくる
         if index >= 0 then lines = lines.patch(index, Nil, 1)

@@ -27,9 +27,17 @@ class CookieCodecSuite extends FunSuite {
 
   test("内部 ID・公開 ID・世代・Lv の書式を確認する") {
     val invalid = Seq(
-      claims.copy(aid = "short"), claims.copy(aid = "ABCDEFGHIJKLMNOP"), claims.copy(aid = "abcdefghijklmno_"),
-      claims.copy(uid = "ab"), claims.copy(uid = "a" * 17), claims.copy(uid = "User123"), claims.copy(uid = "abc-def"),
-      claims.copy(generation = -1), claims.copy(lv = -1), claims.copy(lv = 11))
+      claims.copy(aid = "short"),
+      claims.copy(aid = "ABCDEFGHIJKLMNOP"),
+      claims.copy(aid = "abcdefghijklmno_"),
+      claims.copy(uid = "ab"),
+      claims.copy(uid = "a" * 17),
+      claims.copy(uid = "User123"),
+      claims.copy(uid = "abc-def"),
+      claims.copy(generation = -1),
+      claims.copy(lv = -1),
+      claims.copy(lv = 11)
+    )
     invalid.foreach(value => assertEquals(CookieCodec.payload(value), None, value.toString))
     Seq(claims.copy(uid = "abc", generation = 0, lv = 0), claims.copy(uid = "a" * 16, generation = Long.MaxValue, lv = 10))
       .foreach(value => assertEquals(CookieCodec.parse(CookieCodec.encode(value, signature).get).map(_.claims), Some(value)))
@@ -38,19 +46,33 @@ class CookieCodecSuite extends FunSuite {
   test("端末の粒度・桁数・大文字と紐づけの書式が不正なら拒否する") {
     Seq("0123456789abcdef01", "x0123456789abcdef01", "p0123456789abcdef0", "p0123456789abcdef012", "p0123456789ABCDEF01")
       .foreach(device => assertEquals(CookieCodec.payload(claims.copy(device = device)), None, device))
-    Seq(SessionBinding("", "0123456789abcdef"), SessionBinding("A", "0123456789abcdef"), SessionBinding("a" * 65, "0123456789abcdef"),
-      SessionBinding("token", "short"), SessionBinding("token", "0123456789ABCDEF"))
+    Seq(
+      SessionBinding("", "0123456789abcdef"),
+      SessionBinding("A", "0123456789abcdef"),
+      SessionBinding("a" * 65, "0123456789abcdef"),
+      SessionBinding("token", "short"),
+      SessionBinding("token", "0123456789ABCDEF")
+    )
       .foreach(binding => assertEquals(CookieCodec.payload(claims.copy(binding = Some(binding))), None))
   }
 
   test("版・フィールド数・非整数・整数の範囲外と不正な署名を拒否する") {
     val invalid = Seq(
-      cookie.replace("1.", "2."), cookie + ".extra", payload,
-      cookie.replace(".2.", ".-1."), cookie.replace(".2.", ".2.0."), cookie.replace(".2.", ".9223372036854775808."),
-      cookie.replace(".2000000000.", ".2e9."), cookie.replace(".2000000000.", ".Infinity."),
-      cookie.replace(".2000000000.", ".9223372036854775808."), cookie.replace(".3.", ".11."),
-      payload + "." + "A" * 21, payload + "." + "A" * 21 + "B", payload + "." + signature + "==",
-      cookie.replace("..", ".t:token:0123456789abcdef:extra."))
+      cookie.replace("1.", "2."),
+      cookie + ".extra",
+      payload,
+      cookie.replace(".2.", ".-1."),
+      cookie.replace(".2.", ".2.0."),
+      cookie.replace(".2.", ".9223372036854775808."),
+      cookie.replace(".2000000000.", ".2e9."),
+      cookie.replace(".2000000000.", ".Infinity."),
+      cookie.replace(".2000000000.", ".9223372036854775808."),
+      cookie.replace(".3.", ".11."),
+      payload + "." + "A" * 21,
+      payload + "." + "A" * 21 + "B",
+      payload + "." + signature + "==",
+      cookie.replace("..", ".t:token:0123456789abcdef:extra.")
+    )
     invalid.foreach(value => assertEquals(CookieCodec.parse(value), None, value))
     assertEquals(CookieCodec.parse(null), None)
   }

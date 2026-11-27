@@ -44,6 +44,7 @@ final case class Roles(values: Set[AccountRole] = Set.empty) {
   def manages(target: Roles): Boolean = admin || (staff && !target.staff)
 }
 object Roles {
+
   /** 保存値・RPC の役割の名前を読む。知らない名前があれば None */
   def parse(codes: Seq[String]): Option[Roles] = {
     val parsed = codes.map(AccountRole.parse)
@@ -53,19 +54,19 @@ object Roles {
 
 /** 公開 ID と認証方式、同意・状態・世代。資格情報は別に保存する */
 final case class AccountProfile(
-  aid: String,
-  uid: String,
-  kind: AccountKind,
-  createdAt: Double,
-  expiresAt: Option[Double],
-  agreedAt: Double,
-  agreementVersion: String,
-  status: AccountStatus = AccountStatus.Active,
-  generation: Int = 0,
-  loginId: Option[String] = None,
-  email: Option[String] = None,
-  googleSubHash: Option[String] = None,
-  emailVerifiedAt: Option[Double] = None
+    aid: String,
+    uid: String,
+    kind: AccountKind,
+    createdAt: Double,
+    expiresAt: Option[Double],
+    agreedAt: Double,
+    agreementVersion: String,
+    status: AccountStatus = AccountStatus.Active,
+    generation: Int = 0,
+    loginId: Option[String] = None,
+    email: Option[String] = None,
+    googleSubHash: Option[String] = None,
+    emailVerifiedAt: Option[Double] = None
 ) {
   def valid: Boolean = aid.matches("[a-z0-9]{16}") && uid.matches("[a-z0-9_]{3,16}") &&
     AccountProfile.validTime(createdAt) && AccountProfile.validTime(agreedAt) && agreementVersion.nonEmpty && generation >= 0 &&
@@ -76,7 +77,8 @@ final case class AccountProfile(
   def expired(now: Double): Boolean = kind == AccountKind.Client && expiresAt.forall(_ <= now)
 
   /** クライアント ID の期限を成功投稿から365日後へ延ばす。失効の確認は呼び出し元で行う */
-  def afterPost(now: Double): AccountProfile = if (kind == AccountKind.Client) copy(expiresAt = Some(now + AccountProfile.clientLifetime)) else this
+  def afterPost(now: Double): AccountProfile =
+    if (kind == AccountKind.Client) copy(expiresAt = Some(now + AccountProfile.clientLifetime)) else this
 }
 object AccountProfile {
   val clientLifetime: Double = 365d * 86400
@@ -118,6 +120,7 @@ enum AccountRejection(val code: String) {
   case Deleted extends AccountRejection("auth:deleted")
   case Agreement extends AccountRejection("auth:agreement:required")
   case RolesForbidden extends AccountRejection("auth:roles:forbidden")
+
   /** 操作する人の役割が足りないか、上位の役割を持つ相手への操作 */
   case Forbidden extends AccountRejection("auth:forbidden")
   case TokenUnknown extends AccountRejection("auth:token:unknown")
@@ -129,8 +132,10 @@ enum AccountRejection(val code: String) {
   case IndexOwnership extends AccountRejection("auth:index:ownership")
   case IndexPermanent extends AccountRejection("auth:index:permanent")
   case LoginFailed extends AccountRejection("auth:login:failed")
+
   /** 保留トークンが無い・一致しない・期限切れ */
   case PendingInvalid extends AccountRejection("auth:pending:invalid")
+
   /** この登録方式では使えない操作 */
   case KindForbidden extends AccountRejection("auth:kind:forbidden")
 }

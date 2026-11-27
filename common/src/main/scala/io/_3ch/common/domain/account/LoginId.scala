@@ -10,7 +10,7 @@ enum LoginIdRejection {
 final class LoginId private (val value: String) {
   override def equals(other: Any): Boolean = other match {
     case that: LoginId => value == that.value
-    case _ => false
+    case _             => false
   }
   override def hashCode(): Int = value.hashCode
   override def toString: String = value

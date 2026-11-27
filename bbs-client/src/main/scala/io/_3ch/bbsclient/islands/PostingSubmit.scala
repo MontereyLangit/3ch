@@ -45,7 +45,8 @@ private[islands] object PostingSubmit {
       errorText = text("font > b"),
       refreshContent = Option(doc.querySelector("meta[http-equiv=\"refresh\"]")).flatMap(m => Option(m.getAttribute("content"))),
       cookieSummary = text("ul").getOrElse(""),
-      cookieTerms = text("body > b").getOrElse(""))
+      cookieTerms = text("body > b").getOrElse("")
+    )
   }
 
   /**
@@ -60,19 +61,24 @@ private[islands] object PostingSubmit {
       val init = new dom.RequestInit {}
       init.method = dom.HttpMethod.POST
       init.credentials = dom.RequestCredentials.`same-origin`
-      init.body = params.asInstanceOf[dom.URLSearchParams]
+      init.body = params
       dom.fetch("/test/bbs.cgi", init).toFuture.flatMap { r =>
         val charset = PostingResponse.charset(Option(r.headers.get("content-type")).getOrElse(""))
         r.arrayBuffer().toFuture.map { buffer =>
           val decoder = js.Dynamic.newInstance(js.Dynamic.global.TextDecoder)(charset)
           val outcome = PostingResponse.classify(parsePage(decoder.decode(buffer).asInstanceOf[String]))
           val posted = Option(r.headers.get("x-resnum")).exists(_.matches("[0-9]+"))
-          Reply(if posted then outcome match {
-            case success: PostingOutcome.Posted => success
-            case _ => PostingOutcome.Posted(None)
-          } else outcome,
-            Option(r.headers.get("x-auth-required")).getOrElse(""), Option(r.headers.get("x-post-error")).getOrElse(""),
-            Option(r.headers.get("x-phoebe-required")).flatMap(_.toIntOption).filter(_ > 0))
+          Reply(
+            if posted then
+              outcome match {
+                case success: PostingOutcome.Posted => success
+                case _                              => PostingOutcome.Posted(None)
+              }
+            else outcome,
+            Option(r.headers.get("x-auth-required")).getOrElse(""),
+            Option(r.headers.get("x-post-error")).getOrElse(""),
+            Option(r.headers.get("x-phoebe-required")).flatMap(_.toIntOption).filter(_ > 0)
+          )
         }
       }
     }.recover { case _ => Reply(PostingOutcome.Unrecognized, "", "") }
@@ -84,7 +90,9 @@ private[islands] object PostingSubmit {
    * 失敗時は入力を残して結果を返す
    */
   private def submitAction(props: PostingFormIsland.Props, fields: PostingFields, upload: ImgurUpload)(
-    previous: SubmitResult, formData: dom.FormData): AsyncCallback[SubmitResult] = {
+      previous: SubmitResult,
+      formData: dom.FormData
+  ): AsyncCallback[SubmitResult] = {
     if upload.isUploading() then {
       AsyncCallback.delay {
         upload.setStatus(UploadingMessage).runNow()
@@ -93,36 +101,41 @@ private[islands] object PostingSubmit {
     } else {
       val params = js.Dynamic.newInstance(js.Dynamic.global.URLSearchParams)(formData)
       params.set("submit", "書き込む")
-      val payload = params.toString().asInstanceOf[String]
+      val payload = params.toString()
       val response = postForm(payload).flatMap { first =>
-        if first.auth == "login" then AuthClient.requestLogin().flatMap { ok =>
-          if ok then postForm(payload) else Future.successful(first)
-        } else Future.successful(first)
+        if first.auth == "login" then
+          AuthClient.requestLogin().flatMap { ok =>
+            if ok then postForm(payload) else Future.successful(first)
+          }
+        else Future.successful(first)
       }
       AsyncCallback.fromFuture(response).map {
         case Reply(_, "level", _, level) =>
-          SubmitResult.Level(level.orElse(Option.when(props.requiredLevel > 0)(props.requiredLevel)).fold("このスレに書き込むにはLvが足りません")(n => s"Lv${n}以上が必要です"))
-        case Reply(_, "login", _, _) => SubmitResult.Error("書き込みには認証・登録が必要です")
+          SubmitResult.Level(level.orElse(Option.when(props.requiredLevel > 0)(props.requiredLevel)).fold("このスレに書き込むにはLvが足りません")(n =>
+            s"Lv${n}以上が必要です"
+          ))
+        case Reply(_, "login", _, _)                                                => SubmitResult.Error("書き込みには認証・登録が必要です")
         case Reply(PostingOutcome.Rejected(message), _, error, _) if error.nonEmpty => SubmitResult.Error(message)
-        case Reply(_, _, error, _) if error.nonEmpty => SubmitResult.Error(if error.startsWith("post-rate:") then "しばらく待ってから書き込んでください" else UnknownMessage)
+        case Reply(_, _, error, _) if error.nonEmpty                                =>
+          SubmitResult.Error(if error.startsWith("post-rate:") then "しばらく待ってから書き込んでください" else UnknownMessage)
         case Reply(outcome, _, _, _) => outcome match {
-          case PostingOutcome.Posted(redirect) =>
-            fields.clearPosted.runNow()
-            if props.threadKey.isDefined then {
-              dom.window.location.reload()
-              SubmitResult.Idle
-            } else {
-              redirect match {
-                case Some(url) =>
-                  dom.window.location.assign(url)
-                  SubmitResult.Idle
-                case None => SubmitResult.Unknown(NoRedirectMessage)
+            case PostingOutcome.Posted(redirect) =>
+              fields.clearPosted.runNow()
+              if props.threadKey.isDefined then {
+                dom.window.location.reload()
+                SubmitResult.Idle
+              } else {
+                redirect match {
+                  case Some(url) =>
+                    dom.window.location.assign(url)
+                    SubmitResult.Idle
+                  case None => SubmitResult.Unknown(NoRedirectMessage)
+                }
               }
-            }
-          case PostingOutcome.Rejected(message) => SubmitResult.Error(message)
-          case PostingOutcome.NeedsCookie(summary, terms) => SubmitResult.Cookie(summary, terms)
-          case PostingOutcome.Unrecognized => SubmitResult.Unknown(UnknownMessage)
-        }
+            case PostingOutcome.Rejected(message)           => SubmitResult.Error(message)
+            case PostingOutcome.NeedsCookie(summary, terms) => SubmitResult.Cookie(summary, terms)
+            case PostingOutcome.Unrecognized                => SubmitResult.Unknown(UnknownMessage)
+          }
       }
     }
   }
@@ -136,7 +149,8 @@ private[islands] object PostingSubmit {
       // SSR・hydration では通常の POST 先を出し、マウント後に関数 action へ切り替える（JS 無しでも投稿できる）。
       // 関数 action では method を指定できない（React が補う）ため、切り替え時に外す。
       val tag: TagMod =
-        if ready.value then ^.action ==> ((fd: dom.FormData) => action.dispatch(fd)) else TagMod(^.action := "/test/bbs.cgi", ^.method := "post")
+        if ready.value then ^.action ==> ((fd: dom.FormData) => action.dispatch(fd))
+        else TagMod(^.action := "/test/bbs.cgi", ^.method := "post")
       PostingSubmit(tag, action.state)
     }
   }

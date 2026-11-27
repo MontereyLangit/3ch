@@ -16,25 +16,27 @@ class AccountIndex(val state: DurableObjectState, env: js.Any) extends DurableOb
   private def kind: AccountIndexKind = state.id.name.toOption.flatMap(AccountIndexKind.parse)
     .getOrElse(throw js.JavaScriptException(new js.Error("invalid-account-index-kind")))
   private def validHash(hash: String): Boolean = DedicatedBrowserTokens.validHash(hash)
-  private def read(hash: String): Future[Option[AccountIndexEntry]] = state.storage.get[js.Any](hash).toFuture.map(v => AccountIndexCodec.decode(v.asInstanceOf[js.Any]))
+  private def read(hash: String): Future[Option[AccountIndexEntry]] =
+    state.storage.get[js.Any](hash).toFuture.map(v => AccountIndexCodec.decode(v.asInstanceOf[js.Any]))
 
   /** 十分古い未確定予約だけを取り直せる。成功は空文字 */
-  def register(hash: String, aid: String, now: Double, tokenId: js.UndefOr[String] = js.undefined): js.Promise[String] = DurableLock.serialized(state) {
-    if (!validHash(hash)) Future.successful(AccountRejection.Invalid.code)
-    else read(hash).flatMap { previous =>
-      AccountIndexEntry.register(previous, aid, now, tokenId.toOption, kind) match {
-        case Left(error) => Future.successful(error.code)
-        case Right(entry) => state.storage.put(hash, AccountIndexCodec.encode(entry)).toFuture.map(_ => "")
+  def register(hash: String, aid: String, now: Double, tokenId: js.UndefOr[String] = js.undefined): js.Promise[String] =
+    DurableLock.serialized(state) {
+      if (!validHash(hash)) Future.successful(AccountRejection.Invalid.code)
+      else read(hash).flatMap { previous =>
+        AccountIndexEntry.register(previous, aid, now, tokenId.toOption, kind) match {
+          case Left(error)  => Future.successful(error.code)
+          case Right(entry) => state.storage.put(hash, AccountIndexCodec.encode(entry)).toFuture.map(_ => "")
+        }
       }
-    }
-  }.toJSPromise
+    }.toJSPromise
 
   /** 予約したアカウントだけが有効期限内に確定できる */
   def confirm(hash: String, expectedAid: String, now: Double): js.Promise[String] = DurableLock.serialized(state) {
     if (!validHash(hash) || !AccountProfile.validTime(now)) Future.successful(AccountRejection.Invalid.code)
     else read(hash).flatMap { value =>
       value.toRight(AccountRejection.IndexOwnership).flatMap(_.confirm(expectedAid, now)) match {
-        case Left(error) => Future.successful(error.code)
+        case Left(error)  => Future.successful(error.code)
         case Right(entry) => state.storage.put(hash, AccountIndexCodec.encode(entry)).toFuture.map(_ => "")
       }
     }
@@ -51,11 +53,11 @@ class AccountIndex(val state: DurableObjectState, env: js.Any) extends DurableOb
     if (!validHash(hash)) Future.successful(AccountRejection.Invalid.code)
     else read(hash).flatMap { value =>
       value match {
-        case None => Future.successful("")
+        case None        => Future.successful("")
         case Some(entry) => entry.remove(kind, expectedAid) match {
-          case Left(error) => Future.successful(error.code)
-          case Right(_) => state.storage.delete(hash).toFuture.map(_ => "")
-        }
+            case Left(error) => Future.successful(error.code)
+            case Right(_)    => state.storage.delete(hash).toFuture.map(_ => "")
+          }
       }
     }
   }.toJSPromise
@@ -64,11 +66,11 @@ class AccountIndex(val state: DurableObjectState, env: js.Any) extends DurableOb
   def release(hash: String, expectedAid: String): js.Promise[String] = DurableLock.serialized(state) {
     if (!validHash(hash)) Future.successful(AccountRejection.Invalid.code)
     else read(hash).flatMap {
-      case None => Future.successful("")
+      case None        => Future.successful("")
       case Some(entry) => entry.release(expectedAid) match {
-        case Left(error) => Future.successful(error.code)
-        case Right(_) => state.storage.delete(hash).toFuture.map(_ => "")
-      }
+          case Left(error) => Future.successful(error.code)
+          case Right(_)    => state.storage.delete(hash).toFuture.map(_ => "")
+        }
     }
   }.toJSPromise
 
@@ -79,12 +81,15 @@ class AccountIndex(val state: DurableObjectState, env: js.Any) extends DurableOb
   private def seats(now: Double): Future[Vector[AdminSeat]] = state.storage.list().toFuture.flatMap { values =>
     val entries = values.toVector.flatMap { case (key, value) => AccountIndexCodec.decode(value).map(key -> _) }
     val accounts = env.asInstanceOf[WorkerEnv].ACCOUNT_DO
-    Future.traverse(entries) { case (key, entry) => accounts.get(accounts.idFromName(entry.aid)).adminStatus(now).toFuture.map(AdminSeat(key, entry, _)) }
+    Future.traverse(entries) { case (key, entry) =>
+      accounts.get(accounts.idFromName(entry.aid)).adminStatus(now).toFuture.map(AdminSeat(key, entry, _))
+    }
   }
 
   /** aid の admin を外す前に、他に利用できる admin が居ることを確かめて索引から外す。最後の admin は拒否する */
   def surrender(hash: String, aid: String, now: Double): js.Promise[String] = DurableLock.serialized(state) {
-    if (kind != AccountIndexKind.Admin || !validHash(hash) || !AccountProfile.validTime(now)) Future.successful(AccountRejection.Invalid.code)
+    if (kind != AccountIndexKind.Admin || !validHash(hash) || !AccountProfile.validTime(now))
+      Future.successful(AccountRejection.Invalid.code)
     else seats(now).flatMap { all =>
       if (!FirstAdminClaim.otherAdminExists(all, aid)) Future.successful(AccountRejection.Forbidden.code)
       else state.storage.delete(hash).toFuture.map(_ => "")
@@ -99,7 +104,7 @@ class AccountIndex(val state: DurableObjectState, env: js.Any) extends DurableOb
     if (kind != AccountIndexKind.Admin || !validHash(hash)) Future.successful(AccountRejection.Invalid.code)
     else seats(now).flatMap { all =>
       FirstAdminClaim.claim(all, aid, now, breakGlass) match {
-        case Left(error) => Future.successful(error.code)
+        case Left(error)           => Future.successful(error.code)
         case Right((stale, entry)) =>
           Future.traverse(stale)(key => state.storage.delete(key).toFuture)
             .flatMap(_ => state.storage.put(hash, AccountIndexCodec.encode(entry)).toFuture).map(_ => "")

@@ -35,7 +35,8 @@ object AuthModalIsland {
           val detail = e.asInstanceOf[js.Dynamic].detail
           detail.updateDynamic("handled")(true)
           finish.value = Some(detail.resolve.asInstanceOf[js.Function1[Boolean, Unit]])
-          url.setState(Some("/auth/?embed=1&return=" + URIUtils.encodeURIComponent(dom.window.location.pathname + dom.window.location.search))).runNow()
+          url.setState(Some("/auth/?embed=1&return=" +
+            URIUtils.encodeURIComponent(dom.window.location.pathname + dom.window.location.search))).runNow()
           generation.value += 1
           val opened = generation.value
           def active: Boolean = generation.value == opened
@@ -52,8 +53,10 @@ object AuthModalIsland {
           val message: js.Function1[dom.MessageEvent, Unit] = event => {
             val data = event.data
             if event.origin == dom.window.location.origin && frame.get.runNow().exists(f => event.source == f.contentWindow) &&
-              data != null && js.typeOf(data) == "object" && data.asInstanceOf[js.Dynamic].selectDynamic("type").asInstanceOf[js.UndefOr[String]].contains("ch3s-auth") &&
-              data.asInstanceOf[js.Dynamic].selectDynamic("status").asInstanceOf[js.UndefOr[String]].contains("ok") then recheck()
+              data != null && js.typeOf(data) == "object" &&
+              data.asInstanceOf[js.Dynamic].selectDynamic("type").asInstanceOf[js.UndefOr[String]].contains("ch3s-auth") &&
+              data.asInstanceOf[js.Dynamic].selectDynamic("status").asInstanceOf[js.UndefOr[String]].contains("ok")
+            then recheck()
           }
           dom.window.addEventListener("message", message)
           val channel = Try(js.Dynamic.newInstance(js.Dynamic.global.BroadcastChannel)("ch3s-auth")).toOption
@@ -81,16 +84,30 @@ object AuthModalIsland {
         }
       })
       _ <- useEffect(Callback {
-        if url.value.isDefined then dialog.get.runNow().foreach { d =>
-          if !d.hasAttribute("open") then Try(d.asInstanceOf[js.Dynamic].showModal()).recover { case _ => d.setAttribute("open", "") }
-        }
+        if url.value.isDefined then
+          dialog.get.runNow().foreach { d =>
+            if !d.hasAttribute("open") then Try(d.asInstanceOf[js.Dynamic].showModal()).recover { case _ => d.setAttribute("open", "") }
+          }
       })
     } yield {
-      HtmlTagOf[dom.html.Element]("dialog")(^.className := "fixed inset-0 m-auto w-[min(680px,94vw)] max-w-none border border-[#d6dce3] bg-[#fafafa] p-0 text-[#333] shadow-lg backdrop:bg-black/40",
+      HtmlTagOf[dom.html.Element]("dialog")(
+        ^.className :=
+          "fixed inset-0 m-auto w-[min(680px,94vw)] max-w-none border border-[#d6dce3] bg-[#fafafa] p-0 text-[#333] shadow-lg backdrop:bg-black/40",
         ^.aria.label := "認証・登録",
-        <.div(^.className := "flex items-center justify-between border-b border-[#f66] p-3", <.b("認証・登録"),
-          <.button(^.`type` := "button", ^.className := "cursor-pointer border border-[#d6dce3] bg-white px-2 py-1", ^.onClick --> Callback(AuthClient.event("ch3s:auth-cancel", js.Dynamic.literal())), "閉じる")),
-        url.value.toVdomArray(src => <.iframe(^.key := src, ^.src := src, ^.title := "認証・登録", ^.className := "h-[75vh] w-full border-0").withRef(frame))).withRef(dialog)
+        <.div(
+          ^.className := "flex items-center justify-between border-b border-[#f66] p-3",
+          <.b("認証・登録"),
+          <.button(
+            ^.`type` := "button",
+            ^.className := "cursor-pointer border border-[#d6dce3] bg-white px-2 py-1",
+            ^.onClick --> Callback(AuthClient.event("ch3s:auth-cancel", js.Dynamic.literal())),
+            "閉じる"
+          )
+        ),
+        url.value.toVdomArray(src =>
+          <.iframe(^.key := src, ^.src := src, ^.title := "認証・登録", ^.className := "h-[75vh] w-full border-0").withRef(frame)
+        )
+      ).withRef(dialog)
     }
   }
 }

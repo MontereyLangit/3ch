@@ -11,7 +11,8 @@ class ThreadCreationSettingsSuite extends FunSuite {
       Map("BBS_THREAD_TATESUGI" -> "1/2/3") -> ThreadCreationSettingError.InvalidFormat("BBS_THREAD_TATESUGI"),
       Map("BBS_THREAD_JUNBAN_RESET" -> "315360001") -> ThreadCreationSettingError.AboveMaximum("BBS_THREAD_JUNBAN_RESET", 315360000L),
       Map("BBS_THREAD_JUNBAN_AS_ONLY" -> "AS0") -> ThreadCreationSettingError.PositiveAsnRequired,
-      Map("BBS_THREAD_JUNBAN_AS_ONLY" -> "AS4294967296") -> ThreadCreationSettingError.AboveMaximum("BBS_THREAD_JUNBAN_AS_ONLY", 4294967295L),
+      Map("BBS_THREAD_JUNBAN_AS_ONLY" -> "AS4294967296") ->
+        ThreadCreationSettingError.AboveMaximum("BBS_THREAD_JUNBAN_AS_ONLY", 4294967295L),
       Map("BBS_THREAD_JUNBAN_AS_ONLY" -> "ASbad") -> ThreadCreationSettingError.NonNegativeIntegerRequired("BBS_THREAD_JUNBAN_AS_ONLY")
     )
     cases.foreach { (values, reason) => assertEquals(ThreadCreationSettings.parse(values).left.toOption, Some(reason)) }
@@ -24,8 +25,17 @@ class ThreadCreationSettingsSuite extends FunSuite {
       "BBS_THREAD_JUNBAN" -> "1/2/3",
       "BBS_THREAD_JUNBAN_AS_ONLY" -> "0"
     )
-    assertEquals(ThreadCreationSettings.parse(invalid).left.toOption, Some(ThreadCreationSettingError.NonNegativeIntegerRequired("BBS_THREAD_TATESUGI")))
-    assertEquals(ThreadCreationSettings.parse(invalid - "BBS_THREAD_TATESUGI").left.toOption, Some(ThreadCreationSettingError.NonNegativeIntegerRequired("BBS_THREAD_TATESUGI_RESET")))
-    assertEquals(ThreadCreationSettings.parse(invalid -- Seq("BBS_THREAD_TATESUGI", "BBS_THREAD_TATESUGI_RESET")).left.toOption, Some(ThreadCreationSettingError.InvalidFormat("BBS_THREAD_JUNBAN")))
+    assertEquals(
+      ThreadCreationSettings.parse(invalid).left.toOption,
+      Some(ThreadCreationSettingError.NonNegativeIntegerRequired("BBS_THREAD_TATESUGI"))
+    )
+    assertEquals(
+      ThreadCreationSettings.parse(invalid - "BBS_THREAD_TATESUGI").left.toOption,
+      Some(ThreadCreationSettingError.NonNegativeIntegerRequired("BBS_THREAD_TATESUGI_RESET"))
+    )
+    assertEquals(
+      ThreadCreationSettings.parse(invalid -- Seq("BBS_THREAD_TATESUGI", "BBS_THREAD_TATESUGI_RESET")).left.toOption,
+      Some(ThreadCreationSettingError.InvalidFormat("BBS_THREAD_JUNBAN"))
+    )
   }
 }

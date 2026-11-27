@@ -27,8 +27,11 @@ class RangeSuite extends FunSuite {
     val env = DurableTestKit.newEnv()
     val t = env.thread(s"board1/$Key")
     for {
-      _ <- t.addRes(s"name<><>2026/09/22(火) 12:00:00<>$message<>title", "1<>log",
-        js.Dynamic.literal(bbs = "board1", key = Key, title = "title", resNum = 1, sage = false, maxThreads = 700, create = true)).toFuture
+      _ <- t.addRes(
+        s"name<><>2026/09/22(火) 12:00:00<>$message<>title",
+        "1<>log",
+        js.Dynamic.literal(bbs = "board1", key = Key, title = "title", resNum = 1, sage = false, maxThreads = 700, create = true)
+      ).toFuture
       res <- fut[js.Dynamic](PublicRoutes.fetch(request(s"http://x/board1/dat/$Key.dat"), env.worker, ctx))
       full <- bytes(res)
     } yield new Dat(env, full)

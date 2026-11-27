@@ -6,7 +6,8 @@ class AccountStateSuite extends FunSuite {
   private val now = 2000000000d
   private val profile = AccountProfile("abcdefghijklmnop", "user1234", AccountKind.Client, now, None, now, "v1")
   private val passwordProfile = profile.copy(kind = AccountKind.Password, loginId = Some(profile.uid))
-  private val credential = PasswordCredential(PasswordAlgorithm.Pbkdf2Sha256, 100000, Vector.fill(16)(1.toByte), Vector.fill(32)(2.toByte), now)
+  private val credential =
+    PasswordCredential(PasswordAlgorithm.Pbkdf2Sha256, 100000, Vector.fill(16)(1.toByte), Vector.fill(32)(2.toByte), now)
   private def account: AccountState = AccountState.create(profile, now).toOption.get
 
   test("クライアント ID は発行から一年で失効し成功した投稿だけが期限を延ばす") {
@@ -36,8 +37,11 @@ class AccountStateSuite extends FunSuite {
     val advanced = state.bumpGeneration.toOption.get
     assertEquals(advanced.describe(profile.aid, 0, now), Left(AccountRejection.Generation))
     assert(advanced.describe(profile.aid, 1, now).isRight)
-    Seq(AccountStatus.Frozen -> AccountRejection.Frozen, AccountStatus.Banned -> AccountRejection.Banned,
-      AccountStatus.Deleted -> AccountRejection.Deleted).foreach { case (status, rejection) =>
+    Seq(
+      AccountStatus.Frozen -> AccountRejection.Frozen,
+      AccountStatus.Banned -> AccountRejection.Banned,
+      AccountStatus.Deleted -> AccountRejection.Deleted
+    ).foreach { case (status, rejection) =>
       val stopped = state.setStatus(status).toOption.get
       assertEquals(stopped.profile.generation, 1)
       assertEquals(stopped.describe(profile.aid, 1, now), Left(rejection))
@@ -66,8 +70,9 @@ class AccountStateSuite extends FunSuite {
   }
 
   test("キャップは役割保持者の一個か管理者発行に限る") {
-    val state = AccountState.create(passwordProfile, now).toOption.get.copy(credential = Some(credential), readiness = AccountReadiness.Ready)
-      .setRoles(Roles(Set(AccountRole.Cap))).toOption.get
+    val state =
+      AccountState.create(passwordProfile, now).toOption.get.copy(credential = Some(credential), readiness = AccountReadiness.Ready)
+        .setRoles(Roles(Set(AccountRole.Cap))).toOption.get
     val cap = AccountCap("cap1", "表示名", "legacy-hash", false, profile.aid, now)
     val bound = state.bindCap(cap, false, now).toOption.get
     assertEquals(bound.describeForCap(profile.aid, cap.hash, now).toOption.get._2, cap)
@@ -104,7 +109,8 @@ class AccountStateSuite extends FunSuite {
   test("準備中は投稿用 Cookie・キャップ・専ブラキーと投稿記録を受け付けない") {
     val cap = AccountCap("cap1", "表示名", "legacy-hash", false, profile.aid, now)
     val token = DedicatedBrowserToken("token1", "a" * 64, now, now + 86400, Some("b" * 64), Some("専ブラ"), Some(now))
-    val pending = AccountState.create(passwordProfile, now).toOption.get.copy(credential = Some(credential), caps = Vector(cap), tokens = Vector(token))
+    val pending =
+      AccountState.create(passwordProfile, now).toOption.get.copy(credential = Some(credential), caps = Vector(cap), tokens = Vector(token))
     assertEquals(pending.describe(profile.aid, 0, now), Left(AccountRejection.Pending))
     assertEquals(pending.describe(profile.aid, 0, now, Some(token.tokenId), token.uaHash), Left(AccountRejection.Pending))
     assertEquals(pending.describeForCap(profile.aid, cap.hash, now), Left(AccountRejection.Pending))
@@ -123,10 +129,16 @@ class AccountStateSuite extends FunSuite {
     val ready = pending.copy(credential = Some(credential), readiness = AccountReadiness.Ready)
     assert(ready.valid)
     assert(ready.describe(profile.aid, 0, now).isRight)
-    Seq(ready.copy(credential = None), ready.copy(credential = Some(credential.copy(iterations = 0))),
-      ready.copy(profile = passwordProfile.copy(loginId = None)), ready.copy(profile = passwordProfile.copy(loginId = Some("otherid"))),
-      ready.copy(profile = passwordProfile.copy(loginId = Some("USER1234"))), ready.copy(credential = null), ready.copy(readiness = null),
-      ready.copy(credential = Some(null))).foreach { state =>
+    Seq(
+      ready.copy(credential = None),
+      ready.copy(credential = Some(credential.copy(iterations = 0))),
+      ready.copy(profile = passwordProfile.copy(loginId = None)),
+      ready.copy(profile = passwordProfile.copy(loginId = Some("otherid"))),
+      ready.copy(profile = passwordProfile.copy(loginId = Some("USER1234"))),
+      ready.copy(credential = null),
+      ready.copy(readiness = null),
+      ready.copy(credential = Some(null))
+    ).foreach { state =>
       assert(!state.valid)
       assertEquals(state.usable(now), Left(AccountRejection.Invalid))
     }
@@ -136,7 +148,8 @@ class AccountStateSuite extends FunSuite {
   }
 
   private val hash = "a" * 64
-  private def passwordAccount: AccountState = AccountState.create(passwordProfile, now, Some(credential)).flatMap(_.activate(now)).toOption.get
+  private def passwordAccount: AccountState =
+    AccountState.create(passwordProfile, now, Some(credential)).flatMap(_.activate(now)).toOption.get
 
   test("メール認証のトークンは期限内に一度だけ使え、アドレスを確定させて Lv を 3 未満なら 3 にする") {
     val issued = passwordAccount.issuePending(PendingKind.Email, hash, Some("taro@example.com"), now).toOption.get
@@ -147,15 +160,24 @@ class AccountStateSuite extends FunSuite {
     assertEquals((verified.profile.email, verified.profile.emailVerifiedAt, previous), (Some("taro@example.com"), Some(now + 10), None))
     assertEquals((verified.level.lv, verified.level.lvSince, verified.level.lvPosts), (3, now + 10, 0))
     assertEquals(verified.verifyEmail(hash, now + 11), Left(AccountRejection.PendingInvalid))
-    val higher = passwordAccount.copy(level = AccountLevel(5, now, 7)).issuePending(PendingKind.Email, hash, Some("x@example.com"), now).toOption.get
+    val higher =
+      passwordAccount.copy(level = AccountLevel(5, now, 7)).issuePending(PendingKind.Email, hash, Some("x@example.com"), now).toOption.get
     val (changed, _) = higher.copy(profile = higher.profile.copy(email = Some("old@example.com"))).verifyEmail(hash, now).toOption.get
     assertEquals(changed.level, AccountLevel(5, now, 7))
-    assertEquals(higher.copy(profile = higher.profile.copy(email = Some("old@example.com"))).verifyEmail(hash, now).map(_._2), Right(Some("old@example.com")))
+    assertEquals(
+      higher.copy(profile = higher.profile.copy(email = Some("old@example.com"))).verifyEmail(hash, now).map(_._2),
+      Right(Some("old@example.com"))
+    )
   }
 
   test("保留トークンは種別ごとに別に持ち、クライアント ID と Google には発行しない") {
     val verified = passwordAccount.copy(profile = passwordAccount.profile.copy(email = Some("t@example.com"), emailVerifiedAt = Some(now)))
-    val both = verified.issuePending(PendingKind.Email, hash, Some("n@example.com"), now).flatMap(_.issuePending(PendingKind.Reset, "b" * 64, None, now)).toOption.get
+    val both = verified.issuePending(
+      PendingKind.Email,
+      hash,
+      Some("n@example.com"),
+      now
+    ).flatMap(_.issuePending(PendingKind.Reset, "b" * 64, None, now)).toOption.get
     assert(both.pendingFor(PendingKind.Email, hash, now).isRight)
     assert(both.pendingFor(PendingKind.Reset, "b" * 64, now + 3599).isRight)
     assertEquals(both.pendingFor(PendingKind.Reset, "b" * 64, now + 3600), Left(AccountRejection.PendingInvalid))
@@ -167,22 +189,33 @@ class AccountStateSuite extends FunSuite {
   test("再設定はメール認証済みで役割の無いアカウントだけで、消費するとパスワードを替えて世代を進める") {
     val verified = passwordAccount.copy(profile = passwordAccount.profile.copy(email = Some("t@example.com"), emailVerifiedAt = Some(now)))
     assertEquals(passwordAccount.issuePending(PendingKind.Reset, hash, None, now), Left(AccountRejection.KindForbidden))
-    assertEquals(verified.copy(roles = Roles(Set(AccountRole.Cap))).issuePending(PendingKind.Reset, hash, None, now), Left(AccountRejection.KindForbidden))
+    assertEquals(
+      verified.copy(roles = Roles(Set(AccountRole.Cap))).issuePending(PendingKind.Reset, hash, None, now),
+      Left(AccountRejection.KindForbidden)
+    )
     val issued = verified.issuePending(PendingKind.Reset, hash, None, now).toOption.get
     val next = credential.copy(hash = Vector.fill(32)(3.toByte), updatedAt = now + 1)
     val reset = issued.resetPassword(hash, next, now + 1).toOption.get
     assertEquals((reset.credential.map(_.hash), reset.profile.generation, reset.pending.get(PendingKind.Reset)), (Some(next.hash), 1, None))
-    assertEquals(issued.copy(roles = Roles(Set(AccountRole.Delete))).resetPassword(hash, next, now + 1), Left(AccountRejection.KindForbidden))
+    assertEquals(
+      issued.copy(roles = Roles(Set(AccountRole.Delete))).resetPassword(hash, next, now + 1),
+      Left(AccountRejection.KindForbidden)
+    )
   }
 
   test("クライアント ID だけを移行でき、Lv と書き込み数を引き継いで期限を外し世代を進める。Google は Lv10") {
     val client = account.copy(level = AccountLevel(4, now - 100, 9))
     val moved = client.convert(AccountConversion.ToPassword(credential), "taro_2026", 0, now).toOption.get
-    assertEquals((moved.profile.kind, moved.profile.uid, moved.profile.loginId, moved.profile.expiresAt, moved.profile.generation),
-      (AccountKind.Password, "taro_2026", Some("taro_2026"), None, 1))
+    assertEquals(
+      (moved.profile.kind, moved.profile.uid, moved.profile.loginId, moved.profile.expiresAt, moved.profile.generation),
+      (AccountKind.Password, "taro_2026", Some("taro_2026"), None, 1)
+    )
     assertEquals((moved.profile.aid, moved.level), (client.profile.aid, client.level))
     val google = client.convert(AccountConversion.ToGoogle("c" * 64, Some("t@example.com")), "taro_2026", 0, now).toOption.get
-    assertEquals((google.profile.kind, google.level.lv, google.profile.googleSubHash, google.profile.emailVerifiedAt), (AccountKind.Google, 10, Some("c" * 64), Some(now)))
+    assertEquals(
+      (google.profile.kind, google.level.lv, google.profile.googleSubHash, google.profile.emailVerifiedAt),
+      (AccountKind.Google, 10, Some("c" * 64), Some(now))
+    )
     assertEquals(client.convert(AccountConversion.ToPassword(credential), "taro_2026", 1, now), Left(AccountRejection.Generation))
     assertEquals(moved.convert(AccountConversion.ToGoogle("c" * 64, None), "taro_2026", 1, now), Left(AccountRejection.KindForbidden))
     assertEquals(client.convert(AccountConversion.ToPassword(credential), "x", 0, now), Left(AccountRejection.Invalid))
@@ -191,7 +224,11 @@ class AccountStateSuite extends FunSuite {
 
   test("退会は deleted にして世代を進め、キャップとキーを失効させて外す値を返す") {
     val cap = AccountCap("cap1", "管理人", "kvkey", strong = false, profile.aid, now)
-    val state = passwordAccount.copy(profile = passwordAccount.profile.copy(email = Some("t@example.com")), caps = Vector(cap), roles = Roles(Set(AccountRole.Cap)))
+    val state = passwordAccount.copy(
+      profile = passwordAccount.profile.copy(email = Some("t@example.com")),
+      caps = Vector(cap),
+      roles = Roles(Set(AccountRole.Cap))
+    )
     val (deleted, withdrawal) = state.withdraw(0, now + 1).toOption.get
     assertEquals((deleted.profile.status, deleted.profile.generation), (AccountStatus.Deleted, 1))
     assertEquals(deleted.caps.map(_.revokedAt), Vector(Some(now + 1)))
@@ -204,7 +241,12 @@ class AccountStateSuite extends FunSuite {
   private def verifiedAccount: AccountState =
     passwordAccount.copy(profile = passwordAccount.profile.copy(email = Some("t@example.com"), emailVerifiedAt = Some(now)))
   private def withBothPending: AccountState =
-    verifiedAccount.issuePending(PendingKind.Email, hash, Some("n@example.com"), now).flatMap(_.issuePending(PendingKind.Reset, "b" * 64, None, now)).toOption.get
+    verifiedAccount.issuePending(
+      PendingKind.Email,
+      hash,
+      Some("n@example.com"),
+      now
+    ).flatMap(_.issuePending(PendingKind.Reset, "b" * 64, None, now)).toOption.get
   private val next = credential.copy(hash = Vector.fill(32)(3.toByte), updatedAt = now + 1)
 
   test("パスワードの変更・再設定・メールの確認・移行は保留中のトークンを全て捨てる") {
@@ -246,7 +288,10 @@ class AccountStateSuite extends FunSuite {
   }
 
   test("索引の値を今も持つのは退会していないアカウントだけで、変更前の値は持たない") {
-    val google = AccountState.create(profile.copy(kind = AccountKind.Google, googleSubHash = Some("c" * 64)), now).flatMap(_.activate(now)).toOption.get
+    val google = AccountState.create(
+      profile.copy(kind = AccountKind.Google, googleSubHash = Some("c" * 64)),
+      now
+    ).flatMap(_.activate(now)).toOption.get
     assert(verifiedAccount.holds(AccountIndexKind.Login, "user1234"))
     assert(!verifiedAccount.holds(AccountIndexKind.Login, "other"))
     assert(verifiedAccount.holds(AccountIndexKind.Email, "t@example.com"))

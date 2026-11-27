@@ -36,7 +36,9 @@ class UserAgentTableCacheSuite extends FunSuite {
     val cache = new UserAgentTableCache(60000, () => clock.millis)
     var fetches = 0
     var failing = false
-    def fetch(): Future[UserAgentTable] = { fetches += 1; if (failing) Future.failed(new IllegalStateException("r2")) else Future.successful(table("good")) }
+    def fetch(): Future[UserAgentTable] = {
+      fetches += 1; if (failing) Future.failed(new IllegalStateException("r2")) else Future.successful(table("good"))
+    }
     for {
       _ <- cache.get(fetch)
       _ = { clock.millis += 60000; failing = true }
@@ -55,7 +57,9 @@ class UserAgentTableCacheSuite extends FunSuite {
   test("一度も読めていなければ空の表を返し、表は保持せず次の投稿で読み直す") {
     val cache = new UserAgentTableCache(60000, () => 0)
     var fetches = 0
-    def fetch(): Future[UserAgentTable] = { fetches += 1; if (fetches == 1) Future.failed(new IllegalStateException("r2")) else Future.successful(table("late")) }
+    def fetch(): Future[UserAgentTable] = {
+      fetches += 1; if (fetches == 1) Future.failed(new IllegalStateException("r2")) else Future.successful(table("late"))
+    }
     for {
       empty <- cache.get(fetch)
       loaded <- cache.get(fetch)

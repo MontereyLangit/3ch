@@ -40,9 +40,15 @@ trait PostingFormProps extends js.Object {
 object PostingFormProps {
   private val command = JsKind.Obj(List("text", "label", "field", "description").map(required(_, JsKind.Str)))
   val fields: List[JsField] = List(
-    required("bbs", JsKind.Str), required("time", JsKind.Str), required("imgurClientId", JsKind.Str),
-    required("authEnabled", JsKind.Bool), required("requiredLevel", JsKind.Int), required("returnPath", JsKind.Str),
-    required("commands", JsKind.Arr(command)), optional("session", JsKind.Obj(SessionProps.fields)), optional("threadKey", JsKind.Str)
+    required("bbs", JsKind.Str),
+    required("time", JsKind.Str),
+    required("imgurClientId", JsKind.Str),
+    required("authEnabled", JsKind.Bool),
+    required("requiredLevel", JsKind.Int),
+    required("returnPath", JsKind.Str),
+    required("commands", JsKind.Arr(command)),
+    optional("session", JsKind.Obj(SessionProps.fields)),
+    optional("threadKey", JsKind.Str)
   )
   def validate(raw: js.Any): Either[String, PostingFormProps] = JsShape.validate(raw, fields)
 }
@@ -57,7 +63,9 @@ trait BoardDetailsProps extends js.Object {
 
 object BoardDetailsProps {
   val fields: List[JsField] = List(
-    required("bbs", JsKind.Str), required("headText", JsKind.Str), required("settingsText", JsKind.Str),
+    required("bbs", JsKind.Str),
+    required("headText", JsKind.Str),
+    required("settingsText", JsKind.Str),
     required("postingForm", JsKind.Obj(PostingFormProps.fields))
   )
   def validate(raw: js.Any): Either[String, BoardDetailsProps] = JsShape.validate(raw, fields)
@@ -75,7 +83,7 @@ trait ThreadListProps extends js.Object {
 
 object ThreadListProps {
   val fields: List[JsField] =
-    List("bbs", "type", "subjectText", "query", "sort").map(required(_, JsKind.Str)) :+ required("now", JsKind.Num)
+    List("bbs", "type", "subjectText", "query", "sort").map(required(_, JsKind.Str)) ++ List(required("now", JsKind.Num))
   def validate(raw: js.Any): Either[String, ThreadListProps] = JsShape.validate(raw, fields)
 }
 

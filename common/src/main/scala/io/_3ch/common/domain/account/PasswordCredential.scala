@@ -10,9 +10,16 @@ object PasswordAlgorithm {
 }
 
 /** 保存するパスワード資格情報。平文を含めず、計算と照合はインフラ層で行う */
-final case class PasswordCredential(algo: PasswordAlgorithm, iterations: Int, salt: Vector[Byte], hash: Vector[Byte],
-  updatedAt: Double, throttle: LoginThrottle = LoginThrottle()) {
-  def valid: Boolean = algo != null && salt != null && hash != null && throttle != null && iterations > 0 && iterations <= PasswordCredential.currentIterations && salt.size == 16 && hash.size == 32 &&
+final case class PasswordCredential(
+    algo: PasswordAlgorithm,
+    iterations: Int,
+    salt: Vector[Byte],
+    hash: Vector[Byte],
+    updatedAt: Double,
+    throttle: LoginThrottle = LoginThrottle()
+) {
+  def valid: Boolean = algo != null && salt != null && hash != null && throttle != null && iterations > 0 &&
+    iterations <= PasswordCredential.currentIterations && salt.sizeIs == 16 && hash.sizeIs == 32 &&
     AccountProfile.validTime(updatedAt) && throttle.valid
 
   /** 以前の反復数なら、ログイン成功時に現在の設定で計算し直す */

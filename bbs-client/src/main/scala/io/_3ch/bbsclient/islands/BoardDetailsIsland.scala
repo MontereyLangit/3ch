@@ -13,6 +13,7 @@ object BoardDetailsIsland {
   final case class Props(bbs: BoardId, headText: String, settingsText: String, posting: PostingFormIsland.Props)
 
   object Props {
+
     /** 板名が不正なら None */
     def fromJs(raw: BoardDetailsProps): Option[Props] = {
       for {
@@ -32,11 +33,17 @@ object BoardDetailsIsland {
   )
 
   private def button(id: String, label: String, expanded: Boolean, toggle: Callback) = {
-    <.button(^.key := id, ^.`type` := "button", ^.className := "cursor-pointer border-0 bg-transparent px-1 py-[3px] text-xs hover:text-[#2464b5]",
+    <.button(
+      ^.key := id,
+      ^.`type` := "button",
+      ^.className := "cursor-pointer border-0 bg-transparent px-1 py-[3px] text-xs hover:text-[#2464b5]",
       VdomAttr("data-board-panel") := id,
-      VdomAttr("aria-expanded") := expanded.toString, VdomAttr("aria-controls") := id,
+      VdomAttr("aria-expanded") := expanded.toString,
+      VdomAttr("aria-controls") := id,
       ^.onClick --> toggle,
-      <.span(^.aria.hidden := true, if expanded then "▾ " else "▸ "), label)
+      <.span(^.aria.hidden := true, if expanded then "▾ " else "▸ "),
+      label
+    )
   }
 
   final val Component = ScalaFnComponent[Props] { props =>
@@ -45,19 +52,43 @@ object BoardDetailsIsland {
     } yield {
       def closed(id: String): Boolean = !expanded.value.contains(id)
       def toggle(id: String): Callback = expanded.modState(s => if s.contains(id) then s - id else s + id)
-      <.div(^.className := "contents",
-        <.div(^.className := "board-details mt-[9px] flex flex-wrap items-center gap-2",
-          buttons.toVdomArray { case (id, label) => button(id, label, expanded.value.contains(id), toggle(id)) }),
-        <.div(^.id := "board-rules", ^.hidden := closed("board-rules"),
-          ^.className := s"$panelClass [&_a]:text-[#06f] [&_a:hover]:underline", ^.dangerouslySetInnerHtml := props.headText),
-        <.div(^.id := "board-settings", ^.className := panelClass, ^.hidden := closed("board-settings"),
+      <.div(
+        ^.className := "contents",
+        <.div(
+          ^.className := "board-details mt-[9px] flex flex-wrap items-center gap-2",
+          buttons.toVdomArray { case (id, label) => button(id, label, expanded.value.contains(id), toggle(id)) }
+        ),
+        <.div(
+          ^.id := "board-rules",
+          ^.hidden := closed("board-rules"),
+          ^.className := s"$panelClass [&_a]:text-[#06f] [&_a:hover]:underline",
+          ^.dangerouslySetInnerHtml := props.headText
+        ),
+        <.div(
+          ^.id := "board-settings",
+          ^.className := panelClass,
+          ^.hidden := closed("board-settings"),
           <.div(
             <.pre(^.className := "m-0 whitespace-pre-wrap font-mono text-xs", props.settingsText),
-            <.a(^.className := "text-[#06f] hover:underline", ^.href := s"/${URIUtils.encodeURIComponent(props.bbs.value)}/SETTING.TXT", "SETTING.TXT"))),
-        <.div(^.id := "board-headline", ^.className := panelClass, ^.hidden := closed("board-headline"),
-          <.div(^.className := "side-headline", <.p(^.className := "coming-soon m-2 py-6 text-center text-[#697785]", "Coming Soon…"))),
-        <.div(^.id := "board-new-thread", ^.className := "board-panel", ^.hidden := closed("board-new-thread"),
-          PostingFormIsland.Component(props.posting))
+            <.a(
+              ^.className := "text-[#06f] hover:underline",
+              ^.href := s"/${URIUtils.encodeURIComponent(props.bbs.value)}/SETTING.TXT",
+              "SETTING.TXT"
+            )
+          )
+        ),
+        <.div(
+          ^.id := "board-headline",
+          ^.className := panelClass,
+          ^.hidden := closed("board-headline"),
+          <.div(^.className := "side-headline", <.p(^.className := "coming-soon m-2 py-6 text-center text-[#697785]", "Coming Soon…"))
+        ),
+        <.div(
+          ^.id := "board-new-thread",
+          ^.className := "board-panel",
+          ^.hidden := closed("board-new-thread"),
+          PostingFormIsland.Component(props.posting)
+        )
       )
     }
   }

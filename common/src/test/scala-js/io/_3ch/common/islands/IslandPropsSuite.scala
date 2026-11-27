@@ -42,9 +42,11 @@ class IslandPropsSuite extends FunSuite {
   }
 
   test("サーバーが組み立てた props のキーの並びと JSON は従来の js.Dynamic.literal と同じ") {
-    assertEquals(js.JSON.stringify(postingForm(js.undefined, member)),
+    assertEquals(
+      js.JSON.stringify(postingForm(js.undefined, member)),
       """{"bbs":"sample","time":"1800000100","imgurClientId":"","authEnabled":true,"requiredLevel":3,"returnPath":"/sample/",""" +
-        """"commands":[{"text":"!cmd","label":"cmd","field":"MESSAGE","description":"コマンド"}],"session":{"uid":"member","lv":3}}""")
+        """"commands":[{"text":"!cmd","label":"cmd","field":"MESSAGE","description":"コマンド"}],"session":{"uid":"member","lv":3}}"""
+    )
   }
 
   test("BoardDetailsProps は posting form の props を入れ子で持ち、往復後も検証を通る") {
@@ -140,17 +142,35 @@ class IslandPropsSuite extends FunSuite {
       edit(raw)
       raw
     }
-    assertEquals(AccountMenuProps.validate(menuWith(raw => js.special.delete(raw.tokens.asInstanceOf[js.Array[js.Dynamic]](0), "warnings"))),
-      Left("props.tokens[0].warnings: missing"))
-    assertEquals(AccountMenuProps.validate(menuWith(_.activeCount = 1.5)), Left("props.activeCount: expected integer in Int range, got 1.5"))
-    assertEquals(AccountMenuProps.validate(menuWith(raw => raw.tokens.asInstanceOf[js.Array[js.Dynamic]](0).recentPosts = null)),
-      Left("props.tokens[0].recentPosts: expected array, got null"))
-    assertEquals(AccountMenuProps.validate(menuWith(raw => raw.tokens.asInstanceOf[js.Array[js.Dynamic]](0).recentPosts.asInstanceOf[js.Array[js.Dynamic]](0).resNum = "12")),
-      Left("props.tokens[0].recentPosts[0].resNum: expected number, got string"))
-    assertEquals(AuthFormProps.validate(js.JSON.parse("""{"turnstileSiteKey":"k","returnPath":"/","embed":false,"login":false,"agreementVersion":"v",""" +
-      """"googleEnabled":false,"mailEnabled":false,"upgrade":false}""")), Left("props.notice: missing"))
-    assertEquals(SiteHeaderProps.validate(js.JSON.parse("""{"authEnabled":null,"returnPath":"/","session":{"uid":"member"}}""")),
-      Left("props.authEnabled: expected boolean, got null; props.session.lv: missing"))
+    assertEquals(
+      AccountMenuProps.validate(menuWith(raw => js.special.delete(raw.tokens.asInstanceOf[js.Array[js.Dynamic]](0), "warnings"))),
+      Left("props.tokens[0].warnings: missing")
+    )
+    assertEquals(
+      AccountMenuProps.validate(menuWith(_.activeCount = 1.5)),
+      Left("props.activeCount: expected integer in Int range, got 1.5")
+    )
+    assertEquals(
+      AccountMenuProps.validate(menuWith(raw => raw.tokens.asInstanceOf[js.Array[js.Dynamic]](0).recentPosts = null)),
+      Left("props.tokens[0].recentPosts: expected array, got null")
+    )
+    assertEquals(
+      AccountMenuProps.validate(menuWith(raw =>
+        raw.tokens.asInstanceOf[js.Array[js.Dynamic]](0).recentPosts.asInstanceOf[js.Array[js.Dynamic]](0).resNum = "12"
+      )),
+      Left("props.tokens[0].recentPosts[0].resNum: expected number, got string")
+    )
+    assertEquals(
+      AuthFormProps.validate(
+        js.JSON.parse("""{"turnstileSiteKey":"k","returnPath":"/","embed":false,"login":false,"agreementVersion":"v",""" +
+          """"googleEnabled":false,"mailEnabled":false,"upgrade":false}""")
+      ),
+      Left("props.notice: missing")
+    )
+    assertEquals(
+      SiteHeaderProps.validate(js.JSON.parse("""{"authEnabled":null,"returnPath":"/","session":{"uid":"member"}}""")),
+      Left("props.authEnabled: expected boolean, got null; props.session.lv: missing")
+    )
     assertEquals(AccountLogoutProps.validate(js.JSON.parse("""{"simple":true}""")), Left("props.kind: missing; props.google: missing"))
   }
 

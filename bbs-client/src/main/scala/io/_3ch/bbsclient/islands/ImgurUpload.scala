@@ -15,8 +15,14 @@ import scala.util.Try
  * isUploading -> 非同期のactionから読む時に使う最新値
  * setStatus -> 表示用の文言
  */
-final case class ImgurUpload(uploading: Int, fileKey: Int, status: String, isUploading: () => Boolean, chooseFile: ReactEventFromInput => Callback,
-  setStatus: String => Callback)
+final case class ImgurUpload(
+    uploading: Int,
+    fileKey: Int,
+    status: String,
+    isUploading: () => Boolean,
+    chooseFile: ReactEventFromInput => Callback,
+    setStatus: String => Callback
+)
 
 object ImgurUpload {
 
@@ -51,7 +57,9 @@ object ImgurUpload {
       def done(s: State): State = s.copy(uploading = math.max(0, s.uploading - 1), fileKey = s.fileKey + 1)
 
       def finish(result: Try[(Boolean, js.Dynamic)]): Callback = {
-        val link = result.toOption.collect { case (true, json) => Try(json.data.link).toOption.filter(l => js.typeOf(l) == "string") }.flatten
+        val link = result.toOption.collect { case (true, json) =>
+          Try(json.data.link).toOption.filter(l => js.typeOf(l) == "string")
+        }.flatten
         link match {
           case Some(url) =>
             state.modState(s => done(s.copy(status = "画像をアップロードしました"))) >> Callback.suspend(onLinkNow.value(url.asInstanceOf[String]))

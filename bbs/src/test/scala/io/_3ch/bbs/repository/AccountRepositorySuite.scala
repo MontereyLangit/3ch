@@ -22,20 +22,31 @@ class AccountRepositorySuite extends FunSuite {
     var nextGeneration: js.Any = 2
     var commandReply: js.Any = ""
     private val stub = js.Dynamic.literal(
-      describeForPosting = ((_: String, _: Int, _: Double, _: js.UndefOr[String], _: js.UndefOr[String]) => js.Promise.resolve(accountReply)): js.Function5[String, Int, Double, js.UndefOr[String], js.UndefOr[String], js.Promise[js.Dynamic]],
-      describeForCap = ((_: String, _: String, _: Double) => js.Promise.resolve(accountReply)): js.Function3[String, String, Double, js.Promise[js.Dynamic]],
-      useToken = ((_: String, _: String, _: String, _: Double) => js.Promise.resolve(accountReply)): js.Function4[String, String, String, Double, js.Promise[js.Dynamic]],
+      describeForPosting = (
+          (_: String, _: Int, _: Double, _: js.UndefOr[String], _: js.UndefOr[String]) => js.Promise.resolve(accountReply)
+      ): js.Function5[String, Int, Double, js.UndefOr[String], js.UndefOr[String], js.Promise[js.Dynamic]],
+      describeForCap = (
+          (_: String, _: String, _: Double) => js.Promise.resolve(accountReply)
+      ): js.Function3[String, String, Double, js.Promise[js.Dynamic]],
+      useToken = (
+          (_: String, _: String, _: String, _: Double) => js.Promise.resolve(accountReply)
+      ): js.Function4[String, String, String, Double, js.Promise[js.Dynamic]],
       lookup = ((_: String) => js.Promise.resolve(indexReply)): js.Function1[String, js.Promise[js.Dynamic]],
       hit = ((_: String, _: Double) => js.Promise.resolve(rateReply)): js.Function2[String, Double, js.Promise[js.Dynamic]],
       inspect = (() => js.Promise.resolve(panelReply)): js.Function0[js.Promise[js.Dynamic]],
       bumpGeneration = ((_: Double) => js.Promise.resolve(nextGeneration)): js.Function1[Double, js.Promise[js.Any]],
-      bindDevice = ((_: String, _: String, _: Double) => js.Promise.resolve(commandReply)): js.Function3[String, String, Double, js.Promise[js.Any]]
+      bindDevice =
+        ((_: String, _: String, _: Double) => js.Promise.resolve(commandReply)): js.Function3[String, String, Double, js.Promise[js.Any]]
     )
     private val namespace = js.Dynamic.literal(
       idFromName = ((name: String) => name): js.Function1[String, String],
       get = ((_: js.Any) => stub): js.Function1[js.Any, js.Dynamic]
     )
-    val repository = new AccountRepository(js.Dynamic.literal(ACCOUNT_DO = namespace, ACCOUNT_INDEX_DO = namespace, AUTH_RATE_DO = namespace).asInstanceOf[WorkerEnv])
+    val repository = new AccountRepository(js.Dynamic.literal(
+      ACCOUNT_DO = namespace,
+      ACCOUNT_INDEX_DO = namespace,
+      AUTH_RATE_DO = namespace
+    ).asInstanceOf[WorkerEnv])
     def rejected[A](future: Future[A]): Future[Unit] = future.transform {
       case scala.util.Failure(error) =>
         assertEquals(error.getMessage, "auth:invalid")
@@ -59,16 +70,32 @@ class AccountRepositorySuite extends FunSuite {
   }
 
   test("成功 DTO の欠損・未知の種別や役割・範囲外の値を拒否する") {
-    val invalid = Vector[(String, js.Any)]("code" -> js.undefined, "code" -> 1, "aid" -> "qrstuvwxyz012345", "uid" -> "short",
-      "kind" -> "unknown", "generation" -> -1, "generation" -> 1.5, "generation" -> 2147483648d,
-      "expiresAt" -> js.undefined, "expiresAt" -> null, "lv" -> 11, "lv" -> Double.NaN,
-      "roles" -> js.Array("unknown"), "roles" -> js.Array("admin"), "roles" -> js.undefined,
-      "agreedAt" -> -1, "agreementVersion" -> "")
-    invalid.foldLeft(Future.unit) { case (previous, (field, value)) => previous.flatMap { _ =>
-      val fixture = new Fixture
-      fixture.accountReply.updateDynamic(field)(value)
-      fixture.rejected(fixture.repository.describe(aid, 1, now, None))
-    } }
+    val invalid = Vector[(String, js.Any)](
+      "code" -> js.undefined,
+      "code" -> 1,
+      "aid" -> "qrstuvwxyz012345",
+      "uid" -> "short",
+      "kind" -> "unknown",
+      "generation" -> -1,
+      "generation" -> 1.5,
+      "generation" -> 2147483648d,
+      "expiresAt" -> js.undefined,
+      "expiresAt" -> null,
+      "lv" -> 11,
+      "lv" -> Double.NaN,
+      "roles" -> js.Array("unknown"),
+      "roles" -> js.Array("admin"),
+      "roles" -> js.undefined,
+      "agreedAt" -> -1,
+      "agreementVersion" -> ""
+    )
+    invalid.foldLeft(Future.unit) { case (previous, (field, value)) =>
+      previous.flatMap { _ =>
+        val fixture = new Fixture
+        fixture.accountReply.updateDynamic(field)(value)
+        fixture.rejected(fixture.repository.describe(aid, 1, now, None))
+      }
+    }
   }
 
   test("索引が欠落を明示したときだけ所有者なしとして扱う") {
@@ -99,13 +126,22 @@ class AccountRepositorySuite extends FunSuite {
   }
 
   test("認証計数は欠損・負数・小数と矛盾した窓を拒否する") {
-    val invalid = Vector[(String, js.Any)]("code" -> js.undefined, "hour" -> -1, "day" -> 0, "day" -> 1.5,
-      "distinctDevices24h" -> "1", "distinctDevices24h" -> js.undefined, "hour" -> Double.NaN)
-    invalid.foldLeft(Future.unit) { case (previous, (field, value)) => previous.flatMap { _ =>
-      val fixture = new Fixture
-      fixture.rateReply.updateDynamic(field)(value)
-      fixture.rejected(fixture.repository.rate("key-ip", "verify", now))
-    } }
+    val invalid = Vector[(String, js.Any)](
+      "code" -> js.undefined,
+      "hour" -> -1,
+      "day" -> 0,
+      "day" -> 1.5,
+      "distinctDevices24h" -> "1",
+      "distinctDevices24h" -> js.undefined,
+      "hour" -> Double.NaN
+    )
+    invalid.foldLeft(Future.unit) { case (previous, (field, value)) =>
+      previous.flatMap { _ =>
+        val fixture = new Fixture
+        fixture.rateReply.updateDynamic(field)(value)
+        fixture.rejected(fixture.repository.rate("key-ip", "verify", now))
+      }
+    }
   }
 
   test("文字列のコマンド応答と世代更新も実行時の型を検証する") {
@@ -120,11 +156,22 @@ class AccountRepositorySuite extends FunSuite {
 
   test("本人向け一覧に投稿・置換・失効・UA 不一致の情報を変換する") {
     val fixture = new Fixture
-    val token = DedicatedBrowserToken("token1", "a" * 64, now, now + 86400,
-      uaHash = Some("b" * 64), uaLabel = Some("専ブラ"), boundAt = Some(now), lastUsedAt = Some(now + 1),
-      recentPosts = Vector(TokenPost(now + 1, "bbs", "key", "題名", 2, "本文", "回線")))
-    val state = AccountState(AccountProfile(aid, "user1234", AccountKind.Client, now, account.expiresAt, now, "v1", generation = 1),
-      AccountLevel(1, now), tokens = Vector(token))
+    val token = DedicatedBrowserToken(
+      "token1",
+      "a" * 64,
+      now,
+      now + 86400,
+      uaHash = Some("b" * 64),
+      uaLabel = Some("専ブラ"),
+      boundAt = Some(now),
+      lastUsedAt = Some(now + 1),
+      recentPosts = Vector(TokenPost(now + 1, "bbs", "key", "題名", 2, "本文", "回線"))
+    )
+    val state = AccountState(
+      AccountProfile(aid, "user1234", AccountKind.Client, now, account.expiresAt, now, "v1", generation = 1),
+      AccountLevel(1, now),
+      tokens = Vector(token)
+    )
     val warning = AccountPost(now + 2, AccountVia.Token, Some("token1"), result = AccountRejection.TokenUaMismatch.code, uaLabel = "別の専ブラ")
     fixture.panelReply = AccountCodec.inspect(state, Vector.empty, Vector(warning), now + 3)
     fixture.repository.inspect(aid).map { panel =>

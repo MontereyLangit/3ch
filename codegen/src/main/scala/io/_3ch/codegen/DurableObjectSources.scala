@@ -27,15 +27,22 @@ object DurableObjectSources {
   def serverExports(path: String, tree: Source): Seq[(String, Defn.Class)] =
     tree.collect { case cls: Defn.Class => cls }.flatMap { cls =>
       cls.mods.collect {
-        case annotation: Mod.Annot if Set("JSExportTopLevel", "scala.scalajs.js.annotation.JSExportTopLevel")(
-            annotation.init.tpe.syntax
-          ) => annotation
+        case annotation: Mod.Annot
+            if Set("JSExportTopLevel", "scala.scalajs.js.annotation.JSExportTopLevel")(
+              annotation.init.tpe.syntax
+            ) => annotation
       }.flatMap { annotation =>
         annotation.init.argClauses.flatMap(_.values) match {
           case List(Lit.String(name), Lit.String("server")) =>
-            require(cls.templ.inits.exists(parent => Set(
-              "DurableObject", "io._3ch.bbs.external.cloudflare.DurableObject"
-            )(parent.tpe.syntax)), s"$path: exported DO must directly extend DurableObject")
+            require(
+              cls.templ.inits.exists(parent =>
+                Set(
+                  "DurableObject",
+                  "io._3ch.bbs.external.cloudflare.DurableObject"
+                )(parent.tpe.syntax)
+              ),
+              s"$path: exported DO must directly extend DurableObject"
+            )
             require(cls.tparamClause.values.isEmpty, s"$path: generic DO classes are not supported")
             Some(name -> cls)
           case List(_, Lit.String(module)) if module != "server" => None

@@ -20,9 +20,15 @@ trait AuthFormProps extends js.Object {
 
 object AuthFormProps {
   val fields: List[JsField] = List(
-    required("turnstileSiteKey", JsKind.Str), required("returnPath", JsKind.Str), required("embed", JsKind.Bool), required("login", JsKind.Bool),
-    required("agreementVersion", JsKind.Str), required("googleEnabled", JsKind.Bool), required("notice", JsKind.Str),
-    required("mailEnabled", JsKind.Bool), required("upgrade", JsKind.Bool)
+    required("turnstileSiteKey", JsKind.Str),
+    required("returnPath", JsKind.Str),
+    required("embed", JsKind.Bool),
+    required("login", JsKind.Bool),
+    required("agreementVersion", JsKind.Str),
+    required("googleEnabled", JsKind.Bool),
+    required("notice", JsKind.Str),
+    required("mailEnabled", JsKind.Bool),
+    required("upgrade", JsKind.Bool)
   )
   def validate(raw: js.Any): Either[String, AuthFormProps] = JsShape.validate(raw, fields)
 }
@@ -38,7 +44,11 @@ trait AuthTokenProps extends js.Object {
 
 object AuthTokenProps {
   val fields: List[JsField] = List(
-    required("mode", JsKind.Str), required("token", JsKind.Str), required("enabled", JsKind.Bool), required("uid", JsKind.Str), required("email", JsKind.Str)
+    required("mode", JsKind.Str),
+    required("token", JsKind.Str),
+    required("enabled", JsKind.Bool),
+    required("uid", JsKind.Str),
+    required("email", JsKind.Str)
   )
   def validate(raw: js.Any): Either[String, AuthTokenProps] = JsShape.validate(raw, fields)
 }
@@ -51,7 +61,8 @@ trait AccountCredentialsProps extends js.Object {
 }
 
 object AccountCredentialsProps {
-  val fields: List[JsField] = List(required("email", JsKind.Str), required("pendingEmail", JsKind.Str), required("mailEnabled", JsKind.Bool))
+  val fields: List[JsField] =
+    List(required("email", JsKind.Str), required("pendingEmail", JsKind.Str), required("mailEnabled", JsKind.Bool))
   def validate(raw: js.Any): Either[String, AccountCredentialsProps] = JsShape.validate(raw, fields)
 }
 
@@ -68,8 +79,13 @@ trait AccountPostItemProps extends js.Object {
 
 object AccountPostItemProps {
   val fields: List[JsField] = List(
-    required("t", JsKind.Num), required("bbs", JsKind.Str), required("key", JsKind.Str), required("title", JsKind.Str),
-    required("resNum", JsKind.Int), required("excerpt", JsKind.Str), required("network", JsKind.Str)
+    required("t", JsKind.Num),
+    required("bbs", JsKind.Str),
+    required("key", JsKind.Str),
+    required("title", JsKind.Str),
+    required("resNum", JsKind.Int),
+    required("excerpt", JsKind.Str),
+    required("network", JsKind.Str)
   )
 }
 
@@ -100,10 +116,16 @@ trait AccountTokenItemProps extends js.Object {
 
 object AccountTokenItemProps {
   val fields: List[JsField] = List(
-    required("id", JsKind.Str), required("label", JsKind.Str), required("issuedAt", JsKind.Num), required("expiresAt", JsKind.Num),
+    required("id", JsKind.Str),
+    required("label", JsKind.Str),
+    required("issuedAt", JsKind.Num),
+    required("expiresAt", JsKind.Num),
     required("recentPosts", JsKind.Arr(JsKind.Obj(AccountPostItemProps.fields))),
     required("warnings", JsKind.Arr(JsKind.Obj(AccountTokenWarningProps.fields))),
-    optional("boundAt", JsKind.Num), optional("lastUsedAt", JsKind.Num), optional("revokedAt", JsKind.Num), optional("replacedTokenAt", JsKind.Num),
+    optional("boundAt", JsKind.Num),
+    optional("lastUsedAt", JsKind.Num),
+    optional("revokedAt", JsKind.Num),
+    optional("replacedTokenAt", JsKind.Num),
     optional("revokeReason", JsKind.Str)
   )
 }
@@ -117,7 +139,9 @@ trait AccountMenuProps extends js.Object {
 
 object AccountMenuProps {
   val fields: List[JsField] = List(
-    required("tokens", JsKind.Arr(JsKind.Obj(AccountTokenItemProps.fields))), required("activeCount", JsKind.Int), required("nowSeconds", JsKind.Num)
+    required("tokens", JsKind.Arr(JsKind.Obj(AccountTokenItemProps.fields))),
+    required("activeCount", JsKind.Int),
+    required("nowSeconds", JsKind.Num)
   )
   def validate(raw: js.Any): Either[String, AccountMenuProps] = JsShape.validate(raw, fields)
 }
@@ -134,8 +158,12 @@ trait AccountCapItemProps extends js.Object {
 
 object AccountCapItemProps {
   val fields: List[JsField] = List(
-    required("id", JsKind.Str), required("name", JsKind.Str), required("strong", JsKind.Bool), required("issuedAt", JsKind.Num),
-    required("recentPosts", JsKind.Arr(JsKind.Obj(AccountPostItemProps.fields))), optional("revokedAt", JsKind.Num)
+    required("id", JsKind.Str),
+    required("name", JsKind.Str),
+    required("strong", JsKind.Bool),
+    required("issuedAt", JsKind.Num),
+    required("recentPosts", JsKind.Arr(JsKind.Obj(AccountPostItemProps.fields))),
+    optional("revokedAt", JsKind.Num)
   )
 }
 
@@ -148,7 +176,9 @@ trait AccountCapProps extends js.Object {
 
 object AccountCapProps {
   val fields: List[JsField] = List(
-    required("caps", JsKind.Arr(JsKind.Obj(AccountCapItemProps.fields))), required("admin", JsKind.Bool), required("canIssue", JsKind.Bool)
+    required("caps", JsKind.Arr(JsKind.Obj(AccountCapItemProps.fields))),
+    required("admin", JsKind.Bool),
+    required("canIssue", JsKind.Bool)
   )
   def validate(raw: js.Any): Either[String, AccountCapProps] = JsShape.validate(raw, fields)
 }

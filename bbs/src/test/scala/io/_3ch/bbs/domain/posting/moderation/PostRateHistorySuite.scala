@@ -11,14 +11,24 @@ class PostRateHistorySuite extends FunSuite {
   private def settings(timecount: Int = 18, timeclose: Int = 10, samba24: Int = 10, fr: Int = 0): BoardSettings =
     BoardSettings(timecount, timeclose, samba24, fr, PostRateKey.defaults)
 
-  private def reserve(history: PostRateHistory, key: String, name: String, s: BoardSettings = settings(), now: Double = t0, enforce: Boolean = true): PostRateHistory = {
+  private def reserve(
+      history: PostRateHistory,
+      key: String,
+      name: String,
+      s: BoardSettings = settings(),
+      now: Double = t0,
+      enforce: Boolean = true
+  ): PostRateHistory = {
     val result = history.reserve(key, who(name), s, enforce, now)
     result.saved.getOrElse(fail(s"unexpected rejection: ${result.rejection.map(_.code)}"))
   }
 
   /** 保存したページだけを次の読み込みに使う DO の動きをまねる。全ページを保持し、completeOnSave なら保存した予約を直ちに確定する */
-  private final class Store(var meta: PostRateMeta = PostRateHistory.InitialMeta, val pages: scala.collection.mutable.Map[Int, Vector[PostRateRecord]] = scala.collection.mutable.Map.empty,
-                            completeOnSave: Boolean = true) {
+  private final class Store(
+      var meta: PostRateMeta = PostRateHistory.InitialMeta,
+      val pages: scala.collection.mutable.Map[Int, Vector[PostRateRecord]] = scala.collection.mutable.Map.empty,
+      completeOnSave: Boolean = true
+  ) {
     def load(s: BoardSettings, now: Double): PostRateHistory = {
       var history = PostRateHistory(meta, Vector.empty)
       var next = history.nextPage(s, now)
@@ -93,7 +103,14 @@ class PostRateHistorySuite extends FunSuite {
     (1 to 64 * 3).foreach(n => store.save(reserve(store.load(s, t0 + n * 200), n.toString, n.toString, s, t0 + n * 200)))
     assertEquals(store.meta, PostRateMeta(2, 2), "直近 18 件を含むページより古いページは外す")
     val crowded = new Store()
-    (1 to 64 * 17 + 1).foreach(n => crowded.save(reserve(crowded.load(settings(timecount = 1000, timeclose = 0, samba24 = 0), t0), n.toString, n.toString, settings(timecount = 1000, timeclose = 0, samba24 = 0))))
+    (1 to 64 * 17 + 1).foreach(n =>
+      crowded.save(reserve(
+        crowded.load(settings(timecount = 1000, timeclose = 0, samba24 = 0), t0),
+        n.toString,
+        n.toString,
+        settings(timecount = 1000, timeclose = 0, samba24 = 0)
+      ))
+    )
     assertEquals(crowded.meta, PostRateMeta(17, 2), "16 ページを超えたら古いページを外す")
     assertEquals(crowded.load(settings(timecount = 1000, timeclose = 0, samba24 = 0), t0).records.size, 64 * 15 + 1)
   }
@@ -109,8 +126,11 @@ class PostRateHistorySuite extends FunSuite {
 
   test("保持規則は期限内の予約を含むページを残す") {
     val s = settings(timecount = 1, timeclose = 0, samba24 = 0)
-    val page0 = PostRatePage(0, Vector(PostRateRecord("old", t0 - 10, who("a"), PostRateStatus.Pending)) ++
-      Vector.tabulate(63)(n => PostRateRecord(s"c$n", t0 - 10, who("a"), PostRateStatus.Completed)))
+    val page0 = PostRatePage(
+      0,
+      Vector(PostRateRecord("old", t0 - 10, who("a"), PostRateStatus.Pending)) ++
+        Vector.tabulate(63)(n => PostRateRecord(s"c$n", t0 - 10, who("a"), PostRateStatus.Completed))
+    )
     val page1 = PostRatePage(1, Vector(PostRateRecord("latest", t0, who("a"), PostRateStatus.Completed)))
     val h = PostRateHistory(PostRateMeta(1, 0), Vector(page1, page0))
     val kept = reserve(h, "new", "b", s)
@@ -155,8 +175,20 @@ class PostRateHistorySuite extends FunSuite {
 
   test("保持の範囲は予約中を数えず、読み込みも確定済みの件数で決める") {
     val s = settings(timecount = 2, timeclose = 0, samba24 = 0)
-    val page0 = PostRatePage(0, Vector(PostRateRecord("c", t0 - 1000, who("a"), PostRateStatus.Completed), PostRateRecord("c2", t0 - 1000, who("a"), PostRateStatus.Completed)))
-    val page1 = PostRatePage(1, Vector(PostRateRecord("p1", t0 - 1000, who("b"), PostRateStatus.Pending), PostRateRecord("p2", t0 - 1000, who("b"), PostRateStatus.Pending)))
+    val page0 = PostRatePage(
+      0,
+      Vector(
+        PostRateRecord("c", t0 - 1000, who("a"), PostRateStatus.Completed),
+        PostRateRecord("c2", t0 - 1000, who("a"), PostRateStatus.Completed)
+      )
+    )
+    val page1 = PostRatePage(
+      1,
+      Vector(
+        PostRateRecord("p1", t0 - 1000, who("b"), PostRateStatus.Pending),
+        PostRateRecord("p2", t0 - 1000, who("b"), PostRateStatus.Pending)
+      )
+    )
     val history = PostRateHistory(PostRateMeta(1, 0), Vector(page1))
     assertEquals(history.nextPage(s, t0), Some(0), "予約中が 2 件あっても確定済みが足りなければ読み足す")
     assertEquals(history.withOlder(page0).nextPage(s, t0), None)
@@ -168,7 +200,11 @@ class PostRateHistorySuite extends FunSuite {
     val history = PostRateHistory(PostRateMeta(0, 0), Vector(page0))
     val skipping = settings(timecount = 1, timeclose = 0, samba24 = 0, fr = 3600).copy(checksFr = false)
     assertEquals(reserve(history, "new", "b", skipping).meta, PostRateMeta(1, 0))
-    assertEquals(PostRateHistory(PostRateMeta(1, 0), Vector(PostRatePage(1, Vector.empty))).nextPage(skipping, t0), Some(0), "読み込みも fr の秒数を満たすまで続ける")
+    assertEquals(
+      PostRateHistory(PostRateMeta(1, 0), Vector(PostRatePage(1, Vector.empty))).nextPage(skipping, t0),
+      Some(0),
+      "読み込みも fr の秒数を満たすまで続ける"
+    )
   }
 
   test("リングバッファは番号が進んでも範囲内のページだけを読む") {

@@ -7,14 +7,60 @@
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 
 val scala3Version = "3.3.8" // Scala 3 LTS
-val munitVersion  = "1.0.0"
+val munitVersion = "1.0.0"
 
 ThisBuild / scalaVersion := scala3Version
 ThisBuild / organization := "io._3ch"
-ThisBuild / version      := "1.2.1"
+ThisBuild / version := "1.2.1"
+
+val wartsForTest: Seq[wartremover.Wart] = Seq(
+  Wart.ArrayEquals,
+  Wart.EitherProjectionPartial,
+  Wart.RedundantAsInstanceOf,
+  Wart.RedundantConversions,
+  Wart.Return,
+  Wart.ScalaApp,
+  Wart.StringPlusAny,
+  Wart.ThreadSleep,
+  Wart.TripleQuestionMark,
+  Wart.TryPartial
+)
+
+val wartsForMain: Seq[wartremover.Wart] = wartsForTest ++ Seq(
+  Wart.AnyVal,
+  Wart.CaseClassPrivateApply,
+  Wart.Enumeration,
+  Wart.ExplicitImplicitTypes,
+  Wart.FinalCaseClass,
+  Wart.GetGetOrElse,
+  Wart.ImplicitConversion,
+  Wart.IsInstanceOf,
+  Wart.IterableOps,
+  Wart.JavaConversions,
+  Wart.JavaSerializable,
+  Wart.LeakingSealed,
+  Wart.ListAppend,
+  Wart.ListUnapply,
+  Wart.Option2Iterable,
+  Wart.OptionPartial,
+  Wart.Product,
+  Wart.ReverseFind,
+  Wart.ReverseIterator,
+  Wart.ReverseTakeReverse,
+  Wart.SeqUpdated,
+  Wart.Serializable,
+  Wart.SizeIs,
+  Wart.SizeToLength,
+  Wart.SortFilter,
+  Wart.SortedMaxMin
+)
 
 lazy val commonSettings = Seq(
   scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked"),
+  // 規則の選び方は docs/development.md。JS 連携で避けられない AsInstanceOf・Null・Var・Any などは入れていない
+  Compile / compile / wartremoverErrors := wartsForMain,
+  Test / compile / wartremoverErrors := wartsForTest,
+  wartremoverExcluded += (Compile / sourceManaged).value,
   libraryDependencies += "org.scalameta" %%% "munit" % munitVersion % Test,
   testFrameworks += new TestFramework("munit.Framework")
 )
@@ -44,7 +90,7 @@ lazy val common = crossProject(JSPlatform, JVMPlatform)
   )
 
 lazy val commonJVM = common.jvm
-lazy val commonJS  = common.js
+lazy val commonJS = common.js
 
 // DO の公開メソッドから RPC スタブを生成する（docs/durable-object-stubs.md）。bbs の sourceGenerators から呼ぶ。
 // 生成器は JVM の codegen にあり、bbs のソースだけを入力に取るのでタスクグラフは循環しない。
@@ -76,12 +122,15 @@ lazy val bbs = project
     Compile / sourceGenerators += Def.task {
       val output = (Compile / sourceManaged).value / "io" / "_3ch" / "bbs" / "BuildInfo.scala"
       val updatedDate = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Tokyo")).toString
-      IO.write(output, s"""package io._3ch.bbs
+      IO.write(
+        output,
+        s"""package io._3ch.bbs
                          |object BuildInfo {
                          |  val version = "${version.value}"
                          |  val updatedDate = "$updatedDate"
                          |}
-                         |""".stripMargin)
+                         |""".stripMargin
+      )
       Seq(output)
     }.taskValue,
     scalaJSUseMainModuleInitializer := false,
@@ -92,7 +141,8 @@ lazy val bbs = project
     // ブラウザへサーバ処理を混入させないため、bbsClient とは別にリンクする
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
     // DO の公開メソッドから RPC スタブ（BoardDoStub 等）を生成する（上記 generateDurableObjectStubsTask）
-    Compile / durableObjectStubsFile := (Compile / sourceManaged).value / "io" / "_3ch" / "bbs" / "external" / "cloudflare" / "DurableObjectStubs.scala",
+    Compile / durableObjectStubsFile :=
+      (Compile / sourceManaged).value / "io" / "_3ch" / "bbs" / "external" / "cloudflare" / "DurableObjectStubs.scala",
     Compile / generateDurableObjectStubs := generateDurableObjectStubsTask.value,
     Compile / sourceGenerators += (Compile / generateDurableObjectStubs).taskValue,
     // @route / @islands から app/routes・app/islands（hx4sGenerate）と SSR 用の IslandComponents（sourceGenerators）を生成する（docs/codegen.md）

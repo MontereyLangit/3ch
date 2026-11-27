@@ -67,7 +67,9 @@ class PasswordSuite extends FunSuite {
     assertEquals(Password.parse("e\u0301" * 4), Password.parse("é" * 4))
     assertEquals(Password.parse(" AbCd12 ").map(_.value), Right(" AbCd12 "))
     Seq("a" * 7, "a" * 129, "あ" * 43).foreach(value => assertEquals(Password.parse(value), Left(PasswordRejection.Length)))
-    Seq(null, "abcdefgh\ud800", "abcdefgh\udfff").foreach(value => assertEquals(Password.parse(value), Left(PasswordRejection.InvalidUnicode)))
+    Seq(null, "abcdefgh\ud800", "abcdefgh\udfff").foreach(value =>
+      assertEquals(Password.parse(value), Left(PasswordRejection.InvalidUnicode))
+    )
   }
 
   test("診断用の文字列に平文パスワードを含めない") {

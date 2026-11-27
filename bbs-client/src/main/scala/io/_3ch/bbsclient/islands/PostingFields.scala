@@ -12,15 +12,23 @@ import scala.util.Try
  * modMessage -> 本文を関数で書き換える
  * clearPosted -> 書き込み成功時に下書きを消して題名・本文を空にする
  */
-final case class PostingFields(from: String, mail: String, subject: String, message: String, detailsOpen: Boolean,
-  setField: (String, String) => Callback, modMessage: (String => String) => Callback, clearPosted: Callback) {
+final case class PostingFields(
+    from: String,
+    mail: String,
+    subject: String,
+    message: String,
+    detailsOpen: Boolean,
+    setField: (String, String) => Callback,
+    modMessage: (String => String) => Callback,
+    clearPosted: Callback
+) {
 
   def get(name: String): Option[String] = name match {
-    case "FROM" => Option(from)
-    case "mail" => Option(mail)
+    case "FROM"    => Option(from)
+    case "mail"    => Option(mail)
     case "subject" => Option(subject)
     case "MESSAGE" => Option(message)
-    case _ => None
+    case _         => None
   }
 }
 
@@ -37,11 +45,11 @@ object PostingFields {
   private val DraftPrefix = "3ch:draft:"
 
   private def withField(values: Values, name: String, value: String): Values = name match {
-    case "FROM" => values.copy(from = value)
-    case "mail" => values.copy(mail = value)
+    case "FROM"    => values.copy(from = value)
+    case "mail"    => values.copy(mail = value)
     case "subject" => values.copy(subject = value)
     case "MESSAGE" => values.copy(message = value)
-    case _ => values
+    case _         => values
   }
 
   private def parseDraft(raw: String): Option[Draft] = {
@@ -80,15 +88,19 @@ object PostingFields {
   private def withIdentity(values: Values, name: Option[String], mail: Option[String]): Values = {
     val restoredName = name.filter(_ => values.from.isEmpty)
     val restoredMail = mail.filter(_ => values.mail.isEmpty)
-    values.copy(from = restoredName.getOrElse(values.from), mail = restoredMail.getOrElse(values.mail),
-      detailsOpen = values.detailsOpen || restoredName.isDefined || restoredMail.isDefined)
+    values.copy(
+      from = restoredName.getOrElse(values.from),
+      mail = restoredMail.getOrElse(values.mail),
+      detailsOpen = values.detailsOpen || restoredName.isDefined || restoredMail.isDefined
+    )
   }
 
   /** 下書きの本文（スレ立ての場合はタイトルも）を空欄へ反映する */
   private def withDraft(props: PostingFormIsland.Props, values: Values, draft: Draft): Values = {
     values.copy(
       subject = if props.threadKey.isEmpty && values.subject.isEmpty then draft.subject else values.subject,
-      message = if values.message.isEmpty then draft.message else values.message)
+      message = if values.message.isEmpty then draft.message else values.message
+    )
   }
 
   /** 送信済みの下書きは、履歴移動（back_forward）以外の読み込みでは破棄 */
@@ -100,10 +112,10 @@ object PostingFields {
    */
   private def persist(props: PostingFormIsland.Props, values: Values, field: String): Unit = {
     field match {
-      case "FROM" => BrowserStorage.write(NameKey, values.from)
-      case "mail" => BrowserStorage.write(MailKey, values.mail)
+      case "FROM"                => BrowserStorage.write(NameKey, values.from)
+      case "mail"                => BrowserStorage.write(MailKey, values.mail)
       case "subject" | "MESSAGE" => saveDraft(props, values)
-      case _ => ()
+      case _                     => ()
     }
   }
 
@@ -148,6 +160,7 @@ object PostingFields {
         Callback(dom.window.removeEventListener("pageshow", onPageShow))
       })
     } yield {
+
       /** 状態更新を依頼して反映時にフィールドを保存するよう記録 */
       def modAndPersist(field: String)(f: Values => Values): Callback = Callback { pending.value += field } >> state.modState(f)
 
@@ -164,8 +177,10 @@ object PostingFields {
           val current = latest.value._2
           if current.subject == values.subject && current.message == values.message then BrowserStorage.remove(draftStorageKey(props))
         } >> state.modState { current =>
-          if current.subject == values.subject && current.message == values.message then current.copy(subject = "", message = "") else current
-        })
+          if current.subject == values.subject && current.message == values.message then current.copy(subject = "", message = "")
+          else current
+        }
+      )
     }
   }
 }

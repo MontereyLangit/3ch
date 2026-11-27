@@ -2,6 +2,7 @@ package io._3ch.common.domain.device
 
 /** 粒度と端末ハッシュの保存値。旧16桁と公開鍵付きの保存値も読める */
 final case class DeviceHashRef(granularity: DeviceGranularity, identifier: String, pubKeyHash: String = "") {
+
   /** 粒度1文字と端末部。旧保存値の公開鍵があればコロンで続ける */
   def format: String = s"${granularity.code}$identifier" + (if (pubKeyHash.isEmpty) "" else s":$pubKeyHash")
 
@@ -33,7 +34,8 @@ object DeviceHashRef {
       val granularity = raw.headOption.flatMap(DeviceGranularity.fromCode)
       val identifier = if (granularity.nonEmpty) raw.tail else raw
       Option.when(identifierLength(identifier) && hex(identifier))(
-        DeviceHashRef(granularity.getOrElse(DeviceGranularity.Unknown), identifier))
+        DeviceHashRef(granularity.getOrElse(DeviceGranularity.Unknown), identifier)
+      )
     } else if (separator == 0 || separator == raw.length - 1) None
     else {
       val head = raw.substring(0, separator)
@@ -41,7 +43,8 @@ object DeviceHashRef {
       val granularity = DeviceGranularity.fromCode(head.head)
       val identifier = if (granularity.nonEmpty) head.tail else head
       Option.when(pubKeyHash.length == 64 && hex(pubKeyHash) && identifierLength(identifier) && hex(identifier))(
-        DeviceHashRef(granularity.getOrElse(DeviceGranularity.Unknown), identifier, pubKeyHash))
+        DeviceHashRef(granularity.getOrElse(DeviceGranularity.Unknown), identifier, pubKeyHash)
+      )
     }
   }
 }

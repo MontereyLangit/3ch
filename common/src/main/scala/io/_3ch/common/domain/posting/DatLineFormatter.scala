@@ -2,6 +2,7 @@ package io._3ch.common.domain.posting
 
 /** dat 行と log 行の書式 */
 object DatLineFormatter {
+
   /** 本文の最初の <br> だけ前後に空白を入れる。JavaScript の文字列 replace と同じく 1 か所だけ */
   def spaceFirstBreak(message: String): String = {
     val index = message.indexOf("<br>")

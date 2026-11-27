@@ -4,19 +4,25 @@ import io._3ch.common.text.JsText
 
 /** スレにレスを追記できない理由。code は Thread DO が RPC で返す文字列 */
 enum ThreadWriteRejection(val code: String) {
+
   /** 停止・移動・削除の処理中か済み */
   case Unavailable extends ThreadWriteRejection("thread-write:unavailable")
+
   /** スレ設定で BBS_HEISA=checked */
   case Closed extends ThreadWriteRejection("thread-write:closed")
+
   /** スレ立てで同じ key の dat がある */
   case DuplicateKey extends ThreadWriteRejection("thread-write:duplicate-key")
+
   /** 返信で dat が無い */
   case Missing extends ThreadWriteRejection("thread-write:missing")
+
   /** 1000 件に達した */
   case Full extends ThreadWriteRejection("thread-write:full")
 }
 
 object ThreadWriteRejection {
+
   /** RPC の文字列から読む。該当しなければ None */
   def fromCode(code: String): Option[ThreadWriteRejection] = values.find(_.code == code)
 }
@@ -28,6 +34,7 @@ enum ThreadWriteKind {
 
 /** Thread DO にレスを追記してよいかの判定 */
 object ThreadWriteGuard {
+
   /**
     * 停止・移動・削除、BBS_HEISA、同じ key、スレ不在、1000 件の順に判定し、追記できれば確定するレス番号を返す
     * settings は保存されたスレ設定の文字列そのもの

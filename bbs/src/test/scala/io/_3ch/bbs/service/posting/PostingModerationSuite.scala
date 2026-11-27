@@ -21,7 +21,13 @@ class PostingModerationSuite extends FunSuite {
   private val mark = "</b>[´・ω・｀]<b> "
   private val caution = " <small>👀 Madakana: Caution</small>"
 
-  private def input(form: PostForm = form, cap: Boolean = false, country: String = "JP", number: Double = 2, settings: (String, String)*): ModerationInput =
+  private def input(
+      form: PostForm = form,
+      cap: Boolean = false,
+      country: String = "JP",
+      number: Double = 2,
+      settings: (String, String)*
+  ): ModerationInput =
     ModerationInput(form, userInfo, BypassPoster(cap = cap), country, number, BbsSettings(ListMap.from(settings)))
 
   private def source(text: String): ModerationRuleSource =
@@ -29,9 +35,10 @@ class PostingModerationSuite extends FunSuite {
 
   /** 読んだファイルを記録するローダー。空文字のファイルは無いものとして扱う */
   private final class Loader(sources: Map[ModerationRuleFile, ModerationRuleSource]) extends RuleStore {
-    def this(access: String = "", ng: String = "") = this(Map(ModerationRuleFile.Access -> access, ModerationRuleFile.NgWords -> ng).collect {
-      case (file, text) if text.nonEmpty => file -> source(text)
-    })
+    def this(access: String = "", ng: String = "") =
+      this(Map(ModerationRuleFile.Access -> access, ModerationRuleFile.NgWords -> ng).collect {
+        case (file, text) if text.nonEmpty => file -> source(text)
+      })
     val loaded = scala.collection.mutable.ListBuffer.empty[ModerationRuleFile]
     def load(file: ModerationRuleFile): Future[ModerationRuleSource] = {
       loaded += file

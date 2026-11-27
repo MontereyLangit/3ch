@@ -1,7 +1,13 @@
 package io._3ch.common.domain
 
 /** bbs.cgi書き込み結果画面から取り出した要素 */
-final case class PostingPage(title: String, errorText: Option[String], refreshContent: Option[String], cookieSummary: String, cookieTerms: String)
+final case class PostingPage(
+    title: String,
+    errorText: Option[String],
+    refreshContent: Option[String],
+    cookieSummary: String,
+    cookieTerms: String
+)
 
 /** bbs.cgi書き込み結果の分類 */
 sealed trait PostingOutcome
@@ -49,7 +55,7 @@ object PostingResponse {
   def refreshUrl(content: String): Option[String] = {
     content match {
       case Refresh(url) if url.startsWith("/") && !url.startsWith("//") && !url.startsWith("/\\") => Option(url)
-      case _ => None
+      case _                                                                                      => None
     }
   }
 
@@ -57,9 +63,10 @@ object PostingResponse {
   def classify(page: PostingPage): PostingOutcome = {
     page.title.trim match {
       case PostedTitle => PostingOutcome.Posted(page.refreshContent.flatMap(refreshUrl))
-      case ErrorTitle => page.errorText.map(_.trim).filter(_.nonEmpty).fold[PostingOutcome](PostingOutcome.Unrecognized)(PostingOutcome.Rejected(_))
+      case ErrorTitle  =>
+        page.errorText.map(_.trim).filter(_.nonEmpty).fold[PostingOutcome](PostingOutcome.Unrecognized)(PostingOutcome.Rejected(_))
       case CookieTitle => PostingOutcome.NeedsCookie(page.cookieSummary.trim, page.cookieTerms.trim)
-      case _ => PostingOutcome.Unrecognized
+      case _           => PostingOutcome.Unrecognized
     }
   }
 

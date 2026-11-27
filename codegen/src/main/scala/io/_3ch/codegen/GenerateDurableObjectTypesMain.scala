@@ -8,7 +8,7 @@ object GenerateDurableObjectTypesMain {
   def main(args: Array[String]): Unit = {
     val projectRoot = args.toList match {
       case List("--project-root", root) => Paths.get(root).toAbsolutePath.normalize()
-      case Nil => Paths.get(System.getProperty("user.dir")).toAbsolutePath
+      case Nil                          => Paths.get(System.getProperty("user.dir")).toAbsolutePath
       case _ => throw new IllegalArgumentException("usage: GenerateDurableObjectTypesMain [--project-root <dir>]")
     }
     val durableRoot = projectRoot.resolve("bbs/src/main/scala/io/_3ch/bbs/durable")

@@ -18,8 +18,17 @@ object DeviceFingerprintHasher {
       fp.touch == Missing.touch && fp.colorDepth == Missing.colorDepth && fp.arch == Missing.arch &&
       fp.fonts == Missing.fonts && fp.webgl == Missing.webgl
     if (missing) ""
-    else List(fp.screen, dprToken(fp.dpr), fp.cores.toString, fp.touch.toString, fp.colorDepth.toString,
-      fp.arch, fp.fonts, fp.webgl, DeviceText.lowercase(DeviceStrings.trim(model))).map(axis).mkString
+    else List(
+      fp.screen,
+      dprToken(fp.dpr),
+      fp.cores.toString,
+      fp.touch.toString,
+      fp.colorDepth.toString,
+      fp.arch,
+      fp.fonts,
+      fp.webgl,
+      DeviceText.lowercase(DeviceStrings.trim(model))
+    ).map(axis).mkString
   }
 
   private def dprToken(dpr: Double): String = {

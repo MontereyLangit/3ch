@@ -5,6 +5,7 @@ import scala.concurrent.Future
 
 /** 過去ログ目次と headline.txt（R2）。書き込みは ETag 条件付き */
 trait ArchiveIndexStore {
+
   /** 無ければ None */
   def read(file: ArchiveIndexFile): Future[Option[StoredIndex]]
 

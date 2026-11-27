@@ -77,6 +77,38 @@ hx4s を更新するときは、hx4s 側で commit してから `hx4s.lock` の 
   coursier のキャッシュ（`~/.cache/coursier`）は Maven Central の依存だけなのでキャッシュしてよい。
 - 公開を伴う解決方式（Maven Central / npm）は hx4s の Phase 5 で決める。そうなったら setup の手順は通常の依存解決に置き換える。
 
+## Scalafmt
+
+Scala と sbt のファイルは Scalafmt で整形する（設定は `.scalafmt.conf`）。コミットの前に `sbt scalafmtAll scalafmtSbt` を流す。
+CI は `sbt scalafmtCheckAll scalafmtSbtCheck` で整形漏れを落とす。
+
+- 1行は 140 桁まで。既存のコードに長い行が多いので、100 や 120 にすると差分が大きくなりすぎる
+- `newlines.source = keep` で、書き手が入れた改行はなるべく残す。Scaladoc も `docstrings.style = keep` で触らない
+- 波括弧を消す書き換え（`rewrite.scala3`）は入れない。インデント構文を使わない方針（AGENTS.md 3.3）のため
+- `stripMargin` の中身は整形しない（`assumeStandardLibraryStripMargin` は既定の false のまま）。Tailwind のクラスを `| ` の後ろに書く都合
+
+整形だけのコミットは `.git-blame-ignore-revs` に載せる。`git config blame.ignoreRevsFile .git-blame-ignore-revs` を設定すると `git blame` がそれを飛ばす（GitHub の blame は設定なしで読む）。
+
+## WartRemover
+
+`sbt-wartremover` で、部分関数や型推論の落とし穴をコンパイルエラーにする。規則の一覧は `build.sbt` の `wartsForMain`（本番コード）と `wartsForTest`（テスト）。
+`sbt compile` / `sbt test` がそのまま検査するので、別のコマンドはない。sbt の `sourceManaged` に出る生成コード（DO の RPC スタブ・IslandComponents・BuildInfo）は対象外。
+
+本番コードで入れた規則は、`head` や `Option.get` などの部分関数（IterableOps・OptionPartial・GetGetOrElse・TryPartial・EitherProjectionPartial）、
+`return`、`final` のない case class、`sizeIs` で書ける長さの比較、`Option` から `Iterable` への暗黙変換、文字列と任意の値の `+`、型推論で `Product` / `Serializable` に落ちる式など。
+テストは、`head` や `get` で失敗させる書き方が普通なので、`return`・`???`・`Thread.sleep`・文字列の `+` など、テストでも避けたいものに絞った。
+
+入れていない規則と理由:
+
+- JS 連携まわり（Any・Null・Var・AsInstanceOf）: `js.Dynamic` や facade の `var`、`js.|[A, Null]` を扱う境界で避けられない
+- Throw: DO と外部 API の境界はまだ例外で失敗を伝えている。業務上の拒否を値で返す方針（AGENTS.md 3.3）は FP 化の計画（docs/bbs-cgi-fp-refactoring-plan.md）で進める
+- DefaultArguments・Overloading: scalajs-react の props や case class の既定値で使っている
+- Equals・Nothing・ToString: `==` と `Future.failed` などの推論で数百件出て、直しても読みやすくならない
+- MutableDataStructures・While: Shift_JIS 変換などの性能が要る箇所と、DO のキャッシュで使っている
+- PlatformDefault: Scala.js の `java.util.Locale` は別ライブラリが要る
+
+`@SuppressWarnings` で個別に黙らせることはしない。規則に合わない箇所が出たら、書き方を直すか、規則そのものを見直す。
+
 ## IntelliJ IDEA
 ### Scala プラグインの注意点
 

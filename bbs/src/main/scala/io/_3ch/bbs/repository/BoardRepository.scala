@@ -1,7 +1,7 @@
 package io._3ch.bbs.repository
 
 import io._3ch.bbs.service.posting.ports.SettingsStore
-import io._3ch.bbs.external.cloudflare.{BoardDoStub, WorkerEnv}
+import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.domain.posting.GlobalThread
 import io._3ch.common.domain.{BbsSettings, BbsSubjects, BoardId}
 
@@ -18,14 +18,12 @@ object BoardRepository {
     * @return スレ一覧
     */
   def getSubjects(board: BoardId, e: WorkerEnv): Future[BbsSubjects] = {
-     val stub = e.BOARD_DO
-       .get(e.BOARD_DO.idFromName(board.value))
-       .asInstanceOf[BoardDoStub]
- 
-     stub.getSubject()
-       .toFuture
-       .map(t => BbsSubjects.create(t))
-   }
+    val stub = e.BOARD_DO.get(e.BOARD_DO.idFromName(board.value))
+
+    stub.getSubject()
+      .toFuture
+      .map(t => BbsSubjects.create(t))
+  }
 
   /**
     * 板のDurable Objectから全板共通スレ(924板)と該当板のスレ一覧を取得し結合して返す

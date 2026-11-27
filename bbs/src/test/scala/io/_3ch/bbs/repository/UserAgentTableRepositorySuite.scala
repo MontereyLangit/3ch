@@ -19,12 +19,18 @@ class UserAgentTableRepositorySuite extends FunSuite {
     val table = UserAgentTableRepository.parse(
       """{"os": [{"match": "(", "label": "bad"}, {"match": "Windows NT 10", "label": "Windows"}, "row", {"match": 1, "label": "x"}],
         | "browser": [{"match": "firefox/(\\d+)", "flags": "i", "label": "Firefox $1"}, {"match": "a", "flags": "g", "label": "g"}],
-        | "device": {"match": "x"}}""".stripMargin)
-    assertEquals(table.profile("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0"), UserAgentProfile("Windows", "Firefox 132", ""))
+        | "device": {"match": "x"}}""".stripMargin
+    )
+    assertEquals(
+      table.profile("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0"),
+      UserAgentProfile("Windows", "Firefox 132", "")
+    )
   }
 
   test("JSON でない本文・配列の根は空の表") {
-    Seq("", "{", "[]", "null").foreach(text => assertEquals(UserAgentTableRepository.parse(text).profile("Mozilla"), UserAgentProfile(), text))
+    Seq("", "{", "[]", "null").foreach(text =>
+      assertEquals(UserAgentTableRepository.parse(text).profile("Mozilla"), UserAgentProfile(), text)
+    )
   }
 
   test("ua-profiles.json が無ければ空の表、読めない・JSON の根が不正なら失敗にする") {
@@ -47,7 +53,8 @@ class UserAgentTableRepositorySuite extends FunSuite {
     val rows = (1 to UserAgentTable.MaxRulesPerList + 20).map(n => s"""{"match": "^a$n$$", "label": "L$n"}""").mkString(",")
     val long = "a" * (UserAgentRule.MaxPatternLength + 1)
     val table = UserAgentTableRepository.parse(
-      s"""{"os": [$rows], "browser": [{"match": "$long", "label": "long"}, {"match": "b", "label": "short"}]}""")
+      s"""{"os": [$rows], "browser": [{"match": "$long", "label": "long"}, {"match": "b", "label": "short"}]}"""
+    )
     assertEquals(table.profile(s"a${UserAgentTable.MaxRulesPerList}").os, s"L${UserAgentTable.MaxRulesPerList}")
     assertEquals(table.profile(s"a${UserAgentTable.MaxRulesPerList + 1}").os, "")
     assertEquals(table.profile(long).browser, "")

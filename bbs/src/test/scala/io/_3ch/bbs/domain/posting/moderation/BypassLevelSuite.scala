@@ -36,7 +36,9 @@ class BypassLevelSuite extends FunSuite {
   test("上の段階で免除される人は下の段階でも免除される") {
     val ordered = Seq(BypassLevel.Admin, BypassLevel.Staff, BypassLevel.Privileged, BypassLevel.L10)
     ordered.zip(ordered.tail).foreach { case (upper, lower) =>
-      posters.foreach { case (label, poster) => assert(!upper.exempts(poster) || lower.exempts(poster), s"$label ${upper.value} ${lower.value}") }
+      posters.foreach { case (label, poster) =>
+        assert(!upper.exempts(poster) || lower.exempts(poster), s"$label ${upper.value} ${lower.value}")
+      }
     }
     posters.foreach { case (label, poster) => assert(!BypassLevel.Privileged.exempts(poster) || BypassLevel.Login.exempts(poster), label) }
   }

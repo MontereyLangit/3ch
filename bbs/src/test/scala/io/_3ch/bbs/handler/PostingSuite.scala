@@ -38,7 +38,12 @@ class PostingSuite extends FunSuite {
     base.map { (k, v) => k -> overrides.getOrElse(k, v) } ++ over.filterNot((k, _) => keys.contains(k))
   }
 
-  private def makeRequest(method: String = "POST", headers: Seq[(String, String)] = Nil, cf: Seq[(String, String)] = Nil, body: String = ""): Request = {
+  private def makeRequest(
+      method: String = "POST",
+      headers: Seq[(String, String)] = Nil,
+      cf: Seq[(String, String)] = Nil,
+      body: String = ""
+  ): Request = {
     val lowered = headers.map((k, v) => k.toLowerCase -> v).toMap
     js.Dynamic.literal(
       url = "https://www.3ch.io/test/bbs.cgi",
@@ -57,15 +62,32 @@ class PostingSuite extends FunSuite {
   )
   private val DefaultCf: Seq[(String, String)] = Seq("country" -> "JP", "asn" -> "2516", "region" -> "Tokyo", "city" -> "Tokyo")
   private val DefaultFields: Seq[(String, String)] = Seq(
-    "FROM" -> "", "mail" -> "", "MESSAGE" -> "テスト本文", "subject" -> "テストスレ", "bbs" -> "sample", "key" -> "", "time" -> "9999999999"
+    "FROM" -> "",
+    "mail" -> "",
+    "MESSAGE" -> "テスト本文",
+    "subject" -> "テストスレ",
+    "bbs" -> "sample",
+    "key" -> "",
+    "time" -> "9999999999"
   )
 
-  private def entry(env: Env, req: Request, resolveUser: PostingUserResolver.Resolver = PostingUserResolver.unresolved): Future[js.Dynamic] =
+  private def entry(
+      env: Env,
+      req: Request,
+      resolveUser: PostingUserResolver.Resolver = PostingUserResolver.unresolved
+  ): Future[js.Dynamic] =
     fut[js.Dynamic](Posting.entry(req, env.worker, resolveUser))
 
   /** フィールドを与えて POST リクエストを投稿エントリへ渡す。submit は既定でWebブラウザ相当(UTF-8)。 */
-  private def post(env: Env, fields: Seq[(String, String)] = Nil, headers: Seq[(String, String)] = Nil, cf: Seq[(String, String)] = Nil,
-                   sjisMode: Boolean = false, submitText: String = "書き込む", user: Option[PostingUser] = None): Future[Posted] = {
+  private def post(
+      env: Env,
+      fields: Seq[(String, String)] = Nil,
+      headers: Seq[(String, String)] = Nil,
+      cf: Seq[(String, String)] = Nil,
+      sjisMode: Boolean = false,
+      submitText: String = "書き込む",
+      user: Option[PostingUser] = None
+  ): Future[Posted] = {
     val submit = if sjisMode then sjisPercentEncode(submitText) else js.URIUtils.encodeURIComponent(submitText)
     val body = buildBody(merge(DefaultFields, fields), sjisMode) + s"&submit=$submit"
     val req = makeRequest(headers = merge(DefaultHeaders, headers), cf = merge(DefaultCf, cf), body = body)
@@ -87,9 +109,14 @@ class PostingSuite extends FunSuite {
   }
 
   test("React版確認画面はcookieマーカー・Shift_JIS・エスケープ済みフォーム断片を保持する") {
-    val g = js.Dynamic.literal(form = js.Dynamic.literal(
-      subject = "題名 &lt;test&gt;", FROM = "名前 &amp;", mail = "a&amp;b", MESSAGE = "本文 &lt;script&gt;<br>次行"
-    ))
+    val g = js.Dynamic.literal(form =
+      js.Dynamic.literal(
+        subject = "題名 &lt;test&gt;",
+        FROM = "名前 &amp;",
+        mail = "a&amp;b",
+        MESSAGE = "本文 &lt;script&gt;<br>次行"
+      )
+    )
     val res = RendererShell.legacyReact(PostingPages.respondConfirmationPhase(g, "Shift_JIS")).asInstanceOf[js.Dynamic]
     sjisText(res).map { body =>
       assertEquals(status(res), 200)
@@ -115,7 +142,11 @@ class PostingSuite extends FunSuite {
         assert(!cookie.toLowerCase.contains("domain="))
       }
     }.flatMap { _ =>
-      Future.traverse(Seq("https://www.3ch.io.evil.example/", "https://www.3chbbs.com.evil.example/", "https://www.3ch.io:443@evil.example/")) { referer =>
+      Future.traverse(Seq(
+        "https://www.3ch.io.evil.example/",
+        "https://www.3chbbs.com.evil.example/",
+        "https://www.3ch.io:443@evil.example/"
+      )) { referer =>
         post(DurableTestKit.newEnv(), headers = Seq("referer" -> referer)).map(p => assert(p.text.contains("Referer is invalid.")))
       }
     }
@@ -137,7 +168,11 @@ class PostingSuite extends FunSuite {
   }
 
   test("スレ立て設定: 旧形式・明示RESET・既定値・不正値を検証する") {
-    val parsed = ThreadCreationSettings.parse(Map("BBS_THREAD_TATESUGI" -> "3/86400", "BBS_THREAD_TATESUGI_RESET" -> "60", "BBS_THREAD_JUNBAN_AS_ONLY" -> "AS2516, 0123")).toOption.get
+    val parsed = ThreadCreationSettings.parse(Map(
+      "BBS_THREAD_TATESUGI" -> "3/86400",
+      "BBS_THREAD_TATESUGI_RESET" -> "60",
+      "BBS_THREAD_JUNBAN_AS_ONLY" -> "AS2516, 0123"
+    )).toOption.get
     assertEquals(parsed.limits.threadTatesugi, 3)
     assertEquals(parsed.limits.threadTatesugiResetSeconds, 60d)
     assertEquals(parsed.asOnly, Set("2516", "123"))
@@ -145,7 +180,10 @@ class PostingSuite extends FunSuite {
     assertEquals(ThreadCreationSettings.parse(Map.empty).toOption.get.limits.threadTatesugi, 1)
     assertEquals(ThreadCreationSettings.parse(Map.empty).toOption.get.limits.threadTatesugiResetSeconds, 3600d)
     assertEquals(ThreadCreationSettings.parse(Map.empty).toOption.get.limits.threadJunbanResetSeconds, 3600d)
-    assertEquals(ThreadCreationSettings.parse(Map("BBS_THREAD_TATESUGI" -> "3/86400")).toOption.get.limits.threadTatesugiResetSeconds, 86400d)
+    assertEquals(
+      ThreadCreationSettings.parse(Map("BBS_THREAD_TATESUGI" -> "3/86400")).toOption.get.limits.threadTatesugiResetSeconds,
+      86400d
+    )
     List("-1", "1001", "3/no", "1/2/3", "NaN").foreach { value =>
       assert(ThreadCreationSettings.parse(Map("BBS_THREAD_TATESUGI" -> value)).isLeft)
     }
@@ -154,18 +192,21 @@ class PostingSuite extends FunSuite {
 
   private def atSecond(second: Double)(f: => Future[Posted]): Future[Posted] = withFixedTime(second * 1000)(f)
 
-  for ((label, secondHeaders, secondCf, sameTitle) <- Seq(
-    ("IP", Seq("user-agent" -> "Mozilla/5.0 Other"), Seq("region" -> "Osaka"), false),
-    ("タイトル", Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"), Seq("region" -> "Osaka"), true),
-    ("UA（Client Hints変更でも回避不可）", Seq("CF-Connecting-IP" -> "192.0.2.2", "sec-ch-ua" -> "changed"), Seq("region" -> "Osaka"), false),
-    ("AS＋県", Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"), Nil, false)
-  )) {
+  for (
+    (label, secondHeaders, secondCf, sameTitle) <- Seq(
+      ("IP", Seq("user-agent" -> "Mozilla/5.0 Other"), Seq("region" -> "Osaka"), false),
+      ("タイトル", Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"), Seq("region" -> "Osaka"), true),
+      ("UA（Client Hints変更でも回避不可）", Seq("CF-Connecting-IP" -> "192.0.2.2", "sec-ch-ua" -> "changed"), Seq("region" -> "Osaka"), false),
+      ("AS＋県", Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"), Nil, false)
+    )
+  ) {
     test(s"スレ立て規制: 同一$label を拒否し返信は許可する") {
       val env = DurableTestKit.newEnv()
       withoutPostRate(env)
       for {
         first <- atSecond(1700000000d)(post(env, Seq("subject" -> "original")))
-        rejected <- atSecond(1700000001d)(post(env, Seq("subject" -> (if (sameTitle) "original" else "different")), secondHeaders, secondCf))
+        rejected <-
+          atSecond(1700000001d)(post(env, Seq("subject" -> (if (sameTitle) "original" else "different")), secondHeaders, secondCf))
         reply <- atSecond(1700000002d)(post(env, Seq("key" -> threadKey(first), "subject" -> "")))
         rejectedDat <- dat(env, "sample", "1700000001")
       } yield {
@@ -262,7 +303,12 @@ class PostingSuite extends FunSuite {
     val env = DurableTestKit.newEnv()
     for {
       first <- atSecond(1700000000d)(post(env))
-      next <- atSecond(1700000001d)(post(env, Seq("subject" -> "other"), Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"), Seq("region" -> "Osaka")))
+      next <- atSecond(1700000001d)(post(
+        env,
+        Seq("subject" -> "other"),
+        Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"),
+        Seq("region" -> "Osaka")
+      ))
     } yield {
       assertEquals(header(first.res, "x-resnum"), Some("1"))
       assertEquals(header(next.res, "x-resnum"), Some("1"))
@@ -285,7 +331,12 @@ class PostingSuite extends FunSuite {
     val env = DurableTestKit.newEnv()
     for {
       first <- atSecond(1700000000d)(post(env, cf = Seq("country" -> "US")))
-      next <- atSecond(1700000001d)(post(env, Seq("subject" -> "other"), Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"), Seq("country" -> "GB", "asn" -> "123")))
+      next <- atSecond(1700000001d)(post(
+        env,
+        Seq("subject" -> "other"),
+        Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"),
+        Seq("country" -> "GB", "asn" -> "123")
+      ))
     } yield {
       assertEquals(header(first.res, "x-resnum"), Some("1"))
       assert(next.text.contains("<!-- 2ch_X:error -->"))
@@ -297,7 +348,12 @@ class PostingSuite extends FunSuite {
     env.putR2("sample/SETTING.TXT", "BBS_THREAD_JUNBAN_AS_ONLY=2516\n")
     for {
       first <- atSecond(1700000000d)(post(env))
-      next <- atSecond(1700000001d)(post(env, Seq("subject" -> "other"), Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"), Seq("region" -> "Osaka")))
+      next <- atSecond(1700000001d)(post(
+        env,
+        Seq("subject" -> "other"),
+        Seq("CF-Connecting-IP" -> "192.0.2.2", "user-agent" -> "Mozilla/5.0 Other"),
+        Seq("region" -> "Osaka")
+      ))
     } yield {
       assertEquals(header(first.res, "x-resnum"), Some("1"))
       assert(next.text.contains("<!-- 2ch_X:error -->"))
@@ -332,7 +388,10 @@ class PostingSuite extends FunSuite {
 
   test("スレ立て設定: 値は最初の=以降の全体、重複キーは前後空白によらず後勝ちで読む") {
     assert(ThreadCreationSettings.parseText("BBS_THREAD_TATESUGI=0=invalid\n").isLeft)
-    assertEquals(ThreadCreationSettings.parseText("BBS_THREAD_TATESUGI=invalid\r\n BBS_THREAD_TATESUGI =0\r\n").map(_.limits.threadTatesugi), Right(0))
+    assertEquals(
+      ThreadCreationSettings.parseText("BBS_THREAD_TATESUGI=invalid\r\n BBS_THREAD_TATESUGI =0\r\n").map(_.limits.threadTatesugi),
+      Right(0)
+    )
     assert(ThreadCreationSettings.parseText(" BBS_THREAD_TATESUGI =0\nBBS_THREAD_TATESUGI=invalid\n").isLeft)
   }
 
@@ -429,9 +488,19 @@ class PostingSuite extends FunSuite {
     // POST以外 + Content-Type不正 + Referer不正 + UA不正 + client-ip 同時に混在させ、method判定が最優先されることを確認
     val req = makeRequest(
       method = "GET",
-      headers = Seq("content-type" -> "text/plain", "referer" -> "https://evil.example.com/", "user-agent" -> "x", "client-ip" -> "9.9.9.9"),
+      headers =
+        Seq("content-type" -> "text/plain", "referer" -> "https://evil.example.com/", "user-agent" -> "x", "client-ip" -> "9.9.9.9"),
       cf = DefaultCf,
-      body = buildBody(Seq("FROM" -> "", "mail" -> "", "MESSAGE" -> "x", "subject" -> "x", "bbs" -> "sample", "key" -> "", "time" -> "1", "submit" -> "書き込む"))
+      body = buildBody(Seq(
+        "FROM" -> "",
+        "mail" -> "",
+        "MESSAGE" -> "x",
+        "subject" -> "x",
+        "bbs" -> "sample",
+        "key" -> "",
+        "time" -> "1",
+        "submit" -> "書き込む"
+      ))
     )
     for {
       res <- entry(env, req)
@@ -517,7 +586,7 @@ class PostingSuite extends FunSuite {
         assertEquals(
           d,
           "名無しさん＠３ちゃんねる </b>(JP.Tw.oT wA-4bf50373e5a55843)<b> </b>(主)<b><><>2023/11/15(水) 07:13:20<> テスト本文 <>たておき2\n" +
-          "名無しさん＠３ちゃんねる </b>(JP.Tw.oT wA-4bf50373e5a55843)<b> </b>(主)<b><><>2023/11/15(水) 07:13:20<> 2番目の返信 <>\n"
+            "名無しさん＠３ちゃんねる </b>(JP.Tw.oT wA-4bf50373e5a55843)<b> </b>(主)<b><><>2023/11/15(水) 07:13:20<> 2番目の返信 <>\n"
         )
         val lines = d.stripSuffix("\n").split("\n", -1)
         assertEquals(lines.length, 2)
@@ -534,12 +603,16 @@ class PostingSuite extends FunSuite {
 
   test("readForm: submit=書のUTF-8バイト列が無いと専ブラ(Monazilla)以外はSJIS扱いにされ拒否される") {
     val env = DurableTestKit.newEnv()
-    val expected = "書き込みボタンを押忍べし<br>2ch専用ブラウザからの書き込みでこのエラーが出た場合、お使いの専用ブラウザはMonazilla/1.00で始まるUserAgentを使用していません。<br>認証時の問題などもありますので、2ch専用ブラウザではMonazilla/1.00で始まるUserAgentを使用してください。<br>(Monazilla/1.00以外のUserAgentでsubmit=%E6%9B%B8…でない場合にこのエラーが出ます。)<br>\n&apos;Submit&apos; must require &apos;書&apos; with Web browser&apos;s post."
+    val expected =
+      "書き込みボタンを押忍べし<br>2ch専用ブラウザからの書き込みでこのエラーが出た場合、お使いの専用ブラウザはMonazilla/1.00で始まるUserAgentを使用していません。<br>認証時の問題などもありますので、2ch専用ブラウザではMonazilla/1.00で始まるUserAgentを使用してください。<br>(Monazilla/1.00以外のUserAgentでsubmit=%E6%9B%B8…でない場合にこのエラーが出ます。)<br>\n&apos;Submit&apos; must require &apos;書&apos; with Web browser&apos;s post."
     // このエラー画面自体はSJISでエンコードされるため、生バイトから復号して比較する。
     val req = makeRequest(
       headers = merge(DefaultHeaders, Seq("user-agent" -> "Mozilla/5.0 NotMona")),
       cf = DefaultCf,
-      body = buildBody(Seq("FROM" -> "", "mail" -> "", "MESSAGE" -> "x", "subject" -> "x", "bbs" -> "sample", "key" -> "", "time" -> "9999999999"), sjisMode = true) + "&submit=" + sjisPercentEncode("書き込む")
+      body = buildBody(
+        Seq("FROM" -> "", "mail" -> "", "MESSAGE" -> "x", "subject" -> "x", "bbs" -> "sample", "key" -> "", "time" -> "9999999999"),
+        sjisMode = true
+      ) + "&submit=" + sjisPercentEncode("書き込む")
     )
     for {
       res <- entry(env, req)
@@ -553,7 +626,13 @@ class PostingSuite extends FunSuite {
   test("readForm: Monazilla + Shift_JISエンコードされたPOSTは正しく復号される") {
     val env = DurableTestKit.newEnv()
     for {
-      p <- post(env, Seq("FROM" -> "名無し", "MESSAGE" -> "日本語の本文です", "subject" -> "SJISテスト"), headers = Seq("user-agent" -> "Monazilla/1.00"), sjisMode = true, submitText = "書き込む")
+      p <- post(
+        env,
+        Seq("FROM" -> "名無し", "MESSAGE" -> "日本語の本文です", "subject" -> "SJISテスト"),
+        headers = Seq("user-agent" -> "Monazilla/1.00"),
+        sjisMode = true,
+        submitText = "書き込む"
+      )
       _ = assertEquals(header(p.res, "x-resnum"), Some("1"))
       d <- dat(env, "sample", threadKey(p))
     } yield assert(d.contains(" 日本語の本文です "))
@@ -795,7 +874,13 @@ class PostingSuite extends FunSuite {
     }
   }
 
-  private def firstRowWith(env: Env, fields: Seq[(String, String)], headers: Seq[(String, String)], cf: Seq[(String, String)], bbs: String = "sample"): Future[Array[String]] =
+  private def firstRowWith(
+      env: Env,
+      fields: Seq[(String, String)],
+      headers: Seq[(String, String)],
+      cf: Seq[(String, String)],
+      bbs: String = "sample"
+  ): Future[Array[String]] =
     for {
       p <- post(env, fields, headers, cf)
       d <- dat(env, bbs, threadKey(p))
@@ -808,7 +893,7 @@ class PostingSuite extends FunSuite {
     // 板名・スレキーは BoardId（英数字16文字以内）・ThreadKey（9〜10桁）の制約内に収める。
     def at(t: Long): Future[Array[String]] =
       withFixedTime(t.toDouble * 1000) {
-        val bbs = "bb" + t
+        val bbs = s"bb$t"
         firstRowWith(DurableTestKit.newEnv(), Seq("FROM" -> "boundary", "subject" -> "boundarytest", "bbs" -> bbs), Nil, Nil, bbs)
       }
     for {
@@ -828,7 +913,13 @@ class PostingSuite extends FunSuite {
     withFixedTime(1700000000d * 1000) {
       val env = DurableTestKit.newEnv()
       env.putR2("idsettingsboard/SETTING.TXT", "BBS_ID_GROUP=customgroup\nBBS_ID_RESET=3600\n")
-      firstRowWith(env, Seq("FROM" -> "settingstest", "subject" -> "settingstest", "bbs" -> "idsettingsboard"), Nil, Nil, "idsettingsboard").map { fields =>
+      firstRowWith(
+        env,
+        Seq("FROM" -> "settingstest", "subject" -> "settingstest", "bbs" -> "idsettingsboard"),
+        Nil,
+        Nil,
+        "idsettingsboard"
+      ).map { fields =>
         // 実測値(BBS_ID_GROUP=customgroup, BBS_ID_RESET=3600, unixtime=1700000000固定)。
         assertEquals(fields(0), "settingstest </b>(JP.DF.Qa TU-2f375863c0fe791c)<b> </b>(主)<b>")
       }
@@ -854,10 +945,17 @@ class PostingSuite extends FunSuite {
     } yield fieldsOf(d)
 
   /** スレを立て、返信し、返信行(>>2)の名前欄を返す。`before` は返信の直前に実行する。 */
-  private def replyName(env: Env, create: Seq[(String, String)] = Nil, createHeaders: Seq[(String, String)] = Nil,
-                        createUser: Option[PostingUser] = None, before: String => Future[Unit] = _ => Future.unit,
-                        reply: Seq[(String, String)] = Nil, replyHeaders: Seq[(String, String)] = Nil, replyCf: Seq[(String, String)] = Nil,
-                        replyUser: Option[PostingUser] = None): Future[String] = {
+  private def replyName(
+      env: Env,
+      create: Seq[(String, String)] = Nil,
+      createHeaders: Seq[(String, String)] = Nil,
+      createUser: Option[PostingUser] = None,
+      before: String => Future[Unit] = _ => Future.unit,
+      reply: Seq[(String, String)] = Nil,
+      replyHeaders: Seq[(String, String)] = Nil,
+      replyCf: Seq[(String, String)] = Nil,
+      replyUser: Option[PostingUser] = None
+  ): Future[String] = {
     withoutPostRate(env)
     for {
       p1 <- post(env, merge(Seq("subject" -> "nusi"), create), createHeaders, user = createUser)
@@ -940,9 +1038,10 @@ class PostingSuite extends FunSuite {
   }
 
   test("主: IPも識別子も違うがユーザーIDが同じなら (主) が付く") {
-    fixed(replyName(DurableTestKit.newEnv(), createUser = Alice, replyUser = Alice, replyHeaders = OtherHeaders, replyCf = OtherCf)).map { name =>
-      assert(name.endsWith("<b> </b>(主)<b>"), name)
-      assert(!name.contains(Shiki), name)
+    fixed(replyName(DurableTestKit.newEnv(), createUser = Alice, replyUser = Alice, replyHeaders = OtherHeaders, replyCf = OtherCf)).map {
+      name =>
+        assert(name.endsWith("<b> </b>(主)<b>"), name)
+        assert(!name.contains(Shiki), name)
     }
   }
 
@@ -954,15 +1053,24 @@ class PostingSuite extends FunSuite {
   }
 
   test("主: 何も一致しなければ付かない") {
-    fixed(replyName(DurableTestKit.newEnv(), createUser = Alice, replyUser = Some(PostingUser("aid9", "bob")), replyHeaders = OtherHeaders, replyCf = OtherCf)).map { name =>
+    fixed(replyName(
+      DurableTestKit.newEnv(),
+      createUser = Alice,
+      replyUser = Some(PostingUser("aid9", "bob")),
+      replyHeaders = OtherHeaders,
+      replyCf = OtherCf
+    )).map { name =>
       assert(!name.contains("(主)"), name)
     }
   }
 
   test("主: IPv6は先頭4ブロック(/64)が同じなら (主) が付く") {
-    fixed(replyName(DurableTestKit.newEnv(),
+    fixed(replyName(
+      DurableTestKit.newEnv(),
       createHeaders = Seq("CF-Connecting-IP" -> "2001:db8:85a3:0:1111:2222:3333:4444", "user-agent" -> "Mozilla/5.0 First"),
-      replyHeaders = Seq("CF-Connecting-IP" -> "2001:DB8:85A3::9", "user-agent" -> "Mozilla/5.0 Other"), replyCf = OtherCf)).map { name =>
+      replyHeaders = Seq("CF-Connecting-IP" -> "2001:DB8:85A3::9", "user-agent" -> "Mozilla/5.0 Other"),
+      replyCf = OtherCf
+    )).map { name =>
       assert(name.endsWith("<b> </b>(主)<b>"), name)
     }
   }
@@ -1049,8 +1157,9 @@ class PostingSuite extends FunSuite {
 
   test("主: ownerが無い既存スレには付かない") {
     val env = DurableTestKit.newEnv()
-    fixed(replyName(env, before = key => env.threadInstance(s"sample/$key").state.storage.delete("owner").toFuture.map(_ => ()))).map { name =>
-      assert(!name.contains("(主)"), name)
+    fixed(replyName(env, before = key => env.threadInstance(s"sample/$key").state.storage.delete("owner").toFuture.map(_ => ()))).map {
+      name =>
+        assert(!name.contains("(主)"), name)
     }
   }
 
@@ -1220,12 +1329,13 @@ class PostingSuite extends FunSuite {
     withoutPostRate(env)
     def loop(key: String, i: Int, last: Option[String]): Future[(Option[String], Option[String])] =
       if i > 1001 then Future.successful((last, None))
-      else post(env, Seq("key" -> key, "subject" -> "", "MESSAGE" -> s"res$i")).flatMap { p =>
-        header(p.res, "x-resnum").filter(_.nonEmpty) match {
-          case Some(n) => loop(key, i + 1, Some(n))
-          case None => Future.successful((last, Some(p.text)))
+      else
+        post(env, Seq("key" -> key, "subject" -> "", "MESSAGE" -> s"res$i")).flatMap { p =>
+          header(p.res, "x-resnum").filter(_.nonEmpty) match {
+            case Some(n) => loop(key, i + 1, Some(n))
+            case None    => Future.successful((last, Some(p.text)))
+          }
         }
-      }
     for {
       p <- post(env, Seq("subject" -> "capthread"))
       (lastResnum, failureText) <- loop(threadKey(p), 2, None)
@@ -1298,7 +1408,12 @@ class PostingSuite extends FunSuite {
       // 成功してしまう。つまりここでの失敗は、コンディショナルputが確かに機能している証拠になる。
       assertEquals(status(p2.res), 200)
       assertEquals(header(p2.res, "x-resnum"), None)
-      assertEquals(errMsg, Some(s"updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(unixtime:undefined bbs:sample key:$key2 number:1 errmsg:updateSubback->SubbackFIle_update_conflicted!)"))
+      assertEquals(
+        errMsg,
+        Some(
+          s"updateSubback error. 板飛びそうなので、またの機会にどうぞ。。。(unixtime:undefined bbs:sample key:$key2 number:1 errmsg:updateSubback->SubbackFIle_update_conflicted!)"
+        )
+      )
     }
   }
 
@@ -1336,14 +1451,22 @@ class PostingSuite extends FunSuite {
         _ = assertEquals(header(high.res, "x-resnum"), Some("2"))
         s2 <- subject()
         _ = assertEquals(s2, "1700000001.dat<>ThreadB (1)\n1700000000.dat<>ThreadA (2)\n")
-        _ = assertEquals(env.r2Text("headline.txt"), Some("1700000001\nlivetest<>undefined<>1700000001<>1700000001<>first\n"), "sage時はheadlineが更新されない")
+        _ = assertEquals(
+          env.r2Text("headline.txt"),
+          Some("1700000001\nlivetest<>undefined<>1700000001<>1700000001<>first\n"),
+          "sage時はheadlineが更新されない"
+        )
 
         // 閾値未満(0.05 < 0.1) -> 通常age。ThreadAが先頭に移動し、headlineも更新される。
         low <- reply(1700000003d, 0.05, keyA, "reply-low")
         _ = assertEquals(header(low.res, "x-resnum"), Some("3"))
         s3 <- subject()
         _ = assertEquals(s3, "1700000000.dat<>ThreadA (3)\n1700000001.dat<>ThreadB (1)\n")
-        _ = assertEquals(env.r2Text("headline.txt"), Some("1700000003\nlivetest<>undefined<>1700000003<>1700000000<>reply-low\n"), "age時はheadlineが更新される")
+        _ = assertEquals(
+          env.r2Text("headline.txt"),
+          Some("1700000003\nlivetest<>undefined<>1700000003<>1700000000<>reply-low\n"),
+          "age時はheadlineが更新される"
+        )
 
         // ちょうど閾値(Math.random()===0.1)は `0.1*10=1 >= 1` が真になるため、sage側(閾値含む)に入る。
         boundary <- reply(1700000004d, 0.1, keyB, "reply-boundary")
@@ -1393,7 +1516,10 @@ class PostingSuite extends FunSuite {
       for {
         p <- post(env, Seq("bbs" -> "ordertest", "subject" -> "O"))
         settings <- env.thread(s"ordertest/${threadKey(p)}").getSettings().toFuture
-      } yield assertEquals(settings, "Z_LAST=1<>A_FIRST=2<>MID=3<>BBS_TITLE=t<>B_KEY=4<>Y_KEY=5<>BBS_SHIKIBETSU=off<>") // 末尾のBBS_SHIKIBETSUは投稿処理が未設定時に補う値
+      } yield assertEquals(
+        settings,
+        "Z_LAST=1<>A_FIRST=2<>MID=3<>BBS_TITLE=t<>B_KEY=4<>Y_KEY=5<>BBS_SHIKIBETSU=off<>"
+      ) // 末尾のBBS_SHIKIBETSUは投稿処理が未設定時に補う値
     }
   }
 

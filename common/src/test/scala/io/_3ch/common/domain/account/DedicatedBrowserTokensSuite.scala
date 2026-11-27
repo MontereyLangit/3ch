@@ -59,7 +59,16 @@ class DedicatedBrowserTokensSuite extends FunSuite {
   }
 
   test("無効にしたキーの記録は新しいものから上限まで残し、有効なキーは消さない") {
-    val revoked = (1 to 30).map(i => DedicatedBrowserToken(f"old$i%02d", f"$i%064x", now, now + 86400, revokedAt = Some(now + i), revokeReason = Some(TokenRevokeReason.Superseded))).toVector
+    val revoked = (1 to 30).map(i =>
+      DedicatedBrowserToken(
+        f"old$i%02d",
+        f"$i%064x",
+        now,
+        now + 86400,
+        revokedAt = Some(now + i),
+        revokeReason = Some(TokenRevokeReason.Superseded)
+      )
+    ).toVector
     val kept = DedicatedBrowserTokens.retained(bound ++ revoked, now + 100)
     assertEquals(kept.count(_.revokedAt.isDefined), DedicatedBrowserTokens.revokedLimit)
     assert(kept.exists(_.tokenId == "old30"))
@@ -86,7 +95,9 @@ class DedicatedBrowserTokensSuite extends FunSuite {
   }
 
   test("拒否の記録は新しい順に上限まで残す") {
-    val entries = (1 to 25).foldLeft(Vector.empty[AccountPost])((log, i) => AccountRejectionLog.append(log, AccountPost(now + i, result = "auth:token:ua-mismatch")))
+    val entries = (1 to 25).foldLeft(Vector.empty[AccountPost])((log, i) =>
+      AccountRejectionLog.append(log, AccountPost(now + i, result = "auth:token:ua-mismatch"))
+    )
     assertEquals(entries.size, AccountRejectionLog.limit)
     assertEquals(entries.head.t, now + 25)
   }

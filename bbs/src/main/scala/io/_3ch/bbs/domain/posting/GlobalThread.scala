@@ -5,13 +5,16 @@ package io._3ch.bbs.domain.posting
  * 共通スレは板 `924` の Thread / Board DO に保存し、全板の subject.txt の先頭に 924 → 900 の順で載せる
  */
 object GlobalThread {
+
   /** 共通スレの保存先となる板名 */
   val board: String = "924"
 
   /** 共通スレの種別。prefix はスレキーの先頭 3 桁 */
   enum Kind(val prefix: String) {
+
     /** ★のみ立てられ、★のみ書き込める */
     case CapOnly extends Kind("924")
+
     /** ★のみ立てられるが、誰でも書き込める */
     case Open extends Kind("900")
   }
@@ -36,7 +39,7 @@ object GlobalThread {
   /** その種別のスレに書き込めるか。924 はキャップだけ書き込める */
   def canPost(kind: Kind, cap: Boolean): Boolean = kind match {
     case Kind.CapOnly => cap
-    case Kind.Open => true
+    case Kind.Open    => true
   }
 
   /** 共通スレのスレ立て・返信で最初にあてはまる拒否理由 */

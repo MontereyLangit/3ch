@@ -13,7 +13,10 @@ class EmailAddressSuite extends FunSuite {
 
   test("前後の空白を除いて小文字にし、送信先と照合値を分ける") {
     val email = parse("  Taro.Yamada+bbs@Example.COM ")
-    assertEquals((email.address, email.canonical, email.domain), ("taro.yamada+bbs@example.com", "taro.yamada+bbs@example.com", "example.com"))
+    assertEquals(
+      (email.address, email.canonical, email.domain),
+      ("taro.yamada+bbs@example.com", "taro.yamada+bbs@example.com", "example.com")
+    )
   }
 
   test("gmail.com と googlemail.com はローカル部のドットと + 以降を除いて gmail.com として照合する") {
@@ -27,8 +30,22 @@ class EmailAddressSuite extends FunSuite {
   }
 
   test("書式に合わないアドレスは拒否する") {
-    Seq("", "no-at", "@example.com", "taro@", "taro@localhost", "ta ro@example.com", "taro..x@example.com", ".taro@example.com",
-      "taro@exa mple.com", "taro@-example.com", "taro@example.com/evil", "a" * 65 + "@example.com", "taro@" + "a" * 250 + ".com", null).foreach { raw =>
+    Seq(
+      "",
+      "no-at",
+      "@example.com",
+      "taro@",
+      "taro@localhost",
+      "ta ro@example.com",
+      "taro..x@example.com",
+      ".taro@example.com",
+      "taro@exa mple.com",
+      "taro@-example.com",
+      "taro@example.com/evil",
+      "a" * 65 + "@example.com",
+      "taro@" + "a" * 250 + ".com",
+      null
+    ).foreach { raw =>
       assertEquals(EmailAddress.parse(raw), Left(EmailRejection.Invalid), String.valueOf(raw))
     }
   }

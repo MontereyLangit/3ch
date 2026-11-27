@@ -14,7 +14,8 @@ private object BoardMarkup extends js.Function1[React.Element, String] {
 }
 
 class BoardIndexSuite extends munit.FunSuite {
-  private val subjects = BbsSubjects.create("1800000001.dat<>実スレ &amp; &lt;script&gt; (3)\n1800000002.dat<>次の話題 (7)\n9240000001.dat<>共通のお知らせ (12)\n")
+  private val subjects =
+    BbsSubjects.create("1800000001.dat<>実スレ &amp; &lt;script&gt; (3)\n1800000002.dat<>次の話題 (7)\n9240000001.dat<>共通のお知らせ (12)\n")
   private val sample = BoardId.create("sample").toOption.get
 
   private def threadKey(value: Long) = Option(ThreadKey.create(value).toOption.get)
@@ -138,7 +139,8 @@ class BoardIndexSuite extends munit.FunSuite {
   }
 
   test("勢い順でも全板共通スレの順序はレス数に影響されない") {
-    val data = BbsSubjects.create("9000000001.dat<>共通少レス (1)\n1800000001.dat<>通常少レス (3)\n9240000001.dat<>共通多レス (999)\n1800000002.dat<>通常多レス (30)\n")
+    val data =
+      BbsSubjects.create("9000000001.dat<>共通少レス (1)\n1800000001.dat<>通常少レス (3)\n9240000001.dat<>共通多レス (999)\n1800000002.dat<>通常多レス (30)\n")
     val html = render(props.copy(`type` = "subback", subjects = data, sort = "speed"))
     assert(html.indexOf("共通少レス") < html.indexOf("共通多レス"))
     assert(html.indexOf("通常多レス") < html.indexOf("通常少レス"))
@@ -148,7 +150,11 @@ class BoardIndexSuite extends munit.FunSuite {
     assert(guest.contains("/auth/?return=%2Fsample%2F"))
     assert(guest.contains("書き込みには認証・登録が必要です"))
     assert(!guest.contains("name=\"showid\""))
-    val member = render(props.copy(authEnabled = true, session = Some(io._3ch.common.domain.account.SessionView("test_user", 3)), settings = Map("BBS_PHOEBE" -> "5")))
+    val member = render(props.copy(
+      authEnabled = true,
+      session = Some(io._3ch.common.domain.account.SessionView("test_user", 3)),
+      settings = Map("BBS_PHOEBE" -> "5")
+    ))
     assert(member.contains("@test_user"))
     assert(member.contains("Lv3"))
     assert(member.contains("このスレはLv5以上"))
@@ -160,7 +166,8 @@ class BoardIndexSuite extends munit.FunSuite {
   }
 
   test("認証ページのSSRには秘密や発行済みのキーを含めない") {
-    val html = BoardMarkup(AuthComponent.Component(AuthProps("public-site-key", "/sample/", embed = true, agreementVersion = "v2")).rawElement)
+    val html =
+      BoardMarkup(AuthComponent.Component(AuthProps("public-site-key", "/sample/", embed = true, agreementVersion = "v2")).rawElement)
     assert(html.contains("public-site-key"))
     assert(html.contains("利用規約を読み"))
     assert(!html.contains("<header"))
@@ -176,8 +183,13 @@ class BoardIndexSuite extends munit.FunSuite {
     assert(off.contains("ID・パスワード"))
     assert(off.contains("Googleで続ける（準備中）"))
     assert(off.contains("新しく登録する"))
-    val on = BoardMarkup(AuthComponent.Component(AuthProps("public-site-key", "/sample/", agreementVersion = "v2", googleEnabled = true,
-      notice = "Googleでのログインを中止しました。")).rawElement)
+    val on = BoardMarkup(AuthComponent.Component(AuthProps(
+      "public-site-key",
+      "/sample/",
+      agreementVersion = "v2",
+      googleEnabled = true,
+      notice = "Googleでのログインを中止しました。"
+    )).rawElement)
     assert(!on.contains("準備中"))
     assert(on.contains("Googleでのログインを中止しました。"))
     val login = BoardMarkup(AuthComponent.Component(AuthProps("public-site-key", "/sample/", login = true)).rawElement)
@@ -186,11 +198,31 @@ class BoardIndexSuite extends munit.FunSuite {
   test("アカウント画面は専ブラの使用枠・履歴・不一致・期限・失効理由を公開情報から描く") {
     val recent = AccountPostProps(1800000000, "sample", "1800000001", "スレ &lt;script&gt;", 12, "本文 &lt;img&gt;", "回線・東京都")
     val tokens = Seq(
-      AccountTokenProps("active", "JaneStyle・Windows", boundAt = Some(1800000000), replacedTokenAt = Some(1800000000),
-        recentPosts = Seq(recent), warnings = Seq(AccountTokenWarningProps(1800000010, "別のブラウザ"))),
+      AccountTokenProps(
+        "active",
+        "JaneStyle・Windows",
+        boundAt = Some(1800000000),
+        replacedTokenAt = Some(1800000000),
+        recentPosts = Seq(recent),
+        warnings = Seq(AccountTokenWarningProps(1800000010, "別のブラウザ"))
+      ),
       AccountTokenProps("unused", "未使用", issuedAt = 1800000000, expiresAt = 1800086400),
-      AccountTokenProps("old", "古い専ブラ", boundAt = Some(1799990000), revokedAt = Some(1800000000), revokeReason = Some("superseded"), recentPosts = Seq(recent)))
-    val html = visible(BoardMarkup(AccountComponent.Component(AccountProps("member", 3, tokens, activeCount = 1, nowSeconds = 1800000100)).rawElement))
+      AccountTokenProps(
+        "old",
+        "古い専ブラ",
+        boundAt = Some(1799990000),
+        revokedAt = Some(1800000000),
+        revokeReason = Some("superseded"),
+        recentPosts = Seq(recent)
+      )
+    )
+    val html = visible(BoardMarkup(AccountComponent.Component(AccountProps(
+      "member",
+      3,
+      tokens,
+      activeCount = 1,
+      nowSeconds = 1800000100
+    )).rawElement))
     assert(html.contains("専用ブラウザ 1 / 5"))
     assert(html.contains("前のキーを置き換え"))
     assert(html.contains("別の専用ブラウザ（別のブラウザ）"))
@@ -204,14 +236,24 @@ class BoardIndexSuite extends munit.FunSuite {
   }
 
   test("アカウント画面は登録方法・有効期限（日本時間）・この端末とログアウトの注意を出す") {
-    val html = visible(BoardMarkup(AccountComponent.Component(AccountProps("member", 1, kind = io._3ch.common.domain.account.AccountKind.Client,
-      expiresAt = Some(1830265200), device = Some(io._3ch.common.domain.device.DeviceGranularity.Personal), deviceCount = 2)).rawElement))
+    val html = visible(BoardMarkup(AccountComponent.Component(AccountProps(
+      "member",
+      1,
+      kind = io._3ch.common.domain.account.AccountKind.Client,
+      expiresAt = Some(1830265200),
+      device = Some(io._3ch.common.domain.device.DeviceGranularity.Personal),
+      deviceCount = 2
+    )).rawElement))
     assert(html.contains("かんたん登録（クライアントID）"))
     assert(html.contains("2028/01/01まで有効"))
     assert(html.contains("準個体（p）"))
     assert(html.contains("登録した端末2台"))
     assert(html.contains("ログアウトするとこの端末から戻せません"))
-    val password = visible(BoardMarkup(AccountComponent.Component(AccountProps("member", 3, kind = io._3ch.common.domain.account.AccountKind.Password)).rawElement))
+    val password = visible(BoardMarkup(AccountComponent.Component(AccountProps(
+      "member",
+      3,
+      kind = io._3ch.common.domain.account.AccountKind.Password
+    )).rawElement))
     assert(password.contains("ID・パスワード"))
     assert(!password.contains("まで有効"))
     assert(!password.contains("戻せません"))

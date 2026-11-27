@@ -1,8 +1,16 @@
 package io._3ch.common.domain.account
 
 /** Google の ID トークンから読み出したクレーム。署名は別に検証する */
-final case class GoogleIdClaims(iss: String, aud: String, sub: String, exp: Double, iat: Double, nonce: String,
-  email: Option[String], emailVerified: Boolean)
+final case class GoogleIdClaims(
+    iss: String,
+    aud: String,
+    sub: String,
+    exp: Double,
+    iat: Double,
+    nonce: String,
+    email: Option[String],
+    emailVerified: Boolean
+)
 
 /** ID トークンを受け付けない理由 */
 enum GoogleIdTokenRejection(val code: String) {
@@ -20,6 +28,7 @@ final case class GoogleIdentity(sub: String, email: Option[String])
 
 object GoogleIdToken {
   val issuers: Set[String] = Set("https://accounts.google.com", "accounts.google.com")
+
   /** 発行時刻に許す時計のずれ（秒） */
   val clockSkew: Double = 300
 

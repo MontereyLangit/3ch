@@ -12,14 +12,29 @@ class ModerationRuleSetSuite extends FunSuite {
 
   test("動作欄を読み分ける") {
     val rules = parse("<><><>\n<><><>deny\n<><><>md5\n<><><>mark\n<><><>TateDame").map(_.rules.map(_.action))
-    assertEquals(rules, Right(List(ModerationAction.Deny, ModerationAction.Deny, ModerationAction.Deny, ModerationAction.Mark, ModerationAction.TateDame)))
+    assertEquals(
+      rules,
+      Right(List(ModerationAction.Deny, ModerationAction.Deny, ModerationAction.Deny, ModerationAction.Mark, ModerationAction.TateDame))
+    )
   }
 
   test("5 列目の回避レベルを読み、4 列の行と空欄は privileged にする") {
-    val levels = parse("<><><>deny\n<><><>deny<>\n<><><>deny<>admin\n<><><>mark<>staff\n<><><>deny<> privileged \n<><><>deny<>l10\n<><><>TateDame<>login")
+    val levels = parse(
+      "<><><>deny\n<><><>deny<>\n<><><>deny<>admin\n<><><>mark<>staff\n<><><>deny<> privileged \n<><><>deny<>l10\n<><><>TateDame<>login"
+    )
       .map(_.rules.map(_.bypass))
-    assertEquals(levels, Right(List(BypassLevel.Privileged, BypassLevel.Privileged, BypassLevel.Admin, BypassLevel.Staff, BypassLevel.Privileged,
-      BypassLevel.L10, BypassLevel.Login)))
+    assertEquals(
+      levels,
+      Right(List(
+        BypassLevel.Privileged,
+        BypassLevel.Privileged,
+        BypassLevel.Admin,
+        BypassLevel.Staff,
+        BypassLevel.Privileged,
+        BypassLevel.L10,
+        BypassLevel.Login
+      ))
+    )
   }
 
   test("NG ワード欄が空でなければ NG ワードのルール") {

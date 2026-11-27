@@ -20,7 +20,9 @@ class RendererShellSuite extends munit.FunSuite {
     val res = RendererShell.legacyReact(page).asInstanceOf[js.Dynamic]
     sjisText(res).map { html =>
       assertEquals(header(res, "content-type"), Option("text/html;charset=Shift_JIS"))
-      assert(html.contains("<b>３ちゃんねる</b><br/>\n<a href=\"https://www.3ch.io/sample/\">日本語 &amp; 案内</a><br/>\n<a href=\"https://www.3ch.io/sample2/\">次の板</a><br/>\n"))
+      assert(html.contains(
+        "<b>３ちゃんねる</b><br/>\n<a href=\"https://www.3ch.io/sample/\">日本語 &amp; 案内</a><br/>\n<a href=\"https://www.3ch.io/sample2/\">次の板</a><br/>\n"
+      ))
       assert(html.contains("charset=Shift_JIS"))
       assert(html.contains("<script type=\"module\" src=\"/static/client.js\"></script>"))
       assert(!html.contains("data-reactroot"))
@@ -28,7 +30,8 @@ class RendererShellSuite extends munit.FunSuite {
   }
 
   test("legacyHtmlは専ブラ向けの生HTMLとShift_JISバイト列を保持する") {
-    val html = "<HTML><HEAD><TITLE>日本語</TITLE></HEAD><BODY><!-- 2ch_X:error --><font size=+1 color=#FF0000><b>ERROR: 本文がありません！</b></font>\r\n</BODY></HTML>"
+    val html =
+      "<HTML><HEAD><TITLE>日本語</TITLE></HEAD><BODY><!-- 2ch_X:error --><font size=+1 color=#FF0000><b>ERROR: 本文がありません！</b></font>\r\n</BODY></HTML>"
     val res = RendererShell.legacyHtml(html, extra = Seq("Cache-Control" -> "no-store", "X-Resnum" -> "1")).asInstanceOf[js.Dynamic]
     bytes(res).map { body =>
       assertEquals(status(res), 200)
@@ -43,7 +46,8 @@ class RendererShellSuite extends munit.FunSuite {
   }
 
   test("legacyHtmlはUTF-8の投稿応答を新シェルを付けずに返す") {
-    val html = "<html><head><meta content=5;URL=/test/read.cgi/sample/1700000000/  http-equiv=refresh></head><body><!-- 2ch_X:true -->書きこみました。</body></html>"
+    val html =
+      "<html><head><meta content=5;URL=/test/read.cgi/sample/1700000000/  http-equiv=refresh></head><body><!-- 2ch_X:true -->書きこみました。</body></html>"
     val res = RendererShell.legacyHtml(html, encoding = "UTF-8", extra = Seq("X-Threadkey" -> "1700000000")).asInstanceOf[js.Dynamic]
     bytes(res).map { body =>
       assertEquals(status(res), 200)

@@ -11,8 +11,14 @@ import scala.scalajs.js
 
 class AccountWithdrawSuite extends munit.FunSuite {
   private def now: Double = math.floor(js.Date.now() / 1000)
-  private val register = Seq("id" -> "taro_2026", "password" -> "correct horse", "password2" -> "correct horse", "agreement" -> "v1",
-    "cf-turnstile-response" -> "accepted", "email" -> "taro@example.com")
+  private val register = Seq(
+    "id" -> "taro_2026",
+    "password" -> "correct horse",
+    "password2" -> "correct horse",
+    "agreement" -> "v1",
+    "cf-turnstile-response" -> "accepted",
+    "email" -> "taro@example.com"
+  )
 
   test("ID・パスワードの退会はパスワードを確かめ、login・email 索引とキャップの KV を外して uid・cap の索引と記録を残す") {
     val t = new AuthSignInTestKit(mail = true)
@@ -35,17 +41,28 @@ class AccountWithdrawSuite extends munit.FunSuite {
         deleted <- t.send(t.post("/auth/account", Seq("action" -> "delete", "password" -> "correct horse"), cookie = cookie))
         _ = assertEquals(deleted.status, 200)
         _ = assert(deleted.headers.get("Set-Cookie").startsWith("__Host-ch3s_sid=; Max-Age=0"))
-        lookups <- Future.traverse(Vector("uid" -> "taro_2026", "login" -> "taro_2026", "email" -> "taro@example.com")) { case (kind, value) =>
-          t.index(kind, value).flatMap(hash => t.kit.index(kind).lookup(hash).toFuture).map(v => (v.code.asInstanceOf[String], v.aid.asInstanceOf[js.UndefOr[String]].toOption))
+        lookups <- Future.traverse(Vector("uid" -> "taro_2026", "login" -> "taro_2026", "email" -> "taro@example.com")) {
+          case (kind, value) =>
+            t.index(kind, value).flatMap(hash => t.kit.index(kind).lookup(hash).toFuture).map(v =>
+              (v.code.asInstanceOf[String], v.aid.asInstanceOf[js.UndefOr[String]].toOption)
+            )
         }
         capHash <- t.index("cap", capKey)
         capOwner <- t.kit.index("cap").lookup(capHash).toFuture
         session <- t.send(t.get("/auth/session", cookie = cookie)).flatMap(t.body)
-        login <- t.send(t.post("/auth/login", Seq("id" -> "taro_2026", "password" -> "correct horse", "cf-turnstile-response" -> "accepted"), ip = "192.0.2.90"))
+        login <- t.send(t.post(
+          "/auth/login",
+          Seq("id" -> "taro_2026", "password" -> "correct horse", "cf-turnstile-response" -> "accepted"),
+          ip = "192.0.2.90"
+        ))
         again <- t.send(t.post("/auth/register", register.filterNot(_._1 == "email"), ip = "192.0.2.91"))
       } yield {
         assertEquals(lookups, Vector(("", Some(aid)), ("auth:index:missing", None), ("auth:index:missing", None)))
-        assertEquals((capOwner.code.asInstanceOf[String], capOwner.aid.asInstanceOf[String]), ("", aid), "cap 索引は退会後も所有者を指す（古い KV の写しを旧キャップにしない）")
+        assertEquals(
+          (capOwner.code.asInstanceOf[String], capOwner.aid.asInstanceOf[String]),
+          ("", aid),
+          "cap 索引は退会後も所有者を指す（古い KV の写しを旧キャップにしない）"
+        )
         assertEquals(t.kit.capValue(capKey), None)
         assertEquals(session, null)
         assertEquals(login.status, 401)
@@ -82,8 +99,10 @@ class AccountWithdrawSuite extends munit.FunSuite {
       _ = { t.jwks = js.Dynamic.literal(keys = js.Array(keys.jwk)) }
       token <- keys.token(GoogleTestKeys.claims(sub, authorize.searchParams.get("nonce"), now))
       _ = { t.idToken = token }
-      callback <- t.send(t.get(s"/auth/google/callback/?code=c&state=${authorize.searchParams.get("state")}",
-        cookie = Seq(t.cookie(started, "__Host-ch3s_oauth").get, cookie).filter(_.nonEmpty).mkString("; ")))
+      callback <- t.send(t.get(
+        s"/auth/google/callback/?code=c&state=${authorize.searchParams.get("state")}",
+        cookie = Seq(t.cookie(started, "__Host-ch3s_oauth").get, cookie).filter(_.nonEmpty).mkString("; ")
+      ))
     } yield callback
     t.run {
       for {
@@ -132,7 +151,8 @@ class AccountWithdrawSuite extends munit.FunSuite {
         loginAfter <- repository.lookup("login", loginHash)
         emailAfter <- repository.lookup("email", emailHash)
         _ <- leak(t, "email", emailHash, aid)
-        other <- t.send(t.post("/auth/register", register.map { case ("id", _) => "id" -> "jiro_2026"; case field => field }, ip = "192.0.2.92"))
+        other <-
+          t.send(t.post("/auth/register", register.map { case ("id", _) => "id" -> "jiro_2026"; case field => field }, ip = "192.0.2.92"))
         _ = assertEquals(other.status, 200)
         verified <- t.send(t.post("/auth/email/verify", Seq("token" -> t.mailedToken())))
         otherAid = t.kit.accountNames.find(name => name != aid && name != "dummy").get

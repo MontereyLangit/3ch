@@ -11,13 +11,20 @@ class LoginThrottleSuite extends FunSuite {
   private def failed(state: LoginThrottle, keyIp: String, time: Double): LoginThrottleUpdate =
     state.recordFailure(keyIp, time).toOption.get
 
-  private def failures(state: LoginThrottle, keyIp: String, count: Int, time: Double): LoginThrottle =
-    (0 until count).foldLeft(state)((current, _) => failed(current, keyIp, time).state)
+  private def failures(state: LoginThrottle, keyIp: String, count: Int, time: Double): LoginThrottle = (0 until count).foldLeft(state)(
+    (current, _) => failed(current, keyIp, time).state
+  )
 
   test("null の保存値と接続元ハッシュは例外を出さず不正と判定する") {
-    Seq(LoginThrottle(sources = null), LoginThrottle(account = null), LoginThrottle(sources = Map(null.asInstanceOf[String] -> LoginSource(1, now))),
-      LoginThrottle(sources = Map(ipA -> null)), LoginThrottle(sources = Map(ipA -> LoginSource(0, now))),
-      LoginThrottle(sources = Map(ipA -> LoginSource(1, now, Some(-1d)))), LoginThrottle(account = LoginAccountFailures(-1, now)))
+    Seq(
+      LoginThrottle(sources = null),
+      LoginThrottle(account = null),
+      LoginThrottle(sources = Map(null.asInstanceOf[String] -> LoginSource(1, now))),
+      LoginThrottle(sources = Map(ipA -> null)),
+      LoginThrottle(sources = Map(ipA -> LoginSource(0, now))),
+      LoginThrottle(sources = Map(ipA -> LoginSource(1, now, Some(-1d)))),
+      LoginThrottle(account = LoginAccountFailures(-1, now))
+    )
       .foreach(value => assert(!value.valid))
   }
 
@@ -53,7 +60,9 @@ class LoginThrottleSuite extends FunSuite {
   }
 
   test("ロック中の接続元が百一件になっても期限内のロックを捨てず、保持できない新しい接続元はロック扱いにする") {
-    val locked = (0 until 101).foldLeft(LoginThrottle())((state, i) => failures(state, ip(i), 10, now).copy(account = LoginAccountFailures()))
+    val locked = (0 until 101).foldLeft(LoginThrottle())((state, i) =>
+      failures(state, ip(i), 10, now).copy(account = LoginAccountFailures())
+    )
     assert(locked.sources.size <= LoginThrottle.sourceLimit)
     assertEquals(locked.sources.values.count(_.lockedUntil.isDefined), LoginThrottle.sourceLimit)
     (0 until LoginThrottle.sourceLimit).foreach(i => assert(locked.check(ip(i), now + 1).toOption.get.locked, i.toString))

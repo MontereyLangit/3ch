@@ -17,7 +17,7 @@ object EmailAddress {
   /** 確認画面に出すための伏せ字。ローカル部は先頭の 1 文字だけ残し、ドメインはそのまま出す */
   def mask(address: String): String = address.lastIndexOf('@') match {
     case at if at > 0 => address.take(1) + "***" + address.drop(at)
-    case _ => ""
+    case _            => ""
   }
   private val Local = "[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*"
   private val Label = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
@@ -36,7 +36,7 @@ object EmailAddress {
       val rawDomain = trimmed.substring(at + 1)
       val domain = if (rawDomain.exists(c => c <= ' ' || "/\\?#@:[]%".contains(c))) None else AccountText.asciiDomain(rawDomain)
       domain.filter(d => d.length <= 253 && d.matches(s"(?:$Label\\.)+$Label") && local.matches(Local)) match {
-        case None => Left(EmailRejection.Invalid)
+        case None    => Left(EmailRejection.Invalid)
         case Some(d) =>
           val address = local + "@" + d
           val canonical = if (Gmail.contains(d)) local.takeWhile(_ != '+').replace(".", "") + "@gmail.com" else address
@@ -74,11 +74,13 @@ object PendingKind {
 
 /** 保留中のトークン。hash はトークンの HMAC、email はメール認証で確定させるアドレス、generation は発行時のアカウントの世代 */
 final case class PendingToken(hash: String, expiresAt: Double, email: Option[String] = None, generation: Int = 0) {
-  def valid: Boolean = DedicatedBrowserTokens.validHash(hash) && AccountProfile.validTime(expiresAt) && email.forall(_.nonEmpty) && generation >= 0
+  def valid: Boolean = DedicatedBrowserTokens.validHash(hash) && AccountProfile.validTime(expiresAt) && email.forall(_.nonEmpty) &&
+    generation >= 0
 
   /** ハッシュが一致し、期限内か */
   def accepts(candidate: String, now: Double): Boolean =
-    candidate.length == hash.length && candidate.indices.foldLeft(0)((d, i) => d | (candidate.charAt(i) ^ hash.charAt(i))) == 0 && now < expiresAt
+    candidate.length == hash.length && candidate.indices.foldLeft(0)((d, i) => d | (candidate.charAt(i) ^ hash.charAt(i))) == 0 &&
+      now < expiresAt
 }
 
 /** メールのリンクに載せる保留トークン。aid で Account を引き、secret の HMAC を保存値と照合する */

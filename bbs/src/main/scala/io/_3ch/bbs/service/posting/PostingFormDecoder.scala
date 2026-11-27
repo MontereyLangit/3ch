@@ -39,7 +39,8 @@ object PostingFormDecoder {
     @tailrec
     def bytes(i: Int, acc: Vector[Short]): Vector[Short] =
       if (i >= s.length) acc
-      else if (s(i) == '%' && i + 2 < s.length && HexByte.test(s.substring(i + 1, i + 3))) bytes(i + 3, acc :+ Integer.parseInt(s.substring(i + 1, i + 3), 16).toShort)
+      else if (s(i) == '%' && i + 2 < s.length && HexByte.test(s.substring(i + 1, i + 3)))
+        bytes(i + 3, acc :+ Integer.parseInt(s.substring(i + 1, i + 3), 16).toShort)
       else bytes(i + 1, acc :+ s(i).toShort)
     SjisEncoding.decode(new Uint8Array(bytes(0, Vector.empty).toJSArray))
   }

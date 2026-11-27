@@ -13,6 +13,7 @@ import scala.util.control.NonFatal
 
 /** R2 の edge-rules.json と request.cf の読み取り、判定の記録 */
 object EdgeRuleRepository {
+
   /** 投稿処理のポート */
   def store(env: WorkerEnv): EdgeRuleStore = new EdgeRuleStore {
     def load(): Future[EdgeRules] = EdgeRuleRepository.load(env)
@@ -50,13 +51,25 @@ object EdgeRuleRepository {
       val v = c.selectDynamic(name)
       Option.when(v != null && !js.isUndefined(v))(js.Dynamic.global.String(v).asInstanceOf[String])
     }
-    EdgeSignal(value("asn").getOrElse(""), value("country").getOrElse(""), value("clientTcpRtt").flatMap(_.toDoubleOption),
-      value("tlsClientHelloLength").flatMap(_.toIntOption), Option(request.headers.get("User-Agent")).getOrElse(""))
+    EdgeSignal(
+      value("asn").getOrElse(""),
+      value("country").getOrElse(""),
+      value("clientTcpRtt").flatMap(_.toDoubleOption),
+      value("tlsClientHelloLength").flatMap(_.toIntOption),
+      Option(request.headers.get("User-Agent")).getOrElse("")
+    )
   }
 
   /** 見つけた矛盾を Workers Logs に一行の JSON で残す。応答には出さない */
   def report(endpoint: String, signal: EdgeSignal, decision: EdgeDecision): Unit = if (decision.findings.nonEmpty || decision.strict) {
-    js.Dynamic.global.console.warn(js.JSON.stringify(js.Dynamic.literal(event = "edge", endpoint = endpoint, reject = decision.reject,
-      strict = decision.strict, findings = decision.findings.map(_.code).toJSArray, asn = signal.asn, country = signal.country)))
+    js.Dynamic.global.console.warn(js.JSON.stringify(js.Dynamic.literal(
+      event = "edge",
+      endpoint = endpoint,
+      reject = decision.reject,
+      strict = decision.strict,
+      findings = decision.findings.map(_.code).toJSArray,
+      asn = signal.asn,
+      country = signal.country
+    )))
   }
 }

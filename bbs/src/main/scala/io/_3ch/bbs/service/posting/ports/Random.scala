@@ -8,6 +8,7 @@ trait Random {
 }
 
 object Random {
+
   /** 実行環境の Math.random を使う */
   val system: Random = () => js.Math.random()
 }

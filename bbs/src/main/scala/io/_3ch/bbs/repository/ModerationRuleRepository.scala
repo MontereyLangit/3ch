@@ -9,6 +9,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
 /** R2 の規制ルール（deny.cgi / ngwords.cgi） */
 object ModerationRuleRepository {
+
   /** ルールファイルを読む。R2 の get の失敗はそのまま失敗にし、本文が読めないか書式が不正なら Broken */
   def load(file: ModerationRuleFile, e: WorkerEnv): Future[ModerationRuleSource] =
     e.ch3www.get(file.path).toFuture.flatMap { obj =>

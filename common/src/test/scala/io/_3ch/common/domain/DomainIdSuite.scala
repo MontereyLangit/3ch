@@ -14,7 +14,9 @@ class DomainIdSuite extends FunSuite {
 
   test("ThreadKey.parse: 正規表記の文字列だけを受け付ける") {
     assertEquals(ThreadKey.parse("1800000001").map(_.value), Right(1800000001L))
-    List("", "abc", "01800000001", "+1800000001", "1800000001 ", "99999999", "10000000000").foreach(v => assert(ThreadKey.parse(v).isLeft, v))
+    List("", "abc", "01800000001", "+1800000001", "1800000001 ", "99999999", "10000000000").foreach(v =>
+      assert(ThreadKey.parse(v).isLeft, v)
+    )
   }
 
   test("ThreadKey: 9〜10桁の正の整数のみ受け付ける") {

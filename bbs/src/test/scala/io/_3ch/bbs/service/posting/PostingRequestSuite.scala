@@ -7,7 +7,11 @@ import scala.scalajs.js
 
 /** bbs.cgi のヘッダの読み取りと検査 */
 class PostingRequestSuite extends FunSuite {
-  private def makeRequest(method: String = "POST", headers: Seq[(String, String)] = Nil, cf: js.UndefOr[js.Dictionary[js.Any]] = js.undefined): Request = {
+  private def makeRequest(
+      method: String = "POST",
+      headers: Seq[(String, String)] = Nil,
+      cf: js.UndefOr[js.Dictionary[js.Any]] = js.undefined
+  ): Request = {
     val lowered = headers.map((k, v) => k.toLowerCase -> v).toMap
     js.Dynamic.literal(
       url = "https://www.3ch.io/test/bbs.cgi",
@@ -17,12 +21,14 @@ class PostingRequestSuite extends FunSuite {
     ).asInstanceOf[Request]
   }
 
-  private val valid = PostingRequest.from(makeRequest(headers = Seq(
-    "content-type" -> "application/x-www-form-urlencoded",
-    "referer" -> "https://www.3chbbs.com/test/read.cgi/sample/1/",
-    "user-agent" -> "Mozilla/5.0 (TestBrowser)",
-    "CF-Connecting-IP" -> "192.0.2.1"
-  )))
+  private val valid = PostingRequest.from(makeRequest(headers =
+    Seq(
+      "content-type" -> "application/x-www-form-urlencoded",
+      "referer" -> "https://www.3chbbs.com/test/read.cgi/sample/1/",
+      "user-agent" -> "Mozilla/5.0 (TestBrowser)",
+      "CF-Connecting-IP" -> "192.0.2.1"
+    )
+  ))
 
   test("専ブラキー用の secure は HTTPS だけで localhost HTTP を含めない") {
     val request = makeRequest().asInstanceOf[js.Dynamic]
@@ -41,7 +47,10 @@ class PostingRequestSuite extends FunSuite {
     assertEquals(all.validate, Some(PostingError.MethodNotPost))
     assertEquals(all.copy(method = "POST").validate, Some(PostingError.BrokenBody("text/plain")))
     assertEquals(all.copy(method = "POST", contentType = valid.contentType).validate, Some(PostingError.InvalidReferer("")))
-    assertEquals(all.copy(method = "POST", contentType = valid.contentType, referer = valid.referer).validate, Some(PostingError.InvalidUserAgent("x")))
+    assertEquals(
+      all.copy(method = "POST", contentType = valid.contentType, referer = valid.referer).validate,
+      Some(PostingError.InvalidUserAgent("x"))
+    )
     assertEquals(valid.copy(clientIp = "1.2.3.4").validate, Some(PostingError.ProxyHeader("1.2.3.4")))
   }
 
@@ -52,12 +61,24 @@ class PostingRequestSuite extends FunSuite {
 
   test("referer は 3ch.io・3chbbs.com（ポート付き可）と 127.0.0.1:8787・8788 を通す") {
     val accepted = List(
-      "https://www.3ch.io", "http://www.3ch.io/test/", "https://www.3chbbs.com?x", "https://www.3chbbs.com#a",
-      "https://www.3ch.io:8443/", "http://127.0.0.1:8787/test/", "http://127.0.0.1:8788"
+      "https://www.3ch.io",
+      "http://www.3ch.io/test/",
+      "https://www.3chbbs.com?x",
+      "https://www.3chbbs.com#a",
+      "https://www.3ch.io:8443/",
+      "http://127.0.0.1:8787/test/",
+      "http://127.0.0.1:8788"
     )
     val rejected = List(
-      "", "https://3ch.io/", "https://www.3ch.io.evil.example/", "https://www.3chbbs.com.evil/", "https://www.3ch.io:/",
-      "http://127.0.0.1:8789/", "https://127.0.0.1:8787/", "http://localhost:8787/", "ftp://www.3ch.io/"
+      "",
+      "https://3ch.io/",
+      "https://www.3ch.io.evil.example/",
+      "https://www.3chbbs.com.evil/",
+      "https://www.3ch.io:/",
+      "http://127.0.0.1:8789/",
+      "https://127.0.0.1:8787/",
+      "http://localhost:8787/",
+      "ftp://www.3ch.io/"
     )
     accepted.foreach(referer => assertEquals(valid.copy(referer = referer).validate, None, referer))
     rejected.foreach(referer => assertEquals(valid.copy(referer = referer).validate, Some(PostingError.InvalidReferer(referer)), referer))
@@ -75,15 +96,22 @@ class PostingRequestSuite extends FunSuite {
     def host(headers: (String, String)*): String = PostingRequest.from(makeRequest(headers = headers)).host
     assertEquals(host("CF-Connecting-IP" -> "192.0.2.1"), "192.0.2.1")
     assertEquals(host("CF-Connecting-IP" -> "192.0.2.1", "x-forwarded-for" -> "192.0.2.1"), "192.0.2.1")
-    assertEquals(host("CF-Connecting-IP" -> "192.0.2.1", "x-forwarded-for" -> "192.0.2.1", "forwarded" -> "for=203.0.113.5"), "192.0.2.1<for=203.0.113.5>")
-    assertEquals(host("CF-Connecting-IP" -> "192.0.2.1", "x-forwarded-for" -> "203.0.113.5", "forwarded" -> "for=x", "via" -> "1.1 proxy"), "192.0.2.1<203.0.113.5>")
+    assertEquals(
+      host("CF-Connecting-IP" -> "192.0.2.1", "x-forwarded-for" -> "192.0.2.1", "forwarded" -> "for=203.0.113.5"),
+      "192.0.2.1<for=203.0.113.5>"
+    )
+    assertEquals(
+      host("CF-Connecting-IP" -> "192.0.2.1", "x-forwarded-for" -> "203.0.113.5", "forwarded" -> "for=x", "via" -> "1.1 proxy"),
+      "192.0.2.1<203.0.113.5>"
+    )
     assertEquals(host("CF-Connecting-IP" -> "192.0.2.1", "via" -> "1.1 proxy"), "192.0.2.1<1.1 proxy>")
     assertEquals(host("x-forwarded-for" -> "203.0.113.5"), "null<203.0.113.5>")
     assertEquals(host(), "null")
   }
 
   test("browserUserAgent は full-version-list があればそれを、無ければ sec-ch-ua を連結する") {
-    def ua(headers: (String, String)*): String = PostingRequest.from(makeRequest(headers = ("user-agent" -> "UA") +: headers)).browserUserAgent
+    def ua(headers: (String, String)*): String =
+      PostingRequest.from(makeRequest(headers = ("user-agent" -> "UA") +: headers)).browserUserAgent
     assertEquals(ua("sec-ch-ua" -> "A", "sec-ch-ua-full-version-list" -> "B"), "UAB")
     assertEquals(ua("sec-ch-ua" -> "A", "sec-ch-ua-full-version-list" -> ""), "UA")
     assertEquals(ua("sec-ch-ua" -> "A"), "UAA")

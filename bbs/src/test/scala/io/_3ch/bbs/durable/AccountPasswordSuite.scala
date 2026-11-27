@@ -22,10 +22,12 @@ class AccountPasswordSuite extends FunSuite {
     val subtle = HandlerTestKit.global.crypto.subtle
     val original = subtle.deriveBits
     var calls = 0
-    subtle.deriveBits = ((algorithm: js.Any, key: js.Any, length: js.Any) => {
-      calls += 1
-      original.call(subtle, algorithm, key, length)
-    }): js.Function3[js.Any, js.Any, js.Any, js.Any]
+    subtle.deriveBits = (
+        (algorithm: js.Any, key: js.Any, length: js.Any) => {
+          calls += 1
+          original.call(subtle, algorithm, key, length)
+        }
+    ): js.Function3[js.Any, js.Any, js.Any, js.Any]
     body.transform { result =>
       js.special.delete(subtle, "deriveBits")
       result.map(_ -> calls)
@@ -107,7 +109,10 @@ class AccountPasswordSuite extends FunSuite {
       _ = assertEquals(old.code.asInstanceOf[String], AccountRejection.LoginFailed.code)
       current <- env.account(aid).verifyPassword("another secret value", ip, now + 7).toFuture
       _ = assertEquals(current.code.asInstanceOf[String], "")
-      client <- env.account("clientaccount001").create(AccountCodec.encodeProfile(AccountProfile("clientaccount001", "abcd1234", AccountKind.Client, now, None, now, "v1")), now).toFuture
+      client <- env.account("clientaccount001").create(
+        AccountCodec.encodeProfile(AccountProfile("clientaccount001", "abcd1234", AccountKind.Client, now, None, now, "v1")),
+        now
+      ).toFuture
       _ = assertEquals(client.code.asInstanceOf[String], "")
       refused <- env.account("clientaccount001").setPassword(PasswordCredentialCodec.encode(next), now + 5).toFuture
     } yield assertEquals(refused.code.asInstanceOf[String], AccountRejection.Invalid.code)

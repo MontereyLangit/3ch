@@ -35,9 +35,10 @@ object AutoHideHeader {
       hiddenNow <- useRef(false)
       height <- useRef(0.0)
       board <- useRef(Option.empty[dom.html.Element])
-      setHidden = (value: Boolean) => Callback.when(value != hiddenNow.value) {
-        Callback { hiddenNow.value = value } >> hidden.setState(value) >> Callback(place(board.value, height.value, value))
-      }
+      setHidden = (value: Boolean) =>
+        Callback.when(value != hiddenNow.value) {
+          Callback { hiddenNow.value = value } >> hidden.setState(value) >> Callback(place(board.value, height.value, value))
+        }
       _ <- useEffectOnMount(CallbackTo {
         val measure: () => Unit = () => {
           headerRef.get.runNow().foreach(h => height.value = h.offsetHeight)

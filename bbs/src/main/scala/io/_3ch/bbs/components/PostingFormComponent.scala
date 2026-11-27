@@ -8,16 +8,16 @@ import japgolly.scalajs.react.ScalaFnComponent
 
 import scala.scalajs.js.JSConverters.*
 
-case class PostingFormProps(
-  bbs: BoardId,
-  time: String,
-  key: Option[ThreadKey] = None,
-  imgurClientId: String = "",
-  commands: Seq[ThreadCommand] = ThreadCommand.all,
-  authEnabled: Boolean = false,
-  session: Option[SessionView] = None,
-  requiredLevel: Int = 0,
-  returnPath: String = "/"
+final case class PostingFormProps(
+    bbs: BoardId,
+    time: String,
+    key: Option[ThreadKey] = None,
+    imgurClientId: String = "",
+    commands: Seq[ThreadCommand] = ThreadCommand.all,
+    authEnabled: Boolean = false,
+    session: Option[SessionView] = None,
+    requiredLevel: Int = 0,
+    returnPath: String = "/"
 )
 
 /**

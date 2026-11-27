@@ -8,6 +8,7 @@ import scala.concurrent.Future
 
 /** スレの読み書き（Thread DO） */
 trait ThreadStore {
+
   /** スレ立て前に同じ key の dat を読む。旧形式のログは取り込まない */
   def datBeforeCreation(board: BoardId, key: String): Future[String]
 

@@ -15,7 +15,9 @@ class PostingRejectionHeadersSuite extends munit.FunSuite {
   }
   test("Lv 不足は必要 Lv を返し、ほかの拒否はコードだけにする") {
     assertEquals(Posting.rejectionHeaders(PostingError.AuthenticationLevel(3), "sample").toMap.get("x-phoebe-required"), Some("3"))
-    assertEquals(Posting.rejectionHeaders(PostingError.Authentication(AuthenticationFailure.Account(AccountRejection.Frozen)), "sample"),
-      Seq("x-post-error" -> "auth:frozen"))
+    assertEquals(
+      Posting.rejectionHeaders(PostingError.Authentication(AuthenticationFailure.Account(AccountRejection.Frozen)), "sample"),
+      Seq("x-post-error" -> "auth:frozen")
+    )
   }
 }

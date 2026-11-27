@@ -21,7 +21,7 @@ object JsNumber {
         case 'x' | 'X' => 16
         case 'o' | 'O' => 8
         case 'b' | 'B' => 2
-        case _ => 0
+        case _         => 0
       }
       if (radix != 0 && isDigits(t.drop(2), radix)) radixValue(t.drop(2), radix) else Double.NaN
     } else Double.NaN

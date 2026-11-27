@@ -4,8 +4,8 @@ package io._3ch.common.domain
  * スレッド一覧
  * @param value BbsSubjectのリスト
  */
-case class BbsSubjects (
-  value: List[BbsSubject]
+final case class BbsSubjects(
+    value: List[BbsSubject]
 ) {
 
   /**
@@ -13,7 +13,7 @@ case class BbsSubjects (
    *
    * @return `"1791039040.dat<>洗濯とエアコン掃除と4か月振りの風呂掃除した (6)\n1792588031.dat<>PHPというのが大変らしい (5)\n..."` …
    */
-  override def toString: String = value.map{_.toString}.mkString("", "\n", "\n")
+  override def toString: String = value.map { _.toString }.mkString("", "\n", "\n")
 }
 
 object BbsSubjects {
@@ -51,10 +51,10 @@ object BbsSubjects {
  * @param title スレッドタイトル
  * @param resNum レス数
  */
-case class BbsSubject private (
-  key: ThreadKey,
-  title: ThreadTitle,
-  resNum: Int
+final case class BbsSubject private (
+    key: ThreadKey,
+    title: ThreadTitle,
+    resNum: Int
 ) {
 
   /**
@@ -66,6 +66,7 @@ case class BbsSubject private (
 }
 
 object BbsSubject {
+
   /** 1 行分を作る。題名が null かレス数が 1 未満なら Left */
   def create(key: ThreadKey, title: ThreadTitle, resNum: Int): Either[String, BbsSubject] = {
     val isValid = title != null && resNum > 0

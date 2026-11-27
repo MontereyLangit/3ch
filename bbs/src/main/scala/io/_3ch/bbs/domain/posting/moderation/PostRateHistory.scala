@@ -9,6 +9,7 @@ enum PostRateStatus {
 
 /** 板の連投履歴の 1 件。key は予約 ID（スレキーとランダム値） */
 final case class PostRateRecord(key: String, timestampSeconds: Double, identity: PostRateIdentity, status: PostRateStatus) {
+
   /** 期限内の予約か */
   def isActivePending(now: Double): Boolean =
     status == PostRateStatus.Pending && now <= timestampSeconds + PostRateHistory.ReservationSeconds
@@ -52,7 +53,7 @@ final case class PostRateHistory(meta: PostRateMeta, pages: Vector[PostRatePage]
   def nextPage(settings: BoardSettings, now: Double): Option[Int] = older.filter { _ =>
     val loaded = records
     pages.isEmpty || loaded.count(_.status == PostRateStatus.Completed) < math.max(settings.timecount, 1) ||
-      (settings.windowSeconds > 0 && loaded.lastOption.exists(_.timestampSeconds >= now - settings.windowSeconds))
+    (settings.windowSeconds > 0 && loaded.lastOption.exists(_.timestampSeconds >= now - settings.windowSeconds))
   }
 
   /**
@@ -66,9 +67,9 @@ final case class PostRateHistory(meta: PostRateMeta, pages: Vector[PostRatePage]
     else PostRateReservation(rejection, Some(retained(settings, now).appended(PostRateRecord(key, now, identity, PostRateStatus.Pending))))
   }
 
-  private def appended(record: PostRateRecord): PostRateHistory = pages.headOption.filter(_.records.size < PageSize) match {
-    case Some(page) => copy(pages = page.copy(records = page.records :+ record) +: pages.tail)
-    case None =>
+  private def appended(record: PostRateRecord): PostRateHistory = pages.headOption.filter(_.records.sizeIs < PageSize) match {
+    case Some(page) => copy(pages = page.copy(records = page.records :+ record) +: pages.drop(1))
+    case None       =>
       val number = meta.newest + 1
       PostRateHistory(PostRateMeta(number, math.max(meta.oldest, number - MaxPages + 1)), PostRatePage(number, Vector(record)) +: pages)
   }
@@ -83,7 +84,8 @@ final case class PostRateHistory(meta: PostRateMeta, pages: Vector[PostRatePage]
       case ((completed, numbers), (number, record)) =>
         val isCompleted = record.status == PostRateStatus.Completed
         val keep = (isCompleted && completed < count) ||
-          (isCompleted && settings.windowSeconds > 0 && record.timestampSeconds >= now - settings.windowSeconds) || record.isActivePending(now)
+          (isCompleted && settings.windowSeconds > 0 && record.timestampSeconds >= now - settings.windowSeconds) ||
+          record.isActivePending(now)
         (if (isCompleted) completed + 1 else completed, if (keep) numbers :+ number else numbers)
     }._2
     val oldest = math.max(meta.oldest, kept.minOption.getOrElse(meta.newest))
@@ -106,10 +108,13 @@ final case class PostRateHistory(meta: PostRateMeta, pages: Vector[PostRatePage]
 }
 
 object PostRateHistory {
+
   /** 1 ページの件数 */
   val PageSize: Int = 64
+
   /** 保存するページ数の上限（1,024 件） */
   val MaxPages: Int = 16
+
   /** 予約の有効期限（秒） */
   val ReservationSeconds: Double = 120
 

@@ -10,6 +10,7 @@ trait AccountEmailStore extends IndexHoldings {
   def lookup(kind: String, hash: String): Future[Option[String]]
   def reserve(kind: String, hash: String, aid: String, now: Double, tokenId: Option[String] = None): Future[Boolean]
   def confirm(kind: String, hash: String, aid: String, now: Double): Future[Unit]
+
   /** 保留トークンを保存する。再設定なら送り先のアドレスを返す */
   def issuePending(aid: String, kind: PendingKind, hash: String, email: Option[String], now: Double): Future[Option[String]]
   def checkPending(aid: String, kind: PendingKind, hash: String, now: Double): Future[PendingCheck]

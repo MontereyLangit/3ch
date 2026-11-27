@@ -45,11 +45,17 @@ class GlobalThreadSuite extends FunSuite {
   test("mergeSubject: 924 → 900 → 板固有の順で、各群の並びは保つ") {
     val global = Seq("9000000003.dat<>c (1)", "9240000002.dat<>b (5)", "9000000001.dat<>a (2)", "9240000000.dat<>z (1)")
     val own = Seq("1800000010.dat<>own1 (3)", "9240000002.dat<>dup (1)", "1700000000.dat<>own2 (1)")
-    assertEquals(GlobalThread.mergeSubject(global, own), Seq(
-      "9240000002.dat<>b (5)", "9240000000.dat<>z (1)",
-      "9000000003.dat<>c (1)", "9000000001.dat<>a (2)",
-      "1800000010.dat<>own1 (3)", "1700000000.dat<>own2 (1)"
-    ))
+    assertEquals(
+      GlobalThread.mergeSubject(global, own),
+      Seq(
+        "9240000002.dat<>b (5)",
+        "9240000000.dat<>z (1)",
+        "9000000003.dat<>c (1)",
+        "9000000001.dat<>a (2)",
+        "1800000010.dat<>own1 (3)",
+        "1700000000.dat<>own2 (1)"
+      )
+    )
     assertEquals(GlobalThread.mergeSubject(Nil, own), Seq("1800000010.dat<>own1 (3)", "1700000000.dat<>own2 (1)"))
     assertEquals(GlobalThread.mergeSubject(global, Nil).size, 4)
   }

@@ -16,6 +16,7 @@ final case class JwtParts(header: String, payload: String, signingInput: String,
 
 /** RS256 の JWT の分解と署名検証、PKCE 用の base64url。暗号 API の失敗は検証失敗にする */
 object JwtRs256 {
+
   /** base64url を復号する。不正な文字や長さは None */
   def decode(value: String): Option[Vector[Byte]] = {
     if (!value.matches("[A-Za-z0-9_-]*") || value.length % 4 == 1) None
@@ -33,10 +34,10 @@ object JwtRs256 {
   def parse(token: String): Option[JwtParts] = Option(token).filter(_.length <= 8192).flatMap { text =>
     text.split("\\.", -1).toList match {
       case header :: payload :: signature :: Nil => for {
-        h <- decode(header).flatMap(utf8)
-        p <- decode(payload).flatMap(utf8)
-        s <- decode(signature)
-      } yield JwtParts(h, p, header + "." + payload, s)
+          h <- decode(header).flatMap(utf8)
+          p <- decode(payload).flatMap(utf8)
+          s <- decode(signature)
+        } yield JwtParts(h, p, header + "." + payload, s)
       case _ => None
     }
   }
@@ -46,8 +47,12 @@ object JwtRs256 {
     val algorithm = js.Dynamic.literal(name = "RSASSA-PKCS1-v1_5", hash = "SHA-256")
     val jwk = js.Dynamic.literal(kty = "RSA", n = key.n, e = key.e, alg = "RS256", ext = true)
     GlobalCrypto.subtle.importJwk("jwk", jwk, algorithm, false, js.Array("verify")).toFuture.flatMap { imported =>
-      GlobalCrypto.subtle.verify(js.Dynamic.literal(name = "RSASSA-PKCS1-v1_5"), imported, bytes(parts.signature),
-        new TextEncoder().encode(parts.signingInput)).toFuture
+      GlobalCrypto.subtle.verify(
+        js.Dynamic.literal(name = "RSASSA-PKCS1-v1_5"),
+        imported,
+        bytes(parts.signature),
+        new TextEncoder().encode(parts.signingInput)
+      ).toFuture
     }
   }.recover { case NonFatal(_) => false }
 

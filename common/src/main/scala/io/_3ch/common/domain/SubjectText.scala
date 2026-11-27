@@ -8,23 +8,26 @@ object SubjectText {
 
   /** 名前付きの 5 種と数値文字参照を戻す。範囲外やサロゲートの数値参照はそのまま残す */
   def decode(value: String): String = {
-    entity.replaceAllIn(value, matched => {
-      val token = matched.matched
-      val decoded = token match {
-        case "&amp;" => "&"
-        case "&lt;" => "<"
-        case "&gt;" => ">"
-        case "&quot;" => "\""
-        case "&apos;" => "'"
-        case _ =>
-          val number = token.substring(2, token.length - 1)
-          val parsed = scala.util.Try {
-            if number.startsWith("x") || number.startsWith("X") then Integer.parseInt(number.drop(1), 16)
-            else Integer.parseInt(number, 10)
-          }.toOption.filter(n => n > 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff))
-          parsed.fold(token)(n => new String(Character.toChars(n)))
+    entity.replaceAllIn(
+      value,
+      matched => {
+        val token = matched.matched
+        val decoded = token match {
+          case "&amp;"  => "&"
+          case "&lt;"   => "<"
+          case "&gt;"   => ">"
+          case "&quot;" => "\""
+          case "&apos;" => "'"
+          case _        =>
+            val number = token.substring(2, token.length - 1)
+            val parsed = scala.util.Try {
+              if number.startsWith("x") || number.startsWith("X") then Integer.parseInt(number.drop(1), 16)
+              else Integer.parseInt(number, 10)
+            }.toOption.filter(n => n > 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff))
+            parsed.fold(token)(n => new String(Character.toChars(n)))
+        }
+        Matcher.quoteReplacement(decoded)
       }
-      Matcher.quoteReplacement(decoded)
-    })
+    )
   }
 }

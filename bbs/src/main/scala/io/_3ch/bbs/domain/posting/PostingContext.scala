@@ -11,22 +11,23 @@ import scala.collection.immutable.ListMap
   * mailCommands は認証を有効にした環境でだけ読むメール欄のコマンド
   */
 final case class PostingContext(
-  form: PostForm,
-  identity: PostingIdentity,
-  time: String,
-  unixtime: String,
-  settings: BbsSettings = BbsSettings(ListMap.empty),
-  number: Int = 0,
-  title: String = "",
-  cap: Option[CapHandle] = None,
-  shikibetsu: String = "",
-  threadOwner: () => Option[ThreadOwner] = () => None,
-  sage: Boolean = false,
-  ponCookie: Option[String] = None,
-  capKey: Option[String] = None,
-  mailCommands: MailCommands = MailCommands.empty,
-  sessionCookie: Option[String] = None
+    form: PostForm,
+    identity: PostingIdentity,
+    time: String,
+    unixtime: String,
+    settings: BbsSettings = BbsSettings(ListMap.empty),
+    number: Int = 0,
+    title: String = "",
+    cap: Option[CapHandle] = None,
+    shikibetsu: String = "",
+    threadOwner: () => Option[ThreadOwner] = () => None,
+    sage: Boolean = false,
+    ponCookie: Option[String] = None,
+    capKey: Option[String] = None,
+    mailCommands: MailCommands = MailCommands.empty,
+    sessionCookie: Option[String] = None
 ) {
+
   /** スレ立てか。レス番号が 1 のとき */
   def creating: Boolean = number == 1
 }

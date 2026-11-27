@@ -7,8 +7,9 @@ class PhoebeSuite extends FunSuite {
   private val hour = 3600d
 
   /** 一時間ごとに一回ずつ投稿したときの Lv の推移 */
-  private def postHourly(kind: AccountKind, start: AccountLevel, hours: Int): AccountLevel =
-    (1 to hours).foldLeft(start)((level, i) => level.afterPost(kind, now + i * hour))
+  private def postHourly(kind: AccountKind, start: AccountLevel, hours: Int): AccountLevel = (1 to hours).foldLeft(start)((level, i) =>
+    level.afterPost(kind, now + i * hour)
+  )
 
   test("クライアント ID の T(lv) は 23 時間の 2 の lv-1 乗倍で N(lv) も同じ数") {
     assertEquals((1 to 9).map(Phoebe.hours(AccountKind.Client, _)).toList, (0 to 8).map(n => Option(23 << n)).toList)
@@ -84,8 +85,11 @@ class PhoebeSuite extends FunSuite {
   }
 
   test("BBS_PHOEBE は 0〜10 の整数だけを読み、それ以外は 0") {
-    assertEquals(Seq(None, Some(""), Some("0"), Some("3"), Some(" 10 "), Some("11"), Some("-1"), Some("3.5"), Some("abc"), Some("007"), Some("１"))
-      .map(Phoebe.required).toList, List(0, 0, 0, 3, 10, 0, 0, 0, 0, 0, 0))
+    assertEquals(
+      Seq(None, Some(""), Some("0"), Some("3"), Some(" 10 "), Some("11"), Some("-1"), Some("3.5"), Some("abc"), Some("007"), Some("１"))
+        .map(Phoebe.required).toList,
+      List(0, 0, 0, 3, 10, 0, 0, 0, 0, 0, 0)
+    )
   }
 
   test("必要 Lv 以上か免除の投稿者だけ書き込める") {

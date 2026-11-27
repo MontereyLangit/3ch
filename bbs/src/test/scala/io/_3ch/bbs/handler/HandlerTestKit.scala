@@ -17,7 +17,12 @@ object HandlerTestKit {
   def fut[A](p: js.Any): Future[A] = p.asInstanceOf[js.Promise[A]].toFuture
 
   /** 実 `Request`（GET/POST）。`body` は文字列。 */
-  def request(url: String, headers: Seq[(String, String)] = Nil, method: String = "GET", body: js.UndefOr[js.Any] = js.undefined): Request = {
+  def request(
+      url: String,
+      headers: Seq[(String, String)] = Nil,
+      method: String = "GET",
+      body: js.UndefOr[js.Any] = js.undefined
+  ): Request = {
     val init = js.Dynamic.literal(method = method, headers = js.Dictionary(headers*))
     if body.isDefined then init.updateDynamic("body")(body.get)
     js.Dynamic.newInstance(global.Request)(url, init).asInstanceOf[Request]
@@ -53,14 +58,16 @@ object HandlerTestKit {
     val original = global.selectDynamic(name)
     global.updateDynamic(name)(value)
     val restore = () => global.updateDynamic(name)(original)
-    val result = try body catch { case e: Throwable => restore(); throw e }
+    val result = try body
+    catch { case e: Throwable => restore(); throw e }
     result.transform { r => restore(); r }
   }
 
   /** 引数なしの `new Date()` と `Date.now()` だけを固定ミリ秒にする（明示引数付きの `new Date(x)` は素通し）。 */
   def withFixedTime[A](ms: Double)(body: => Future[A]): Future[A] = {
     val make = js.Dynamic.newInstance(js.Dynamic.global.Function)(
-      "RealDate", "ms",
+      "RealDate",
+      "ms",
       "class FixedDate extends RealDate { constructor(...args) { if (args.length === 0) return new RealDate(ms); return new RealDate(...args); } static now() { return ms; } } return FixedDate;"
     )
     withGlobal("Date", make(global.Date, ms).asInstanceOf[js.Any])(body)
@@ -71,21 +78,29 @@ object HandlerTestKit {
     val original = math.random
     math.random = ((() => value): js.Function0[Double])
     val restore = () => math.random = original
-    val result = try body catch { case e: Throwable => restore(); throw e }
+    val result = try body
+    catch { case e: Throwable => restore(); throw e }
     result.transform { r => restore(); r }
   }
 
   /** `publicFetch` が直接参照する Workers の Cache API (`caches.default`) のインメモリ実装。 */
   private def makeCaches(): js.Dynamic = {
     val store = mutable.Map.empty[String, js.Any]
-    def keyOf(req: js.Any): String = if js.typeOf(req) == "string" then req.asInstanceOf[String] else req.asInstanceOf[js.Dynamic].url.asInstanceOf[String]
+    def keyOf(req: js.Any): String =
+      if js.typeOf(req) == "string" then req.asInstanceOf[String] else req.asInstanceOf[js.Dynamic].url.asInstanceOf[String]
     js.Dynamic.literal(
       default = js.Dynamic.literal(
-        `match` = ((req: js.Any) => js.Promise.resolve[js.Any](store.getOrElse(keyOf(req), js.undefined.asInstanceOf[js.Any]))): js.Function1[js.Any, js.Promise[js.Any]],
-        put = ((req: js.Any, res: js.Dynamic) => {
-          store.update(keyOf(req), res.applyDynamic("clone")().asInstanceOf[js.Any])
-          js.Promise.resolve[js.Any](js.undefined)
-        }): js.Function2[js.Any, js.Dynamic, js.Promise[js.Any]]
+        `match` = ((req: js.Any) =>
+          js.Promise.resolve[js.Any](store.getOrElse(
+            keyOf(req),
+            js.undefined.asInstanceOf[js.Any]
+          ))): js.Function1[js.Any, js.Promise[js.Any]],
+        put = (
+            (req: js.Any, res: js.Dynamic) => {
+              store.update(keyOf(req), res.applyDynamic("clone")().asInstanceOf[js.Any])
+              js.Promise.resolve[js.Any](js.undefined)
+            }
+        ): js.Function2[js.Any, js.Dynamic, js.Promise[js.Any]]
       )
     )
   }
@@ -99,7 +114,9 @@ object HandlerTestKit {
   }
 
   def restoreCaches(): Unit = {
-    savedCaches.foreach(original => if js.isUndefined(original) then js.Dynamic.global.Reflect.deleteProperty(global, "caches") else global.caches = original)
+    savedCaches.foreach(original =>
+      if js.isUndefined(original) then js.Dynamic.global.Reflect.deleteProperty(global, "caches") else global.caches = original
+    )
     savedCaches = None
   }
 

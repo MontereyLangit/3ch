@@ -8,6 +8,7 @@ enum PostRateKey(val name: String) {
 }
 
 object PostRateKey {
+
   /** 既定の照合キー（ip,shiki,aid） */
   val defaults: Set[PostRateKey] = values.toSet
 
@@ -23,10 +24,11 @@ object PostRateKey {
 
 /** 投稿者の照合値。どれもソルト付きハッシュで、空の値は照合しない */
 final case class PostRateIdentity(ip: String = "", shiki: String = "", aid: String = "") {
+
   /** キーに対応する値 */
   def value(key: PostRateKey): String = key match {
-    case PostRateKey.Ip => ip
-    case PostRateKey.Shiki => shiki
+    case PostRateKey.Ip      => ip
+    case PostRateKey.Shiki   => shiki
     case PostRateKey.Account => aid
   }
 
@@ -35,31 +37,40 @@ final case class PostRateIdentity(ip: String = "", shiki: String = "", aid: Stri
     keys.exists(key => value(key).nonEmpty && value(key) == other.value(key))
 
   /** 各値を先頭 ShortLength 文字にした照合値。1 つのスレの中だけで照合する値の保存に使う */
-  def shortened: PostRateIdentity = PostRateIdentity(ip.take(PostRateIdentity.ShortLength), shiki.take(PostRateIdentity.ShortLength), aid.take(PostRateIdentity.ShortLength))
+  def shortened: PostRateIdentity = PostRateIdentity(
+    ip.take(PostRateIdentity.ShortLength),
+    shiki.take(PostRateIdentity.ShortLength),
+    aid.take(PostRateIdentity.ShortLength)
+  )
 }
 
 object PostRateIdentity {
+
   /** スレの直近の投稿に保存するハッシュの長さ（16 進 12 文字 = 48 bit） */
   val ShortLength: Int = 12
 }
 
 /** 連投規制の拒否理由。RPC では code の文字列で返す */
 enum PostRateRejection {
+
   /** ごんたくれ（timecount / timeclose） */
   case Gontakure
+
   /** Samba24。remainingSeconds は文言に出す残り秒数 */
   case Samba24(remainingSeconds: Int)
+
   /** 識別子による広域連投規制（BBS_FR_SECOND）。remainingSeconds は文言に出す残り秒数 */
   case Fr(remainingSeconds: Int)
+
   /** スレ単位の連投（BBS_THREAD_RENTOU） */
   case ThreadRentou
 
   /** RPC とエラーコードに使う文字列。Samba24 と Fr は末尾に残り秒数を付ける */
   def code: String = this match {
-    case Gontakure => PostRateRejection.GontakureCode
+    case Gontakure        => PostRateRejection.GontakureCode
     case Samba24(seconds) => s"${PostRateRejection.Samba24Prefix}$seconds"
-    case Fr(seconds) => s"${PostRateRejection.FrPrefix}$seconds"
-    case ThreadRentou => PostRateRejection.ThreadRentouCode
+    case Fr(seconds)      => s"${PostRateRejection.FrPrefix}$seconds"
+    case ThreadRentou     => PostRateRejection.ThreadRentouCode
   }
 }
 
@@ -71,11 +82,11 @@ object PostRateRejection {
 
   /** code の文字列から戻す。知らない文字列なら None */
   def fromCode(code: String): Option[PostRateRejection] = code match {
-    case GontakureCode => Some(Gontakure)
-    case ThreadRentouCode => Some(ThreadRentou)
+    case GontakureCode                       => Some(Gontakure)
+    case ThreadRentouCode                    => Some(ThreadRentou)
     case _ if code.startsWith(Samba24Prefix) => seconds(code.stripPrefix(Samba24Prefix)).map(Samba24(_))
-    case _ if code.startsWith(FrPrefix) => seconds(code.stripPrefix(FrPrefix)).map(Fr(_))
-    case _ => None
+    case _ if code.startsWith(FrPrefix)      => seconds(code.stripPrefix(FrPrefix)).map(Fr(_))
+    case _                                   => None
   }
 
   private def seconds(text: String): Option[Int] = text.toIntOption.filter(_ > 0)
@@ -84,13 +95,14 @@ object PostRateRejection {
 /** 試行モード（BBS_FR_LEVEL=log）で拒否せずに記録した判定 */
 enum PostRateFinding {
   case Rejected(rejection: PostRateRejection)
+
   /** コピペ吸い込みの対象 */
   case Copipe
 
   /** RPC とログに使う文字列 */
   def code: String = this match {
     case Rejected(rejection) => rejection.code
-    case Copipe => PostRateFinding.CopipeCode
+    case Copipe              => PostRateFinding.CopipeCode
   }
 }
 
@@ -104,6 +116,7 @@ object PostRateFinding {
 
 /** 連投規制の純粋な判定。仕様は docs/post-rate-limit.md */
 object PostRateLimit {
+
   /** ごんたくれで見る期間（秒） */
   val DaySeconds: Double = 86400
 
@@ -112,6 +125,7 @@ object PostRateLimit {
     * checksFr が偽ならこの投稿では広域連投規制を判定しない（履歴の保持には fr を使う）
     */
   final case class BoardSettings(timecount: Int, timeclose: Int, samba24: Int, fr: Int, keys: Set[PostRateKey], checksFr: Boolean = true) {
+
     /** 履歴の保持と読み込みに使う秒数。板設定だけから決まり、投稿ごとの判定の有無によらない。どちらも無効なら 0 */
     def windowSeconds: Int = math.max(samba24, fr)
   }
@@ -126,9 +140,16 @@ object PostRateLimit {
     * 板単位の判定。history は新しい順で、予約中も 1 件に数える。ごんたくれ、Samba24、広域の順に見る。
     * Samba24 は ip・aid、広域は識別子だけで照合する
     */
-  def checkBoard(settings: BoardSettings, history: Seq[Entry], identity: PostRateIdentity, nowSeconds: Double): Option[PostRateRejection] = {
+  def checkBoard(
+      settings: BoardSettings,
+      history: Seq[Entry],
+      identity: PostRateIdentity,
+      nowSeconds: Double
+  ): Option[PostRateRejection] = {
     val gontakure = settings.timecount > 0 && settings.timeclose > 0 &&
-      history.take(settings.timecount).count(entry => entry.timestampSeconds >= nowSeconds - DaySeconds && entry.identity.sameAs(identity, settings.keys)) >= settings.timeclose
+      history.take(settings.timecount).count(entry =>
+        entry.timestampSeconds >= nowSeconds - DaySeconds && entry.identity.sameAs(identity, settings.keys)
+      ) >= settings.timeclose
     def within(seconds: Int, keys: Set[PostRateKey]): Option[Int] =
       if (seconds <= 0) None
       else history.filter(entry => entry.timestampSeconds >= nowSeconds - seconds && entry.identity.sameAs(identity, keys))
@@ -140,8 +161,14 @@ object PostRateLimit {
   }
 
   /** スレ単位の判定。recent はスレの直近の投稿で、RESET 秒以内の同一投稿者が count 件以上なら拒否 */
-  def checkThread(settings: ThreadSettings, recent: Seq[Entry], identity: PostRateIdentity, nowSeconds: Double): Option[PostRateRejection] = {
-    val matched = recent.count(entry => entry.timestampSeconds >= nowSeconds - settings.resetSeconds && entry.identity.sameAs(identity, settings.keys))
+  def checkThread(
+      settings: ThreadSettings,
+      recent: Seq[Entry],
+      identity: PostRateIdentity,
+      nowSeconds: Double
+  ): Option[PostRateRejection] = {
+    val matched =
+      recent.count(entry => entry.timestampSeconds >= nowSeconds - settings.resetSeconds && entry.identity.sameAs(identity, settings.keys))
     Option.when(settings.count > 0 && matched >= settings.count)(PostRateRejection.ThreadRentou)
   }
 

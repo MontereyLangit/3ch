@@ -27,7 +27,15 @@ enum ModerationDecision {
 }
 
 /** 規制の判定に使う投稿。form は規制前のフォーム、poster は各行の回避レベルと照らす投稿者、number はレス番号（スレ立ては 1） */
-final case class ModerationInput(form: PostForm, userInfo: UserInfo, poster: BypassPoster, country: String, number: Double, settings: BbsSettings) {
+final case class ModerationInput(
+    form: PostForm,
+    userInfo: UserInfo,
+    poster: BypassPoster,
+    country: String,
+    number: Double,
+    settings: BbsSettings
+) {
+
   /** NG ワードを照合する文字列と、その文字参照を復元したもの */
   val contents: Seq[String] = {
     val content = s"FROM=${form.name} mail=${form.mail} MESSAGE=${form.message} subject=${form.subject}"
@@ -55,10 +63,10 @@ object ModerationService {
 
   /** ファイルが無ければ通し、壊れていれば既定の段階で免除されない投稿者を拒否し、読み取れたルールを評価する */
   def evaluate(input: ModerationInput, form: PostForm, source: ModerationRuleSource): ModerationDecision = source match {
-    case ModerationRuleSource.Missing => ModerationDecision.Pass(form)
+    case ModerationRuleSource.Missing                             => ModerationDecision.Pass(form)
     case ModerationRuleSource.Broken if exemptWithoutRules(input) => ModerationDecision.Pass(form)
-    case ModerationRuleSource.Broken => ModerationDecision.Deny(ModerationDenial.BrokenRules, form)
-    case ModerationRuleSource.Loaded(rules) => evaluate(input, form, rules)
+    case ModerationRuleSource.Broken                              => ModerationDecision.Deny(ModerationDenial.BrokenRules, form)
+    case ModerationRuleSource.Loaded(rules)                       => evaluate(input, form, rules)
   }
 
   /**
@@ -67,10 +75,12 @@ object ModerationService {
     */
   def evaluate(input: ModerationInput, form: PostForm, rules: ModerationRuleSet): ModerationDecision =
     rules.rules.foldLeft[ModerationDecision](ModerationDecision.Pass(form)) {
-      case (ModerationDecision.Pass(current), rule) if !rule.bypass.exempts(input.poster) && rule.matches(input.form.bbs, input.userInfo.text, input.contents) =>
+      case (ModerationDecision.Pass(current), rule)
+          if !rule.bypass.exempts(input.poster) && rule.matches(input.form.bbs, input.userInfo.text, input.contents) =>
         if (rule.isWord && input.settings.checked("BBS_NGWORD_PASS")) ModerationDecision.Pass(current)
         else if (rule.action == ModerationAction.TateDame && input.number != 1) ModerationDecision.Pass(current)
-        else if (rule.action == ModerationAction.Mark || input.settings.checked("BBS_NO_MADAKANA")) ModerationDecision.Pass(mark(current, rule.isWord))
+        else if (rule.action == ModerationAction.Mark || input.settings.checked("BBS_NO_MADAKANA"))
+          ModerationDecision.Pass(mark(current, rule.isWord))
         else ModerationDecision.Deny(denial(rule), current)
       case (decision, _) => decision
     }

@@ -2,7 +2,9 @@ package io._3ch.bbs.service.auth
 
 import io._3ch.bbs.domain.account.AccountStoreException
 import io._3ch.bbs.service.auth.ports.{AccountCapStore, AuthenticationKeys, CapDirectory}
-import io._3ch.common.domain.account.{AbuseThresholds, AccountCap, AccountDescription, AccountIndexKind, AccountProfile, AccountRejection, CapName, CapNameRejection}
+import io._3ch.common.domain.account.{
+  AbuseThresholds, AccountCap, AccountDescription, AccountIndexKind, AccountProfile, AccountRejection, CapName, CapNameRejection
+}
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.util.control.NonFatal

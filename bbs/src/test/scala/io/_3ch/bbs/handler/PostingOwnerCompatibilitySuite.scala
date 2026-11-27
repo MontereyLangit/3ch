@@ -17,16 +17,33 @@ class PostingOwnerCompatibilitySuite extends munit.FunSuite {
   private def seeded(settings: String = "", dat: String = row): Future[Env] = {
     val env = DurableTestKit.newEnv()
     env.putCap("cap", "管理人")
-    DurableTestKit.seed(env.threadInstance(s"sample/$key"), "dat" -> dat, "log" -> "", "settings" -> settings, "owner" -> brokenOwner).map(_ => env)
+    DurableTestKit.seed(env.threadInstance(s"sample/$key"), "dat" -> dat, "log" -> "", "settings" -> settings, "owner" -> brokenOwner).map(
+      _ => env
+    )
   }
 
   private def reply(env: Env, mail: String = ""): Future[js.Dynamic] = {
-    val body = Seq("FROM" -> "", "mail" -> mail, "MESSAGE" -> "返信", "subject" -> "", "bbs" -> "sample", "key" -> key,
-      "time" -> "9999999999", "submit" -> "書き込む").map((name, value) => s"$name=${js.URIUtils.encodeURIComponent(value)}").mkString("&")
-    val req = request("https://www.3ch.io/test/bbs.cgi", headers = Seq(
-      "content-type" -> "application/x-www-form-urlencoded", "referer" -> "https://www.3ch.io/", "user-agent" -> "Mozilla/5.0",
-      "CF-Connecting-IP" -> "192.0.2.1"
-    ), method = "POST", body = body)
+    val body = Seq(
+      "FROM" -> "",
+      "mail" -> mail,
+      "MESSAGE" -> "返信",
+      "subject" -> "",
+      "bbs" -> "sample",
+      "key" -> key,
+      "time" -> "9999999999",
+      "submit" -> "書き込む"
+    ).map((name, value) => s"$name=${js.URIUtils.encodeURIComponent(value)}").mkString("&")
+    val req = request(
+      "https://www.3ch.io/test/bbs.cgi",
+      headers = Seq(
+        "content-type" -> "application/x-www-form-urlencoded",
+        "referer" -> "https://www.3ch.io/",
+        "user-agent" -> "Mozilla/5.0",
+        "CF-Connecting-IP" -> "192.0.2.1"
+      ),
+      method = "POST",
+      body = body
+    )
     Posting.entry(req, env.worker).toFuture.map(_.asInstanceOf[js.Dynamic])
   }
 

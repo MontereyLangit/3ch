@@ -7,18 +7,20 @@ import io._3ch.bbs.domain.posting.ClientIdentity
   * 詳細は docs/thread-creation-regulation.md「判定」
   */
 object ThreadCreationRateLimit {
+
   /** 狭域（tatesugi）と広域（junban）の、見る件数と秒数 */
   final case class Settings(
-    threadTatesugi: Int,
-    threadTatesugiResetSeconds: Double,
-    threadJunban: Int,
-    threadJunbanResetSeconds: Double
+      threadTatesugi: Int,
+      threadTatesugiResetSeconds: Double,
+      threadJunban: Int,
+      threadJunbanResetSeconds: Double
   )
+
   /** 判定に使うスレ立て履歴の 1 件。識別情報とスレタイはハッシュ済み */
   final case class Entry(
-    timestampSeconds: Double,
-    title: String,
-    identity: ClientIdentity
+      timestampSeconds: Double,
+      title: String,
+      identity: ClientIdentity
   )
 
   /**
@@ -46,9 +48,9 @@ object ThreadCreationRateLimit {
     val tatesugi = window(settings.threadTatesugi, settings.threadTatesugiResetSeconds)
     val junban = window(settings.threadJunban, settings.threadJunbanResetSeconds)
     val matched: Seq[Reason] = tatesugi.flatMap { entry =>
-      Option.when(isSame(identity.ip, entry.identity.ip))(Reason.Ip) ++ Option.when(isSame(title, entry.title))(Reason.Title)
+      Option.when(isSame(identity.ip, entry.identity.ip))(Reason.Ip).toList ++ Option.when(isSame(title, entry.title))(Reason.Title)
     } ++ junban.flatMap { entry =>
-      Option.when(isSame(identity.userAgent, entry.identity.userAgent))(Reason.UserAgent) ++
+      Option.when(isSame(identity.userAgent, entry.identity.userAgent))(Reason.UserAgent).toList ++
         Option.when(isSame(identity.networkGroup, entry.identity.networkGroup))(Reason.NetworkGroup)
     }
     // 履歴の新旧によらず Reason の宣言順で最優先の理由を返す
@@ -59,10 +61,15 @@ object ThreadCreationRateLimit {
     * 確定済み履歴は件数窓ごと全体で、有効な予約は1件ずつ個別に判定し、最優先の規制理由を返す。
     * 優先順は [[Reason]] の宣言順
     */
-  def checkWithReservations(settings: Settings, records: Seq[ThreadCreationRecord], request: ThreadCreationRequest, nowSeconds: Double): Option[Reason] = {
+  def checkWithReservations(
+      settings: Settings,
+      records: Seq[ThreadCreationRecord],
+      request: ThreadCreationRequest,
+      nowSeconds: Double
+  ): Option[Reason] = {
     val (pending, completed) = records.partition(_.isActivePending(nowSeconds))
     def check(entries: Seq[Entry]): Option[Reason] = this.check(settings, entries, request.identity, request.title, nowSeconds)
-    val reasons = check(completed.map(_.toEntry)).toSeq ++ pending.flatMap(record => check(Seq(record.toEntry)))
+    val reasons = check(completed.map(_.toEntry)).toList ++ pending.flatMap(record => check(Seq(record.toEntry)))
     Reason.values.find(reasons.contains)
   }
 }

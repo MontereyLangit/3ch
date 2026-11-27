@@ -18,24 +18,52 @@ object BbsMenuPage {
     val entries: Seq[React.Node] = boards.flatMap { case (board, title) =>
       Seq[React.Node](link(s"https://www.3ch.io/$board/", title), element("br"), "\n")
     }
-    val menu = React.createElement("font", js.Dictionary("size" -> "2").asInstanceOf[js.Object], (
-      Seq[React.Node](
-        link("https://www.3ch.io/", "3chの入口", true), element("br"),
-        link("https://www.3ch.io/html/guide/", "3ch総合案内", true), element("br"),
-        link("https://wiki.3chbbs.com/", "3ch Wiki", true), element("br"),
-        element("br"), element("br"), element("b", "３ちゃんねる"), element("br"), "\n"
-      ) ++ entries ++ Seq[React.Node](
-        element("br"), element("br"), element("b", "他のサイト"), element("br"),
-        element("br"), s"更新日 $updated"
-      )
-    )*)
-    val head = element("head",
-      React.createElement("meta", js.Dictionary("httpEquiv" -> "Content-Type", "content" -> "text/html; charset=Shift_JIS").asInstanceOf[js.Object]),
-      element("title", "BBS MENU for 3ch"), RendererShell.clientScript()
+    val menu = React.createElement(
+      "font",
+      js.Dictionary("size" -> "2").asInstanceOf[js.Object],
+      (
+        Seq[React.Node](
+          link("https://www.3ch.io/", "3chの入口", true),
+          element("br"),
+          link("https://www.3ch.io/html/guide/", "3ch総合案内", true),
+          element("br"),
+          link("https://wiki.3chbbs.com/", "3ch Wiki", true),
+          element("br"),
+          element("br"),
+          element("br"),
+          element("b", "３ちゃんねる"),
+          element("br"),
+          "\n"
+        ) ++ entries ++ Seq[React.Node](
+          element("br"),
+          element("br"),
+          element("b", "他のサイト"),
+          element("br"),
+          element("br"),
+          s"更新日 $updated"
+        )
+      )*
     )
-    val body = React.createElement("body", js.Dictionary(
-      "text" -> "#CC3300", "bgcolor" -> "#FFFFFF", "link" -> "#0000FF", "alink" -> "#ff0000", "vlink" -> "#660099"
-    ).asInstanceOf[js.Object], menu)
+    val head = element(
+      "head",
+      React.createElement(
+        "meta",
+        js.Dictionary("httpEquiv" -> "Content-Type", "content" -> "text/html; charset=Shift_JIS").asInstanceOf[js.Object]
+      ),
+      element("title", "BBS MENU for 3ch"),
+      RendererShell.clientScript()
+    )
+    val body = React.createElement(
+      "body",
+      js.Dictionary(
+        "text" -> "#CC3300",
+        "bgcolor" -> "#FFFFFF",
+        "link" -> "#0000FF",
+        "alink" -> "#ff0000",
+        "vlink" -> "#660099"
+      ).asInstanceOf[js.Object],
+      menu
+    )
     element("html", head, body)
   }
 }

@@ -65,7 +65,7 @@ class SjisEncodingSuite extends FunSuite {
       val b = bytes(i) & 0xff
       refSingle.get(b) match {
         case Some(ch) => sb.append(ch); i += 1
-        case None =>
+        case None     =>
           refLead.get(b) match {
             case Some(branch) =>
               if (i + 1 < bytes.length) {
@@ -103,7 +103,11 @@ class SjisEncodingSuite extends FunSuite {
       val lead = e.field("lead").asInt
       val second = e.field("second").asInt
       val expected = charFromCodePoint(e.field("char").asInt)
-      assertEquals(SjisEncoding.decode(bytesOf(Seq(lead, second))), expected, s"double lead=0x${lead.toHexString} second=0x${second.toHexString}")
+      assertEquals(
+        SjisEncoding.decode(bytesOf(Seq(lead, second))),
+        expected,
+        s"double lead=0x${lead.toHexString} second=0x${second.toHexString}"
+      )
       checked += 1
     }
     assertEquals(checked, 9027, "sjis-table.json の件数が変わっている(想定9,027件)")
@@ -155,7 +159,11 @@ class SjisEncodingSuite extends FunSuite {
       val throwsField = c.field("throws")
       // どちらのケースも、期待値は referenceDecode(本ファイル冒頭、golden データのみから
       // 独立に構築したKB-18対応込みの参照実装)と一致するはずである。
-      assertEquals(got, referenceDecode(input.toArray), s"input=$input (throws=${if (throwsField.isNull) "null" else throwsField.asString})")
+      assertEquals(
+        got,
+        referenceDecode(input.toArray),
+        s"input=$input (throws=${if (throwsField.isNull) "null" else throwsField.asString})"
+      )
       if (throwsField.isNull) {
         val expected = c.field("output").asString
         if (got == expected) () // KB-18は関与しない(v5自身がそのまま変換できた入力)
@@ -165,7 +173,7 @@ class SjisEncodingSuite extends FunSuite {
           // (すり替えではなく追記であることを保証する)。
           assert(
             got.startsWith(expected),
-            s"input=$input: KB-18フォールバックはv5が変換できた部分を完全に温存すべき (got=$got expected=$expected)",
+            s"input=$input: KB-18フォールバックはv5が変換できた部分を完全に温存すべき (got=$got expected=$expected)"
           )
       }
     }
@@ -218,7 +226,8 @@ class SjisEncodingSuite extends FunSuite {
       val bytes = Array(lead, second)
       val got = SjisEncoding.decode(bytesOf(bytes.toIndexedSeq))
       val expected = referenceDecode(bytes)
-      if (got != expected && unexpected.size < 20) unexpected += s"lead=0x${lead.toHexString} second=0x${second.toHexString} got=$got expected=$expected"
+      if (got != expected && unexpected.size < 20) unexpected +=
+        s"lead=0x${lead.toHexString} second=0x${second.toHexString} got=$got expected=$expected"
       pair += 1
     }
 
@@ -239,11 +248,11 @@ class SjisEncodingSuite extends FunSuite {
     val loneLow = "A\udfff"
     assertEquals(
       toIntArray(SjisEncoding.encode(loneHigh)).toList,
-      (referenceEncode(0xd800) ++ referenceEncode('A'.toInt)).toList,
+      (referenceEncode(0xd800) ++ referenceEncode('A'.toInt)).toList
     )
     assertEquals(
       toIntArray(SjisEncoding.encode(loneLow)).toList,
-      (referenceEncode('A'.toInt) ++ referenceEncode(0xdfff)).toList,
+      (referenceEncode('A'.toInt) ++ referenceEncode(0xdfff)).toList
     )
   }
 }

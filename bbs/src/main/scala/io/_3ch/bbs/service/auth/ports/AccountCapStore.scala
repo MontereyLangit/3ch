@@ -11,9 +11,18 @@ trait AccountCapStore {
   def confirm(kind: String, hash: String, aid: String, now: Double): Future[Unit]
   def remove(kind: String, hash: String, aid: String): Future[Unit]
   def bindCap(aid: String, cap: AccountCap, issuerIsAdmin: Boolean, now: Double): Future[Unit]
+
   /** 失効させたキャップの照合値を返す */
   def revokeCap(aid: String, capId: String, now: Double): Future[String]
-  def reissueCap(aid: String, capId: String, nextId: String, nextHash: String, issuedBy: String, issuerIsAdmin: Boolean, now: Double): Future[CapReissue]
+  def reissueCap(
+      aid: String,
+      capId: String,
+      nextId: String,
+      nextHash: String,
+      issuedBy: String,
+      issuerIsAdmin: Boolean,
+      now: Double
+  ): Future[CapReissue]
 }
 
 /** KV の CAP（照合キー → 表示名） */

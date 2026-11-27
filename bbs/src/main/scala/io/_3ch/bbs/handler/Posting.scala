@@ -10,7 +10,10 @@ import io._3ch.bbs.external.web.{Request, Response}
 import io._3ch.bbs.handler.auth.{AuthEnv, SessionCredentials}
 import io._3ch.bbs.hash.WebHasher
 import io._3ch.common.domain.account.AccountRejection
-import io._3ch.bbs.repository.{AccountRepository, ArchiveIndexRepository, BoardRepository, CapRepository, ModerationRuleRepository, ThreadRepository, UserAgentTableRepository, EdgeRuleRepository, PhoebeRuleRepository}
+import io._3ch.bbs.repository.{
+  AccountRepository, ArchiveIndexRepository, BoardRepository, CapRepository, ModerationRuleRepository, ThreadRepository,
+  UserAgentTableRepository, EdgeRuleRepository, PhoebeRuleRepository
+}
 
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
@@ -18,7 +21,11 @@ import scala.scalajs.js.JSConverters.*
 
 /** bbs.cgi の書き込み。リクエストを PostingRequest にしてサービスに渡し、結果を画面にする */
 object Posting {
-  def entry(request: Request, env: WorkerEnv, resolveUser: PostingUserResolver.Resolver = PostingUserResolver.unresolved): js.Promise[Response] = {
+  def entry(
+      request: Request,
+      env: WorkerEnv,
+      resolveUser: PostingUserResolver.Resolver = PostingUserResolver.unresolved
+  ): js.Promise[Response] = {
     val settings = AuthEnv.settings(env)
     val ports = PostingPorts(
       threads = ThreadRepository.store(env),
@@ -31,13 +38,21 @@ object Posting {
       clock = Clock.system,
       random = Random.system,
       rateLog = PostRateLog.console,
-      accounts = settings.map(config => new PostingAccountService(new AccountRepository(env), new SessionCredentials(config.secret, request.url),
-        config.agreementVersion, _ => js.Dynamic.global.console.warn("account post recording failed"))),
+      accounts = settings.map(config =>
+        new PostingAccountService(
+          new AccountRepository(env),
+          new SessionCredentials(config.secret, request.url),
+          config.agreementVersion,
+          _ => js.Dynamic.global.console.warn("account post recording failed")
+        )
+      ),
       agents = UserAgentTableRepository.store(env),
       edge = EdgeRuleRepository.store(env),
       phoebe = PhoebeRuleRepository.store(env)
     )
-    new PostingService(ports, String.valueOf(env.salt)).post(PostingRequest.from(request)).map(outcome => respond(outcome, settings.isDefined)).toJSPromise
+    new PostingService(ports, String.valueOf(env.salt)).post(PostingRequest.from(request)).map(outcome =>
+      respond(outcome, settings.isDefined)
+    ).toJSPromise
   }
 
   private def respond(outcome: PostingOutcome, authenticated: Boolean): Response = {
@@ -45,7 +60,7 @@ object Posting {
     val charset = if (context.form.isSJIS) "Shift_JIS" else "UTF-8"
     val result = outcome match {
       case PostingOutcome.Rejected(error, rejected, _) => if (authenticated) rejectionHeaders(error, rejected.form.bbs) else Nil
-      case _ => Seq("x-threadkey" -> context.form.key, "x-resnum" -> context.number.toString)
+      case _                                           => Seq("x-threadkey" -> context.form.key, "x-resnum" -> context.number.toString)
     }
     RendererShell.legacyReact(PostingPages.render(outcome, charset), encoding = charset, extra = outcome.headers ++ result)
   }
