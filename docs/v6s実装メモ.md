@@ -21,12 +21,12 @@ import されるエントリポイント関数群。TS 側はここで export �
 生成 TSX を SSR 側から import する必要はない。利用方法と制約は [Scala からの Islands SSR](islands-ssr.md)を参照。
 
 ```scala
-// bbs.Main（io._3ch.common.routes.route を import）
+// bbs.Main（hx4s.annotation.route を import）
 @route("_v6/health.ts")
 @JSExportTopLevel("healthHandler", "server")
 def healthHandler(c: js.Any): js.Promise[Response] = { /* handler 呼び出し */ }
 
-// bbsclient.Main（io._3ch.common.routes.islands を import）
+// bbsclient.Main（hx4s.annotation.islands を import）
 @islands("thread-view.tsx")
 @JSExportTopLevel("ThreadView", "client")
 val threadView = /* JS props を受ける React コンポーネント */

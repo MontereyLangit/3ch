@@ -1,5 +1,6 @@
 package io._3ch.bbsclient.islands
 
+import io._3ch.common.islands.AccountLogoutProps
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
@@ -28,7 +29,7 @@ object AccountLogoutIsland {
     form.remove()
   }
 
-  final val Component = ScalaFnComponent[js.Object] { raw =>
+  final val Component = ScalaFnComponent[AccountLogoutProps] { raw =>
     for {
       busy <- useState(false)
       message <- useState("")
@@ -36,7 +37,7 @@ object AccountLogoutIsland {
       password <- useState("")
       agreed <- useState(false)
     } yield {
-      val kind = AuthClient.text(raw, "kind", "client")
+      val kind = raw.kind
       val logout = busy.setState(true) >> message.setState("") >> Callback {
         AuthClient.logout().foreach { ok =>
           if ok then dom.window.location.assign("/")
@@ -62,7 +63,7 @@ object AccountLogoutIsland {
         <.h2(^.className := "mb-2 font-bold", "■ ログアウト・退会"),
         <.button(^.`type` := "button", ^.className := button, ^.disabled := busy.value, ^.onClick --> logout, "ログアウト（すべての端末）"),
         <.button(^.`type` := "button", ^.className := s"$button ml-2 text-[#c00]", ^.disabled := busy.value, ^.onClick --> deleting.modState(!_), "退会する"),
-        if AuthClient.flag(raw, "simple") then <.p(^.className := "mt-2 text-xs text-[#697785]", "かんたん登録のアカウントは、ログアウトするとこの端末から戻せません。")
+        if raw.simple then <.p(^.className := "mt-2 text-xs text-[#697785]", "かんたん登録のアカウントは、ログアウトするとこの端末から戻せません。")
         else EmptyVdom,
         <.p(^.className := "mt-2 text-xs text-[#697785]", "退会しても書き込みは消えません。ユーザーIDはほかの人に使われません。"),
         if !deleting.value then EmptyVdom
@@ -73,7 +74,7 @@ object AccountLogoutIsland {
               <.label(^.className := "mb-2 block", "パスワード", <.input(^.className := input, ^.`type` := "password", ^.autoComplete := "current-password",
                 ^.value := password.value, ^.onChange ==> ((e: ReactEventFromInput) => password.setState(e.target.value)))),
               <.button(^.`type` := "button", ^.className := s"$button text-[#c00]", ^.disabled := busy.value || password.value.isEmpty, ^.onClick --> withdraw, "パスワードを確かめて退会する"))
-            case "google" => <.button(^.`type` := "button", ^.className := s"$button text-[#c00]", ^.disabled := busy.value || !AuthClient.flag(raw, "google"),
+            case "google" => <.button(^.`type` := "button", ^.className := s"$button text-[#c00]", ^.disabled := busy.value || !raw.google,
               ^.onClick --> Callback(startGoogle()), "Googleで確かめて退会する")
             case _ => <.div(
               <.label(^.className := "mb-2 block", <.input(^.`type` := "checkbox", ^.className := "mr-1", ^.checked := agreed.value,

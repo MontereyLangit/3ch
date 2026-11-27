@@ -1,10 +1,10 @@
 package io._3ch.bbsclient.islands
 
 import io._3ch.common.domain.BoardId
+import io._3ch.common.islands.BoardDetailsProps
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 
-import scala.scalajs.js
 import scala.scalajs.js.URIUtils
 
 /** 板概要・板設定・新着レス一覧・新規スレッド作成の開閉ボタン・パネル */
@@ -14,13 +14,11 @@ object BoardDetailsIsland {
 
   object Props {
     /** 板名が不正なら None */
-    def fromJs(raw: js.Object): Option[Props] = {
-      val o = raw.asInstanceOf[js.Dynamic]
-      def text(name: String): String = o.selectDynamic(name).asInstanceOf[js.UndefOr[String]].getOrElse("")
+    def fromJs(raw: BoardDetailsProps): Option[Props] = {
       for {
-        bbs <- BoardId.create(text("bbs")).toOption
-        posting <- PostingFormIsland.Props.fromJs(raw)
-      } yield Props(bbs, text("headText"), text("settingsText"), posting)
+        bbs <- BoardId.create(raw.bbs).toOption
+        posting <- PostingFormIsland.Props.fromJs(raw.postingForm)
+      } yield Props(bbs, raw.headText, raw.settingsText, posting)
     }
   }
 
@@ -64,11 +62,6 @@ object BoardDetailsIsland {
     }
   }
 
-  /**
-   * jsから渡されるpropsを [[Props]] へ変換して描画
-   * 不正なpropsのときは何も描画しない
-   */
-  final val JsComponent = ScalaFnComponent[js.Object] { raw =>
-    Props.fromJs(raw).fold[VdomNode](EmptyVdom)(Component(_))
-  }
+  /** 検証済みの props を [[Props]] へ変換して描画する。変換できない値なら何も描画しない */
+  def render(raw: BoardDetailsProps): VdomNode = Props.fromJs(raw).fold[VdomNode](EmptyVdom)(Component(_))
 }

@@ -1,5 +1,6 @@
 package io._3ch.bbsclient.islands
 
+import io._3ch.common.islands.AuthFormProps
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
@@ -21,15 +22,15 @@ object AuthFormIsland {
   private val box = "mb-4 border border-[#d6dce3] bg-[#fafafa] p-3 text-sm"
 
   /** Google の開始はフォームの遷移で送る。埋め込み時は別のウィンドウで開く */
-  private def startGoogle(raw: js.Object, uid: String, agreed: Boolean): Unit = {
-    val upgrade = AuthClient.flag(raw, "upgrade")
+  private def startGoogle(raw: AuthFormProps, uid: String, agreed: Boolean): Unit = {
+    val upgrade = raw.upgrade
     val form = dom.document.createElement("form").asInstanceOf[dom.html.Form]
     form.method = "post"
     form.action = "/auth/google/start"
-    form.target = if AuthClient.flag(raw, "embed") then "_blank" else "_self"
-    val values = Seq("uid" -> uid, "return" -> AuthClient.text(raw, "returnPath", "/"), "popup" -> (if AuthClient.flag(raw, "embed") then "1" else "0"),
+    form.target = if raw.embed then "_blank" else "_self"
+    val values = Seq("uid" -> uid, "return" -> raw.returnPath, "popup" -> (if raw.embed then "1" else "0"),
       "device" -> js.JSON.stringify(BrowserFingerprintCollector.collect())) ++
-      (if agreed then Seq("agreement" -> AuthClient.text(raw, "agreementVersion")) else Nil) ++
+      (if agreed then Seq("agreement" -> raw.agreementVersion) else Nil) ++
       (if upgrade then Seq("purpose" -> "upgrade") else Nil)
     values.foreach { case (name, value) =>
       val field = dom.document.createElement("input").asInstanceOf[dom.html.Input]
@@ -43,10 +44,10 @@ object AuthFormIsland {
     form.remove()
   }
 
-  final val Component = ScalaFnComponent[js.Object] { raw =>
+  final val Component = ScalaFnComponent[AuthFormProps] { raw =>
     for {
-      login <- useState(AuthClient.flag(raw, "login") && !AuthClient.flag(raw, "upgrade"))
-      chosen <- useState(if AuthClient.flag(raw, "upgrade") then AuthMethod.Password else AuthMethod.Client)
+      login <- useState(raw.login && !raw.upgrade)
+      chosen <- useState(if raw.upgrade then AuthMethod.Password else AuthMethod.Client)
       agreed <- useState(false)
       userId <- useState("")
       password <- useState("")
@@ -56,7 +57,7 @@ object AuthFormIsland {
       notice <- useState("")
       token <- useState("")
       busy <- useState(false)
-      error <- useState(AuthClient.text(raw, "notice"))
+      error <- useState(raw.notice)
       container <- useRefToVdom[dom.html.Div]
       widget <- useRef(Option.empty[String])
       mounted <- useRef(false)
@@ -67,7 +68,7 @@ object AuthFormIsland {
           if !js.isUndefined(turnstile) && widget.value.isEmpty then {
             val callback: js.Function1[String, Unit] = value => if mounted.value then token.setState(value).runNow()
             val expired: js.Function0[Unit] = () => if mounted.value then token.setState("").runNow()
-            widget.value = Some(turnstile.render(el, js.Dynamic.literal("sitekey" -> AuthClient.text(raw, "turnstileSiteKey"), "callback" -> callback,
+            widget.value = Some(turnstile.render(el, js.Dynamic.literal("sitekey" -> raw.turnstileSiteKey, "callback" -> callback,
               "expired-callback" -> expired, "error-callback" -> expired)).asInstanceOf[String])
           }
         }
@@ -88,9 +89,9 @@ object AuthFormIsland {
         }
       })
     } yield {
-      val google = AuthClient.flag(raw, "googleEnabled")
-      val mail = AuthClient.flag(raw, "mailEnabled")
-      val upgrade = AuthClient.flag(raw, "upgrade")
+      val google = raw.googleEnabled
+      val mail = raw.mailEnabled
+      val upgrade = raw.upgrade
       val registering = !login.value
       val choice = chosen.value
       def resetTurnstile(): Unit = {
@@ -112,7 +113,7 @@ object AuthFormIsland {
         busy.setState(true).runNow()
         error.setState("").runNow()
         val params = new dom.URLSearchParams()
-        (values ++ Seq("cf-turnstile-response" -> token.value, "return" -> AuthClient.text(raw, "returnPath", "/"),
+        (values ++ Seq("cf-turnstile-response" -> token.value, "return" -> raw.returnPath,
           "device" -> js.JSON.stringify(BrowserFingerprintCollector.collect()))).foreach { case (name, value) => params.set(name, value) }
         dom.fetch(path, new dom.RequestInit { method = dom.HttpMethod.POST; credentials = dom.RequestCredentials.`same-origin`; body = params }).toFuture
           .flatMap(r => r.json().toFuture.map(json => (r.ok, json))).map { case (ok, json) =>
@@ -120,8 +121,8 @@ object AuthFormIsland {
             AuthClient.session(json) match {
               case Some(s) if ok =>
                 val message = js.Dynamic.literal(`type` = "ch3s-auth", status = "ok", uid = s.uid, lv = s.lv)
-                if AuthClient.flag(raw, "embed") then dom.window.parent.postMessage(message, dom.window.location.origin)
-                else dom.window.location.assign(AuthClient.text(raw, "returnPath", "/"))
+                if raw.embed then dom.window.parent.postMessage(message, dom.window.location.origin)
+                else dom.window.location.assign(raw.returnPath)
               case _ =>
                 error.setState(AuthClient.text(json.asInstanceOf[js.Object], "error", "認証できませんでした。もう一度お試しください")).runNow()
                 token.setState("").runNow()
@@ -143,8 +144,8 @@ object AuthFormIsland {
           if !registering && forgot.value then requestReset()
           else if !registering then post("/auth/login", Seq("id" -> userId.value, "password" -> password.value))
           else choice match {
-            case AuthMethod.Client => post("/auth/verify", Seq("agreement" -> AuthClient.text(raw, "agreementVersion")))
-            case AuthMethod.Password => post("/auth/register", Seq("agreement" -> AuthClient.text(raw, "agreementVersion"), "id" -> userId.value,
+            case AuthMethod.Client => post("/auth/verify", Seq("agreement" -> raw.agreementVersion))
+            case AuthMethod.Password => post("/auth/register", Seq("agreement" -> raw.agreementVersion, "id" -> userId.value,
               "password" -> password.value, "password2" -> confirmation.value) ++
               (if mail && email.value.trim.nonEmpty then Seq("email" -> email.value.trim) else Nil) ++ (if upgrade then Seq("upgrade" -> "1") else Nil))
             case AuthMethod.Google => startGoogle(raw, userId.value, agreed = true)

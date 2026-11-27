@@ -1,20 +1,13 @@
 package io._3ch.bbs.handler
 
 import io._3ch.bbs.components.{BoardIndexComponent, BoardIndexProps}
-import io._3ch.bbs.external.honox.Island
 import io._3ch.common.domain.{BbsSubjects, BoardId}
 import japgolly.scalajs.react.ReactDOMServer
-import japgolly.scalajs.react.facade.React
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSExportTopLevel
 
-/** Vite 上で実際の Scala bridge と HonoX の SSR / hydration を検証する入口 */
+/** Vite 上で板topの実際の SSR と HonoX の hydration を検証する入口 */
 object IslandTestExports {
-  @JSExportTopLevel("renderIslandTest", "island-test")
-  def renderIslandTest(component: React.ComponentType[js.Object], props: js.Object, componentName: String): React.Element = {
-    Island(component, props, componentName).rawElement
-  }
-
   /**
    * 実際の板topのサーバー描画 HTML を返す
    * raw -> title,headText,bbs,type,subjectText,time,imgurClientId,now,settings

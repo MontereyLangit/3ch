@@ -12,7 +12,7 @@ import { act } from 'react';
 // 3 つの island がすべて hydrate され、サーバーの DOM を再利用し、操作が効くことを確かめる。
 const root = fileURLToPath(new URL('../', import.meta.url));
 const bridge = path.join(root, 'bbs/target/scala-3.3.8/bbs-test-fastopt/island-test.js');
-const clientModule = path.join(root, 'bbs-client/target/scala-3.3.8/bbsclient-fastopt/client.js');
+const clientOutput = path.join(root, 'bbs-client/target/scala-3.3.8/bbsclient-fastopt');
 
 const subjectText = '1800000001.dat<>実スレ &amp; <b> (3)\n1800000002.dat<>次の話題 (7)\n9240000001.dat<>共通のお知らせ (12)\n';
 const sample = {
@@ -22,7 +22,7 @@ const sample = {
 
 test('板topの実 SSR HTML を HonoX の createClient で hydrate できる', async () => {
   await access(bridge);
-  await access(clientModule);
+  await access(clientOutput);
   const previousNodeEnv = process.env.NODE_ENV;
   process.env.NODE_ENV = 'development';
   const fixture = await mkdtemp(path.join(root, 'tests/.board-top-hydration-'));
@@ -39,16 +39,26 @@ export const render = raw => renderBoardTopTest(raw);
 `);
     await writeFile(path.join(fixture, 'client.js'), `
 import { createClient } from 'honox/client';
+import { islandPropsProblem } from 'hx4s-vite/client';
 import { createElement } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 export const roots = [];
 export const errors = [];
+export const skipped = [];
+// app/client.ts と同じく、props が合わない island は hydrate せず SSR の markup を残す
 export function hydrate() {
   return createClient({
     createElement,
-    hydrate: (element, root) => roots.push(hydrateRoot(root, element, {
-      onRecoverableError: error => errors.push(error.message)
-    }))
+    hydrate: (element, root) => {
+      const problem = islandPropsProblem(element);
+      if (problem !== undefined) {
+        skipped.push(root.getAttribute('component-name') + ': ' + problem);
+        return;
+      }
+      roots.push(hydrateRoot(root, element, {
+        onRecoverableError: error => errors.push(error.message)
+      }));
+    }
   });
 }
 `);
@@ -56,11 +66,11 @@ export function hydrate() {
       configFile: false,
       root: fixture,
       logLevel: 'silent',
-      resolve: { alias: {
-        'scala-island-test': bridge,
-        'scalajs:client.js': clientModule,
-        'cloudflare:workers': path.join(root, 'bbs/test-stubs/cloudflare-workers-stub.mjs'),
-      } },
+      resolve: { alias: [
+        { find: 'scala-island-test', replacement: bridge },
+        { find: /^scalajs:/, replacement: clientOutput.replaceAll('\\', '/') + '/' },
+        { find: 'cloudflare:workers', replacement: path.join(root, 'bbs/test-stubs/cloudflare-workers-stub.mjs') },
+      ] },
       ssr: { noExternal: ['honox'] },
     };
     await build({ ...config,
@@ -139,6 +149,20 @@ export function hydrate() {
       console.error = originalError;
     }
     assert.deepEqual(consoleErrors, [], 'console.error が出ていない');
+    assert.deepEqual(hydrator.skipped, []);
+
+    // 古い HTML（props の形が今の client と合わない）では、その island だけ hydrate せず SSR の markup を残す
+    await act(async () => { for (const reactRoot of hydrator.roots.splice(0)) reactRoot.unmount(); });
+    window.document.body.innerHTML = server.render(sample);
+    const stale = document.querySelector('honox-island[component-name="/app/islands/thread-list.tsx"]');
+    const { now: _now, ...withoutNow } = JSON.parse(stale.getAttribute('data-serialized-props'));
+    stale.setAttribute('data-serialized-props', JSON.stringify(withoutNow));
+    const staleList = document.querySelector('#thread-list');
+    await act(async () => { await hydrator.hydrate(); });
+    assert.deepEqual(hydrator.skipped, ['/app/islands/thread-list.tsx: props.now: missing']);
+    assert.equal(hydrator.roots.length, 2, '残りの 2 つは hydrate される');
+    assert.equal(document.querySelector('#thread-list'), staleList, 'スレ一覧は SSR の DOM のまま残る');
+    assert.ok(staleList.querySelector('[data-thread-key="924/9240000001"]'));
   } finally {
     await act(async () => { for (const reactRoot of (hydrator?.roots ?? []).splice(0)) reactRoot.unmount(); });
     dom?.window.close();

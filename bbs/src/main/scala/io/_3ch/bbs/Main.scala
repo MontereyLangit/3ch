@@ -1,19 +1,18 @@
 package io._3ch.bbs
 
+import hx4s.annotation.route
+import hx4s.hono.ExecutionContext
+import io._3ch.bbs.external.cloudflare.WorkerEnv
 import io._3ch.bbs.external.hono.HonoContextFacade
-import io._3ch.bbs.external.web.{Response, ResponseInit}
-import io._3ch.bbs.handler.RendererShell
+import io._3ch.bbs.external.hono.HonoContextFacade.*
+import io._3ch.bbs.external.web.{Request, Response, ResponseInit}
+import io._3ch.bbs.handler.{BoardHandler, RendererShell}
 import io._3ch.bbs.util.SjisEncoding
-import io._3ch.common.routes.route
 import japgolly.scalajs.react.facade.React
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSExportTopLevel
 import scala.scalajs.js.typedarray.Uint8Array
-
-import external.web.Request
-import external.cloudflare.WorkerEnv
-import io._3ch.bbs.handler.BoardHandler
 
 object Main {
 
@@ -27,10 +26,10 @@ object Main {
 
   //noinspection ScalaWeakerAccess
   @JSExportTopLevel("publicFetch", "server")
-  def publicFetch(request: Request, env: WorkerEnv, ctx: js.Dynamic): js.Promise[Response] = handler.PublicRoutes.fetch(request, env, ctx)
+  def publicFetch(request: Request, env: WorkerEnv, ctx: ExecutionContext): js.Promise[Response] = handler.PublicRoutes.fetch(request, env, ctx)
 
   @JSExportTopLevel("publicHandler", "server")
-  def publicHandler(c: js.Dynamic): js.Promise[Response] = publicFetch(c.req.raw.asInstanceOf[Request], c.env.asInstanceOf[WorkerEnv], c.executionCtx)
+  def publicHandler(c: HonoContextFacade): js.Promise[Response] = publicFetch(c.request, c.env, c.executionCtx)
 
   @JSExportTopLevel("bbs_entry", "server")
   def bbsEntry(request: Request, env: WorkerEnv): js.Promise[Response] = handler.Posting.entry(request, env)
@@ -38,28 +37,28 @@ object Main {
   @JSExportTopLevel("settingTxtDefault", "server")
   val settingTxtDefault: String = handler.PostingText.settingTxtDefault
 
-  @route("[bbs]/index.ts")
+  @route("[bbs]/index")
   @JSExportTopLevel("boardIndexHandler", "server")
   def boardIndexHandler(c: js.Any): js.Promise[Response] =
   BoardHandler.index(c.asInstanceOf[HonoContextFacade])
 
   /** 認証・登録画面を描画する */
-  @route("auth/index.ts")
+  @route("auth/index")
   @JSExportTopLevel("authPageHandler", "server")
   def authPageHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.page(c.asInstanceOf[HonoContextFacade])
 
   /** 本人のアカウント設定画面を描画する */
-  @route("auth/account/index.ts")
+  @route("auth/account/index")
   @JSExportTopLevel("authAccountHandler", "server")
   def authAccountHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.page(c.asInstanceOf[HonoContextFacade], accountPage = true)
 
   /** メールアドレスの確認リンクの画面を描画する */
-  @route("auth/email/verify/index.ts")
+  @route("auth/email/verify/index")
   @JSExportTopLevel("authEmailVerifyHandler", "server")
   def authEmailVerifyHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.tokenPage(c.asInstanceOf[HonoContextFacade], reset = false)
 
   /** パスワードの再設定リンクの画面を描画する */
-  @route("auth/reset/index.ts")
+  @route("auth/reset/index")
   @JSExportTopLevel("authResetHandler", "server")
   def authResetHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.tokenPage(c.asInstanceOf[HonoContextFacade], reset = true)
 

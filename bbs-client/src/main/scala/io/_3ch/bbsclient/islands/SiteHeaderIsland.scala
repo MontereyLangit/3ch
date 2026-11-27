@@ -1,5 +1,6 @@
 package io._3ch.bbsclient.islands
 
+import io._3ch.common.islands.SiteHeaderProps
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 import org.scalajs.dom
@@ -25,7 +26,7 @@ object SiteHeaderIsland {
     }
   }
 
-  final val Component = ScalaFnComponent[js.Object] { raw =>
+  final val Component = ScalaFnComponent[SiteHeaderProps] { raw =>
     for {
       header <- AutoHideHeader.useAutoHideHeader
     } yield {
@@ -37,7 +38,7 @@ object SiteHeaderIsland {
         <.nav(^.aria.label := "メインメニュー",
           <.a(^.href := "/", "ホーム"), <.span("|"), <.a(^.href := "/bbsmenu.html", "板一覧"), <.span("|"),
           <.a(^.href := "#board-search", ^.onClick ==> focusSearch, "検索")),
-        if AuthClient.flag(raw, "authEnabled") then <.nav(^.className := "account-nav ml-auto", ^.aria.label := "アカウント", AccountNavIsland.Component(raw)) else
+        if raw.authEnabled then <.nav(^.className := "account-nav ml-auto", ^.aria.label := "アカウント", AccountNavIsland.Component(raw)) else
           <.nav(^.className := "account-nav ml-auto", ^.aria.label := "アカウント",
           <.span(^.title := "準備中", "認証・登録"), <.span("|"), <.span(<.span(^.title := "準備中", "ログイン"),
             <.button(^.`type` := "button", ^.className := "dropBtnSetting settingDrop cursor-pointer border-0 bg-transparent p-0", ^.title := "準備中",
@@ -46,5 +47,4 @@ object SiteHeaderIsland {
       ).withRef(header.ref)
     }
   }
-  final val JsComponent = Component
 }

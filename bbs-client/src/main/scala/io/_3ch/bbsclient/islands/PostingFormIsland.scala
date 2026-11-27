@@ -2,10 +2,10 @@ package io._3ch.bbsclient.islands
 
 import io._3ch.common.domain.account.SessionView
 import io._3ch.common.domain.{BoardId, ThreadCommand, ThreadKey}
+import io._3ch.common.islands.PostingFormProps
 import japgolly.scalajs.react.*
 import japgolly.scalajs.react.vdom.html_<^.*
 
-import scala.scalajs.js
 import scala.scalajs.js.URIUtils
 
 /**
@@ -22,22 +22,14 @@ object PostingFormIsland {
 
   object Props {
     /** 板名・スレキーが不正なら None */
-    def fromJs(raw: js.Object): Option[Props] = {
-      val o = raw.asInstanceOf[js.Dynamic]
-
-      def text(name: String): String = o.selectDynamic(name).asInstanceOf[js.UndefOr[String]].getOrElse("")
-
-      val commands = o.selectDynamic("commands").asInstanceOf[js.UndefOr[js.Array[js.Dynamic]]].toList.flatMap(_.toList).map { c =>
-        def field(name: String): String = c.selectDynamic(name).asInstanceOf[js.UndefOr[String]].getOrElse("")
-
-        ThreadCommand(field("text"), field("label"), field("field"), field("description"))
-      }
-      val threadKey = o.selectDynamic("threadKey").asInstanceOf[js.UndefOr[String]].toOption.map(ThreadKey.parse(_).toOption)
+    def fromJs(raw: PostingFormProps): Option[Props] = {
+      val threadKey = raw.threadKey.toOption.map(ThreadKey.parse(_).toOption)
+      val commands = raw.commands.toList.map(c => ThreadCommand(c.text, c.label, c.field, c.description))
       for {
-        bbs <- BoardId.create(text("bbs")).toOption
+        bbs <- BoardId.create(raw.bbs).toOption
         key <- threadKey.fold[Option[Option[ThreadKey]]](Option(None))(_.map(Option(_)))
-      } yield Props(bbs, text("time"), key, text("imgurClientId"), commands, AuthClient.flag(raw, "authEnabled"), AuthClient.initial(raw),
-        o.selectDynamic("requiredLevel").asInstanceOf[js.UndefOr[Int]].getOrElse(0), text("returnPath"))
+      } yield Props(bbs, raw.time, key, raw.imgurClientId, commands, raw.authEnabled,
+        raw.session.toOption.map(AuthClient.sessionView), raw.requiredLevel, raw.returnPath)
     }
   }
 
@@ -151,7 +143,7 @@ object PostingFormIsland {
             <.label(" E-mail：", textInput("mail", fields.mail, 24, fields.setField))),
           props.threadKey.fold[VdomNode](
             <.label("タイトル：", textInput("subject", fields.subject, 80, fields.setField, ^.required := true)))(_ => EmptyVdom),
-          if props.authEnabled && session.isEmpty then <.p(^.className := "my-2 text-sm", "書き込みには認証・登録が必要です。", <.a(^.className := "text-[#06f]", ^.href := ("/auth/?return=" + URIUtils.encodeURIComponent(props.returnPath)), "認証・登録へ")) else EmptyVdom,
+          if props.authEnabled && session.isEmpty then <.p(^.className := "my-2 text-sm", "書き込みには認証・登録が必要です。", <.a(^.className := "text-[#06f]", ^.href := s"/auth/?return=${URIUtils.encodeURIComponent(props.returnPath)}", "認証・登録へ")) else EmptyVdom,
           if props.authEnabled && session.exists(_.lv < props.requiredLevel) then <.p(^.className := "my-2 text-sm", s"このスレはLv${props.requiredLevel}以上", " ", <.a(^.className := "text-[#06f]", ^.href := "/auth/account?upgrade=1", "アカウント設定へ")) else EmptyVdom,
           if props.authEnabled && session.isDefined then <.label(^.className := "my-2 block! text-sm", <.input(^.`type` := "checkbox", ^.name := "showid", ^.value := "1", ^.checked := showId.value,
             ^.onChange ==> ((e: ReactEventFromInput) => showId.setState(e.target.checked))), " ユーザーIDを名前欄に出す") else EmptyVdom,
@@ -169,11 +161,6 @@ object PostingFormIsland {
     }
   }
 
-  /**
-   * jsから渡されるpropsを [[Props]] へ変換して描画
-   * 不正なpropsのときは何も描画しない
-   */
-  final val JsComponent = ScalaFnComponent[js.Object] { raw =>
-    Props.fromJs(raw).fold[VdomNode](EmptyVdom)(Component(_))
-  }
+  /** 検証済みの props を [[Props]] へ変換して描画する。変換できない値なら何も描画しない */
+  def render(raw: PostingFormProps): VdomNode = Props.fromJs(raw).fold[VdomNode](EmptyVdom)(Component(_))
 }
