@@ -1,1 +1,16 @@
 tests/snapshots/** text eol=lf
+
+# Vendored AI agent skills
+.agents/skills/** linguist-vendored=true
+
+# hx4s-generated HonoX routes and islands
+app/routes/**/*.ts linguist-generated=true
+app/routes/**/*.tsx linguist-generated=true
+app/islands/**/*.tsx linguist-generated=true
+
+# Handwritten HonoX routes (keep in language statistics)
+app/routes/_renderer.tsx -linguist-generated
+app/routes/index.ts -linguist-generated
+app/routes/admin/index.ts -linguist-generated
+app/routes/auth.js.ts -linguist-generated
+app/routes/bbsmenu.html.ts -linguist-generated
