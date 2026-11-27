@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: build & test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      # Windows ランナーの既定 autocrlf=true だと golden / snapshot の改行が変わる
+      - run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: sbt
+
+      - uses: sbt/setup-sbt@v1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: npm run v6:build
+        run: npm run v6:build
+
+      - name: npm run v6:typecheck
+        run: npm run v6:typecheck
+
+      - name: npm run pretest
+        run: npm run pretest
+
+      # pretest は直前の段で済んでいるので、npm の pre スクリプトは飛ばす
+      - name: npm run test
+        run: npm run test --ignore-scripts
+
+      - name: npm run dev（起動確認）
+        run: node scripts/ci-dev-smoke.mjs
