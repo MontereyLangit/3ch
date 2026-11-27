@@ -10,10 +10,10 @@ import scala.scalajs.js
 import scala.util.Try
 
 /**
- * Imgurアップロード処理の状態
+ * Imgurアップロードの状態
  * fileKey -> file入力のキー．変えると選択が元に戻る
- * isUploading -> 非同期のactionから読む時に使う最新値
- * setStatus -> 表示用の文言
+ * isUploading -> 非同期のactionから読むときに使う最新の値
+ * setStatus -> 表示用の文言を設定する
  */
 final case class ImgurUpload(uploading: Int, fileKey: Int, status: String, isUploading: () => Boolean, chooseFile: ReactEventFromInput => Callback,
   setStatus: String => Callback)
@@ -25,8 +25,8 @@ object ImgurUpload {
   private val Endpoint = "https://api.imgur.com/3/image"
 
   /**
-   * Imgurアップロード処理のHooks
-   * onLinkはURL発行成功時に非同期で呼ばれる
+   * Imgurへのアップロードを扱うHooks
+   * onLink は、URLの発行に成功したときに非同期で呼ばれる
    */
   def useImgurUpload(clientId: String, onLink: String => Callback): HookResult[ImgurUpload] = {
     for {

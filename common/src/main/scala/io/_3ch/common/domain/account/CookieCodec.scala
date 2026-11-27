@@ -8,7 +8,7 @@ object CookieCodec {
   /** セッション Cookie の名前 */
   val Name: String = "__Host-ch3s_sid"
 
-  /** 署名する 8 フィールド。値が書式に合わなければ None */
+  /** 署名の対象になる 8 フィールドを返す。値が書式に合わなければ None を返す */
   def payload(claims: SessionClaims): Option[String] = {
     val bind = claims.binding.fold("")(binding => s"t:${binding.tokenId}:${binding.uaHash}")
     val fields = Seq("1", claims.aid, claims.uid, claims.generation.toString, claims.expiresAt.toString, claims.lv.toString, claims.device, bind)

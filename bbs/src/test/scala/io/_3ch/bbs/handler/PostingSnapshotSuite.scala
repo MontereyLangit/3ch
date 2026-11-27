@@ -125,7 +125,7 @@ class PostingSnapshotSuite extends FunSuite {
   private def all(steps: (Env => Future[Unit])*): Env => Future[Unit] = env =>
     steps.foldLeft(Future.unit)((acc, step) => acc.flatMap(_ => step(env)))
 
-  /** 準備として at 秒に投稿処理を通す（スレ立て規制の履歴作り） */
+  /** 準備として at 秒に投稿処理を通し、スレ立て規制の履歴を作る */
   private def priorPost(at: Double, c: Case): Env => Future[Unit] = env =>
     withFixedTime(at * 1000)(fut[js.Dynamic](Posting.entry(makeRequest(c), env.worker, resolver(c)))).map(_ => ())
 
@@ -159,11 +159,11 @@ class PostingSnapshotSuite extends FunSuite {
   /** IP だけが違い、識別子は既定の投稿者と同じになる */
   private val SameShikiClient = Seq("CF-Connecting-IP" -> "192.0.2.78")
 
-  /** 準備として at 秒に ExistingKey へ返信する（連投規制の履歴作り） */
+  /** 準備として at 秒に ExistingKey へ返信し、連投規制の履歴を作る */
   private def priorReply(at: Double, headers: Seq[(String, String)] = Nil, fields: Seq[(String, String)] = Nil): Env => Future[Unit] =
     priorPost(at, Case("prior", fields = merge(ReplyFields, fields), headers = headers))
 
-  /** 準備としてスレ ExistingKey を投稿処理で立てる（スレ主情報を残す） */
+  /** 準備としてスレ ExistingKey を投稿処理で立て、スレ主の情報を残す */
   private def ownThread(headers: Seq[(String, String)] = Nil, user: Option[PostingUser] = None): Env => Future[Unit] =
     priorPost(Now - 10000, Case("prior", headers = headers, user = user))
 

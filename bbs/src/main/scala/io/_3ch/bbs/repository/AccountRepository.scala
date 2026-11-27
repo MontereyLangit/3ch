@@ -14,7 +14,7 @@ import scala.scalajs.js.JSConverters.*
 final case class AccountTokenPostView(t: Double, bbs: String, key: String, title: String, resNum: Int, excerpt: String, network: String)
 /** 別の UA からキーが使われようとした時刻と専ブラ表示名 */
 final case class AccountTokenWarningView(t: Double, uaLabel: String)
-/** キーの使用状況と履歴。キー平文・照合ハッシュ・生 UA は含めない */
+/** キーの使用状況と履歴。キーの平文、照合ハッシュ、生の UA は含めない */
 final case class AccountTokenView(id: String, label: String, issuedAt: Double = 0, expiresAt: Double = 0,
   boundAt: Option[Double] = None, lastUsedAt: Option[Double] = None, revokedAt: Option[Double] = None,
   revokeReason: Option[String] = None, replacedTokenAt: Option[Double] = None,

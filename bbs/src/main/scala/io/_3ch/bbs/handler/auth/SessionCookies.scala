@@ -11,7 +11,7 @@ import scala.util.control.NonFatal
 object SessionCookies {
   private val Attributes = "; Path=/; Secure; HttpOnly; SameSite=Lax"
 
-  /** 署名と期限を確認する。Cookie の重複や設定不足は未認証 */
+  /** 署名と期限を確認する。Cookie が重複しているときや設定が足りないときは未認証として扱う */
   def verify(cookieHeader: String, secret: String, nowSeconds: Double): Future[Option[SessionClaims]] =
     CookieCodec.fromHeader(cookieHeader).fold(Future.successful(Option.empty[SessionClaims])) { session =>
       AuthHmac.verifySession(secret, session.payload, session.signature).map { verified =>
@@ -19,7 +19,7 @@ object SessionCookies {
       }
     }.recover { case NonFatal(_) => None }
 
-  /** HTTPS または開発用 localhost にだけ発行する。期限切れや鍵の欠落は発行しない */
+  /** HTTPS または開発用 localhost にだけ発行する。期限が切れているときや鍵が無いときは発行しない */
   def issue(claims: SessionClaims, secret: String, requestUrl: String, nowSeconds: Double): Future[Option[String]] = Future.unit.flatMap { _ =>
     if (!canIssue(requestUrl) || !claims.isCurrent(nowSeconds)) Future.successful(None)
     else CookieCodec.payload(claims).fold(Future.successful(Option.empty[String])) { payload =>

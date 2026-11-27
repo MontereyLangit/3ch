@@ -25,27 +25,27 @@ object PostRateCodec {
   /** ページの範囲を保存形式にする */
   def encodeMeta(meta: PostRateMeta): js.Dynamic = js.Dynamic.literal(newest = meta.newest, oldest = meta.oldest)
 
-  /** 照合値。無い項目は空 */
+  /** RPC 引数から照合値を読む。無い項目は空文字として読む */
   def decodeIdentity(value: js.Dynamic): PostRateIdentity = PostRateIdentity(text(value.ip), text(value.shiki), text(value.aid))
 
   /** 照合値を RPC 引数にする */
   def encodeIdentity(identity: PostRateIdentity): js.Dynamic = js.Dynamic.literal(ip = identity.ip, shiki = identity.shiki, aid = identity.aid)
 
-  /** Board.reservePost の引数 settings。enforce は拒否するときに真 */
+  /** Board.reservePost の引数 settings にする。enforce は、拒否するときに真にする */
   def encodeBoardSettings(settings: BoardSettings, enforce: Boolean): js.Dynamic = js.Dynamic.literal(
     timecount = settings.timecount, timeclose = settings.timeclose, samba24 = settings.samba24, fr = settings.fr, checksFr = settings.checksFr,
     keys = encodeKeys(settings.keys), enforce = enforce)
 
-  /** fr の無い旧形式は既定の秒数で、checksFr の無い旧形式は判定する（fr が 0 なら判定しない）として読む */
+  /** Board.reservePost の引数 settings を読む。fr の無い旧形式は既定の秒数として、checksFr の無い旧形式は判定するもの（fr が 0 なら判定しない）として読む */
   def decodeBoardSettings(value: js.Dynamic): (BoardSettings, Boolean) = (decodeBoard(value, PostRateKey.parse(text(value.keys))), value.enforce.asInstanceOf[Boolean])
 
-  /** Thread.addRes の posting.rateLimit */
+  /** Thread.addRes の posting.rateLimit を RPC 引数にする */
   def encodeCheck(check: PostRateCheck): js.Dynamic = js.Dynamic.literal(
     level = check.level.value, ip = check.identity.ip, shiki = check.identity.shiki, aid = check.identity.aid,
     timecount = check.board.timecount, timeclose = check.board.timeclose, samba24 = check.board.samba24, fr = check.board.fr,
     threadRentou = check.thread.count, threadRentouReset = check.thread.resetSeconds, keys = encodeKeys(check.board.keys))
 
-  /** level が空の旧形式は既定の段階で読む */
+  /** Thread.addRes の posting.rateLimit を読む。level が空の旧形式は、既定の段階として読む */
   def decodeCheck(value: js.Dynamic): PostRateCheck = {
     val keys = PostRateKey.parse(text(value.keys))
     PostRateCheck(
@@ -55,7 +55,7 @@ object PostRateCodec {
       ThreadSettings(value.threadRentou.asInstanceOf[Int], value.threadRentouReset.asInstanceOf[Double], keys))
   }
 
-  /** Thread DO の recentPosts。無ければ空。全長の照合値で保存した旧形式も短縮して読む */
+  /** Thread DO の recentPosts を読む。無ければ空として扱い、全長の照合値で保存した旧形式は短縮して読む */
   def decodeRecent(value: js.Any): ThreadRecentPosts =
     if (value == null || js.isUndefined(value)) ThreadRecentPosts.empty
     else ThreadRecentPosts(value.asInstanceOf[js.Array[js.Dynamic]].toVector.map(v => Entry(v.t.asInstanceOf[Double], decodeIdentity(v)))).normalized

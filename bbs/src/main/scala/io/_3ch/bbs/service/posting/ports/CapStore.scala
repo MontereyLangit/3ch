@@ -6,6 +6,6 @@ import scala.concurrent.Future
 
 /** キャップの照合 */
 trait CapStore {
-  /** 照合キーに対応するキャップ。未登録なら None */
+  /** 照合キーに対応するキャップ。未登録なら None を返す */
   def find(key: String): Future[Option[CapHandle]]
 }

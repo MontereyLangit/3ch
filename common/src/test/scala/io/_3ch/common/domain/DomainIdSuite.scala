@@ -3,7 +3,7 @@ package io._3ch.common.domain
 import munit.FunSuite
 
 /**
- * 板IDやスレキーなどID系ドメイン型のテスト．
+ * 板IDやスレキーなどID系ドメイン型のテスト
  */
 class DomainIdSuite extends FunSuite {
 

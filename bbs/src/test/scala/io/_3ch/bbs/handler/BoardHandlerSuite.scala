@@ -9,7 +9,7 @@ import io._3ch.bbs.handler.HandlerTestKit.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
-/** 板top (`BoardHandler.index`) と `BoardRepository` のテスト。 */
+/** 板top (`BoardHandler.index`) と `BoardRepository` のテスト */
 class BoardHandlerSuite extends munit.FunSuite {
 
   private def board(value: String): BoardId = BoardId.create(value).toOption.get

@@ -30,8 +30,8 @@ object ArchiveIndexRepository {
     }
 
   /**
-    * 空でない ETag があれば一致するときだけ書き、無ければ doesNotExist を付ける
-    * 書けたら true
+    * 空でない ETag があれば一致するときだけ書き、無ければ doesNotExist を付けて書く。
+    * 書けたら true を返す
     */
   def writeIndex(file: String, value: String, etag: Option[String], e: WorkerEnv): Future[Boolean] = {
     val condition = etag.filter(_.nonEmpty).fold(js.Dynamic.literal(doesNotExist = true))(t => js.Dynamic.literal(etagMatches = t))

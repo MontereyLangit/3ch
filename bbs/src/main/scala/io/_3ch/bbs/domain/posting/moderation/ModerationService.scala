@@ -13,20 +13,20 @@ enum ModerationRuleFile(val path: String) {
   case NgWords extends ModerationRuleFile("ngwords.cgi")
 }
 
-/** ルールファイルの読込結果。本文が読めないか書式が不正なら Broken */
+/** ルールファイルの読み込み結果。本文が読めないか、書式が不正なら Broken */
 enum ModerationRuleSource {
   case Missing
   case Broken
   case Loaded(rules: ModerationRuleSet)
 }
 
-/** 規制の判定結果。どちらも mark で名前・本文を加工した後のフォームを持つ */
+/** 規制の判定結果。どちらも、mark で名前と本文を加工した後のフォームを持つ */
 enum ModerationDecision {
   case Pass(form: PostForm)
   case Deny(denial: ModerationDenial, form: PostForm)
 }
 
-/** 規制の判定に使う投稿。form は規制前のフォーム、poster は各行の回避レベルと照らす投稿者、number はレス番号（スレ立ては 1） */
+/** 規制の判定に使う投稿。form は規制前のフォーム、poster は各行の回避レベルと照らし合わせる投稿者、number はレス番号（スレ立ては 1） */
 final case class ModerationInput(form: PostForm, userInfo: UserInfo, poster: BypassPoster, country: String, number: Double, settings: BbsSettings) {
   /** NG ワードを照合する文字列と、その文字参照を復元したもの */
   val contents: Seq[String] = {
@@ -43,17 +43,17 @@ object ModerationService {
   private val NamedEntity = new js.RegExp("&(?:amp|lt|gt|quot|apos);", "g")
   private val Entities = Map("&amp;" -> "&", "&lt;" -> "<", "&gt;" -> ">", "&quot;" -> "\"", "&apos;" -> "'")
 
-  /** saku 板は対象外。キャップ以外の Tor は役割によらず拒否し、そのあとどの段階でも免除される admin を通す。ルールを読む必要があれば None */
+  /** saku 板は対象外にする。キャップ以外の Tor は役割によらず拒否し、そのあとで、どの段階でも免除される admin は通す。ルールを読む必要があるときは None を返す */
   def beforeRules(input: ModerationInput): Option[ModerationDecision] =
     if (input.form.bbs == "saku") Some(ModerationDecision.Pass(input.form))
     else if (input.country == "T1" && !input.poster.cap) Some(ModerationDecision.Deny(ModerationDenial.Tor, input.form))
     else if (BypassLevel.Admin.exempts(input.poster)) Some(ModerationDecision.Pass(input.form))
     else None
 
-  /** ルールが読めなくても通す投稿者か。行ごとの段階が分からないので既定の段階で判定する */
+  /** ルールが読めなくても通す投稿者かどうか。行ごとの段階が分からないので、既定の段階で判定する */
   def exemptWithoutRules(input: ModerationInput): Boolean = BypassLevel.Default.exempts(input.poster)
 
-  /** ファイルが無ければ通し、壊れていれば既定の段階で免除されない投稿者を拒否し、読み取れたルールを評価する */
+  /** ファイルが無ければ通す。壊れていれば、既定の段階で免除されない投稿者を拒否する。読み取れたときは、そのルールを評価する */
   def evaluate(input: ModerationInput, form: PostForm, source: ModerationRuleSource): ModerationDecision = source match {
     case ModerationRuleSource.Missing => ModerationDecision.Pass(form)
     case ModerationRuleSource.Broken if exemptWithoutRules(input) => ModerationDecision.Pass(form)
@@ -62,7 +62,7 @@ object ModerationService {
   }
 
   /**
-    * 1 つのルール一覧を評価する。照合は規制前の内容で行い、mark は form に重ねる。BBS_NO_MADAKANA なら拒否も mark にする。
+    * 1 つのルール一覧を評価する。照合は規制前の内容で行い、mark は form に重ねる。BBS_NO_MADAKANA のときは、拒否も mark にする。
     * 回避レベルで免除される行は飛ばす
     */
   def evaluate(input: ModerationInput, form: PostForm, rules: ModerationRuleSet): ModerationDecision =

@@ -1,6 +1,6 @@
 package io._3ch.common.domain.account
 
-/** パスワードの Unicode・長さ・ユーザー ID の包含による拒否 */
+/** パスワードを拒否する理由（Unicode の不備、長さ、ユーザー ID を含むこと） */
 enum PasswordRejection {
   case InvalidUnicode
   case Length

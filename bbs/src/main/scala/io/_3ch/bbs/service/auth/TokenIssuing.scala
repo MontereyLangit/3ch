@@ -6,7 +6,7 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.util.control.NonFatal
 
-/** 発行直後に一度だけ返す専ブラキー。永続化やログ出力に使わない */
+/** 発行直後に一度だけ返す専ブラキー。永続化にもログ出力にも使わない */
 final case class IssuedToken(tokenId: String, token: String)
 
 /** 専ブラキーを予約・発行・確定し、途中で失敗したキーを失効させる */

@@ -1,10 +1,10 @@
 package io._3ch.common.domain.account
 
-/** 認証要求の計数イベント。kind は verify・register・login・loginFail・reset・token・cap・email、端末の相異数を数える deviceHash:<端末ハッシュ>、端末申告が無い anonymousDevice */
+/** 認証要求の計数イベント。kind は verify・register・login・loginFail・reset・token・cap・email のほか、端末の相異数を数える deviceHash:<端末ハッシュ> と、端末申告が無い場合の anonymousDevice を取る */
 final case class AuthRateEvent(kind: String, t: Double)
 final case class AuthRateCounts(hour: Int, day: Int, distinctDevices24h: Int)
 
-/** 認証要求の一時間・一日窓。同じ端末ハッシュは一件にまとめ、申告の無い端末は毎回別の端末として数える */
+/** 認証要求の一時間窓と一日窓。同じ端末ハッシュは一件にまとめ、申告の無い端末は毎回別の端末として数える */
 final case class AuthRateHistory(events: Vector[AuthRateEvent] = Vector.empty) {
   /** 一件を加えて窓ごとの件数を返す。24時間前の境界に達した記録は捨てる。上限に達した種類は記録を増やさず、閾値を超えた件数を返す */
   def hit(kind: String, now: Double): Either[AccountRejection, (AuthRateHistory, AuthRateCounts)] = {
@@ -54,7 +54,7 @@ object AuthRateHistory {
 
 /** 認証の乱造検知の閾値。計数に失敗した場合は呼び出し元が認証を拒否する */
 object AbuseThresholds {
-  /** strict は国内の遠い接続元（エッジ防御の RTT 判定）で、閾値を半分にする */
+  /** strict の場合（国内の遠い接続元。エッジ防御の RTT 判定による）は、閾値を半分にする */
   def verify(counts: AuthRateCounts, strict: Boolean = false): Boolean =
     counts.hour <= (if (strict) 5 else 10) && counts.distinctDevices24h <= (if (strict) 2 else 5)
   def registration(counts: AuthRateCounts, strict: Boolean = false): Boolean = counts.day <= (if (strict) 2 else 5)
@@ -83,7 +83,7 @@ enum AbuseReason(val code: String) {
 object AbuseReason {
   def parse(code: String): Option[AbuseReason] = AbuseReason.values.find(_.code == code)
 
-  /** 認証の計数が閾値を超えた理由。超えていなければ空 */
+  /** 認証の計数が閾値を超えた理由を返す。超えていなければ空になる */
   def ofVerify(counts: AuthRateCounts, strict: Boolean): Vector[AbuseReason] =
     Vector(Option.when(counts.hour > (if (strict) 5 else 10))(VerifyBurst), Option.when(counts.distinctDevices24h > (if (strict) 2 else 5))(DeviceSpread)).flatten
 }

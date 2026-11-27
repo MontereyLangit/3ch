@@ -6,11 +6,11 @@ import io._3ch.common.domain.posting.PostForm
 /** 入力欄の文字数と本文の行数の上限 */
 object PostFormLimits {
   /**
-    * 題名・名前・メール・本文の文字数と返信の行数を検査し、名前が空なら BBS_NONAME_NAME にする。強キャップは何もしない
-    * 本文が !ADMIN: で始まれば本文の検査と名前の補完をしない。スレ立ての本文は 65536 文字まで許す
+    * 題名、名前、メール、本文の文字数と返信の行数を検査し、名前が空なら BBS_NONAME_NAME にする。強キャップは何もしない。
+    * 本文が !ADMIN: で始まるときは本文の検査と名前の補完をしない。スレ立ての本文は 65536 文字まで許す
     */
   def check(form: PostForm, settings: BbsSettings, number: Int, strongCap: Boolean): Either[PostingError, PostForm] = {
-    /** 上限値と、文言に出す上限の文字列（設定値そのもの、無ければ既定値） */
+    /** 上限値と、文言に出す上限の文字列を返す。文字列は設定値そのままで、設定が無ければ既定値 */
     def limit(name: String, default: Int): (Double, String) = (settings.number(name, default), settings.get(name).getOrElse(default.toString))
     val fields = List((form.subject, "BBS_SUBJECT_COUNT", PostField.Subject), (form.name, "BBS_NAME_COUNT", PostField.Name), (form.mail, "BBS_MAIL_COUNT", PostField.Mail))
     def tooLong: Option[PostingError] = fields.iterator.flatMap { case (value, setting, field) =>

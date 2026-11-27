@@ -76,7 +76,7 @@ object PendingKind {
 final case class PendingToken(hash: String, expiresAt: Double, email: Option[String] = None, generation: Int = 0) {
   def valid: Boolean = DedicatedBrowserTokens.validHash(hash) && AccountProfile.validTime(expiresAt) && email.forall(_.nonEmpty) && generation >= 0
 
-  /** ハッシュが一致し、期限内か */
+  /** ハッシュが一致し、かつ期限内か */
   def accepts(candidate: String, now: Double): Boolean =
     candidate.length == hash.length && candidate.indices.foldLeft(0)((d, i) => d | (candidate.charAt(i) ^ hash.charAt(i))) == 0 && now < expiresAt
 }

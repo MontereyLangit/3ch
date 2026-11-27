@@ -33,7 +33,7 @@ object ThreadCreationRateLimit {
     *
     * @param settings スレ立て規制設定
     * @param history スレ立てエントリ履歴
-    * @param identity 投稿者の識別情報、IPやASN・端末情報など
+    * @param identity 投稿者の識別情報、IP、ASN、端末情報など
     * @param title スレタイ
     * @param nowSeconds スレ立てUNIXTIME
     * @return 問題ない場合None / 規制対象なら規制理由（対象）
@@ -56,7 +56,7 @@ object ThreadCreationRateLimit {
   }
 
   /**
-    * 確定済み履歴は件数窓ごと全体で、有効な予約は1件ずつ個別に判定し、最優先の規制理由を返す。
+    * 確定済み履歴は件数窓ごとにまとめて判定し、有効な予約は1件ずつ個別に判定して、最優先の規制理由を返す。
     * 優先順は [[Reason]] の宣言順
     */
   def checkWithReservations(settings: Settings, records: Seq[ThreadCreationRecord], request: ThreadCreationRequest, nowSeconds: Double): Option[Reason] = {

@@ -4,6 +4,6 @@ package io._3ch.common.domain
 case class ThreadCommand(text: String, label: String, field: String, description: String)
 
 object ThreadCommand {
-  /** サーバーがコマンドを解釈するようになるまで空 */
+  /** サーバーがコマンドを解釈するようになるまでは空にしておく */
   val all: Seq[ThreadCommand] = Nil
 }

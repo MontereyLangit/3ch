@@ -8,7 +8,7 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.concurrent.Future
 
-/** Thread DO の直列化・一括保存・拒否のコードの返し方。追記できるかの規則は ThreadWriteGuardSuite、連投規制の判定は PostRateLimitSuite で確かめる */
+/** Thread DO が直列化されること、一括保存されること、拒否のコードを返すことを確かめる。追記できるかの規則は ThreadWriteGuardSuite、連投規制の判定は PostRateLimitSuite で確かめる */
 class ThreadSuite extends FunSuite {
   import DurableTestKit.{newEnv, seed, rejectionMessage}
 
@@ -21,7 +21,7 @@ class ThreadSuite extends FunSuite {
     val key = "1700000000"
     env.putR2(s"source/thread/1700/$key.cgi", "legacy title\nBBS_HEISA=checked\n1<>name<><>1700000000<>ID:one<>text<>IP:192.0.2.1\n")
     val source = env.thread(s"source/$key")
-    // 1700000000 を Asia/Tokyo で Intl.DateTimeFormat 整形した固定値（タイムゾーン指定込みなのでシステムTZに依存しない）。
+    // 1700000000 を Asia/Tokyo で Intl.DateTimeFormat で整形した固定値。タイムゾーンを指定しているので、システムのタイムゾーンには依存しない。
     val expectedDat = "name<><>2023/11/15(水) 07:13:20 ID:one<> text <>legacy title\n"
     for {
       before <- source.inspect("source", key).toFuture
@@ -86,8 +86,8 @@ class ThreadSuite extends FunSuite {
       _ <- source.setDat(dat).toFuture
       destDynamic = destInstance.asInstanceOf[js.Dynamic]
       originalReceiveMove = destDynamic.receiveMove
-      // 素の関数参照を切り離して呼ぶと `this`(=destInstance)が失われクラスメソッド内の `this.state`
-      // 参照が壊れるため、`Function.prototype.call` で明示的に `this` を渡して元の実装を呼ぶ。
+      // 素の関数参照を切り離して呼ぶと `this`(=destInstance)が失われ、クラスメソッド内の `this.state`
+      // 参照が使えなくなるため、`Function.prototype.call` で明示的に `this` を渡して元の実装を呼ぶ。
       _ = destDynamic.receiveMove = ((data: js.Any, src: js.Any) =>
         originalReceiveMove.call(destDynamic, data, src).asInstanceOf[js.Promise[js.Any]].toFuture
           .flatMap(_ => Future.failed[js.Any](js.JavaScriptException(new js.Error("lost response")))).toJSPromise

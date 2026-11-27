@@ -17,7 +17,7 @@ enum PostingAuthenticationResult {
   case Rejected(reason: AuthenticationFailure)
 }
 
-/** 投稿認証の材料。token はメール欄の専ブラキー、capKey は照合済みキャップの既存 KV キー */
+/** 投稿認証に渡す値。token はメール欄の専ブラキー、capKey は照合済みキャップの既存 KV キー */
 final case class PostingAuthenticationRequest(token: Option[String], cookieHeader: String, userAgent: String, isMonazilla: Boolean,
   secure: Boolean, now: Double, capKey: Option[String] = None)
 
@@ -25,7 +25,7 @@ final case class PostingAuthenticationRequest(token: Option[String], cookieHeade
 final class PostingAuthentication(accounts: AccountStore, credentials: PostingCredentials, agreementVersion: String) {
   import PostingAuthenticationResult.*
 
-  /** 明示したキーが拒否された場合は Cookie を参照しない。外部の障害でも認証を通さない */
+  /** 明示したキーが拒否された場合は Cookie を参照しない。外部の障害が起きたときも認証を通さない */
   def resolve(request: PostingAuthenticationRequest): Future[PostingAuthenticationResult] =
     Future.unit.flatMap { _ =>
       request.capKey match {

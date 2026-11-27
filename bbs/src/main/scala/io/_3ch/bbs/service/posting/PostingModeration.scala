@@ -10,7 +10,7 @@ import scala.util.control.NonFatal
 
 /** deny.cgi・ngwords.cgi を順に読み、拒否した時点で読み込みを止める */
 object PostingModeration {
-  /** 免除・Tor の判定ではファイルを読まず、読み込みの障害は Future の失敗で返す。既定の段階で免除される投稿者は障害でも通す */
+  /** 免除と Tor の判定ではファイルを読まない。読み込みに失敗したときは Future の失敗で返すが、既定の段階で免除される投稿者は失敗しても通す */
   def check(input: ModerationInput, store: RuleStore): Future[ModerationDecision] = {
     def load(file: ModerationRuleFile): Future[ModerationRuleSource] =
       if (!ModerationService.exemptWithoutRules(input)) store.load(file)

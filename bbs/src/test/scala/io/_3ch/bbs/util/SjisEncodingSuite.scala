@@ -32,13 +32,13 @@ class SjisEncodingSuite extends FunSuite {
   // ============================================================
   private val goldenTable = Json.parse(GoldenFile.readText("sjis-table.json")).asObj
 
-  /** v5実表の単バイト側（葉）。`this.d` 相当。 */
+  /** v5実表の単バイト側（葉）。`this.d` に相当する */
   private val refSingle: Map[Int, Char] =
     goldenTable("singleByte").asArr.map { e =>
       e.field("byte").asInt -> charFromCodePoint(e.field("char").asInt).charAt(0)
     }.toMap
 
-  /** v5実表のリードバイト側（枝）。`this.d` 相当。 */
+  /** v5実表のリードバイト側（枝）。`this.d` に相当する */
   private val refLead: Map[Int, Map[Int, Char]] =
     goldenTable("doubleByte").asArr
       .groupBy(_.field("lead").asInt)
@@ -46,7 +46,7 @@ class SjisEncodingSuite extends FunSuite {
       .mapValues(_.map(e => e.field("second").asInt -> charFromCodePoint(e.field("char").asInt).charAt(0)).toMap)
       .toMap
 
-  /** v5 の encode 表（`this.e`）を golden から構築する。重複符号は後勝ち（docs/v6s実装メモ.md 4.5）。 */
+  /** v5 の encode 表（`this.e`）を golden から構築する。重複符号は後勝ち（docs/v6s実装メモ.md 4.5） */
   private val refEncodeTable: Map[Int, Array[Int]] = {
     val m = scala.collection.mutable.LinkedHashMap.empty[Int, Array[Int]]
     for (e <- goldenTable("singleByte").asArr) m(e.field("char").asInt) = Array(e.field("byte").asInt)
@@ -54,10 +54,10 @@ class SjisEncodingSuite extends FunSuite {
     m.toMap
   }
 
-  /** KB-17: v5に存在しない文字はNCR（v5のNULバイトの代わり）。それ以外はv5と同一バイト列。 */
+  /** KB-17: v5に存在しない文字はNCR（v5ではNULバイトになる）にする。それ以外はv5と同じバイト列にする */
   private def referenceEncode(cp: Int): Array[Int] = refEncodeTable.getOrElse(cp, ncrBytes(cp))
 
-  /** [[SjisEncoding.decode]] と同じ状態遷移を golden から独立に再構築したもの（KB-18 は `?`）。 */
+  /** [[SjisEncoding.decode]] と同じ状態遷移を golden から独立に再構築したもの（KB-18 は `?`） */
   private def referenceDecode(bytes: Array[Int]): String = {
     val sb = new StringBuilder
     var i = 0

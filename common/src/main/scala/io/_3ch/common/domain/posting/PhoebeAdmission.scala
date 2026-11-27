@@ -2,9 +2,9 @@ package io._3ch.common.domain.posting
 
 import io._3ch.common.domain.account.Phoebe
 
-/** Thread DO が書き込む直前に BBS_PHOEBE を判定し直すための投稿者側の条件。boardLevel はスレ設定に値が無いときの必要 Lv */
+/** Thread DO が書き込む直前に BBS_PHOEBE を判定し直すときに使う、投稿者側の条件。boardLevel は、スレ設定に値が無いときに必要になる Lv */
 final case class PhoebeAdmission(lv: Int, exempt: Boolean, boardLevel: Int) {
-  /** 保存されたスレ設定の値（無ければ板の値）で書き込めないときの必要 Lv。書き込めれば None */
+  /** 保存されたスレ設定の値（無ければ板の値）では書き込めないときに、必要な Lv を返す。書き込める場合は None */
   def refusal(threadValue: Option[String]): Option[Int] = {
     val required = threadValue.fold(boardLevel)(value => Phoebe.required(Some(value)))
     Option.when(!Phoebe.admits(lv, required, exempt))(required)

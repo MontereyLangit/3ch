@@ -1,6 +1,6 @@
 package io._3ch.common.domain.device
 
-/** 既知の画面とDPRを持つiOS端末が動作する最小メジャー版 */
+/** 既知の画面と DPR を持つ iOS 端末が動作する最小のメジャー版 */
 final case class IosDeviceProfile(screen: String, dpr: Double, minIosMajor: Int)
 
 /** 端末申告の論理破綻と、受信ヘッダとの矛盾を照合する */

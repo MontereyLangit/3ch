@@ -10,7 +10,7 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
-/** 送信の結果表示．Idle は表示なし */
+/** 送信結果の表示。Idle は何も表示しない */
 private[islands] sealed trait SubmitResult
 
 private[islands] object SubmitResult {
@@ -21,7 +21,7 @@ private[islands] object SubmitResult {
   final case class Unknown(message: String) extends SubmitResult
 }
 
-/** formに付けるaction・マウント前のmethodのTagModと直近の送信結果 */
+/** formに付けるTagMod（action と、マウント前の method）と、直近の送信結果 */
 private[islands] final case class PostingSubmit(action: TagMod, result: SubmitResult)
 
 private[islands] object PostingSubmit {
@@ -80,7 +80,7 @@ private[islands] object PostingSubmit {
 
   /** 
    * form action
-   * 成功時は下書きを消して遷移（TODO: 返信は暫定でリロード）
+   * 成功時は下書きを消して遷移する（TODO: 返信は暫定でリロード）
    * 失敗時は入力を残して結果を返す
    */
   private def submitAction(props: PostingFormIsland.Props, fields: PostingFields, upload: ImgurUpload)(

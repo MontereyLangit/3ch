@@ -2,7 +2,7 @@ package io._3ch.bbs.service.auth.ports
 
 import scala.concurrent.Future
 
-/** 索引の所有者が値を今も持っているかの確認と、確定前の予約の取り消し。放置された索引を解放するのに使う */
+/** 索引の所有者が値を今も持っているかを確認し、確定前の予約を取り消す。放置された索引を解放するのに使う */
 trait IndexHoldings {
   /** 退会していないアカウント aid が、索引の値（ログイン ID・Google の sub の HMAC・メールの正規形）を今も持っているか */
   def holds(aid: String, kind: String, value: String): Future[Boolean]

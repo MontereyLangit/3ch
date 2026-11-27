@@ -5,7 +5,7 @@ import test, { beforeEach } from 'node:test';
 import { JSDOM } from 'jsdom';
 
 // 板topのIslandを、リンク済みの実モジュールのままjsdom上で動かす
-// npm pretest が bbsClient/fastLinkJS を実行
+// npm pretest が bbsClient/fastLinkJS を実行する
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const clientOutput = path.join(root, 'bbs-client/target/scala-3.3.8/bbsclient-fastopt');
 

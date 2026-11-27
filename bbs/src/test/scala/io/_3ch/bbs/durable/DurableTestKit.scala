@@ -83,7 +83,7 @@ object DurableTestKit {
     def resolve(paths: String*): String = js.native
   }
 
-  /** `process.cwd()` から上へ辿って `public/3chiko.html` を持つディレクトリ（リポジトリルート）を探す。 */
+  /** `process.cwd()` から上へ辿って `public/3chiko.html` を持つディレクトリ（リポジトリルート）を探す */
   private def publicDir(): String = {
     var dir = NodePath.resolve(".")
     var depth = 0
@@ -96,7 +96,7 @@ object DurableTestKit {
     throw new IllegalStateException("public/3chiko.html が見つからない")
   }
 
-  /** 1テストケース分の Thread/Board/R2/KV(CAP)/ASSETS を束ねる環境。R2 は etag と `onlyIf.etagMatches` を再現する。 */
+  /** 1テストケース分の Thread/Board/R2/KV(CAP)/ASSETS を束ねる環境。R2 は etag と `onlyIf.etagMatches` を再現する */
   final class Env {
     private val threadInstances = mutable.Map.empty[String, Thread]
     private val boardInstances = mutable.Map.empty[String, Board]
@@ -118,7 +118,7 @@ object DurableTestKit {
 
     private def str(v: js.Any): String = js.Dynamic.global.String(v).asInstanceOf[String]
 
-    /** 実R2 の `put(onlyIf)` と同じく etagMatches / etagDoesNotMatch だけを評価し、未知のプロパティ（doesNotExist 等）は無視する。条件不成立は null を返す。 */
+    /** 実R2 の `put(onlyIf)` と同じく etagMatches / etagDoesNotMatch だけを評価し、未知のプロパティ（doesNotExist 等）は無視する。条件不成立は null を返す */
     private def r2Put(key: String, value: js.Any, opts: js.UndefOr[js.Dynamic]): js.Any = {
       val rec = r2.get(key)
       val onlyIf: js.Dynamic = opts.toOption.filter(o => !js.isUndefined(o.onlyIf)).map(_.onlyIf).getOrElse(js.Dynamic.literal())
@@ -177,30 +177,30 @@ object DurableTestKit {
       e.asInstanceOf[WorkerEnv]
     }
 
-    /** KV (`CAP`) にキャップを登録する（キー: パスワードハッシュ、値: 表示名）。 */
+    /** KV (`CAP`) にキャップを登録する（キー: パスワードハッシュ、値: 表示名） */
     def putCap(key: String, name: String): Unit = capStore.update(key, name)
-    /** KV (`CAP`) の値 */
+    /** KV (`CAP`) に保存されている値 */
     def capValue(key: String): Option[String] = capStore.get(key)
 
-    /** R2 の現在の本文。存在しなければ None。 */
+    /** R2 の現在の本文を返す。存在しなければ None を返す */
     def r2Text(key: String): Option[String] = r2.get(key).map(_._1)
 
-    /** R2 の etag を指定して直接書き込む（他者の書き込みや競合の再現用）。 */
+    /** R2 の etag を指定して直接書き込む（他者の書き込みや競合の再現用） */
     def putR2Raw(key: String, text: String, etag: String): Unit = r2.update(key, (text, etag))
 
-    /** 現在の etag を別の値に差し替える（読み取り後の競合注入用）。 */
+    /** 現在の etag を別の値に差し替える（読み取り後の競合注入用） */
     def replaceR2Etag(key: String, etag: String): Unit = r2.get(key).foreach { case (text, _) => r2.update(key, (text, etag)) }
 
-    /** R2 の `get` が結果を返した直後に呼ばれるフックを差し込む。 */
+    /** R2 の `get` が結果を返した直後に呼ばれるフックを差し込む */
     def onR2Get(hook: String => Unit): Unit = r2GetHook = hook
 
-    /** R2 (`ch3www`) に旧形式スレッドログを仕込む。キーは `bbs/thread/head4/key.cgi` の形。 */
+    /** R2 (`ch3www`) に旧形式スレッドログを仕込む。キーは `bbs/thread/head4/key.cgi` の形 */
     def putR2(key: String, text: String): Unit = r2.update(key, (text, nextEtag()))
 
     /** 作成済みの Account DO の名前（aid）。照合のためだけに呼ばれた名前も含む */
     def accountNames: Set[String] = accountInstances.keySet.toSet
 
-    /** 保存内容を直接確かめるテスト用の Account インスタンス */
+    /** 保存内容を直接確かめるための Account インスタンスを返す */
     def accountInstance(name: String): Account = { account(name); accountInstances(name) }
 
     def account(name: String): AccountDoStub = worker.ACCOUNT_DO.get(worker.ACCOUNT_DO.idFromName(name))
@@ -209,29 +209,29 @@ object DurableTestKit {
     def thread(name: String): ThreadDoStub = worker.THREAD_DO.get(worker.THREAD_DO.idFromName(name))
     def board(name: String): BoardDoStub = worker.BOARD_DO.get(worker.BOARD_DO.idFromName(name))
 
-    /** 直接 storage を触りたいテスト用に、生の `Thread` インスタンス（`state`フィールド公開）を返す。 */
+    /** 直接 storage を触りたいテスト用に、生の `Thread` インスタンス（`state`フィールド公開）を返す */
     def threadInstance(name: String): Thread = threadInstances.getOrElseUpdate(name, new Thread(fakeState(), worker))
 
-    /** 直接 storage を触りたいテスト用に、生の `Board` インスタンスを返す。 */
+    /** 直接 storage を触りたいテスト用に、生の `Board` インスタンスを返す */
     def boardInstance(name: String): Board = boardInstances.getOrElseUpdate(name, new Board(fakeState(), worker.asInstanceOf[js.Any]))
   }
 
   def newEnv(): Env = new Env()
 
-  /** `js.JavaScriptException(new js.Error(msg))` からメッセージ文字列を取り出す（Posting.scala の errorText と同じ発想）。 */
+  /** `js.JavaScriptException(new js.Error(msg))` からメッセージ文字列を取り出す（Posting.scala の errorText と同じ発想） */
   def messageOf(e: Throwable): String = e match {
     case x: js.JavaScriptException => x.exception.asInstanceOf[js.Dynamic].message.asInstanceOf[String]
     case other => other.getMessage
   }
 
-  /** node:assert の `assert.rejects` 相当。成功時は失敗させ、失敗時はそのメッセージを返す。 */
+  /** node:assert の `assert.rejects` 相当。成功時は失敗させ、失敗時はそのメッセージを返す */
   def rejectionMessage(fut: Future[Any]): Future[String] =
     fut.transform {
       case scala.util.Failure(e) => scala.util.Success(messageOf(e))
       case scala.util.Success(v) => scala.util.Failure(new AssertionError(s"expected the future to fail, but it resolved with: $v"))
     }
 
-  /** 生の `Thread` インスタンスへ直接 storage を書き込む（JS版 `source.state.storage.put({...})` 相当）。 */
+  /** 生の `Thread` インスタンスへ直接 storage を書き込む（JS版 `source.state.storage.put({...})` 相当） */
   def seed(t: Thread, entries: (String, js.Any)*): Future[Unit] =
     t.state.storage.put(js.Dictionary(entries*)).toFuture
 }

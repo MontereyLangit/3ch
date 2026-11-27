@@ -18,3 +18,6 @@ dist/
 .bloop
 .metals
 metals.sbt
+
+# .agents/skills/ から scripts/sync-skills.mjs が写す（docs/ai-skills.md）
+/.claude/skills/yomiyasu/

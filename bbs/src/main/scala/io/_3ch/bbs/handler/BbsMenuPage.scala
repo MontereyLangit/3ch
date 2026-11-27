@@ -3,7 +3,7 @@ package io._3ch.bbs.handler
 import japgolly.scalajs.react.facade.React
 import scala.scalajs.js
 
-/** 専ブラ向け板一覧。カテゴリ見出しと板リンク・改行の並びを維持する。 */
+/** 専ブラ向けの板一覧を描画する。カテゴリ見出しと板リンクの並びや改行を維持する */
 object BbsMenuPage {
   private def element(tag: String, children: React.Node*): React.Element = {
     React.createElement(tag, new js.Object(), children*)

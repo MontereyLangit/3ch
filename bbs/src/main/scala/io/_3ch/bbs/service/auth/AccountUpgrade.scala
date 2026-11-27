@@ -17,9 +17,9 @@ enum UpgradeOutcome {
 }
 
 /**
-  * クライアント ID を ID・パスワードか Google に移す。uid とログイン用の索引を予約し、ログイン用・uid の順に確定してから Account を移す。
-  * 失敗したときは、この試行で新しく取った確定前の予約だけを取り消す。確定した索引（ほかの試行や移行済みのアカウントのものを含む）は外さず、
-  * 旧 uid の索引も残す。同じ aid ならやり直せる
+  * クライアント ID を ID・パスワードか Google に移す。uid とログイン用の索引を予約し、ログイン用の索引、uid の順に確定してから Account を移す。
+  * 失敗したときに取り消すのは、この試行で新しく取った確定前の予約だけ。確定した索引（ほかの試行や移行済みのアカウントのものを含む）と、
+  * 旧 uid の索引は外さずに残す。同じ aid ならやり直せる
   */
 final class AccountUpgrade(accounts: AccountConversionStore, keys: AuthenticationKeys, review: AbuseReviewLog = AbuseReviewLog.none) {
   private val stale = new StaleIndex(accounts)
@@ -27,7 +27,7 @@ final class AccountUpgrade(accounts: AccountConversionStore, keys: Authenticatio
   private def hash(kind: String, value: String): Future[String] =
     keys.index(kind, value).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
 
-  /** 予約できたか、すでに自分のものなら真。取れたかどうかと、新しく取ったかを返す。持ち主が値を持たない確定済みの索引は解放して取り直す */
+  /** 索引を予約する。戻り値は（取れたか、新しく取ったか）で、予約できたか、すでに自分のものなら取れたことにする。持ち主が値を持たない確定済みの索引は解放して取り直す */
   private def claim(kind: String, value: String, hash: String, aid: String, now: Double): Future[(Boolean, Boolean)] =
     accounts.reserve(kind, hash, aid, now).flatMap {
       case true => Future.successful((true, true))
@@ -65,7 +65,7 @@ final class AccountUpgrade(accounts: AccountConversionStore, keys: Authenticatio
     }
   }
 
-  /** ID・パスワードへ移す。ユーザー ID はログイン ID と同じ値。登録と同じ接続元ごとの上限（strict なら半分）を数える */
+  /** ID・パスワードへ移す。ユーザー ID にはログイン ID と同じ値を使う。接続元ごとの上限は登録と同じ（strict なら半分）で数える */
   def toPassword(account: AccountDescription, id: LoginId, password: Password, hashing: PasswordHashing, deviceHash: String, keyIp: String,
     now: Double, strict: Boolean = false): Future[UpgradeOutcome] = for {
     _ <- RegistrationRate.check(accounts.rate, review, keyIp, now, strict)

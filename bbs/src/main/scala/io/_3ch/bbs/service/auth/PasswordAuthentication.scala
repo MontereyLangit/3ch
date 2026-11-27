@@ -23,7 +23,7 @@ final class PasswordAuthentication(accounts: AccountManagementStore & AccountSig
   private def counted(keyIp: String, kind: String, now: Double)(allowed: AuthRateCounts => Boolean): Future[Unit] =
     accounts.rate(keyIp, kind, now).map(counts => if (!allowed(counts)) throw AuthServiceException(AuthServiceFailure.RateLimited))
 
-  /** 接続元ごとに一日五件まで（strict なら半分）。ユーザー ID とログイン ID は同じ値で登録する */
+  /** 登録は接続元ごとに一日五件まで（strict なら半分）。ユーザー ID とログイン ID には同じ値を登録する */
   def register(loginId: LoginId, password: Password, deviceHash: String, keyIp: String, now: Double, strict: Boolean = false): Future[AccountDescription] =
     for {
       _ <- RegistrationRate.check(accounts.rate, review, keyIp, now, strict)
@@ -36,7 +36,7 @@ final class PasswordAuthentication(accounts: AccountManagementStore & AccountSig
     } yield account
 
   /**
-   * 接続元ごとに一時間三十回まで。存在しない ID も固定の Account("dummy") で同じ照合を行い、
+   * 接続元ごとに一時間三十回まで。存在しない ID も固定の Account("dummy") で同じ照合をして、
    * 不一致・ロック中・未登録を区別しない。失敗の遅延は接続元の失敗数だけで決める
    */
   def login(loginId: Option[LoginId], password: String, deviceHash: String, keyIp: String, now: Double): Future[LoginOutcome] =

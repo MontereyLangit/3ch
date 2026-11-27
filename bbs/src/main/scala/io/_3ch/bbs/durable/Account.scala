@@ -19,7 +19,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
   private def error(reason: AccountRejection): js.Dynamic = AccountCodec.describe(Left(reason))
   private def current[A](missing: => A)(f: AccountState => Future[A]): Future[A] = read().flatMap(_.fold(Future.successful(missing))(f))
 
-  /** 無効にしたキーを token 索引から外す。索引の障害では保存済みの状態を戻さない */
+  /** 無効にしたキーを token 索引から外す。索引の更新に失敗しても、保存済みの状態は元に戻さない */
   private def release(before: AccountState, after: AccountState): Future[Unit] = {
     val hashes = DedicatedBrowserTokens.released(before.tokens, after.tokens)
     if (hashes.isEmpty) Future.unit
@@ -85,7 +85,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** PBKDF2 で照合し、接続元ごとの失敗計数とロックを同じ直列化の中で保存する。アカウントが無ければ固定の資格情報で同じ計算をして失敗にする */
+  /** PBKDF2 で照合し、接続元ごとの失敗回数とロックを同じ直列化の中で保存する。アカウントが無いときは、固定の資格情報で同じ計算をして失敗にする */
   def verifyPassword(password: String, keyIpHash: String, now: Double): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
     val parsed = Option(password).filter(p => js.typeOf(p) == "string").flatMap(p => Password.parse(p).toOption)
     read().flatMap { value =>
@@ -124,7 +124,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** 保留トークンを種別ごとに置き換える。再設定なら送り先のアドレスを返す */
+  /** 保留トークンを種別ごとに置き換える。種別が再設定のときは、送り先のアドレスを返す */
   def issuePending(kind: String, hash: String, email: js.UndefOr[String], now: Double): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
     PendingKind.parse(kind).fold(Future.successful(error(AccountRejection.Invalid))) { pendingKind =>
       current(error(AccountRejection.Missing)) { account =>
@@ -136,7 +136,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** 一致する期限内の保留トークンがあれば、ユーザー ID と確認先のアドレスを返す。消費はしない */
+  /** 一致する期限内の保留トークンがあれば、ユーザー ID と確認先のアドレスを返す。トークンは消費しない */
   def checkPending(kind: String, hash: String, now: Double): js.Promise[js.Dynamic] = read().map { value =>
     PendingKind.parse(kind).toRight(AccountRejection.Invalid).flatMap(k => value.toRight(AccountRejection.Missing).flatMap(a => a.pendingFor(k, hash, now).map(a -> _))) match {
       case Left(rejection) => error(rejection)
@@ -144,7 +144,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** メール認証のトークンを消費してアドレスを確定させる。置き換えた前のアドレスも返す */
+  /** メール認証のトークンを消費してアドレスを確定させ、置き換える前のアドレスも返す */
   def verifyEmail(hash: String, now: Double): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
     current(error(AccountRejection.Missing)) { account =>
       account.verifyEmail(hash, now) match {
@@ -158,7 +158,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** 再設定のトークンを消費してパスワードを置き換え、世代を進める。専ブラキーは全て無効にして token 索引から外す */
+  /** 再設定のトークンを消費してパスワードを置き換え、世代を進める。専ブラキーはすべて無効にして、token 索引から外す */
   def resetPassword(hash: String, credential: js.Dynamic, now: Double): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
     current(error(AccountRejection.Missing)) { account =>
       account.resetPassword(hash, PasswordCredentialCodec.decode(credential), now) match {
@@ -168,7 +168,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** クライアント ID を移す。kind が password なら credential、google なら googleSubHash（と参考の email）を渡す */
+  /** クライアント ID を移す。kind が password なら credential を、google なら googleSubHash（と参考の email）を渡す */
   def convert(kind: String, uid: String, generation: Int, now: Double, credential: js.UndefOr[js.Dynamic] = js.undefined,
     googleSubHash: js.UndefOr[String] = js.undefined, email: js.UndefOr[String] = js.undefined): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
     val target = AccountKind.parse(kind) match {
@@ -186,7 +186,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** 退会する。外す索引の値と、失効させたキャップの照合値を返す。専ブラキーは token 索引から外す */
+  /** 退会する。外した索引の値と、失効させたキャップの照合値を返す。専ブラキーは token 索引から外す */
   def withdraw(generation: Int, now: Double): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
     current(error(AccountRejection.Missing)) { account =>
       account.withdraw(generation, now) match {
@@ -200,7 +200,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
   def describeGoogle(subHash: String, now: Double): js.Promise[js.Dynamic] =
     read().map(_.fold(error(AccountRejection.Missing))(account => AccountCodec.signIn(account.describeGoogle(subHash, now), account.profile.uid))).toJSPromise
 
-  /** 世代・状態・失効と、専ブラ Cookie のキーと UA を一度で検証する */
+  /** 世代・状態・失効を確認し、専ブラ Cookie のキーと UA も一度に検証する */
   def describeForPosting(aid: String, generation: Int, now: Double, tokenId: js.UndefOr[String] = js.undefined, uaHash: js.UndefOr[String] = js.undefined): js.Promise[js.Dynamic] =
     read().map(_.fold(error(AccountRejection.Missing))(account => AccountCodec.describe(account.describe(aid, generation, now, tokenId.toOption, uaHash.toOption)))).toJSPromise
 
@@ -212,7 +212,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** 未使用の専ブラキーを一個発行し、前の未使用キーを失効させる */
+  /** 未使用の専ブラキーを1つ発行し、前の未使用キーを失効させる */
   def issueToken(tokenId: String, hash: String, now: Double): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
     current(error(AccountRejection.Missing)) { account =>
       account.issueToken(tokenId, hash, now) match {
@@ -222,7 +222,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** キーと UA の照合・初回紐付けを保存する。成功はログへ、拒否は上限付きの拒否記録へ残す */
+  /** キーと UA の照合結果と初回の紐付けを保存する。成功はログに、拒否は上限付きの拒否記録に残す */
   def useToken(tokenId: String, uaHash: String, uaLabel: String, now: Double): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
     current(error(AccountRejection.Missing)) { account =>
       val (next, result) = account.useToken(tokenId, uaHash, uaLabel, now)
@@ -235,10 +235,10 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** キーを失効させ、そこから発行した Cookie を使えなくする */
+  /** キーを失効させ、そのキーから発行した Cookie を使えなくする */
   def revokeToken(tokenId: String, now: Double): js.Promise[String] = update(_.revokeToken(tokenId, now))
 
-  /** 法的投稿確認の版と同意時刻を更新する */
+  /** 法的投稿確認の版と、同意した時刻を更新する */
   def agree(version: String, now: Double): js.Promise[String] = update(_.agree(version, now))
 
   /** 世代を進めて全端末をログアウトさせる */
@@ -249,10 +249,10 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** 端末の観測を最新十件まで保持する */
+  /** 端末の観測記録を、最新の十件まで保持する */
   def bindDevice(hash: String, keyIpHash: String, now: Double): js.Promise[String] = update(_.bindDevice(hash, keyIpHash, now))
 
-  /** 発行者を確認済みのキャップを所有先に登録する */
+  /** 発行者を確認済みのキャップを、所有先のアカウントに登録する */
   def bindCap(cap: js.Dynamic, issuerIsAdmin: Boolean, now: Double): js.Promise[String] = update(_.bindCap(AccountCodec.decodeCap(cap), issuerIsAdmin, now))
 
   /** キャップを失効させ、KV と索引から外すための照合値を返す。KV と索引の更新は呼び出し元が行う */
@@ -265,7 +265,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** 有効なキャップを失効させ、同じ表示名・強さで照合値だけ新しいキャップを登録する。古い照合値と新しいキャップを返す */
+  /** 有効なキャップを失効させ、同じ表示名・強さで、照合値だけ新しいキャップを登録する。返すのは古い照合値と新しいキャップ */
   def reissueCap(capId: String, nextId: String, nextHash: String, issuedBy: String, issuerIsAdmin: Boolean, now: Double): js.Promise[js.Dynamic] =
     DurableLock.serialized(state) {
       current(error(AccountRejection.Missing)) { account =>
@@ -276,7 +276,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
       }
     }.toJSPromise
 
-  /** 操作する人（actorAid）の今の役割で役割を置き換える。呼び出し元の申告は使わず、admin 以外と上位の役割を持つ相手への操作は拒否する */
+  /** 操作する人（actorAid）の今の役割に基づいて役割を置き換える。呼び出し元の申告は使わず、admin 以外と上位の役割を持つ相手への操作は拒否する */
   def setRoles(roles: js.Array[String], actorAid: String, now: Double): js.Promise[String] =
     Roles.parse(roles.toSeq) match {
       case Some(next) if actorAid.matches("[a-z0-9]{16}") =>
@@ -294,21 +294,21 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     index.get(index.idFromName(AccountIndexKind.Admin.code)).seat(hash, aid, now).toFuture.flatMap(claimed => update(_.grantFirstAdmin(claimed, now)).toFuture).toJSPromise
   }
 
-  /** 利用できるアカウントの今の役割。凍結・退会・未登録は空 */
+  /** 利用できるアカウントの今の役割を返す。凍結・退会・未登録のアカウントは空を返す */
   def activeRoles(now: Double): js.Promise[js.Array[String]] =
     read().map(_.fold(Roles())(_.activeRoles(now)).values.toVector.map(_.code).sorted.toJSArray).toJSPromise
 
-  /** 退会していないアカウントが、索引の値を今も持っているか。値はログイン ID・Google の sub の HMAC・メールの正規形 */
+  /** 退会していないアカウントが、索引の値を今も持っているかを返す。値はログイン ID・Google の sub の HMAC・メールの正規形 */
   def holds(kind: String, value: String): js.Promise[Boolean] =
     read().map(account => AccountIndexKind.parse(kind).exists(k => account.exists(_.holds(k, value)))).toJSPromise
 
-  /** 利用できる admin か。凍結・退会や役割を外したアカウントは偽 */
+  /** 利用できる admin かどうかを返す。凍結・退会したアカウントと、役割を外したアカウントは偽を返す */
   def adminStatus(now: Double): js.Promise[Boolean] = read().map(_.exists(_.activeAdmin(now))).toJSPromise
 
-  /** 管理者による Lv の固定値を保存する。未指定で固定を外す */
+  /** 管理者による Lv の固定値を保存する。未指定のときは固定を外す */
   def setLevel(lvOverride: js.UndefOr[Int], now: Double): js.Promise[String] = update(_.setLevelOverride(lvOverride.toOption, now))
 
-  /** 成功した書き込みの期限更新・計数と Lv の昇格、ログを一括保存する */
+  /** 成功した書き込みの期限の更新、計数、Lv の昇格、ログを一括で保存する */
   def recordPost(now: Double, post: js.Dynamic, observation: js.Dynamic): js.Promise[js.Dynamic] = DurableLock.serialized(state) {
     current(error(AccountRejection.Missing)) { account =>
       val entry = AccountCodec.decodePost(post)
@@ -319,7 +319,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
     }
   }.toJSPromise
 
-  /** 本人向けのアカウント情報と利用履歴。照合用ハッシュは返さない */
+  /** 本人向けのアカウント情報と利用履歴を返す。照合用のハッシュは返さない */
   def inspect(): js.Promise[js.Dynamic] = {
     val now = math.floor(js.Date.now() / 1000)
     current(error(AccountRejection.Missing)) { account =>

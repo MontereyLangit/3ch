@@ -21,7 +21,7 @@ object PhoebeCapRule {
   }
 }
 
-/** Lv の上限ルール（R2 の phoebe.cgi）。当てはまる行の上限のうち最も低いもので実効 Lv を抑え、アカウントの Lv は下げない */
+/** Lv の上限ルール（R2 の phoebe.cgi）。当てはまる行のうち最も低い上限で実効 Lv を抑える。アカウントの Lv は下げない */
 final case class PhoebeCapRules(rules: List[PhoebeCapRule]) {
   def cap(lv: Int, userInfo: String): Int = rules.iterator.filter(_.matches(userInfo)).map(_.limit).foldLeft(lv)(math.min)
 }

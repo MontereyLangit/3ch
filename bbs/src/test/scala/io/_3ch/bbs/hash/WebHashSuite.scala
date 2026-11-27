@@ -7,7 +7,7 @@ import scala.concurrent.Future
 import scala.scalajs.js.Thenable.Implicits._
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
-/** [[WebHash]] を `sha1base64.json` / `hash.json` の JS 実測値と照合する（KB-14 を含む）。 */
+/** [[WebHash]] を `sha1base64.json` / `hash.json` の JS 実測値と照合する（KB-14 を含む） */
 class WebHashSuite extends FunSuite {
 
   test("golden: sha1base64.json の全ケースがJS実測値と一致する(KB-14: TextEncoderによる二重エンコードを含む)") {

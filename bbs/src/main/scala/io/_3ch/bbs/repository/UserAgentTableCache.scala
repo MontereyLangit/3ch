@@ -7,7 +7,7 @@ import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 import scala.util.control.NonFatal
 
-/** 読み込んだ UA 解析表を ttlMillis だけ使い回す。読み込みに失敗したら最後に読めた表を返し、一度も読めていなければ空の表 */
+/** 読み込んだ UA 解析表を ttlMillis だけ使い回す。読み込みに失敗したら最後に読めた表を返し、一度も読めていなければ空の表を返す */
 final class UserAgentTableCache(ttlMillis: Double, now: () => Double) {
   private var table: Option[UserAgentTable] = None
   private var checkedAt: Double = 0

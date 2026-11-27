@@ -14,16 +14,16 @@ final case class AutoHideHeader(hidden: Boolean, ref: Ref.ToVdom[dom.html.Elemen
 object AutoHideHeader {
 
   /**
-   * --header-heightを直近の.board-uiへ反映
-   * 隠れている間は0となる
-   * 高さは計測済みの値を利用
+   * --header-heightを直近の.board-uiへ反映する。
+   * 隠れている間は0になる。
+   * 高さは計測済みの値を使う
    */
   private def place(board: Option[dom.html.Element], height: Double, hidden: Boolean): Unit = {
     board.foreach(_.style.setProperty("--header-height", s"${(if hidden then 0.0 else height).toInt}px"))
   }
 
   /**
-   * スクロール時のヘッダー表示切替処理のHooks
+   * スクロールに応じてヘッダーの表示を切り替えるHooks
    * @return HookResult[AutoHideHeader]
    */
   def useAutoHideHeader: HookResult[AutoHideHeader] = {

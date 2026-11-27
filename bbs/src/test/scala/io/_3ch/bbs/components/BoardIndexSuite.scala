@@ -21,7 +21,7 @@ class BoardIndexSuite extends munit.FunSuite {
 
   private val props = BoardIndexProps("テスト板", "<b>ローカルルール</b>", sample, subjects = subjects, time = "1800000100")
 
-  /** island の data-serialized-propsは見える描画ではないので除く */
+  /** island の data-serialized-props は見える描画ではないので除く */
   private def visible(html: String): String = html.replaceAll("data-serialized-props=\"[^\"]*\"", "")
 
   private def renderForm(props: PostingFormProps): String = visible(BoardMarkup(PostingFormComponent.Component(props).rawElement))

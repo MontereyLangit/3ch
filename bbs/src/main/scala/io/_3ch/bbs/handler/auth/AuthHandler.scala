@@ -36,13 +36,13 @@ enum AuthApiError {
   case Device(reason: DeviceRejection)
   case Service(failure: AuthServiceFailure)
   case Unavailable
-  /** 不一致・ロック中・未登録を区別しないログインの失敗 */
+  /** ログインの失敗。パスワードの不一致、ロック中、未登録を区別しない */
   case LoginFailed
   case Refused(reason: AccountRejection)
   case LoginId(reason: LoginIdRejection)
   case Password(reason: PasswordRejection)
   case Confirmation
-  /** キャップの発行・失効の拒否 */
+  /** キャップの発行や失効を拒否した */
   case Cap(reason: AccountRejection)
   case CapName(reason: CapNameRejection)
   case Email(reason: EmailRejection)
@@ -179,7 +179,7 @@ object AuthHandler {
       else Try { val uri = new URL(value, origin(requestUrl)); if (uri.origin == origin(requestUrl)) value else "/" }.getOrElse("/")
     }
   }
-  /** application/x-www-form-urlencoded の本文を読む。不正な % は要求の誤りにする */
+  /** application/x-www-form-urlencoded の本文を読む。不正な % があれば要求の誤りとして扱う */
   private def fields(request: Request): Future[Map[String, String]] = request.arrayBuffer().toFuture.map { bytes =>
     val text = new TextDecoder().decode(new scala.scalajs.js.typedarray.Uint8Array(bytes))
     def decode(value: String): String = Try(js.URIUtils.decodeURIComponent(value.replace("+", " "))).getOrElse(throw Refused(AuthApiError.Invalid))
@@ -212,7 +212,7 @@ object AuthHandler {
   private[auth] def managed(request: Request, secret: String, repository: AccountRepository, time: Double): Future[(SessionClaims, AccountDescription)] =
     current(request, secret, repository, time, allowBound = false)
 
-  /** Google ログインから戻したときの理由。知らない値は出さない */
+  /** Google ログインから戻ったときの理由の文言を返す。知らない値には文言を付けず None を返す */
   private def notice(code: String): Option[String] = code match {
     case "google_denied" => Some("Googleでのログインを中止しました。")
     case "google" | "oauth_state" => Some("Googleでのログインを確認できませんでした。もう一度お試しください。")
@@ -385,7 +385,7 @@ object AuthHandler {
       }
   }
 
-  /** 受信 IP の keyIp の HMAC。IP が無い要求や鍵の障害は利用不可 */
+  /** 受信 IP から keyIp の HMAC を求める。IP が無い要求や鍵の障害は、利用不可として扱う */
   private[auth] def keyIp(request: Request, secret: String): Future[String] = {
     val ip = header(request, "CF-Connecting-IP")
     if (ip.isEmpty) Future.failed(Refused(AuthApiError.Unavailable))
@@ -408,8 +408,8 @@ object AuthHandler {
   }
 
   /**
-    * エッジ防御。ログイン中で Lv3 以上・作成から7日以上なら免除する。試行モードでは記録だけで通す。
-    * 拒否はデータセンターなら Datacenter、TLS の矛盾なら端末申告の突合と同じ declaration_mismatch。乱造検知を厳しくするかを返す
+    * エッジ防御を適用する。ログイン中で Lv3 以上、かつ作成から7日以上のアカウントは免除する。試行モードでは記録だけして通す。
+    * 拒否するときは、データセンターからの接続なら Datacenter、TLS に矛盾があれば端末申告の突合と同じ declaration_mismatch にする。戻り値は、乱造検知を厳しくするかどうか
     */
   private[auth] def edge(request: Request, env: WorkerEnv, repository: AccountRepository, config: AuthSettings, endpoint: String, time: Double): Future[Boolean] = {
     val signal = EdgeRuleRepository.signal(request)
@@ -457,7 +457,7 @@ object AuthHandler {
     } yield json(js.Dynamic.literal(uid = created.uid, lv = created.lv, returnPath = safeReturn(form.getOrElse("return", "/"), request.url)), cookie = Some(cookie))
   }
 
-  /** 登録に使えないユーザー ID。固定の予約語に R2 の reserved-ids.txt と既存の板名を加える。R2 の障害では登録しない */
+  /** 登録に使えないユーザー ID。固定の予約語に、R2 の reserved-ids.txt と既存の板名を加えたもの。R2 に障害があるときは登録させない */
   private[auth] def available(env: WorkerEnv, raw: String): Future[Either[LoginIdRejection, LoginId]] =
     LoginId.parse(raw) match {
       case Left(reason) => Future.successful(Left(reason))
@@ -473,7 +473,7 @@ object AuthHandler {
     def create(password: Password, now: Double): Future[Option[PasswordCredential]] = PasswordHasher.create(password, now).map(_.toOption)
   }
 
-  /** 入力規則は Turnstile より前に確かめ、使えない ID は予約語と板名も含めて同じ文言にする */
+  /** 入力規則は Turnstile より前に確かめる。使えない ID は、予約語や板名の場合も含めて同じ文言にする */
   private def register(request: Request, env: WorkerEnv, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] = {
     val raw = form.getOrElse("id", "")
     val validated = for {

@@ -39,7 +39,7 @@ final case class DedicatedBrowserToken(
   def revoke(now: Double, reason: TokenRevokeReason): DedicatedBrowserToken = copy(revokedAt = Some(now), revokeReason = Some(reason))
 }
 
-/** 専ブラキーの使用結果。拒否でも期限切れの整理を反映する */
+/** 専ブラキーの使用結果。拒否した場合も、期限切れの整理は結果に反映する */
 final case class TokenUseResult(tokens: Vector[DedicatedBrowserToken], result: Either[AccountRejection, DedicatedBrowserToken])
 
 /** 専ブラキーの初回紐付け・置換・失効を判定する純粋な規則 */
@@ -79,7 +79,7 @@ object DedicatedBrowserTokens {
     } :+ DedicatedBrowserToken(tokenId, hash, now, now + unusedLifetime))
   }
 
-  /** 最大五つの UA に紐付ける。同じ UA の別キーは置換し、UA 不一致では元のキーを止めない */
+  /** 最大五つの UA に紐付ける。同じ UA の別キーは置き換え、UA が一致しなくても元のキーは止めない */
   def use(tokens: Vector[DedicatedBrowserToken], tokenId: String, uaHash: String, uaLabel: String, now: Double): TokenUseResult = {
     val current = retained(tokens, now)
     val result = if (!validHash(uaHash) || !AccountProfile.validTime(now)) Left(AccountRejection.Invalid)
@@ -103,7 +103,7 @@ object DedicatedBrowserTokens {
     TokenUseResult(updated, result)
   }
 
-  /** Cookie の照合用。紐付け済みの有効なキーと完全な UA ハッシュの一致を求める */
+  /** Cookie の照合に使う。紐付け済みの有効なキーであることと、UA ハッシュが完全に一致することを求める */
   def describe(tokens: Vector[DedicatedBrowserToken], tokenId: String, uaHash: String, now: Double): Either[AccountRejection, DedicatedBrowserToken] = {
     if (!AccountProfile.validTime(now) || !validHash(uaHash)) Left(AccountRejection.Invalid)
     else retained(tokens, now).find(_.tokenId == tokenId) match {
