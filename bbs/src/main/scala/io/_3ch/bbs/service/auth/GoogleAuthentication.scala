@@ -10,7 +10,7 @@ import scala.util.control.NonFatal
 /** Google でのログイン・登録の結果 */
 enum GoogleOutcome {
   case Success(account: AccountDescription)
-  /** 未登録の Google アカウントで、ユーザー ID か同意が無い */
+  /** 未登録の Google アカウントで、ユーザー ID または同意が欠けている */
   case Registration
   /** 指定したユーザー ID が使えない */
   case Taken
@@ -22,7 +22,7 @@ final class GoogleAuthentication(accounts: AccountManagementStore & AccountSignI
   private val registration = new AccountRegistration(accounts, keys)
   private val stale = new StaleIndex(accounts)
 
-  /** requestedUid は登録用に検証済みの ID。agreed は開始時に同意を確認したか */
+  /** requestedUid は登録用に検証した ID、agreed は開始時に同意を確認したかどうか */
   def signIn(identity: GoogleIdentity, requestedUid: Option[LoginId], agreed: Boolean, deviceHash: String, keyIp: String, now: Double): Future[GoogleOutcome] =
     keys.index("google", identity.sub).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable))).flatMap { subHash =>
       accounts.lookup("google", subHash).flatMap {

@@ -27,9 +27,9 @@ private object GoogleFetch extends js.Object {
 
 /** Google のトークンエンドポイントと JWKS を呼ぶ口。テストでは差し替える */
 trait GoogleEndpoints {
-  /** 認可コードを ID トークンに交換する。失敗は None */
+  /** 認可コードを ID トークンに交換する。失敗したら None を返す */
   def exchange(code: String, verifier: String, redirectUri: String): Future[Option[String]]
-  /** 署名鍵の一覧。refresh なら保存した鍵を使わず取り直す */
+  /** 署名鍵の一覧を返す。refresh が真なら、保存した鍵を使わず取り直す */
   def keys(refresh: Boolean): Future[Vector[RsaPublicKey]]
 }
 

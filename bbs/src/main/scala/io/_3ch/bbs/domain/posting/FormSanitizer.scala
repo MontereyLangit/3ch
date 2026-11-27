@@ -13,7 +13,7 @@ object FormSanitizer {
     "&#0*1[03];" -> "<br>", "&#[xX]0*[aAdD];" -> "<br>", "\r\n?|\n" -> "<br>", "[\\x00-\\x1F\\x7F]" -> ""
   ).map((pattern, replacement) => new js.RegExp(pattern, "g") -> replacement)
 
-  /** HTML 用にエスケープする。名前欄の # 以降は捨て、!id・!no を読む */
+  /** HTML 用にエスケープする。名前欄は # 以降を捨て、!id と !no を読む */
   def fromFields(values: Map[String, String], isSJIS: Boolean = false, isMonazilla: Boolean = false): PostForm = {
     val fields = values.map { case (name, value) => name -> sanitize(value) }
     def field(name: String): String = fields.getOrElse(name, "")
@@ -34,7 +34,7 @@ object FormSanitizer {
     form.copy(name = commands.name, showId = commands.showId || field("showid").nonEmpty, noNusi = commands.noNusi)
   }
 
-  /** HTML の特殊文字・改行・制御文字を置き換える */
+  /** HTML の特殊文字、改行、制御文字を置き換える */
   def sanitize(value: String): String =
     Replacements.foldLeft(value) { case (text, (pattern, replacement)) => text.jsReplace(pattern, replacement) }
 }

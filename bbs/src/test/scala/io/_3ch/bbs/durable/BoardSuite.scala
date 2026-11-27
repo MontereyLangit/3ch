@@ -12,7 +12,7 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.Thenable.Implicits.*
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
-/** `Board.updateThread` の並び順と打ち切りを subjectList の完全一致で固定し、連投履歴の RPC の直列化と保存を確かめる */
+/** `Board.updateThread` の並び順と打ち切りを subjectList の完全一致で固定し、連投履歴の RPC が直列化されることと、保存されることを確かめる */
 class BoardSuite extends FunSuite {
 
   private def data(key: String, title: js.UndefOr[String], resNum: Int): js.Dynamic =
@@ -73,7 +73,7 @@ class BoardSuite extends FunSuite {
     val env = DurableTestKit.newEnv()
     val board = env.board("board1")
     val capBytes = 512 * 1024
-    // "huge.dat<>" + title + " (1)" + 末尾の"\n"(renderが1行の時に付与する分) の可変部分(title)以外の
+    // "huge.dat<>" + title + " (1)" + 末尾の"\n"(renderが1行のときに付ける分) のうち、可変部分(title)以外の
     // 固定長。ASCIIのみなのでUTF-8バイト長==文字数。
     val fixedOverhead = "huge.dat<>".length + " (1)".length + "\n".length
     // 行1本だけでちょうどcapBytesになるよう調整する。閾値判定は`> capBytes`(厳密に超えた場合のみ)

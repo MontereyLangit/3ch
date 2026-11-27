@@ -6,7 +6,7 @@ import scala.concurrent.Future
 
 /** ID/Password と Google の登録・ログインに必要なアカウント操作 */
 trait AccountSignInStore {
-  /** 確定済みの索引の所有者。未登録や未確定なら None */
+  /** 確定済みの索引の所有者。未登録か未確定なら None を返す */
   def lookup(kind: String, hash: String): Future[Option[String]]
   def create(profile: AccountProfile, now: Double, credential: Option[PasswordCredential]): Future[AccountDescription]
   /** 索引を確定したアカウントの利用を開始する */
@@ -16,7 +16,7 @@ trait AccountSignInStore {
   def describeGoogle(aid: String, subHash: String, now: Double): Future[SignInResult]
 }
 
-/** パスワードの資格情報を作る。暗号 API が使えなければ None */
+/** パスワードの資格情報を作る。暗号 API が使えなければ None を返す */
 trait PasswordHashing {
   def create(password: Password, now: Double): Future[Option[PasswordCredential]]
 }

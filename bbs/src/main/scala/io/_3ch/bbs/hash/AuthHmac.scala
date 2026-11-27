@@ -8,7 +8,7 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.typedarray.Uint8Array
 import scala.util.control.NonFatal
 
-/** 認証用の HMAC と乱数。鍵が無い場合や暗号 API の失敗は None */
+/** 認証用の HMAC と乱数を作る。鍵が無い場合や暗号 API が失敗した場合は None を返す */
 object AuthHmac {
   private val Base32 = "abcdefghijklmnopqrstuvwxyz234567"
   private val Alphanumeric = "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -18,7 +18,7 @@ object AuthHmac {
   def fullHex(secret: String, text: String): Future[Option[String]] =
     hmac(secret, text).map(_.map(_.map(byte => Integer.toHexString(byte | 0x100).substring(1)).mkString))
 
-  /** 種別ごとの索引キー。値の正規化は呼び出し側で行う */
+  /** 種別ごとの索引キーを作る。値の正規化は呼び出し側で行う */
   def indexKey(secret: String, kind: String, value: String): Future[Option[String]] =
     fullHex(secret, kind + ":" + value)
 
@@ -40,10 +40,10 @@ object AuthHmac {
     })
   }
 
-  /** 専ブラ認証キーに使う a-z・2-7 の乱数 */
+  /** 専ブラ認証キーに使う、a-z と 2-7 の文字からなる乱数 */
   def randomBase32(length: Int): String = randomString(Base32, length)
 
-  /** OAuth の state・nonce・PKCE の verifier に使う base64url の文字の乱数 */
+  /** OAuth の state・nonce と PKCE の verifier に使う、base64url の文字からなる乱数 */
   def randomUrlSafe(length: Int): String = randomString(UrlSafe, length)
 
   /** 内部アカウント ID に使う 16 文字の乱数 */

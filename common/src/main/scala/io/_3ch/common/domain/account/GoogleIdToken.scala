@@ -23,7 +23,7 @@ object GoogleIdToken {
   /** 発行時刻に許す時計のずれ（秒） */
   val clockSkew: Double = 300
 
-  /** 発行者・対象・期限・発行時刻・nonce・メールの確認を検査する。nonce は定数時間で比べる */
+  /** 発行者・対象・期限・発行時刻に加えて、nonce とメールの確認を検査する。nonce は定数時間で比べる */
   def verifyClaims(claims: GoogleIdClaims, now: Double, nonce: String, clientId: String): Either[GoogleIdTokenRejection, GoogleIdentity] = {
     if (!issuers.contains(claims.iss)) Left(GoogleIdTokenRejection.Issuer)
     else if (clientId.isEmpty || claims.aud != clientId) Left(GoogleIdTokenRejection.Audience)

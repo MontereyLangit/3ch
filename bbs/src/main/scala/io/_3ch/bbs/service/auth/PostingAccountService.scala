@@ -10,7 +10,7 @@ import io._3ch.common.domain.posting.MailCommands
 import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
-/** 認証を有効にした環境の投稿者の認証と、成功した投稿のアカウントへの記録 */
+/** 認証を有効にした環境で、投稿者を認証し、成功した投稿をアカウントに記録する */
 final class PostingAccountService(accounts: AccountStore, credentials: PostingCredentials, agreementVersion: String,
   onRecordFailed: Throwable => Unit) extends PostingAccounts {
   import PostingAuthenticationResult.*

@@ -5,10 +5,10 @@ object DeviceFingerprintHasher {
   final val Length: Int = 18
   private val Missing = ClientFingerprint()
 
-  /** 申告8軸が全て欠損なら空文字。機種名だけではハッシュを作らない */
+  /** 申告された8軸がすべて欠けていれば空文字を返す。機種名だけではハッシュを作らない */
   def hash(fingerprint: Option[ClientFingerprint], model: String = ""): String = fingerprint.fold("")(hash(_, model))
 
-  /** 欠損した軸は既定値のまま使い、機種名の前後空白と大小文字は正規化する */
+  /** 欠けた軸は既定値のまま使い、機種名は前後の空白と大小文字を正規化する */
   def hash(fingerprint: ClientFingerprint): String = hash(fingerprint, "")
 
   /** 受信した機種名を第9軸に加える */

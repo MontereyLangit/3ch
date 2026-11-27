@@ -22,7 +22,7 @@ enum PasswordChangeOutcome {
   case Failed
 }
 
-/** メールアドレスの登録・変更と確認、パスワードの変更と再設定 */
+/** メールアドレスの登録・変更と確認、パスワードの変更と再設定を扱う */
 final class AccountMail(accounts: AccountEmailStore, keys: AuthenticationKeys, mail: MailSender, hashing: PasswordHashing) {
   private def unavailable: Nothing = throw AuthServiceException(AuthServiceFailure.Unavailable)
   private def hmac(kind: String, value: String): Future[String] = keys.index(kind, value).map(_.getOrElse(unavailable))
@@ -32,14 +32,14 @@ final class AccountMail(accounts: AccountEmailStore, keys: AuthenticationKeys, m
 
   private val stale = new StaleIndex(accounts)
 
-  /** 他のアカウントが認証済みのアドレスなら EmailTaken。自分のアドレスと、持ち主が持たなくなった索引はそのまま受け付ける */
+  /** ほかのアカウントが認証済みのアドレスなら EmailTaken にする。自分のアドレスと、持ち主がすでに持っていない索引は、そのまま受け付ける */
   private def available(aid: String, email: EmailAddress): Future[String] =
     hmac("email", email.canonical).flatMap(hash => accounts.lookup("email", hash).flatMap {
       case Some(owner) if owner != aid => stale.reclaim("email", email.canonical, hash, owner).map(freed => if (freed) hash else throw AuthServiceException(AuthServiceFailure.EmailTaken))
       case _ => Future.successful(hash)
     })
 
-  /** ID・パスワードのアカウントにアドレスを登録・変更し、確認メールを送る。送信は一アカウント一日三回まで */
+  /** ID・パスワードのアカウントにアドレスを登録・変更し、確認メールを送る。送信は1アカウントにつき1日3回まで */
   def request(account: AccountDescription, email: EmailAddress, origin: String, now: Double): Future[Unit] =
     Future.unit.flatMap { _ =>
       if (account.kind != AccountKind.Password) throw AccountStoreException(AccountRejection.KindForbidden)
@@ -56,7 +56,7 @@ final class AccountMail(accounts: AccountEmailStore, keys: AuthenticationKeys, m
       } yield ()
     }
 
-  /** ID・パスワードのアカウントの現在のパスワードを確かめる。違えば false。照合の失敗は失敗計数に含める */
+  /** ID・パスワードのアカウントの現在のパスワードを確かめ、違っていれば false を返す。照合に失敗した回数は失敗計数に含める */
   def reauthenticate(account: AccountDescription, current: String, keyIp: String, now: Double): Future[Boolean] =
     Future.unit.flatMap { _ =>
       if (account.kind != AccountKind.Password) throw AccountStoreException(AccountRejection.KindForbidden)
@@ -68,7 +68,7 @@ final class AccountMail(accounts: AccountEmailStore, keys: AuthenticationKeys, m
       }
     }
 
-  /** 確定した索引の所有者が、まだ値を持っていなければ（確定の途中で止まった）索引を外す。持っていれば残す。読み直せなければ残す */
+  /** 確定した索引の所有者がまだアドレスを持っていなければ、確定の途中で止まったとみなして索引を外す。持っていれば残し、読み直せなかったときも残す */
   private def cleanup(reserved: Boolean, hash: String, canonical: String, aid: String): Future[Unit] =
     if (!reserved) Future.unit
     else accounts.holds(aid, "email", canonical).flatMap(held => if (held) Future.unit else accounts.remove("email", hash, aid)).recover { case NonFatal(_) => () }
@@ -76,7 +76,7 @@ final class AccountMail(accounts: AccountEmailStore, keys: AuthenticationKeys, m
   /**
     * リンクのトークンを確かめ、email 索引を確定してからアドレスを確定させる（Lv3 から）。
     * 置き換えた前のアドレスは索引から外す（外せなくても、持ち主が持たない索引は次の登録・確認で解放される）。
-    * 確定に失敗したら新しく取った索引を、アカウントがそのアドレスを持っていない場合に限り外す
+    * 確定に失敗したら、新しく取った索引を外す。ただし、アカウントがそのアドレスを持っていない場合に限る
     */
   def verify(link: PendingLink, now: Double): Future[AccountDescription] = for {
     hash <- pendingHash(PendingKind.Email, link)
@@ -107,7 +107,7 @@ final class AccountMail(accounts: AccountEmailStore, keys: AuthenticationKeys, m
 
   /**
     * 再設定を申請する。結果は区別せずに返し、メール認証済みで役割の無いアカウントにだけ送る。
-    * 接続元ごと・アカウントごとに一日三回まで
+    * 申請は、接続元ごと、アカウントごとに1日3回までとする
     */
   def requestReset(loginId: LoginId, origin: String, keyIp: String, now: Double): Future[Unit] = for {
     allowed <- counted(keyIp, "reset", now)(AbuseThresholds.reset)
@@ -126,11 +126,11 @@ final class AccountMail(accounts: AccountEmailStore, keys: AuthenticationKeys, m
     }
   } yield ()
 
-  /** 確認リンクの持ち主のユーザー ID と、確定させるアドレス。確認画面に示す */
+  /** 確認リンクの持ち主のユーザー ID と、確定させるアドレスを返す。確認画面に示す */
   def emailTarget(link: PendingLink, now: Double): Future[PendingCheck] =
     pendingHash(PendingKind.Email, link).flatMap(accounts.checkPending(link.aid, PendingKind.Email, _, now))
 
-  /** 再設定のリンクのユーザー ID。新しいパスワードの検証に使う */
+  /** 再設定のリンクの持ち主のユーザー ID を返す。新しいパスワードの検証に使う */
   def resetTarget(link: PendingLink, now: Double): Future[String] =
     pendingHash(PendingKind.Reset, link).flatMap(accounts.checkPending(link.aid, PendingKind.Reset, _, now)).map(_.uid)
 

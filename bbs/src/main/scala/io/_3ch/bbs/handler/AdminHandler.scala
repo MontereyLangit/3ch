@@ -108,7 +108,7 @@ object AdminHandler {
                         other = current.split("\\r?\\n", -1).filterNot(line => names.contains(line.takeWhile(_ != '=').trim))
                         settings = (other.filter(_.nonEmpty).toSeq ++ fields).mkString("\n") + "\n"
                         _ = validateCreationSettings(settings)
-                        // 読込後に他の管理操作が保存していたら上書きしない（未作成時は条件なし）
+                        // 読み込んだあとに他の管理操作が保存していたら上書きしない（未作成のときは条件を付けない）
                         options = if (obj == null) js.Dynamic.literal() else js.Dynamic.literal(onlyIf = js.Dynamic.literal(etagMatches = obj.asInstanceOf[js.Dynamic].etag))
                         result <- e.ch3www.asInstanceOf[js.Dynamic].put(file, settings, options).asInstanceOf[js.Promise[js.Any]].toFuture
                       } yield {

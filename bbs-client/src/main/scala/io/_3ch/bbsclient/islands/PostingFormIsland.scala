@@ -21,7 +21,7 @@ object PostingFormIsland {
   }
 
   object Props {
-    /** 板名・スレキーが不正なら None */
+    /** 板名かスレキーが不正なら None を返す */
     def fromJs(raw: PostingFormProps): Option[Props] = {
       val threadKey = raw.threadKey.toOption.map(ThreadKey.parse(_).toOption)
       val commands = raw.commands.toList.map(c => ThreadCommand(c.text, c.label, c.field, c.description))

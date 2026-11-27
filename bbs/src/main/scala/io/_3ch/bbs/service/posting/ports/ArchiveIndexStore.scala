@@ -8,7 +8,7 @@ trait ArchiveIndexStore {
   /** 無ければ None */
   def read(file: ArchiveIndexFile): Future[Option[StoredIndex]]
 
-  /** etag があれば一致するときだけ、無ければまだ無いときだけ書く。書けたら true */
+  /** etag があれば一致するときだけ書き、etag が無ければ対象がまだ無いときだけ書く。書けたら true を返す */
   def write(file: ArchiveIndexFile, value: String, etag: Option[String]): Future[Boolean]
 
   /** 無ければ None */

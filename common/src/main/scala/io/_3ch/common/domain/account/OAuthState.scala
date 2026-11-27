@@ -24,7 +24,7 @@ object OAuthStateCodec {
 
   private val random = "[A-Za-z0-9_-]{43,128}"
 
-  /** 署名する内容。値が書式に合わなければ None */
+  /** 署名する内容を返す。値が書式に合わなければ None を返す */
   def payload(value: OAuthState): Option[String] = Option.when(valid(value)) {
     Seq("2", value.state, value.nonce, value.verifier, value.device, value.returnPath, if (value.popup) "1" else "0",
       value.uid.getOrElse(""), value.agreedVersion, value.expiresAt.toString, value.purpose.code, value.aid.getOrElse("")).mkString("|")

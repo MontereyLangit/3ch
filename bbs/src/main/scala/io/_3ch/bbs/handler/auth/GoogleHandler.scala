@@ -34,7 +34,7 @@ object GoogleHandler {
     case OAuthPurpose.SignIn => redirect(s"/auth/?${if (login) "mode=login&" else ""}error=$error&return=${URIUtils.encodeURIComponent(returnPath)}", cookies)
   }
 
-  /** 移行・退会を始めたセッションのアカウント。種別が合わなければ拒否する */
+  /** 移行や退会を始めたセッションのアカウントを返す。種別が合わなければ拒否する */
   private def owner(request: Request, repository: AccountRepository, config: AuthSettings, purpose: OAuthPurpose, time: Double): Future[Option[AccountDescription]] =
     purpose match {
       case OAuthPurpose.SignIn => Future.successful(None)

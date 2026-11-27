@@ -6,7 +6,7 @@ import japgolly.scalajs.react.vdom.html_<^.*
 import scala.scalajs.js
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 
-/** ID・パスワードのアカウントのメールアドレスとパスワードの変更 */
+/** ID・パスワードのアカウントで、メールアドレスとパスワードを変更する */
 object AccountCredentialsIsland {
   import io._3ch.bbsclient.islands.AccountPostView.button
   private val input = "mt-1 block w-full max-w-sm border border-[#d6dce3] p-1"

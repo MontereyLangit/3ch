@@ -7,10 +7,10 @@ import scala.scalajs.js
 import scala.util.Try
 
 /**
- * 書き込みフォームの入力値およびlocalStorageへの保存・復元状態
+ * 書き込みフォームの入力値と、localStorageへの保存・復元の状態
  * setField -> 入力欄の onChange
  * modMessage -> 本文を関数で書き換える
- * clearPosted -> 書き込み成功時に下書きを消して題名・本文を空にする
+ * clearPosted -> 書き込みに成功したときに下書きを消し、題名と本文を空にする
  */
 final case class PostingFields(from: String, mail: String, subject: String, message: String, detailsOpen: Boolean,
   setField: (String, String) => Callback, modMessage: (String => String) => Callback, clearPosted: Callback) {
@@ -66,7 +66,7 @@ object PostingFields {
 
   private def draftStorageKey(props: PostingFormIsland.Props): String = s"$DraftPrefix${props.draftKey}"
 
-  /** 両方空なら下書きを消し、そうでなければ保存 */
+  /** 両方空なら下書きを消し、そうでなければ保存する */
   private def saveDraft(props: PostingFormIsland.Props, values: Values): Unit = {
     val key = draftStorageKey(props)
     if values.subject == "" && values.message == "" then BrowserStorage.remove(key)
@@ -76,7 +76,7 @@ object PostingFields {
     }
   }
 
-  /** 空でない保存済みの名前・メールを空欄の欄へ反映する */
+  /** 保存済みの名前・メールのうち空でないものを、空欄の入力欄へ反映する */
   private def withIdentity(values: Values, name: Option[String], mail: Option[String]): Values = {
     val restoredName = name.filter(_ => values.from.isEmpty)
     val restoredMail = mail.filter(_ => values.mail.isEmpty)
@@ -91,11 +91,11 @@ object PostingFields {
       message = if values.message.isEmpty then draft.message else values.message)
   }
 
-  /** 送信済みの下書きは、履歴移動（back_forward）以外の読み込みでは破棄 */
+  /** 送信済みの下書きは、履歴移動（back_forward）以外の読み込みでは破棄する */
   private def discardsDraft(draft: Draft, backForward: Boolean): Boolean = draft.sent.isDefined && !backForward
 
   /**
-   * 変更欄に応じ名前・メール記憶または下書き保存する
+   * 変更した欄に応じて、名前・メールを記憶するか下書きを保存する
    * （状態の反映後に呼ぶ）
    */
   private def persist(props: PostingFormIsland.Props, values: Values, field: String): Unit = {
@@ -108,7 +108,7 @@ object PostingFields {
   }
 
   /**
-   * 書き込みフォームの入力値操作・localStorage保存・復元処理のHooks
+   * 書き込みフォームの入力値の操作と、localStorageへの保存・復元を扱うHooks
    * @param props 書き込みフォームコンポーネントのProps
    * @return HookResult[PostingFields]
    */
@@ -148,7 +148,7 @@ object PostingFields {
         Callback(dom.window.removeEventListener("pageshow", onPageShow))
       })
     } yield {
-      /** 状態更新を依頼して反映時にフィールドを保存するよう記録 */
+      /** 状態の更新を依頼し、反映されたときにフィールドを保存するよう記録する */
       def modAndPersist(field: String)(f: Values => Values): Callback = Callback { pending.value += field } >> state.modState(f)
 
       val values = state.value

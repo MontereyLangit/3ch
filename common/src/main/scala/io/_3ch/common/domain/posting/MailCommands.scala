@@ -1,7 +1,7 @@
 package io._3ch.common.domain.posting
 
 /**
-  * メール欄の認証コマンド。token は最初の !# の後ろ（空白の手前まで）、capPassword は !# を除いた欄を CapHandle と同じく読んだもの
+  * メール欄の認証コマンド。token は最初の !# の後ろ（空白の手前まで）、capPassword は !# を除いた欄を CapHandle と同じく読んだもの。
   * plain は !#・キャップのパスワード部分・!auth を除いた残りで、sage の判定と画面に使う
   */
 final case class MailCommands(plain: String, token: Option[String], capPassword: Option[String], auth: Boolean)

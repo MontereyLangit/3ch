@@ -15,11 +15,11 @@ trait DurableObjectStorage extends js.Object {
   def put[T](key: String, value: T): js.Promise[Unit] = js.native
   def delete(key: String): js.Promise[Boolean] = js.native
 
-  /** 複数キー版 */
+  /** 複数のキーをまとめて扱う版 */
   def get(keys: js.Array[String]): js.Promise[js.Map[String, js.Any]] = js.native
   def put(entries: js.Dictionary[js.Any]): js.Promise[Unit] = js.native
 
-  /** 全キーと値。件数の少ない索引でだけ使う */
+  /** すべてのキーと値を返す。件数の少ない索引でだけ使う */
   def list(): js.Promise[js.Map[String, js.Any]] = js.native
 }
 
@@ -33,7 +33,7 @@ trait DurableObjectState extends js.Object {
   val id: DurableObjectId = js.native
   val storage: DurableObjectStorage = js.native
 
-  /** コールバック完了まで同DOへの他処理をブロックする */
+  /** コールバックが終わるまで、同じ DO への他の処理をブロックする */
   def blockConcurrencyWhile[T](callback: js.Function0[js.Promise[T]]): js.Promise[T] = js.native
 }
 
@@ -51,10 +51,10 @@ trait DurableObjectNamespace[S <: DurableObjectStub] extends js.Object {
 }
 
 /**
- * `Thread.inspect` / `receiveMove` の管理画面向け一括状態
+ * `Thread.inspect` / `receiveMove` が返す、管理画面向けの一括状態
  * 実体は `Object.fromEntries(map)` で
  * 組み立てたプレーンオブジェクトなので、キーが存在しないフィールドは（`undefined` ではなく）
- * そもそもプロパティ自体が無い。`js.UndefOr` はどちらの場合も未定義として扱えるのでこれで足りる。
+ * プロパティ自体が無い。`js.UndefOr` はどちらの場合も未定義として扱えるので、これで足りる。
  */
 @js.native
 trait ThreadInspectResult extends js.Object {
@@ -69,7 +69,7 @@ trait ThreadInspectResult extends js.Object {
   val importedFrom: js.UndefOr[String] = js.native
 }
 
-/** `Thread.addRes` の結果。count は確定（吸い込みなら採番予定）のレス番号、observed は試行モードで記録だけした判定のコード */
+/** `Thread.addRes` の結果。count は確定したレス番号（吸い込みなら採番する予定の番号）、observed は試行モードで記録だけした判定のコード */
 @js.native
 trait ThreadAddResult extends js.Object {
   val count: Int = js.native
@@ -79,7 +79,7 @@ trait ThreadAddResult extends js.Object {
 
 /** 
  * R2 オブジェクト
- * 未存在キーは `null` なので `js.UndefOr` にしないこと
+ * 存在しないキーでは `null` になるので、`js.UndefOr` にしないこと
  */
 @js.native
 trait R2ObjectBody extends js.Object {
@@ -94,8 +94,8 @@ trait R2Bucket extends js.Object {
 }
 
 /**
- * KV Namespace facade（追加分）。実バインディング名は`wrangler.jsonc` の
- * `kv_namespaces` 参照（`CAP`）。
+ * KV Namespace の facade（追加分）。実際のバインディング名は `wrangler.jsonc` の
+ * `kv_namespaces` を参照（`CAP`）。
  */
 @js.native
 trait KVNamespace extends js.Object {
@@ -104,7 +104,7 @@ trait KVNamespace extends js.Object {
   def delete(key: String): js.Promise[Unit] = js.native
 }
 
-/** Workers Static Assets バインディング（`env.ASSETS`）。3chiko.html配信に使う（PublicRoutes参照）。 */
+/** Workers Static Assets バインディング（`env.ASSETS`）。3chiko.html の配信に使う（PublicRoutes を参照） */
 @js.native
 trait Fetcher extends js.Object {
   def fetch(request: Request): js.Promise[Response] = js.native
@@ -116,10 +116,10 @@ trait MailBinding extends js.Object {
   def send(message: js.Object): js.Promise[js.Any] = js.native
 }
 
-/** Workers バインディング一式。`env.THREAD_DO` 等へ型付きで触るためのキャスト先。 */
+/** Workers バインディング一式。`env.THREAD_DO` などへ型付きでアクセスするためのキャスト先 */
 @js.native
 trait WorkerEnv extends js.Object {
-  /** v5 `thread.js` / `board.js` 移植分のバインディング（`wrangler.jsonc` 参照）。 */
+  /** v5 `thread.js` / `board.js` を移植した分のバインディング（`wrangler.jsonc` を参照） */
   val THREAD_DO: DurableObjectNamespace[ThreadDoStub] = js.native
   val BOARD_DO: DurableObjectNamespace[BoardDoStub] = js.native
   /** アカウント本体、一意索引、認証回数の記録 */
@@ -129,17 +129,17 @@ trait WorkerEnv extends js.Object {
   val ch3www: R2Bucket = js.native
   val CAP: KVNamespace = js.native
   val ASSETS: Fetcher = js.native
-  /** 板topの画像アップロード用 imgur Client-ID。未設定ならアップロード欄を出さない。 */
+  /** 板 top の画像アップロード用の imgur Client-ID。未設定のときは、アップロード欄を出さない */
   val IMGUR_CLIENT_ID: js.UndefOr[String] = js.native
   /** セッションと認証用索引の署名鍵 */
   val AUTH_SECRET: js.UndefOr[String] = js.native
   /** Turnstile のサーバ検証鍵と公開サイトキー */
   val TURNSTILE_SECRET_KEY: js.UndefOr[String] = js.native
   val TURNSTILE_SITE_KEY: js.UndefOr[String] = js.native
-  /** Google ログインのクライアント ID と秘密。どちらか欠ければ Google ログインを出さない */
+  /** Google ログインのクライアント ID と秘密。どちらかが欠けているときは、Google ログインを出さない */
   val GOOGLE_CLIENT_ID: js.UndefOr[String] = js.native
   val GOOGLE_CLIENT_SECRET: js.UndefOr[String] = js.native
-  /** 確認メール・再設定メールの送信先。無ければメール機能を「準備中」にする */
+  /** 確認メール・再設定メールの送信先。無いときは、メール機能を「準備中」にする */
   val MAIL_SENDER: js.UndefOr[MailBinding] = js.native
   /** 現在の法的投稿確認の版 */
   val AGREEMENT_VERSION: js.UndefOr[String] = js.native

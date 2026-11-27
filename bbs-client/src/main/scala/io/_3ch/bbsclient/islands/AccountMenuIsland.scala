@@ -54,7 +54,7 @@ object AccountMenuIsland {
         <.p(^.className := "mb-3", "キーは最初に使った専用ブラウザだけで使えます。キーは発行したときにしか表示されません。"),
         tokens.flatMap(t => t.warnings.toList.zipWithIndex.map { case (warning, index) =>
           <.p(^.key := s"${t.id}:$index", ^.role := "alert", ^.className := "my-2 border border-[#e2c17a] bg-[#fff8e7] p-3",
-            s"${time(warning.t)}に、別の専用ブラウザ（${warning.uaLabel}）から、${t.label}のキーが使われそうになりました（拒否済み）。心当たりが無ければキーを無効にしてください。")
+            s"${time(warning.t)}に、別の専用ブラウザ（${warning.uaLabel}）から、${t.label}のキーが使われそうになりました（使用は拒否しました）。心当たりが無ければキーを無効にしてください。")
         }).toVdomArray,
         <.h3(^.className := "my-2 font-bold", s"キーを使っている専用ブラウザ ${math.max(0, activeCount)} / 5"),
         <.p(^.className := "text-xs text-[#697785]", "身に覚えのない書き込みがあれば、そのブラウザのキーを無効にしてください。"),
@@ -74,7 +74,7 @@ object AccountMenuIsland {
           val id = t.id
           val remaining = if now > 0 && t.expiresAt > now then s"（あと${math.ceil((t.expiresAt - now) / 3600).toInt}時間）" else ""
           <.div(^.key := id, ^.className := "my-3 border-t border-[#d6dce3] pt-3 text-xs", <.b("未使用のキー"), " ", t.label,
-            s" 発行 ${time(t.issuedAt)}・${time(t.expiresAt)}まで有効$remaining ",
+            s" ${time(t.issuedAt)}に発行。${time(t.expiresAt)}まで有効です$remaining ",
             <.button(^.`type` := "button", ^.className := button, ^.disabled := busy.value, ^.onClick --> post("/auth/token/revoke", Some(id)), "取り消す"))
         },
         <.details(^.className := "my-3 text-xs", <.summary(^.className := "cursor-pointer", "キーを無効にした専用ブラウザ（30日間表示）"),

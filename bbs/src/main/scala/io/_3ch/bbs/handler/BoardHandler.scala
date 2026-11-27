@@ -29,7 +29,7 @@ object BoardHandler {
   }
 
   /**
-   * 無効な板名の場合404
+   * 無効な板名の場合は404を返す
    * 404画面に板名をそのまま出力するので、HTMLエスケープすること
    */
   private def notFound(path: String): Response = Responses.response(PublicText.respond404(path.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")), 404, js.Dictionary("content-type" -> "text/html;charset=UTF-8"))

@@ -37,21 +37,21 @@ final case class Roles(values: Set[AccountRole] = Set.empty) {
   def permitted(kind: AccountKind): Boolean = kind != AccountKind.Client || values.isEmpty
   def admin: Boolean = values.contains(AccountRole.Admin)
 
-  /** 削除・規制・管理のいずれかを持つ。cap だけの人は含めない */
+  /** 削除・規制・管理のいずれかの役割を持つか。cap だけの人は含めない */
   def staff: Boolean = values.exists(_ != AccountRole.Cap)
 
-  /** 相手のアカウントを操作できるか。admin は誰でも、ほかの staff は staff でない相手だけ */
+  /** 相手のアカウントを操作できるか。admin は誰でも操作でき、ほかの staff は staff でない相手だけ操作できる */
   def manages(target: Roles): Boolean = admin || (staff && !target.staff)
 }
 object Roles {
-  /** 保存値・RPC の役割の名前を読む。知らない名前があれば None */
+  /** 保存値や RPC で受け取った役割の名前を読む。知らない名前があれば None を返す */
   def parse(codes: Seq[String]): Option[Roles] = {
     val parsed = codes.map(AccountRole.parse)
     Option.when(parsed.forall(_.isDefined))(Roles(parsed.flatten.toSet))
   }
 }
 
-/** 公開 ID と認証方式、同意・状態・世代。資格情報は別に保存する */
+/** 公開 ID、認証方式、同意、状態、世代を持つ。資格情報は別に保存する */
 final case class AccountProfile(
   aid: String,
   uid: String,
@@ -75,7 +75,7 @@ final case class AccountProfile(
 
   def expired(now: Double): Boolean = kind == AccountKind.Client && expiresAt.forall(_ <= now)
 
-  /** クライアント ID の期限を成功投稿から365日後へ延ばす。失効の確認は呼び出し元で行う */
+  /** クライアント ID の期限を成功投稿から365日後へ延ばす。失効しているかどうかの確認は呼び出し元で行う */
   def afterPost(now: Double): AccountProfile = if (kind == AccountKind.Client) copy(expiresAt = Some(now + AccountProfile.clientLifetime)) else this
 }
 object AccountProfile {
@@ -83,12 +83,12 @@ object AccountProfile {
   def validTime(now: Double): Boolean = now.isFinite && now >= 0 && now == math.floor(now)
 }
 
-/** アカウントに保持する Lv と、その段階の開始時刻・書き込み数 */
+/** アカウントが持つ Lv と、その段階を始めた時刻、その段階での書き込み数 */
 final case class AccountLevel(lv: Int, lvSince: Double, lvPosts: Int = 0, lvOverride: Option[Int] = None) {
   def valid: Boolean = lv >= 0 && lv <= 10 && AccountProfile.validTime(lvSince) && lvPosts >= 0 && lvOverride.forall(n => n >= 0 && n <= 10)
   def effective: Int = lvOverride.getOrElse(lv)
 
-  /** 成功投稿を数え、経過時間と投稿数が揃えば一段だけ上げて両方を数え直す。固定中は上げない */
+  /** 成功した投稿を数え、経過時間と投稿数がそろったら Lv を一段だけ上げて、時間と投稿数を数え直す。固定中は上げない */
   def afterPost(kind: AccountKind, now: Double): AccountLevel = {
     val counted = copy(lvPosts = if (lvPosts == Int.MaxValue) Int.MaxValue else lvPosts + 1)
     val reached = lvOverride.isEmpty && Phoebe.seconds(kind, lv).zip(Phoebe.posts(kind, lv)).exists { case (seconds, posts) =>
@@ -100,7 +100,7 @@ final case class AccountLevel(lv: Int, lvSince: Double, lvPosts: Int = 0, lvOver
   /** Lv が minimum 未満なら minimum にして数え直す。固定値は保つ */
   def atLeast(minimum: Int, now: Double): AccountLevel = if (lv >= minimum) this else AccountLevel(minimum, now, 0, lvOverride)
 
-  /** 管理者による固定値を設定する。None で固定を外す */
+  /** 管理者による固定値を設定する。None を渡すと固定を外す */
   def overridden(value: Option[Int]): Option[AccountLevel] =
     Option.when(value.forall(n => n >= 0 && n <= Phoebe.MaxLevel))(copy(lvOverride = value))
 }
@@ -118,7 +118,7 @@ enum AccountRejection(val code: String) {
   case Deleted extends AccountRejection("auth:deleted")
   case Agreement extends AccountRejection("auth:agreement:required")
   case RolesForbidden extends AccountRejection("auth:roles:forbidden")
-  /** 操作する人の役割が足りないか、上位の役割を持つ相手への操作 */
+  /** 操作する人の役割が足りない、または上位の役割を持つ相手を操作しようとした */
   case Forbidden extends AccountRejection("auth:forbidden")
   case TokenUnknown extends AccountRejection("auth:token:unknown")
   case TokenRevoked extends AccountRejection("auth:token:revoked")
@@ -129,7 +129,7 @@ enum AccountRejection(val code: String) {
   case IndexOwnership extends AccountRejection("auth:index:ownership")
   case IndexPermanent extends AccountRejection("auth:index:permanent")
   case LoginFailed extends AccountRejection("auth:login:failed")
-  /** 保留トークンが無い・一致しない・期限切れ */
+  /** 保留トークンが無いか、一致しないか、期限が切れている */
   case PendingInvalid extends AccountRejection("auth:pending:invalid")
   /** この登録方式では使えない操作 */
   case KindForbidden extends AccountRejection("auth:kind:forbidden")

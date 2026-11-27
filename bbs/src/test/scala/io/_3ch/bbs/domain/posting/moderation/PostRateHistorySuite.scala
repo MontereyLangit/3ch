@@ -16,7 +16,7 @@ class PostRateHistorySuite extends FunSuite {
     result.saved.getOrElse(fail(s"unexpected rejection: ${result.rejection.map(_.code)}"))
   }
 
-  /** 保存したページだけを次の読み込みに使う DO の動きをまねる。全ページを保持し、completeOnSave なら保存した予約を直ちに確定する */
+  /** 保存したページだけを次の読み込みに使う DO の動きをまねる。全ページを保持し、completeOnSave のときは保存した予約を直ちに確定する */
   private final class Store(var meta: PostRateMeta = PostRateHistory.InitialMeta, val pages: scala.collection.mutable.Map[Int, Vector[PostRateRecord]] = scala.collection.mutable.Map.empty,
                             completeOnSave: Boolean = true) {
     def load(s: BoardSettings, now: Double): PostRateHistory = {

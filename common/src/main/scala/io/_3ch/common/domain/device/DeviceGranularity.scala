@@ -1,6 +1,6 @@
 package io._3ch.common.domain.device
 
-/** 端末ハッシュが共有される範囲。粒度にかかわらず規制照合には使う */
+/** 端末ハッシュが共有される範囲。粒度にかかわらず、規制の照合には使う */
 enum DeviceGranularity(val code: Char) {
   case Personal extends DeviceGranularity('p')
   case Class extends DeviceGranularity('g')

@@ -64,8 +64,8 @@ object PostingResponse {
   }
 
   /**
-   * CONTENT-TYPEのcharset
-   * 無い場合UTF-8
+   * CONTENT-TYPE の charset。
+   * 無い場合は UTF-8
    */
   def charset(contentType: String): String = {
     """(?i)charset\s*=\s*"?([^\s;"]+)""".r.findFirstMatchIn(contentType).fold("utf-8")(_.group(1))

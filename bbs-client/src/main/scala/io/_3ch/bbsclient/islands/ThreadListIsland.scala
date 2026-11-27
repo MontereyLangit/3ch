@@ -16,12 +16,12 @@ object ThreadListIsland {
 
   /**
    * ThreadListIslandコンポーネントのprops
-   * subjectTextは Board DOのsubject、nowはサーバー描画ミリ秒UNIXTIME
+   * subjectText は Board DO の subject、now はサーバー描画時のミリ秒UNIXTIME
    */
   final case class Props(bbs: BoardId, viewType: String, subjectText: String, query: String, sort: String, now: Double)
 
   object Props {
-    /** 板名が不正なら None */
+    /** 板名が不正なら None を返す */
     def fromJs(raw: ThreadListProps): Option[Props] =
       BoardId.create(raw.bbs).toOption.map(bbs => Props(bbs, raw.`type`, raw.subjectText, raw.query, raw.sort, raw.now))
   }
@@ -48,7 +48,7 @@ object ThreadListIsland {
   private def rowKey(bbs: BoardId, thread: BbsSubject): String = s"${if isCommon(thread) then "924" else bbs.value}/${thread.key.value}"
 
   /**
-   * スレ立て時刻 -> JST、yyyy/MM/dd HH:mm
+   * スレ立て時刻を JST の yyyy/MM/dd HH:mm にする
    * 実行環境の Intl に依存させず SSR と一致させること
    */
   private def created(thread: BbsSubject): String = {
@@ -76,7 +76,7 @@ object ThreadListIsland {
       <.span(^.className := "numeric text-right", "レス"))
   }
 
-  /** 他タブの localStorage 変更を seen へ反映 */
+  /** 他タブでの localStorage の変更を seen へ反映する */
   private def withStorageChange(state: State, storageKey: String, newValue: String): State = {
     if storageKey == null then state.copy(seen = Map.empty)
     else if !storageKey.startsWith(SeenPrefix) then state
@@ -166,7 +166,7 @@ object ThreadListIsland {
         state.modState(s => s.copy(seen = s.seen.updated(key, count.toString))) >> Callback(BrowserStorage.write(s"$SeenPrefix$key", count.toString))
       }
 
-      /** リロード -> /<板>/subject.txtをSJISで取得 */
+      /** リロードで /<板>/subject.txt を SJIS で取得する */
       def reload: Callback = {
         state.modState(_.copy(loading = true, status = "更新中…")) >> Callback {
           request.value.foreach(_.abort())

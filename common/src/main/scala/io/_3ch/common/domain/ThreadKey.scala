@@ -10,7 +10,7 @@ case class ThreadKey private (
 
 object ThreadKey {
 
-  /** 十進の正規表記（先頭の 0 や + なし）だけを読み、桁数を create で検査する */
+  /** 十進の正規表記（先頭に 0 や + が付かないもの）だけを読み、桁数を create で検査する */
   def parse(text: String): Either[String, ThreadKey] = {
     text.toLongOption.filter(_.toString == text).toRight("ThreadKey must be a canonical decimal number").flatMap(create)
   }

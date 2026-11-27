@@ -6,14 +6,14 @@ import scala.util.Try
 
 /** 検証済みの端末申告と、サーバーが受信したヒント */
 final case class DeviceEvidence(fingerprint: Option[ClientFingerprint], hints: ClientHints) {
-  /** 規制照合用の18桁。全欠損なら空文字 */
+  /** 規制の照合に使う18桁の端末識別子。端末情報がすべて欠けていれば空文字を返す */
   def deviceIdentifier: String = DeviceFingerprintHasher.hash(fingerprint, hints.model)
 
-  /** Cookie・アカウントへ保存する粒度1字と18桁 */
+  /** Cookie とアカウントに保存する値。端末情報の粒度を表す1文字の後ろに18桁の端末識別子を続ける。端末情報がすべて欠けていれば空文字を返す */
   def deviceHash: String = DeviceHashRef.of(fingerprint, hints = hints).fold("")(_.format)
 }
 
-/** JSON境界で型・長さ・数値範囲を確認してから端末情報を照合する */
+/** JSON の境界で型と長さと数値の範囲を確認してから、端末情報を照合する */
 object DeviceEvidence {
   private def missing(value: js.Any): Boolean = value == null || js.isUndefined(value)
   private def invalid(): Nothing = throw new IllegalArgumentException("invalid-fingerprint")
@@ -65,7 +65,7 @@ object DeviceEvidence {
     }
   }
 
-  /** フォーム中のJSON文字列から端末情報を読む */
+  /** フォームに含まれる JSON 文字列から端末情報を読む */
   def fromJson(raw: String, hints: ClientHints, headerUserAgent: String,
     profiles: Vector[IosDeviceProfile] = Vector.empty): Either[DeviceRejection, DeviceEvidence] = {
     if (raw.isEmpty) decode(js.undefined, hints, headerUserAgent, profiles)
@@ -74,7 +74,7 @@ object DeviceEvidence {
       .flatMap(value => decode(value, hints, headerUserAgent, profiles))
   }
 
-  /** 拒否時のログに使う最初の照合規則名。申告値は返さない */
+  /** 拒否したときのログに使う、最初に当たった照合規則の名前を返す。申告値は返さない */
   def declarationRuleFromJson(raw: String, hints: ClientHints, headerUserAgent: String): Option[String] = {
     if (raw.length > 20000) None
     else Try {

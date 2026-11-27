@@ -3,6 +3,8 @@
   "type": "module",
   "scripts": {
     "hx4s:setup": "node scripts/setup-hx4s.mjs",
+    "postinstall": "node scripts/sync-skills.mjs",
+    "skills:sync": "node scripts/sync-skills.mjs",
     "dev": "npm run v6:build && wrangler dev --config wrangler.jsonc",
     "deploy": "npm run v6:build && wrangler deploy --config wrangler.jsonc --minify",
     "pretest": "sbt bbs/Test/fastLinkJS bbsClient/fastLinkJS generatedAppCheck",

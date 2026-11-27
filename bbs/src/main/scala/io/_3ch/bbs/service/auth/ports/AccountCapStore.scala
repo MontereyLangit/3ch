@@ -4,7 +4,7 @@ import io._3ch.bbs.domain.account.{CapReissue, AccountStoreException}
 import io._3ch.common.domain.account.{AccountCap, AuthRateCounts}
 import scala.concurrent.Future
 
-/** キャップの登録・失効と cap 索引。拒否は AccountStoreException の Future の失敗で返す */
+/** キャップの登録・失効と cap 索引を扱う。拒否は AccountStoreException の Future の失敗で返す */
 trait AccountCapStore {
   def rate(key: String, kind: String, now: Double): Future[AuthRateCounts]
   def reserve(kind: String, hash: String, aid: String, now: Double, tokenId: Option[String] = None): Future[Boolean]

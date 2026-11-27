@@ -13,7 +13,7 @@ object Responses {
     new Response(body, init)
   }
 
-  /** 本文を指定の文字コードで返す。extra は同名の既存ヘッダを置き換え、同名を複数並べれば複数出す */
+  /** 本文を指定の文字コードで返す。extra に同名の既存ヘッダがあれば置き換える。extra に同名のヘッダを複数並べたときは、複数とも出す */
   def plain(text: String, kind: String, encoding: String = "UTF-8", range: String = "", modified: js.Date = new js.Date(), since: String = "", extra: Seq[(String, String)] = Nil): Response = {
     if since.nonEmpty && modified.getTime() <= new js.Date(since).getTime() then
       return response(null, 304, js.Dictionary("Last-Modified" -> modified.toUTCString()))

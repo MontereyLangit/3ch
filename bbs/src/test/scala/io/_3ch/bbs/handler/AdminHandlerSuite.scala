@@ -7,7 +7,7 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.scalajs.js
 
-/** 管理画面の認証と、Origin / Fetch Metadata によらず認証済み変更を受け付ける仕様を検証する。 */
+/** 管理画面の認証と、Origin / Fetch Metadata によらず認証済み変更を受け付ける仕様を検証する */
 class AdminHandlerSuite extends FunSuite {
   import HandlerTestKit.*
 

@@ -2,7 +2,7 @@ package io._3ch.bbs.service.auth.ports
 
 import scala.concurrent.Future
 
-/** 認証用の乱数と索引 HMAC。平文キーを永続化しない */
+/** 認証用の乱数と索引の HMAC を作る。平文のキーは永続化しない */
 trait AuthenticationKeys {
   def aid(): String
   def uid(): String

@@ -31,7 +31,7 @@ class PostingSuite extends FunSuite {
   private def buildBody(fields: Seq[(String, String)], sjisMode: Boolean = false): String =
     fields.map { (k, v) => s"$k=${if sjisMode then sjisPercentEncode(v) else js.URIUtils.encodeURIComponent(v)}" }.mkString("&")
 
-  /** JS の `{...base, ...over}` と同じ並び（既存キーは位置を保って上書き、新規キーは末尾）。 */
+  /** JS の `{...base, ...over}` と同じ並びにする（既存のキーは位置を保って上書きし、新規のキーは末尾に置く） */
   private def merge(base: Seq[(String, String)], over: Seq[(String, String)]): Seq[(String, String)] = {
     val overrides = over.toMap
     val keys = base.map(_._1).toSet
@@ -63,7 +63,7 @@ class PostingSuite extends FunSuite {
   private def entry(env: Env, req: Request, resolveUser: PostingUserResolver.Resolver = PostingUserResolver.unresolved): Future[js.Dynamic] =
     fut[js.Dynamic](Posting.entry(req, env.worker, resolveUser))
 
-  /** フィールドを与えて POST リクエストを投稿エントリへ渡す。submit は既定でWebブラウザ相当(UTF-8)。 */
+  /** フィールドを与えて POST リクエストを投稿エントリへ渡す。submit は既定でWebブラウザ相当(UTF-8) */
   private def post(env: Env, fields: Seq[(String, String)] = Nil, headers: Seq[(String, String)] = Nil, cf: Seq[(String, String)] = Nil,
                    sjisMode: Boolean = false, submitText: String = "書き込む", user: Option[PostingUser] = None): Future[Posted] = {
     val submit = if sjisMode then sjisPercentEncode(submitText) else js.URIUtils.encodeURIComponent(submitText)
@@ -345,7 +345,7 @@ class PostingSuite extends FunSuite {
     }
   }
 
-  /** スレ立て（既定フィールド＋`fields`）を投稿し、`sample` 板の先頭行の `<>` 区切りフィールドを返す。 */
+  /** スレ立て（既定フィールド＋`fields`）を投稿し、`sample` 板の先頭行の `<>` 区切りフィールドを返す */
   private def firstRow(env: Env, fields: (String, String)*): Future[Array[String]] =
     for {
       p <- post(env, fields)
@@ -426,7 +426,7 @@ class PostingSuite extends FunSuite {
 
   test("checkRequest: 複数の不正が同時にあってもソースコード上の記述順で最初のチェックが勝つ") {
     val env = DurableTestKit.newEnv()
-    // POST以外 + Content-Type不正 + Referer不正 + UA不正 + client-ip 同時に混在させ、method判定が最優先されることを確認
+    // POST以外、Content-Typeの不正、Refererの不正、UAの不正、client-ip を同時に混在させ、methodの判定が最優先されることを確認する
     val req = makeRequest(
       method = "GET",
       headers = Seq("content-type" -> "text/plain", "referer" -> "https://evil.example.com/", "user-agent" -> "x", "client-ip" -> "9.9.9.9"),
@@ -570,7 +570,7 @@ class PostingSuite extends FunSuite {
   test("readForm: タブは半角スペースに、制御文字は除去される") {
     val env = DurableTestKit.newEnv()
     firstRow(env, "MESSAGE" -> "a\tb\u0001\u0002c", "subject" -> "tabtest").map { fields =>
-      assertEquals(fields(3), " a bc ") // タブ->半角スペース、\x01\x02は除去
+      assertEquals(fields(3), " a bc ") // タブは半角スペースになり、\x01\x02は除去される
     }
   }
 
@@ -842,7 +842,7 @@ class PostingSuite extends FunSuite {
   private val OtherCf = Seq("region" -> "Osaka", "city" -> "Osaka")
   private val Shiki = "(JP.Tw.oT wA-4bf50373e5a55843)"
 
-  /** 識別子(Shiki)の実測値は時刻に依存するため、時刻を固定して実行する。 */
+  /** 識別子(Shiki)の実測値は時刻に依存するため、時刻を固定して実行する */
   private def fixed[A](body: => Future[A]): Future[A] = withFixedTime(1700000000d * 1000)(body)
 
   private def nameOf(d: String, n: Int): String = d.split("\n", -1)(n - 1).split("<>", -1)(0)
@@ -853,7 +853,7 @@ class PostingSuite extends FunSuite {
       d <- dat(env, "sample", threadKey(p))
     } yield fieldsOf(d)
 
-  /** スレを立て、返信し、返信行(>>2)の名前欄を返す。`before` は返信の直前に実行する。 */
+  /** スレを立て、返信し、返信行(>>2)の名前欄を返す。`before` は返信の直前に実行する */
   private def replyName(env: Env, create: Seq[(String, String)] = Nil, createHeaders: Seq[(String, String)] = Nil,
                         createUser: Option[PostingUser] = None, before: String => Future[Unit] = _ => Future.unit,
                         reply: Seq[(String, String)] = Nil, replyHeaders: Seq[(String, String)] = Nil, replyCf: Seq[(String, String)] = Nil,
@@ -1064,7 +1064,7 @@ class PostingSuite extends FunSuite {
       d <- dat(env, "sample", threadKey(p))
     } yield {
       val fields = fieldsOf(d)
-      assertEquals(fields(3), "  <br> 本文本文 ") // subjectとして切り出された残りの本文（先頭<br>のぶん前後スペース重複）
+      assertEquals(fields(3), "  <br> 本文本文 ") // subjectとして切り出された残りの本文（先頭の<br>のぶん、前後のスペースが重複する）
       assertEquals(fields(4), "議題ですね")
     }
   }
@@ -1393,7 +1393,7 @@ class PostingSuite extends FunSuite {
       for {
         p <- post(env, Seq("bbs" -> "ordertest", "subject" -> "O"))
         settings <- env.thread(s"ordertest/${threadKey(p)}").getSettings().toFuture
-      } yield assertEquals(settings, "Z_LAST=1<>A_FIRST=2<>MID=3<>BBS_TITLE=t<>B_KEY=4<>Y_KEY=5<>BBS_SHIKIBETSU=off<>") // 末尾のBBS_SHIKIBETSUは投稿処理が未設定時に補う値
+      } yield assertEquals(settings, "Z_LAST=1<>A_FIRST=2<>MID=3<>BBS_TITLE=t<>B_KEY=4<>Y_KEY=5<>BBS_SHIKIBETSU=off<>") // 末尾のBBS_SHIKIBETSUは、投稿処理が未設定のときに補う値
     }
   }
 

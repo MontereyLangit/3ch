@@ -1,6 +1,6 @@
 package io._3ch.common.domain.account
 
-/** 一意な値を管理する索引の種別。uid と cap は確定後に削除しない（cap は退会・失効後も所有者を指して、古い KV の写しを旧キャップとして通さない） */
+/** 一意な値を管理する索引の種別。uid と cap は確定後に削除しない（退会や失効の後も cap は所有者を指し続けるので、古い KV の写しが旧キャップとして通ることはない） */
 enum AccountIndexKind(val code: String) {
   case Uid extends AccountIndexKind("uid")
   case Login extends AccountIndexKind("login")
@@ -14,7 +14,7 @@ object AccountIndexKind {
   def parse(code: String): Option[AccountIndexKind] = AccountIndexKind.values.find(_.code == code)
 }
 
-/** 索引の予約と確定。token 索引だけはキー ID も持つ */
+/** 索引の予約と確定の状態。キー ID を持つのは token 索引だけ */
 final case class AccountIndexEntry(aid: String, createdAt: Double, confirmed: Boolean = false, tokenId: Option[String] = None) {
   def reserved(now: Double): Boolean = confirmed || createdAt > now - AccountIndexEntry.reservationLifetime
 
@@ -23,7 +23,7 @@ final case class AccountIndexEntry(aid: String, createdAt: Double, confirmed: Bo
     if (!AccountProfile.validTime(now)) Left(AccountRejection.Invalid)
     else if (aid != expectedAid) Left(AccountRejection.IndexOwnership) else Right(copy(confirmed = true))
 
-  /** 所有者を照合し、確定済みの uid と cap の削除は退会後も許可しない */
+  /** 所有者を照合してから削除する。確定済みの uid と cap は、退会後も削除させない */
   def remove(kind: AccountIndexKind, expectedAid: String): Either[AccountRejection, Unit] =
     if (aid != expectedAid) Left(AccountRejection.IndexOwnership)
     else if ((kind == AccountIndexKind.Uid || kind == AccountIndexKind.Cap) && confirmed) Left(AccountRejection.IndexPermanent)
@@ -35,13 +35,13 @@ final case class AccountIndexEntry(aid: String, createdAt: Double, confirmed: Bo
     else if (confirmed) Left(AccountRejection.IndexPermanent)
     else Right(())
 
-  /** 期限内の予約か確定で、aid が所有者か */
+  /** 期限内の予約または確定済みの値で、aid が所有者になっているか */
   def claimedBy(expectedAid: String, now: Double): Boolean = aid == expectedAid && reserved(now)
 }
 object AccountIndexEntry {
   val reservationLifetime: Double = 600
 
-  /** 未登録か予約から10分を過ぎた未確定値だけを取得する。token 索引にはキー ID を必須とする */
+  /** 未登録の値か、予約から10分を過ぎた未確定の値だけを取得できる。token 索引ではキー ID を必須とする */
   def register(previous: Option[AccountIndexEntry], aid: String, now: Double, tokenId: Option[String], kind: AccountIndexKind): Either[AccountRejection, AccountIndexEntry] = {
     if (!aid.matches("[a-z0-9]{16}") || !AccountProfile.validTime(now) ||
       (kind == AccountIndexKind.Token && !tokenId.exists(DedicatedBrowserTokens.validId)) || (kind != AccountIndexKind.Token && tokenId.isDefined)) Left(AccountRejection.Invalid)
@@ -50,10 +50,10 @@ object AccountIndexEntry {
   }
 }
 
-/** role:admin 索引の一件。activeAdmin は所有者が今も利用できる admin か（確定前でも、役割の付与が済んでいれば真） */
+/** role:admin 索引の1件。activeAdmin は、所有者が今も利用できる admin かどうかを表す（確定前でも、役割の付与が済んでいれば真） */
 final case class AdminSeat(hash: String, entry: AccountIndexEntry, activeAdmin: Boolean)
 
-/** 初回の管理者の確保。有効な admin が居ない間か、非常用期間だけ予約できる */
+/** 初回の管理者の確保。予約できるのは、有効な admin が居ない間か非常用期間のときだけ */
 object FirstAdminClaim {
   /** 非常用期間の上限（秒）。これより先の期限は無視する */
   val breakGlassWindow: Double = 86400
@@ -63,7 +63,7 @@ object FirstAdminClaim {
     AccountProfile.validTime(now) && until.exists(value => value.isFinite && value > now && value <= now + breakGlassWindow)
 
   /**
-    * 外す索引のハッシュと、aid の予約を返す。有効な admin か他人の期限内の予約があれば、非常用期間を除いて拒否する。
+    * 外す索引のハッシュと aid の予約を返す。非常用期間を除き、有効な admin か他人の期限内の予約があれば拒否する。
     * admin でなくなった所有者の確定済みの値と、期限切れの予約は外す
     */
   def claim(seats: Vector[AdminSeat], aid: String, now: Double, breakGlass: Boolean): Either[AccountRejection, (Vector[String], AccountIndexEntry)] = {

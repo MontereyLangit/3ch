@@ -6,7 +6,7 @@ import io._3ch.common.islands
 import japgolly.scalajs.react.ScalaFnComponent
 import japgolly.scalajs.react.vdom.html_<^.*
 
-/** メールのリンクの画面。reset ならパスワードの再設定、そうでなければメールアドレスの確認。enabled はメールの送信先が設定されているか。uid と email（伏せ字）は確認前に示す対象 */
+/** メールのリンクの画面。reset ならパスワードの再設定、そうでなければメールアドレスの確認。enabled はメールの送信先が設定されているか。uid と email（伏せ字）は、確認の前に示す対象 */
 final case class AuthTokenProps(reset: Boolean, token: String, enabled: Boolean, uid: String = "", email: String = "")
 
 /** メールのリンクから開く確認・再設定の画面 */

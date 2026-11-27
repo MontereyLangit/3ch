@@ -7,7 +7,7 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.util.control.NonFatal
 
-/** ユーザー ID と方式別の索引を予約し、ログイン用の索引・uid の順に確定してから利用を開始する */
+/** ユーザー ID と方式別の索引を予約し、ログイン用の索引と uid をこの順に確定してから利用を開始する */
 final class AccountRegistration(accounts: AccountManagementStore & AccountSignInStore, keys: AuthenticationKeys) {
   private def hash(kind: String, value: String): Future[String] =
     keys.index(kind, value).map(_.getOrElse(throw AuthServiceException(AuthServiceFailure.Unavailable)))
@@ -20,7 +20,7 @@ final class AccountRegistration(accounts: AccountManagementStore & AccountSignIn
   private def releaseBoth(signIn: (String, String), uidHash: String, aid: String): Future[Unit] =
     release(signIn._1, signIn._2, aid).flatMap(_ => release("uid", uidHash, aid))
 
-  /** 新しい aid でアカウントを作る。signIn は (索引の種別, ハッシュ)。ID が使われていれば Taken */
+  /** 新しい aid でアカウントを作る。signIn には (索引の種別, ハッシュ) を渡す。ID がすでに使われていれば Taken を返す */
   def register(profile: AccountProfile, signIn: (String, String), credential: Option[PasswordCredential], now: Double): Future[AccountDescription] =
     hash("uid", profile.uid).flatMap { uidHash =>
       val aid = profile.aid
@@ -48,7 +48,7 @@ final class AccountRegistration(accounts: AccountManagementStore & AccountSignIn
       }.flatMap(_ => accounts.activate(aid, now))
     }
 
-  /** 確定が途中で止まったアカウントを、本人の確認後に再開する。uid の確定は同じ aid の予約に限る */
+  /** 確定が途中で止まったアカウントを、本人の確認後に再開する。uid を確定できるのは、同じ aid が予約したものに限る */
   def resume(aid: String, uid: String, now: Double): Future[AccountDescription] =
     hash("uid", uid).flatMap { uidHash =>
       accounts.lookup("uid", uidHash).flatMap {
@@ -60,7 +60,7 @@ final class AccountRegistration(accounts: AccountManagementStore & AccountSignIn
       }
     }.flatMap(_ => accounts.activate(aid, now))
 
-  /** 予約できなければ Taken。login・google の確定済みの索引で持ち主が値を持たなければ（退会の後始末が止まった）解放して取り直す */
+  /** 索引を予約し、予約できなければ Taken を返す。login・google の索引が確定済みでも、持ち主がその値を持っていなければ（退会の後始末が止まった場合）解放して取り直す */
   private def reserve(kind: String, value: String, hash: String, aid: String, now: Double): Future[Unit] =
     accounts.reserve(kind, hash, aid, now).flatMap { reserved =>
       if (reserved) Future.unit

@@ -10,7 +10,7 @@ import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.annotation.JSExportTopLevel
 
-/** 種別ごとの一意な索引。予約の所有者を確かめてから確定・削除する */
+/** 種別ごとの一意な索引。予約の所有者を確かめてから、確定や削除をする */
 @JSExportTopLevel("AccountIndex", "server")
 class AccountIndex(val state: DurableObjectState, env: js.Any) extends DurableObject(state, env) {
   private def kind: AccountIndexKind = state.id.name.toOption.flatMap(AccountIndexKind.parse)
@@ -18,7 +18,7 @@ class AccountIndex(val state: DurableObjectState, env: js.Any) extends DurableOb
   private def validHash(hash: String): Boolean = DedicatedBrowserTokens.validHash(hash)
   private def read(hash: String): Future[Option[AccountIndexEntry]] = state.storage.get[js.Any](hash).toFuture.map(v => AccountIndexCodec.decode(v.asInstanceOf[js.Any]))
 
-  /** 十分古い未確定予約だけを取り直せる。成功は空文字 */
+  /** 十分に古い未確定の予約だけを取り直せる。成功したときは空文字を返す */
   def register(hash: String, aid: String, now: Double, tokenId: js.UndefOr[String] = js.undefined): js.Promise[String] = DurableLock.serialized(state) {
     if (!validHash(hash)) Future.successful(AccountRejection.Invalid.code)
     else read(hash).flatMap { previous =>
@@ -29,7 +29,7 @@ class AccountIndex(val state: DurableObjectState, env: js.Any) extends DurableOb
     }
   }.toJSPromise
 
-  /** 予約したアカウントだけが有効期限内に確定できる */
+  /** 予約したアカウントだけが、有効期限内に確定できる */
   def confirm(hash: String, expectedAid: String, now: Double): js.Promise[String] = DurableLock.serialized(state) {
     if (!validHash(hash) || !AccountProfile.validTime(now)) Future.successful(AccountRejection.Invalid.code)
     else read(hash).flatMap { value =>
@@ -72,7 +72,7 @@ class AccountIndex(val state: DurableObjectState, env: js.Any) extends DurableOb
     }
   }.toJSPromise
 
-  /** aid の期限内の予約か確定があるか。Account.grantFirstAdmin が確保の有無を確かめるのに使う */
+  /** aid の期限内の予約か確定があるかを返す。Account.grantFirstAdmin が、確保の有無を確かめるのに使う */
   def seat(hash: String, aid: String, now: Double): js.Promise[Boolean] =
     if (!validHash(hash)) js.Promise.resolve[Boolean](false) else read(hash).map(_.exists(_.claimedBy(aid, now))).toJSPromise
 
@@ -82,7 +82,7 @@ class AccountIndex(val state: DurableObjectState, env: js.Any) extends DurableOb
     Future.traverse(entries) { case (key, entry) => accounts.get(accounts.idFromName(entry.aid)).adminStatus(now).toFuture.map(AdminSeat(key, entry, _)) }
   }
 
-  /** aid の admin を外す前に、他に利用できる admin が居ることを確かめて索引から外す。最後の admin は拒否する */
+  /** aid の admin を索引から外す。外す前にほかの利用できる admin が居ることを確かめ、最後の admin は拒否する */
   def surrender(hash: String, aid: String, now: Double): js.Promise[String] = DurableLock.serialized(state) {
     if (kind != AccountIndexKind.Admin || !validHash(hash) || !AccountProfile.validTime(now)) Future.successful(AccountRejection.Invalid.code)
     else seats(now).flatMap { all =>
@@ -93,7 +93,7 @@ class AccountIndex(val state: DurableObjectState, env: js.Any) extends DurableOb
 
   /**
     * role:admin 索引で初回の管理者を予約する。有効な admin が居なければ（非常用期間なら居ても）予約し、
-    * 利用できなくなった所有者の索引は外す。続く Account.grantFirstAdmin と confirm は呼び出し元が行い、途中で止まっても予約は外さず admin の有無から揃え直す
+    * 利用できなくなった所有者の索引は外す。続く Account.grantFirstAdmin と confirm は呼び出し元が行う。途中で止まっても予約は外さず、admin の有無から揃え直す
     */
   def claimFirstAdmin(hash: String, aid: String, now: Double, breakGlass: Boolean): js.Promise[String] = DurableLock.serialized(state) {
     if (kind != AccountIndexKind.Admin || !validHash(hash)) Future.successful(AccountRejection.Invalid.code)

@@ -32,7 +32,7 @@ object PostRateLevel {
 
   /**
     * 設定の値を読む。キーが無ければ Default、空と 0 は広域連投規制だけを外す。
-    * 負数・大文字・知らない値などの不正な値は Default にする
+    * 負数、大文字、知らない値などの不正な値は Default にする
     */
   def parse(value: Option[String]): PostRateLevel = value.map(_.trim) match {
     case None => Default
@@ -44,7 +44,7 @@ object PostRateLevel {
   }
 }
 
-/** Thread.addRes に渡す連投規制の材料と設定。identity はハッシュ済み */
+/** Thread.addRes に渡す、連投規制の判定に使う値と設定。identity はハッシュ済み */
 final case class PostRateCheck(level: PostRateLevel, identity: PostRateIdentity, board: BoardSettings, thread: ThreadSettings) {
   /** 判定と履歴の記録をするか */
   def enabled: Boolean = level != PostRateLevel.Off
@@ -59,9 +59,9 @@ final case class PostRateCheck(level: PostRateLevel, identity: PostRateIdentity,
   def boardSettings: BoardSettings = board.copy(checksFr = level.checksFlyRibbon)
 }
 
-/** 連投規制の設定。不正な値は拒否せず既定値で動き、BBS_FR_LEVEL の不正な値は規制と広域連投規制の側に倒す */
+/** 連投規制の設定。不正な値は拒否せず既定値で動き、BBS_FR_LEVEL の不正な値は、規制し広域連投規制も判定する段階にする */
 final case class PostRateSettings(level: PostRateLevel, pass: BypassLevel, live: Boolean, board: BoardSettings, thread: ThreadSettings) {
-  /** この投稿を判定するか。off・BBS_LIVE・回避レベルで免除される投稿者は判定も記録もしない */
+  /** この投稿を判定するか。off、BBS_LIVE、回避レベルで免除される投稿者は判定も記録もしない */
   def applies(poster: BypassPoster): Boolean =
     level != PostRateLevel.Off && !live && !pass.exempts(poster)
 }
@@ -72,7 +72,7 @@ object PostRateSettings {
 
   /**
     * 連投規制で shiki の照合値にする文字列。識別子が checked のときだけ使い、
-    * phoebe・ken・city・as・raw などは県・市・AS・機種の単位で別人が一致するので空（照合しない）にする。キャップ（★）も空
+    * phoebe、ken、city、as、raw などは県、市、AS、機種の単位で別人が一致してしまうので、空（照合しない）にする。キャップ（★）も空にする
     */
   def shikiSource(mode: ShikibetsuMode, cap: Boolean, shikibetsu: String): String =
     if (cap || mode != ShikibetsuMode.Checked) "" else shikibetsu

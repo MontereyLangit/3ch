@@ -11,7 +11,7 @@ import scala.scalajs.js.JSConverters.*
 import scala.util.Try
 import scala.util.control.NonFatal
 
-/** R2 の edge-rules.json と request.cf の読み取り、判定の記録 */
+/** R2 の edge-rules.json と request.cf を読み、判定を記録する */
 object EdgeRuleRepository {
   /** 投稿処理のポート */
   def store(env: WorkerEnv): EdgeRuleStore = new EdgeRuleStore {
@@ -19,7 +19,7 @@ object EdgeRuleRepository {
     def report(endpoint: String, signal: EdgeSignal, decision: EdgeDecision): Unit = EdgeRuleRepository.report(endpoint, signal, decision)
   }
 
-  /** {"mode": "log"|"on", "datacenterAsns": [...], "rttMs": 400, "tls": [{"ua": 正規表現, "min": n, "max": n}]}。無い・読めない・壊れていれば規則なし */
+  /** {"mode": "log"|"on", "datacenterAsns": [...], "rttMs": 400, "tls": [{"ua": 正規表現, "min": n, "max": n}]}。無いか、読めないか、壊れていれば、規則なしとして扱う */
   def load(env: WorkerEnv): Future[EdgeRules] =
     Future.unit.flatMap(_ => env.ch3www.get("edge-rules.json").toFuture).flatMap { value =>
       if (value == null) Future.successful(EdgeRules.empty) else value.text().toFuture.map(parse)
@@ -43,7 +43,7 @@ object EdgeRuleRepository {
     EdgeRules.empty
   }
 
-  /** request.cf の AS 番号・国・RTT・ClientHello の長さと UA */
+  /** request.cf から AS 番号、国、RTT、ClientHello の長さと UA を取り出す */
   def signal(request: Request): EdgeSignal = {
     val cf = request.cf.toOption
     def value(name: String): Option[String] = cf.flatMap { c =>

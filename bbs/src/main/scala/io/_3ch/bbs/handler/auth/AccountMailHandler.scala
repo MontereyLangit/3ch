@@ -15,27 +15,27 @@ import scala.util.control.NonFatal
 object AccountMailHandler {
   import AuthHandler.{Refused, json, keys, hashing, managed, origin, signed}
 
-  /** 送信先が設定されていれば使える。無ければメール関連の API は「準備中」 */
+  /** 送信先が設定されていればメール機能を返す。設定されていなければ None で、メール関連の API は「準備中」になる */
   def service(env: WorkerEnv, repository: AccountRepository, config: AuthSettings): Option[AccountMail] =
     MailSenders.from(env).map(new AccountMail(repository, keys(config.secret), _, hashing))
 
   private def required(env: WorkerEnv, repository: AccountRepository, config: AuthSettings): AccountMail =
     service(env, repository, config).getOrElse(throw Refused(AuthApiError.MailUnavailable))
 
-  /** R2 の使い捨てメールのドメイン一覧。無ければ空、読めなければ利用不可 */
+  /** R2 から使い捨てメールのドメイン一覧を読む。一覧が無ければ空にし、読めなければ利用不可として拒否する */
   private def disposable(env: WorkerEnv): Future[DisposableDomains] =
     env.ch3www.get("disposable-domains.txt").toFuture.flatMap { value =>
       if (value == null) Future.successful(DisposableDomains.empty) else value.text().toFuture.map(DisposableDomains.parse)
     }.recover { case NonFatal(_) => throw Refused(AuthApiError.Unavailable) }
 
-  /** フォームのメール欄を読む。空なら None、送信先が無ければ準備中 */
+  /** フォームのメール欄を読む。空なら None を返す。入力があっても送信先が設定されていなければ、準備中として拒否する */
   def parse(env: WorkerEnv, raw: Option[String]): Either[AuthApiError, Option[EmailAddress]] = raw.map(_.trim).filter(_.nonEmpty) match {
     case None => Right(None)
     case Some(_) if MailSenders.from(env).isEmpty => Left(AuthApiError.MailUnavailable)
     case Some(value) => EmailAddress.parse(value).left.map(AuthApiError.Email(_)).map(Some(_))
   }
 
-  /** 使い捨てのドメインと、ほかのアカウントで認証済みのアドレスを拒否する。aid が空なら誰のアドレスでも使用済みとする */
+  /** 使い捨てのドメインのアドレスと、ほかのアカウントが認証済みのアドレスを拒否する。aid が空のときは、誰かが持っているアドレスをすべて使用済みとみなす */
   def check(env: WorkerEnv, repository: AccountRepository, config: AuthSettings, aid: String, email: EmailAddress): Future[Unit] = for {
     domains <- disposable(env)
     _ = if (domains.blocks(email)) throw Refused(AuthApiError.Email(EmailRejection.Disposable))
@@ -96,7 +96,7 @@ object AccountMailHandler {
     password
   }
 
-  /** 現在のパスワードを確かめて変更し、この端末だけ新しい世代の Cookie を発行し直す（ほかの端末はログアウト） */
+  /** 現在のパスワードを確かめて変更し、この端末にだけ新しい世代の Cookie を発行し直す。ほかの端末はログアウトする */
   def password(request: Request, repository: AccountRepository, form: Map[String, String], config: AuthSettings, time: Double): Future[Response] =
     managed(request, config.secret, repository, time).flatMap { case (claims, account) =>
       if (account.kind != AccountKind.Password) throw Refused(AuthApiError.Refused(AccountRejection.KindForbidden))

@@ -2,18 +2,18 @@ package io._3ch.bbs.domain.posting.moderation
 
 import io._3ch.bbs.domain.posting.moderation.PostRateLimit.Entry
 
-/** Thread.addRes の連投規制の組み合わせ（返信のみの判定、規制モードと試行モードの違い、コピペの吸い込み）。DO はこの結果に従って保存する */
+/** Thread.addRes で連投規制を組み合わせて判定する処理。返信だけを判定し、規制モードと試行モードで扱いを変え、コピペを吸い込む。DO はこの結果に従って保存する */
 object PostRateFlow {
   /** スレ単位の判定結果。refusal は規制モードで拒否する理由、observed は試行モードで記録だけする理由 */
   final case class ThreadJudgement(refusal: Option[PostRateRejection], observed: Option[PostRateRejection])
 
-  /** 最終的な扱い。Swallow は成功画面のまま dat に残さない。Store は保存し、observed を試行モードの記録として返す */
+  /** 最終的な扱い。Swallow は成功画面は返すが dat には残さない。Store は保存し、observed を試行モードの記録として返す */
   enum Verdict {
     case Store(observed: Seq[PostRateFinding])
     case Swallow
   }
 
-  /** スレ単位の判定。>>1 とスレ立て（返信でない書き込み）は見ない */
+  /** スレ単位の判定。>>1 とスレ立て（返信でない書き込み）は判定しない */
   def judgeThread(check: PostRateCheck, reply: Boolean, recent: ThreadRecentPosts, now: Double): ThreadJudgement = {
     val rejection = if (reply) recent.check(check.thread, check.identity, now) else None
     if (check.enforce) ThreadJudgement(rejection, None) else ThreadJudgement(None, rejection)
@@ -30,7 +30,7 @@ object PostRateFlow {
     else Verdict.Store(thread.observed.map(PostRateFinding.Rejected(_)).toSeq ++ PostRateFinding.fromCode(boardCode) ++ Option.when(copipe)(PostRateFinding.Copipe))
   }
 
-  /** 新しい投稿を足した直近の投稿 */
+  /** 新しい投稿を加えた後の、直近の投稿 */
   def recorded(check: PostRateCheck, recent: ThreadRecentPosts, now: Double): ThreadRecentPosts =
     recent.appended(Entry(now, check.identity), check.thread, now)
 }

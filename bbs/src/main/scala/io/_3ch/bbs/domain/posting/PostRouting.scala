@@ -15,7 +15,7 @@ object PostRouting {
   private val Forbidden = Set("", "test", "js", "css", "html", "images", "auth", "admin")
 
   /**
-    * スレ立てなら key を unixtime（本文先頭が !924・!900 なら共通スレのキー）にし、返信なら題名を空にする。
+    * スレ立てなら key を unixtime（本文先頭が !924 か !900 なら共通スレのキー）にし、返信なら題名を空にする。
     * 拒否時はそこまで整えたフォームを添えて返す
     */
   def route(form: PostForm, unixtime: String): Either[(PostingError, PostForm), PostForm] = {

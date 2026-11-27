@@ -19,7 +19,7 @@ object SjisEncoding {
   /** 初回参照時に一度だけ構築する。decode 側は密な JS 配列 */
   private val (encodeTable, rootTable): (Map[Int, Array[Int]], js.Array[js.Any]) = buildTables()
 
-  /** v5 `sjis` コンストラクタの逐語的な再現 */
+  /** v5 `sjis` コンストラクタを、そのまま再現する */
   private def buildTables(): (Map[Int, Array[Int]], js.Array[js.Any]) = {
     val td = new NativeTextDecoder("sjis")
     val encode = scala.collection.mutable.LinkedHashMap.empty[Int, Array[Int]]

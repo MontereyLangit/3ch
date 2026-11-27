@@ -7,7 +7,7 @@ import japgolly.scalajs.react.vdom.html_<^.*
 import scala.scalajs.js
 import scala.scalajs.js.URIUtils
 
-/** アカウント設定画面の時刻の表示と、書き込み記録の 1 行 */
+/** アカウント設定画面で使う、時刻の表示と書き込み記録 1 行の表示 */
 private[islands] object AccountPostView {
   val button = "cursor-pointer border border-[#d6dce3] bg-white px-3 py-1 disabled:opacity-50"
 
@@ -16,7 +16,7 @@ private[islands] object AccountPostView {
   /** UNIX 秒を日本時間で出す。値が無ければ空 */
   def time(value: js.UndefOr[Double]): String = number(value).filter(_ > 0).fold("")(JstTime.dateTime)
 
-  /** 日時・書き込み先（スレへのリンク）・接続元・本文の先頭 */
+  /** 日時、書き込み先（スレへのリンク）、接続元、本文の先頭を表示する */
   def apply(raw: AccountPostItemProps): VdomElement = {
     val bbs = raw.bbs
     val key = raw.key

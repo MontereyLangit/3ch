@@ -7,15 +7,15 @@ import scala.concurrent.Future
 import scala.scalajs.concurrent.JSExecutionContext.Implicits.queue
 import scala.util.control.NonFatal
 
-/** 発行直後に一度だけ返すキャップ。password はメール欄に # を付けて入れる値で、永続化やログ出力に使わない */
+/** 発行直後に一度だけ返すキャップ。password はメール欄に # を付けて入れる値で、永続化にもログ出力にも使わない */
 final case class IssuedCap(capId: String, password: String)
 
 /** キャップの表示名が使えないことを Future の失敗として運ぶ */
 final case class CapNameException(reason: CapNameRejection) extends RuntimeException(reason.toString)
 
 /**
-  * キャップの発行・失効・再発行。Account に記録し、KV の CAP と cap 索引（照合キー → 所有者。失効後も残す）を揃える。
-  * 発行できる人と数の判定は Account DO が行う
+  * キャップを発行・失効・再発行する。Account に記録し、KV の CAP と cap 索引（照合キー → 所有者。失効後も残す）を揃える。
+  * 発行できる人と数の判定は Account DO がする
   */
 final class CapIssuing(accounts: AccountCapStore, directory: CapDirectory, keys: AuthenticationKeys, capKey: String => Future[String]) {
   private val kind = AccountIndexKind.Cap.code
@@ -37,7 +37,7 @@ final class CapIssuing(accounts: AccountCapStore, directory: CapDirectory, keys:
     } yield (password, key, hash)
   }
 
-  /** 索引を予約してから body を行い、失敗したら確定前の予約を外す。確定した cap 索引は外れない */
+  /** 索引を予約してから body を実行し、失敗したら確定前の予約を外す。確定した cap 索引は外れない */
   private def reserved[A](hash: String, owner: String, now: Double)(body: => Future[A]): Future[A] =
     accounts.reserve(kind, hash, owner, now).recoverWith { case NonFatal(error) =>
       accounts.remove(kind, hash, owner).recover { case NonFatal(_) => () }.flatMap(_ => Future.failed(error))
@@ -64,7 +64,7 @@ final class CapIssuing(accounts: AccountCapStore, directory: CapDirectory, keys:
   /** KV から消す。cap 索引は外さず、KV の写しが残っても所有者の失効の記録で照合を拒否する */
   private def retire(key: String): Future[Unit] = directory.delete(key)
 
-  /** issuer が owner に発行する。強キャップと他人宛ては admin だけ、ほかの役割保持者は自分宛てに一個まで */
+  /** issuer が owner に発行する。強キャップと他人宛ての発行は admin だけができ、ほかの役割保持者が発行できるのは自分宛ての一個まで */
   def issue(issuer: AccountDescription, owner: String, rawName: String, strong: Boolean, now: Double): Future[IssuedCap] =
     Future.unit.flatMap { _ =>
       val name = CapName.parse(rawName).fold(reason => throw CapNameException(reason), identity)

@@ -21,7 +21,7 @@ object PostingCodec {
       board = request.boardLevel))).orUndefined,
     phoebeAdmission = posting.admission.map(a => js.Dynamic.literal(lv = a.lv, exempt = a.exempt, board = a.boardLevel)).orUndefined)
 
-  /** null と undefined は投稿情報なし。初期スレ設定・スレ立て規制・スレ主は create が真で値が真のときだけ、連投規制とコマンドは値が真のときだけ読む */
+  /** null と undefined は投稿情報なし。初期スレ設定・スレ立て規制・スレ主は、create が真で値も真のときだけ読む。連投規制とコマンドは、値が真のときだけ読む */
   def decode(value: js.UndefOr[js.Dynamic]): Option[ThreadPosting] = {
     val raw = value.asInstanceOf[js.Any]
     if (isNullish(raw)) None

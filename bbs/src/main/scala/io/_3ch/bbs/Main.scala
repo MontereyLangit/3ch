@@ -16,7 +16,7 @@ import scala.scalajs.js.typedarray.Uint8Array
 
 object Main {
 
-  /** HonoX の renderer から HTML ドキュメント全体を組み立てる。 */
+  /** HonoX の renderer から HTML ドキュメント全体を組み立てる */
   @JSExportTopLevel("renderShell", "server")
   def renderShell(children: js.Any, title: js.UndefOr[String], clientScriptSrc: String, authModal: js.UndefOr[Boolean] = js.undefined): React.Element =
     RendererShell.render(children, title, clientScriptSrc, authModal.getOrElse(false))
@@ -62,7 +62,7 @@ object Main {
   @JSExportTopLevel("authResetHandler", "server")
   def authResetHandler(c: js.Any): js.Promise[Response] = handler.auth.AuthHandler.tokenPage(c.asInstanceOf[HonoContextFacade], reset = true)
 
-  /** 本文と状態を保って応答を複製し、変更可能なヘッダへClient Hintsを付ける */
+  /** 本文と状態を保ったまま応答を複製し、変更できるヘッダーに Client Hints を付ける */
   @JSExportTopLevel("acceptClientHints", "server")
   def acceptClientHints(response: Response): Response = {
     val init = new ResponseInit {}

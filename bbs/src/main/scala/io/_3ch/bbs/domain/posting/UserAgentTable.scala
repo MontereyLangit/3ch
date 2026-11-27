@@ -20,13 +20,13 @@ object UserAgentRule {
   /** 照合にかかる時間を抑えるための pattern の長さの上限 */
   val MaxPatternLength: Int = 200
 
-  /** 正規表現として読めない行、長すぎる pattern、g・y など照合の状態を持つフラグの行は None */
+  /** 正規表現として読めない行、長すぎる pattern、g や y など照合の状態を持つフラグの行は None */
   def create(pattern: String, flags: String, label: String): Option[UserAgentRule] =
     if (pattern.length > MaxPatternLength || !flags.forall("ius".contains(_)) || flags.distinct.length != flags.length) None
     else Try(new js.RegExp(pattern, flags)).toOption.map(new UserAgentRule(_, label))
 }
 
-/** OS・ブラウザ・端末種別ごとの解析表。各表は上から順に見て最初に一致した行を使う */
+/** OS、ブラウザ、端末種別ごとの解析表。それぞれの表は上から順に見て、最初に一致した行を使う */
 final case class UserAgentTable(os: Seq[UserAgentRule], browser: Seq[UserAgentRule], device: Seq[UserAgentRule]) {
   def profile(userAgent: String): UserAgentProfile = {
     def first(rules: Seq[UserAgentRule]): String = rules.iterator.flatMap(_(userAgent)).nextOption().getOrElse("")
@@ -35,9 +35,9 @@ final case class UserAgentTable(os: Seq[UserAgentRule], browser: Seq[UserAgentRu
 }
 
 object UserAgentTable {
-  /** 一つの表（os・browser・device）に読み込む行数の上限 */
+  /** 一つの表（os、browser、device）に読み込む行数の上限 */
   val MaxRulesPerList: Int = 100
 
-  /** 表が無いときの解析表。どの UA も解析できない */
+  /** 表が無いときに使う解析表。どの UA も解析できない */
   val empty: UserAgentTable = UserAgentTable(Nil, Nil, Nil)
 }
