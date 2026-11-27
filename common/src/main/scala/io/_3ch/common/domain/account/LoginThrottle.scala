@@ -33,7 +33,7 @@ final case class LoginThrottleUpdate(state: LoginThrottle, decision: LoginThrott
  * 保持できる接続元が尽きたときは新しい接続元をロック扱いにする。時刻逆行では未来側の記録を残す
  */
 final case class LoginThrottle(sources: Map[String, LoginSource] = Map.empty, account: LoginAccountFailures = LoginAccountFailures()) {
-  def valid: Boolean = sources != null && account != null && sources.size <= LoginThrottle.sourceLimit && account.valid &&
+  def valid: Boolean = sources != null && account != null && sources.sizeIs <= LoginThrottle.sourceLimit && account.valid &&
     sources.forall { case (hash, source) => hash != null && DedicatedBrowserTokens.validHash(hash) && source != null && source.valid }
 
   private def retained(now: Double): LoginThrottle = {
@@ -48,10 +48,10 @@ final case class LoginThrottle(sources: Map[String, LoginSource] = Map.empty, ac
       Left(LoginThrottleRejection.Invalid)
     else Right(retained(now))
 
-  private def full(keyIpHash: String): Boolean = !sources.contains(keyIpHash) && sources.size >= LoginThrottle.sourceLimit
+  private def full(keyIpHash: String): Boolean = !sources.contains(keyIpHash) && sources.sizeIs >= LoginThrottle.sourceLimit
 
   private def decision(keyIpHash: String): LoginThrottleDecision = {
-    val untilFull = Option.when(full(keyIpHash))(sources.values.map(_.expiresAt).min)
+    val untilFull = sources.values.map(_.expiresAt).minOption.filter(_ => full(keyIpHash))
     LoginThrottleDecision(Seq(account.lockedUntil, sources.get(keyIpHash).flatMap(_.lockedUntil), untilFull).flatten.maxOption)
   }
 

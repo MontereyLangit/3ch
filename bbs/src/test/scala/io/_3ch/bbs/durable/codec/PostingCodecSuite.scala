@@ -185,7 +185,7 @@ class PostingCodecSuite extends FunSuite {
   }
 
   test("初期スレ設定・スレ立て規制・スレ主は create が真で値が真のときだけ読む") {
-    val reply = PostingCodec.encode(create).asInstanceOf[js.Dynamic]
+    val reply = PostingCodec.encode(create)
     reply.create = false
     assertEquals(PostingCodec.decode(reply), Some(create.copy(create = false, initialSettings = None, creationLimit = None, owner = None)))
     val empty = js.Dynamic.literal(create = true, initialSettings = "", creationLimit = null, owner = 0)

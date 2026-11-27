@@ -67,8 +67,8 @@ final case class PostRateHistory(meta: PostRateMeta, pages: Vector[PostRatePage]
     else PostRateReservation(rejection, Some(retained(settings, now).appended(PostRateRecord(key, now, identity, PostRateStatus.Pending))))
   }
 
-  private def appended(record: PostRateRecord): PostRateHistory = pages.headOption.filter(_.records.size < PageSize) match {
-    case Some(page) => copy(pages = page.copy(records = page.records :+ record) +: pages.tail)
+  private def appended(record: PostRateRecord): PostRateHistory = pages.headOption.filter(_.records.sizeIs < PageSize) match {
+    case Some(page) => copy(pages = page.copy(records = page.records :+ record) +: pages.drop(1))
     case None       =>
       val number = meta.newest + 1
       PostRateHistory(PostRateMeta(number, math.max(meta.oldest, number - MaxPages + 1)), PostRatePage(number, Vector(record)) +: pages)

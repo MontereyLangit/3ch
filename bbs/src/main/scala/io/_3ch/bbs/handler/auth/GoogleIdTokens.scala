@@ -56,7 +56,7 @@ final class GoogleHttpEndpoints(settings: GoogleSettings) extends GoogleEndpoint
     ).toFuture.flatMap { response =>
       if (!response.ok) Future.successful(None)
       else response.text().toFuture.map { text =>
-        Try(js.JSON.parse(text).asInstanceOf[js.Dynamic].selectDynamic("id_token")).toOption
+        Try(js.JSON.parse(text).selectDynamic("id_token")).toOption
           .filter(value => js.typeOf(value) == "string").map(_.asInstanceOf[String])
       }
     }.recover { case NonFatal(_) => None }
@@ -102,7 +102,7 @@ object GoogleIdTokens {
     Option.when(js.typeOf(v) == "number" && v.asInstanceOf[Double].isFinite)(v.asInstanceOf[Double])
   }
   private def record(raw: String): Option[js.Dynamic] = Try(js.JSON.parse(raw)).toOption
-    .filter(v => v != null && js.typeOf(v) == "object" && !js.Array.isArray(v)).map(_.asInstanceOf[js.Dynamic])
+    .filter(v => v != null && js.typeOf(v) == "object" && !js.Array.isArray(v))
 
   /** JWKS の RS256 の鍵だけを読む */
   def parseKeys(raw: String): Vector[RsaPublicKey] = record(raw).flatMap { value =>

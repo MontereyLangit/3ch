@@ -3,6 +3,7 @@ package io._3ch.common.golden
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import scala.annotation.tailrec
 
 /**
  * `tests/golden` 配下の JSON ファイルを読むための JVM 側実装。
@@ -21,16 +22,15 @@ object GoldenFile {
     new String(Files.readAllBytes(file.toPath), StandardCharsets.UTF_8)
   }
 
-  private def findGoldenDir(): File = {
-    var dir = new File(".").getAbsoluteFile
-    var depth = 0
-    while (depth < 8) {
-      val candidate = new File(dir, "tests/golden")
-      if (candidate.isDirectory) return candidate
-      dir = dir.getParentFile
-      if (dir == null) throw new IllegalStateException("tests/golden ディレクトリが見つからない")
-      depth += 1
+  @tailrec
+  private def findGoldenDir(dir: File = new File(".").getAbsoluteFile, depth: Int = 0): File = {
+    val candidate = new File(dir, "tests/golden")
+    if (candidate.isDirectory) candidate
+    else {
+      val parent = dir.getParentFile
+      if (parent == null) throw new IllegalStateException("tests/golden ディレクトリが見つからない")
+      else if (depth + 1 < 8) findGoldenDir(parent, depth + 1)
+      else throw new IllegalStateException("tests/golden ディレクトリが見つからない（8階層まで探索）")
     }
-    throw new IllegalStateException("tests/golden ディレクトリが見つからない（8階層まで探索）")
   }
 }

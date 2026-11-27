@@ -893,7 +893,7 @@ class PostingSuite extends FunSuite {
     // 板名・スレキーは BoardId（英数字16文字以内）・ThreadKey（9〜10桁）の制約内に収める。
     def at(t: Long): Future[Array[String]] =
       withFixedTime(t.toDouble * 1000) {
-        val bbs = "bb" + t
+        val bbs = s"bb$t"
         firstRowWith(DurableTestKit.newEnv(), Seq("FROM" -> "boundary", "subject" -> "boundarytest", "bbs" -> bbs), Nil, Nil, bbs)
       }
     for {

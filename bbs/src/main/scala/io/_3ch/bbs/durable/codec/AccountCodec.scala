@@ -181,14 +181,14 @@ object AccountCodec {
 
   def decodeState(values: js.Map[String, js.Any]): Option[AccountState] = values.get("profile").filterNot(missing).map { profile =>
     val decodedProfile = decodeProfile(profile.asInstanceOf[js.Dynamic])
-    val activation: js.Any = values.get("activation").getOrElse(js.undefined)
+    val activation: js.Any = values.getOrElse("activation", js.undefined)
     // activation が無い既存クライアント ID だけは、これまでどおり利用可能として読む
     val readiness = if (js.isUndefined(activation) && decodedProfile.kind == AccountKind.Client) AccountReadiness.Ready
     else AccountReadiness.parse(text(activation)).getOrElse(invalid())
     val credential = values.get("credential").filterNot(missing).map(PasswordCredentialCodec.decode)
     val state = AccountState(
       decodedProfile,
-      decodeLevel(values.get("level").getOrElse(invalid()).asInstanceOf[js.Dynamic]),
+      decodeLevel(values.getOrElse("level", invalid()).asInstanceOf[js.Dynamic]),
       decodeRoles(values.get("roles").orNull),
       array(values.get("tokens").orNull).map(decodeToken),
       array(values.get("devices").orNull).map(decodeDevice),

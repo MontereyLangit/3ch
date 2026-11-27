@@ -1,5 +1,6 @@
 package io._3ch.common.golden
 
+import scala.annotation.tailrec
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
 
@@ -32,20 +33,15 @@ object GoldenFile {
     NodeFs.readFileSync(NodePath.join(dir, name), "utf8")
   }
 
-  private def findGoldenDir(): String = {
-    var dir = NodePath.resolve(".")
-    var depth = 0
-    while (depth < 8) {
-      val candidate = NodePath.join(dir, "tests", "golden")
-      if (NodeFs.existsSync(candidate) && NodeFs.statSync(candidate).isDirectory().asInstanceOf[Boolean]) {
-        return candidate
-      }
-      val parent = NodePath.join(dir, "..")
-      val resolvedParent = NodePath.resolve(parent)
+  @tailrec
+  private def findGoldenDir(dir: String = NodePath.resolve("."), depth: Int = 0): String = {
+    val candidate = NodePath.join(dir, "tests", "golden")
+    if (NodeFs.existsSync(candidate) && NodeFs.statSync(candidate).isDirectory().asInstanceOf[Boolean]) candidate
+    else {
+      val resolvedParent = NodePath.resolve(NodePath.join(dir, ".."))
       if (resolvedParent == dir) throw new IllegalStateException("tests/golden ディレクトリが見つからない")
-      dir = resolvedParent
-      depth += 1
+      else if (depth + 1 < 8) findGoldenDir(resolvedParent, depth + 1)
+      else throw new IllegalStateException("tests/golden ディレクトリが見つからない（8階層まで探索）")
     }
-    throw new IllegalStateException("tests/golden ディレクトリが見つからない（8階層まで探索）")
   }
 }

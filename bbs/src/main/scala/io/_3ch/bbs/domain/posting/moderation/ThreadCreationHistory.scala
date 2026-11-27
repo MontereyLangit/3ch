@@ -99,7 +99,7 @@ final case class ThreadCreationHistory(records: Vector[ThreadCreationRecord]) {
       capacity: Int
   ): Either[ThreadCreationRejection, ThreadCreationHistory] = {
     val current = retained(now)
-    if current.records.size >= capacity then Left(ThreadCreationRejection.Capacity)
+    if current.records.sizeIs >= capacity then Left(ThreadCreationRejection.Capacity)
     else
       ThreadCreationRateLimit.checkWithReservations(settings, current.records, request, now) match {
         case Some(reason @ (Reason.Ip | Reason.Title)) => Left(ThreadCreationRejection.Narrow(reason))
@@ -125,7 +125,7 @@ final case class ThreadCreationHistory(records: Vector[ThreadCreationRecord]) {
   /** 同じ key の最初の記録を確定済みにする */
   def complete(key: String, now: Double): ThreadCreationHistory = {
     val index = records.indexWhere(_.key == key)
-    val updated = if index < 0 then records else records.updated(index, records(index).copy(status = Completed))
+    val updated = if index < 0 then records else records.patch(index, Seq(records(index).copy(status = Completed)), 1)
     ThreadCreationHistory(updated).retained(now)
   }
 

@@ -321,7 +321,7 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
           text(post, "network")
         )
       }
-      if (posts.size > 5) invalid()
+      if (posts.sizeIs > 5) invalid()
       posts
     }
     val tokens = array(value, "tokens").map { raw =>
@@ -353,7 +353,7 @@ final class AccountRepository(env: WorkerEnv) extends AccountStore with AccountM
       ) invalid()
       view
     }
-    if (tokens.map(_.id).distinct.size != tokens.size) invalid()
+    if (tokens.map(_.id).distinct.sizeIs != tokens.size) invalid()
     val activeCount = tokens.count(token => token.boundAt.isDefined && token.revokedAt.isEmpty)
     if (activeCount > DedicatedBrowserTokens.boundLimit) invalid()
     val caps = array(value, "caps").map { raw =>

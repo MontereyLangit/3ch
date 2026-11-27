@@ -101,7 +101,7 @@ final class PostingService(ports: PostingPorts, salt: String) {
   }
 
   private def headers(context: PostingContext)
-      : Seq[(String, String)] = (context.ponCookie.toSeq ++ context.sessionCookie).map("Set-Cookie" -> _)
+      : Seq[(String, String)] = (context.ponCookie.toList ++ context.sessionCookie).map("Set-Cookie" -> _)
 
   private def authEnabled: Boolean = ports.accounts.isDefined
 
@@ -498,8 +498,9 @@ final class PostingService(ports: PostingPorts, salt: String) {
 
   /** 段の途中の例外を内部エラーにする。時刻は BoardSettings・スレの読込・書込の段だけ受付時刻を出し、ほかは未設定 */
   private def guarded[A](context: PostingContext, stage: PostingStage, clock: FailureClock)(f: => Future[A]): Future[A] =
-    Future.unit.flatMap(_ => f).recover {
-      case e if !e.isInstanceOf[Rejected] =>
+    Future.unit.flatMap(_ => f).recoverWith {
+      case e: Rejected => Future.failed(e)
+      case e           =>
         val time = if (clock == FailureClock.Time || stage == PostingStage.ThreadDataAndSettings || stage == PostingStage.ThreadWrite)
           context.time
         else UnsetTime

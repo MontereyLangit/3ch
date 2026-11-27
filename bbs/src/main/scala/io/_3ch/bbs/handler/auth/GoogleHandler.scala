@@ -59,7 +59,7 @@ object GoogleHandler {
     }
 
   private def clear(requestUrl: String): Seq[String] =
-    Option.when(SessionCookies.canIssue(requestUrl))(s"${OAuthStateCodec.Name}=; Max-Age=0$Attributes").toSeq
+    Option.when(SessionCookies.canIssue(requestUrl))(s"${OAuthStateCodec.Name}=; Max-Age=0$Attributes").toList
 
   private def signature(secret: String, payload: String): Future[Option[String]] = AuthHmac.sessionSignature(secret, "oauth|" + payload)
 

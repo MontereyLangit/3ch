@@ -16,7 +16,7 @@ object KeyIp {
     }
 
   private def expand(ip: String): Option[List[Int]] = ip.split("::", -1) match {
-    case Array(all)        => groups(all).filter(_.length == 8)
+    case Array(all)        => groups(all).filter(_.lengthIs == 8)
     case Array(head, tail) =>
       for {
         h <- groups(head)

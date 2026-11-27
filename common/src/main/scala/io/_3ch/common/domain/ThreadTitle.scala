@@ -3,7 +3,7 @@ package io._3ch.common.domain
 /**
  * スレッドタイトル
  */
-case class ThreadTitle private (
+final case class ThreadTitle private (
     value: String
 )
 

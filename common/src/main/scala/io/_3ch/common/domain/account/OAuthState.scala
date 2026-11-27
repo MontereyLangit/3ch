@@ -61,32 +61,33 @@ object OAuthStateCodec {
   def parse(text: String): Option[SignedOAuthState] = Option(text).filter(_.length <= 1024).flatMap { raw =>
     raw.split("\\|", -1).toList match {
       case "2" :: state :: nonce :: verifier :: device :: returnPath :: popup :: uid :: agreed :: exp :: purpose :: aid :: sig :: Nil
-          if Set("0", "1").contains(popup) && exp.matches("[0-9]{1,12}") && sig.matches("[A-Za-z0-9_-]{21}[AQgw]") &&
-            OAuthPurpose.values.exists(_.code == purpose) =>
-        val value = OAuthState(
-          state,
-          nonce,
-          verifier,
-          device,
-          returnPath,
-          popup == "1",
-          Option.when(uid.nonEmpty)(uid),
-          agreed,
-          exp.toLong,
-          OAuthPurpose.values.find(_.code == purpose).get,
-          Option.when(aid.nonEmpty)(aid)
-        )
-        Option.when(valid(value))(SignedOAuthState(raw.substring(0, raw.lastIndexOf('|')), value, sig))
+          if Set("0", "1").contains(popup) && exp.matches("[0-9]{1,12}") && sig.matches("[A-Za-z0-9_-]{21}[AQgw]") =>
+        OAuthPurpose.values.find(_.code == purpose).flatMap { oauthPurpose =>
+          val value = OAuthState(
+            state,
+            nonce,
+            verifier,
+            device,
+            returnPath,
+            popup == "1",
+            Option.when(uid.nonEmpty)(uid),
+            agreed,
+            exp.toLong,
+            oauthPurpose,
+            Option.when(aid.nonEmpty)(aid)
+          )
+          Option.when(valid(value))(SignedOAuthState(raw.substring(0, raw.lastIndexOf('|')), value, sig))
+        }
       case _ => None
     }
   }
 
   /** Cookie ヘッダから読む。同名の Cookie が複数ある場合は受け付けない */
   def fromHeader(header: String): Option[SignedOAuthState] = {
-    val values = Option(header).toSeq.flatMap(_.split(";", -1)).map(_.trim).collect {
+    val values = Option(header).toList.flatMap(_.split(";", -1)).map(_.trim).collect {
       case cookie if cookie.startsWith(Name + "=") => cookie.substring(Name.length + 1)
     }
-    values.toList match {
+    values match {
       case value :: Nil => parse(value)
       case _            => None
     }

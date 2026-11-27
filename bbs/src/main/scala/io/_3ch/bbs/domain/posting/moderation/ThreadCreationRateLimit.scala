@@ -48,9 +48,9 @@ object ThreadCreationRateLimit {
     val tatesugi = window(settings.threadTatesugi, settings.threadTatesugiResetSeconds)
     val junban = window(settings.threadJunban, settings.threadJunbanResetSeconds)
     val matched: Seq[Reason] = tatesugi.flatMap { entry =>
-      Option.when(isSame(identity.ip, entry.identity.ip))(Reason.Ip) ++ Option.when(isSame(title, entry.title))(Reason.Title)
+      Option.when(isSame(identity.ip, entry.identity.ip))(Reason.Ip).toList ++ Option.when(isSame(title, entry.title))(Reason.Title)
     } ++ junban.flatMap { entry =>
-      Option.when(isSame(identity.userAgent, entry.identity.userAgent))(Reason.UserAgent) ++
+      Option.when(isSame(identity.userAgent, entry.identity.userAgent))(Reason.UserAgent).toList ++
         Option.when(isSame(identity.networkGroup, entry.identity.networkGroup))(Reason.NetworkGroup)
     }
     // 履歴の新旧によらず Reason の宣言順で最優先の理由を返す
@@ -69,7 +69,7 @@ object ThreadCreationRateLimit {
   ): Option[Reason] = {
     val (pending, completed) = records.partition(_.isActivePending(nowSeconds))
     def check(entries: Seq[Entry]): Option[Reason] = this.check(settings, entries, request.identity, request.title, nowSeconds)
-    val reasons = check(completed.map(_.toEntry)).toSeq ++ pending.flatMap(record => check(Seq(record.toEntry)))
+    val reasons = check(completed.map(_.toEntry)).toList ++ pending.flatMap(record => check(Seq(record.toEntry)))
     Reason.values.find(reasons.contains)
   }
 }

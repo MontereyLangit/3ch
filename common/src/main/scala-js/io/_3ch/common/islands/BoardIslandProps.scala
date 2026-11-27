@@ -83,7 +83,7 @@ trait ThreadListProps extends js.Object {
 
 object ThreadListProps {
   val fields: List[JsField] =
-    List("bbs", "type", "subjectText", "query", "sort").map(required(_, JsKind.Str)) :+ required("now", JsKind.Num)
+    List("bbs", "type", "subjectText", "query", "sort").map(required(_, JsKind.Str)) ++ List(required("now", JsKind.Num))
   def validate(raw: js.Any): Either[String, ThreadListProps] = JsShape.validate(raw, fields)
 }
 

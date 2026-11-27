@@ -11,7 +11,7 @@ import japgolly.scalajs.react.vdom.html_<^.*
 import scala.scalajs.js
 import scala.scalajs.js.URIUtils
 
-case class BoardIndexProps(
+final case class BoardIndexProps(
     title: String,
     headText: String,
     bbs: BoardId,

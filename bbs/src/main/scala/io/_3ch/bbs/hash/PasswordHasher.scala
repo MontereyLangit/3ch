@@ -71,7 +71,7 @@ object PasswordHasher {
   private def vector(value: Uint8Array): Vector[Byte] = Vector.tabulate(value.length)(index => value(index).toByte)
 
   private def equal(actual: Vector[Byte], expected: Vector[Byte]): Boolean = {
-    if (actual.size != expected.size) false
+    if (actual.sizeIs != expected.size) false
     else actual.indices.foldLeft(0)((difference, index) => difference | ((actual(index).toInt & 0xff) ^ (expected(index).toInt & 0xff))) ==
       0
   }

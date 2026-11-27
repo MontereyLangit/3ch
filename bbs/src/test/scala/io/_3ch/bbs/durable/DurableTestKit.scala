@@ -85,17 +85,13 @@ object DurableTestKit {
   }
 
   /** `process.cwd()` から上へ辿って `public/3chiko.html` を持つディレクトリ（リポジトリルート）を探す。 */
-  private def publicDir(): String = {
-    var dir = NodePath.resolve(".")
-    var depth = 0
-    while (depth < 8) {
-      val candidate = NodePath.join(dir, "public")
-      if (NodeFs.existsSync(NodePath.join(candidate, "3chiko.html"))) return candidate
-      dir = NodePath.resolve(NodePath.join(dir, ".."))
-      depth += 1
-    }
-    throw new IllegalStateException("public/3chiko.html が見つからない")
-  }
+  private def publicDir(): String =
+    Iterator
+      .iterate(NodePath.resolve("."))(dir => NodePath.resolve(NodePath.join(dir, "..")))
+      .take(8)
+      .map(NodePath.join(_, "public"))
+      .find(candidate => NodeFs.existsSync(NodePath.join(candidate, "3chiko.html")))
+      .getOrElse(throw new IllegalStateException("public/3chiko.html が見つからない"))
 
   /** 1テストケース分の Thread/Board/R2/KV(CAP)/ASSETS を束ねる環境。R2 は etag と `onlyIf.etagMatches` を再現する。 */
   final class Env {

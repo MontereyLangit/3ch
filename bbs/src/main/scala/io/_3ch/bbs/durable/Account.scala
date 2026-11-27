@@ -374,7 +374,7 @@ class Account(val state: DurableObjectState, env: js.Any) extends DurableObject(
         AccountCodec.inspect(
           account,
           logs,
-          AccountCodec.decodeRejections(values.get(AccountCodec.rejectionsKey).getOrElse(js.undefined)),
+          AccountCodec.decodeRejections(values.getOrElse(AccountCodec.rejectionsKey, js.undefined)),
           now
         )
       }

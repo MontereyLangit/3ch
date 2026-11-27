@@ -32,7 +32,7 @@ final case class DedicatedBrowserToken(
     AccountProfile.validTime(issuedAt) && AccountProfile.validTime(expiresAt) && expiresAt > issuedAt &&
     uaHash.forall(DedicatedBrowserTokens.validHash) &&
     Vector(boundAt, replacedTokenAt, lastUsedAt, revokedAt).flatten.forall(AccountProfile.validTime) &&
-    uaHash.isDefined == boundAt.isDefined && revokedAt.isDefined == revokeReason.isDefined && recentPosts.size <= 5 &&
+    uaHash.isDefined == boundAt.isDefined && revokedAt.isDefined == revokeReason.isDefined && recentPosts.sizeIs <= 5 &&
     recentPosts.forall(post => AccountProfile.validTime(post.t) && post.resNum >= 0 && post.excerpt.length <= 40)
 
   def active(now: Double): Boolean = revokedAt.isEmpty && (uaHash.isDefined || expiresAt > now)
@@ -61,7 +61,7 @@ object DedicatedBrowserTokens {
         token.revoke(token.expiresAt, TokenRevokeReason.Expired)
       else token
     }.filter(_.revokedAt.forall(_ > now - retainedLifetime))
-    val kept = current.filter(_.revokedAt.isDefined).sortBy(token => -token.revokedAt.get).take(revokedLimit).map(_.tokenId).toSet
+    val kept = current.flatMap(token => token.revokedAt.map(at => (at, token.tokenId))).sortBy(-_._1).take(revokedLimit).map(_._2).toSet
     current.filter(token => token.revokedAt.isEmpty || kept.contains(token.tokenId))
   }
 
@@ -98,7 +98,7 @@ object DedicatedBrowserTokens {
       case Some(token)                                     =>
         val active = current.filter(t => t.active(now) && t.uaHash.isDefined)
         val replaced = active.find(_.uaHash.contains(uaHash))
-        if (replaced.isEmpty && active.size >= boundLimit) Left(AccountRejection.TokenLimit)
+        if (replaced.isEmpty && active.sizeIs >= boundLimit) Left(AccountRejection.TokenLimit)
         else Right(token.copy(
           uaHash = Some(uaHash),
           uaLabel = Some(uaLabel),

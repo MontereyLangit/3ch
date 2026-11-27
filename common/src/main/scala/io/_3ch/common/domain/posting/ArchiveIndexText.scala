@@ -27,7 +27,7 @@ object ArchiveIndexText {
     */
   def headline(unixtime: String, bbs: String, title: Option[String], key: String, message: String, current: Option[String]): String = {
     val head = s"$unixtime\n$bbs<>${title.getOrElse("undefined")}<>$unixtime<>$key<>${message.take(30)}\n"
-    val kept = current.toSeq
+    val kept = current.toList
       .flatMap(_.split("\n", -1).slice(1, 301))
       .map(line => JsText.trim(line).split("<>", -1))
       .filter(f => f.length >= 5 && isBoardName(f(0)) && f(1).nonEmpty && f(0) != bbs)

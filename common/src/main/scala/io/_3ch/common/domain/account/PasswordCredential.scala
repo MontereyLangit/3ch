@@ -19,7 +19,7 @@ final case class PasswordCredential(
     throttle: LoginThrottle = LoginThrottle()
 ) {
   def valid: Boolean = algo != null && salt != null && hash != null && throttle != null && iterations > 0 &&
-    iterations <= PasswordCredential.currentIterations && salt.size == 16 && hash.size == 32 &&
+    iterations <= PasswordCredential.currentIterations && salt.sizeIs == 16 && hash.sizeIs == 32 &&
     AccountProfile.validTime(updatedAt) && throttle.valid
 
   /** 以前の反復数なら、ログイン成功時に現在の設定で計算し直す */

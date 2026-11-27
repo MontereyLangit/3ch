@@ -6,14 +6,14 @@ import japgolly.scalajs.react.vdom.html_<^.*
 
 import scala.scalajs.js.URIUtils
 
-case class ThreadPost(number: Int, name: String, date: String, message: String, slip: String = "")
+final case class ThreadPost(number: Int, name: String, date: String, message: String, slip: String = "")
 
 /**
  * スレッドコンポーネント要props
  * moreは1レス目の後ろに出す省略表示
  * read.cgiで全レスを出すときはNoneにすること
  */
-case class ThreadProps(
+final case class ThreadProps(
     bbs: BoardId,
     time: String,
     key: ThreadKey,

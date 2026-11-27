@@ -16,7 +16,7 @@ object PhoebeAdmission {
   private val Prefix = "thread-write:level:"
 
   /** Thread DO が Lv 不足の拒否として返す文字列 */
-  def code(required: Int): String = Prefix + required
+  def code(required: Int): String = s"$Prefix$required"
 
   /** RPC の文字列から必要 Lv を読む。Lv 不足の拒否でなければ None */
   def requiredOf(code: String): Option[Int] =

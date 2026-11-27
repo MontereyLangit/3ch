@@ -13,3 +13,4 @@ val hx4sLockedVersion: String = {
 addSbtPlugin("io.github.montereylangit" % "sbt-hx4s" % hx4sLockedVersion)
 
 addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.6.2")
+addSbtPlugin("org.wartremover" % "sbt-wartremover" % "3.6.3")

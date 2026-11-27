@@ -80,7 +80,7 @@ object RendererShell {
         ).asInstanceOf[React.Node],
         script.asInstanceOf[React.Node]
       ) ++
-        title.toOption.map(t => React.createElement("title", new js.Object(), t).asInstanceOf[React.Node]).toSeq
+        title.toOption.map(t => React.createElement("title", new js.Object(), t).asInstanceOf[React.Node]).toList
 
     val head = React.createElement("head", new js.Object(), headChildren*)
     val modal = if (authModal) Seq(IslandComponents.AuthModalJs(new js.Object).rawElement.asInstanceOf[React.Node]) else Nil

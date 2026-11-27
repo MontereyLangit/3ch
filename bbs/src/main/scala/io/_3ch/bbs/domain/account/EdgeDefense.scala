@@ -57,7 +57,7 @@ object EdgeDefense {
       val tls = Option.when(
         browser && signal.tlsHelloLength.exists(length => rules.tls.exists(_.contradicts(signal.userAgent, length)))
       )(EdgeFinding.DeclarationMismatch)
-      val findings = datacenter.toVector ++ tls
+      val findings = Vector(datacenter, tls).flatten
       val enforced = rules.mode == EdgeMode.On
       EdgeDecision(
         findings,

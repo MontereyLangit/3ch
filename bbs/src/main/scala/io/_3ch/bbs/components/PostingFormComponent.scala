@@ -8,7 +8,7 @@ import japgolly.scalajs.react.ScalaFnComponent
 
 import scala.scalajs.js.JSConverters.*
 
-case class PostingFormProps(
+final case class PostingFormProps(
     bbs: BoardId,
     time: String,
     key: Option[ThreadKey] = None,

@@ -28,7 +28,7 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
       val keys = (0 until count.getOrElse(0)).map(creationPageKey)
       Future.sequence(keys.grouped(128).map { batch =>
         state.storage.get(batch.toJSArray).toFuture.map { values =>
-          batch.flatMap(key => values.get(key).toSeq.flatMap(_.asInstanceOf[js.Array[js.Dynamic]].toSeq))
+          batch.flatMap(key => values.get(key).toList.flatMap(_.asInstanceOf[js.Array[js.Dynamic]].toSeq))
         }
       }.toVector).map(pages => ThreadCreationHistory(pages.flatten.map(ThreadCreationCodec.decodeRecord)))
     }
@@ -104,8 +104,7 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
       val reservation = history.reserve(key, identity, boardSettings, enforce, now)
       val saved = reservation.saved.fold(Future.unit) { updated =>
         state.storage.put(js.Dictionary[js.Any](
-          postRateMetaKey -> PostRateCodec.encodeMeta(updated.meta),
-          postRatePage(updated.pages.head)
+          (postRateMetaKey -> PostRateCodec.encodeMeta(updated.meta)) +: updated.pages.take(1).map(postRatePage)*
         )).toFuture
       }
       saved.map(_ => reservation.rejection.fold("")(_.code))
@@ -171,7 +170,7 @@ class Board(val state: DurableObjectState, env: js.Any) extends DurableObject(st
       } else js.Dynamic.global.String(data.title).asInstanceOf[String]
       val line = s"$key.dat<>$title (${js.Dynamic.global.String(data.resNum).asInstanceOf[String]})"
       // 既存スレ更新でsageの場合レス数のみ更新
-      if index >= 0 && js.Dynamic.global.Boolean(sage).asInstanceOf[Boolean] then lines = lines.updated(index, line)
+      if index >= 0 && js.Dynamic.global.Boolean(sage).asInstanceOf[Boolean] then lines = lines.patch(index, Seq(line), 1)
       else {
         // 先頭に持ってくる
         if index >= 0 then lines = lines.patch(index, Nil, 1)

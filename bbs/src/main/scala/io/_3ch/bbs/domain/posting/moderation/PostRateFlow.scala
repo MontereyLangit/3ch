@@ -28,7 +28,7 @@ object PostRateFlow {
   def conclude(check: PostRateCheck, reply: Boolean, thread: ThreadJudgement, boardCode: String, dat: String, datLine: String): Verdict = {
     val copipe = reply && PostRateLimit.copipe(dat, datLine)
     if (copipe && check.enforce) Verdict.Swallow
-    else Verdict.Store(thread.observed.map(PostRateFinding.Rejected(_)).toSeq ++ PostRateFinding.fromCode(boardCode) ++
+    else Verdict.Store(thread.observed.map(PostRateFinding.Rejected(_)).toList ++ PostRateFinding.fromCode(boardCode) ++
       Option.when(copipe)(PostRateFinding.Copipe))
   }
 

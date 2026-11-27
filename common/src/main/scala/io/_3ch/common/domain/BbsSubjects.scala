@@ -4,7 +4,7 @@ package io._3ch.common.domain
  * スレッド一覧
  * @param value BbsSubjectのリスト
  */
-case class BbsSubjects(
+final case class BbsSubjects(
     value: List[BbsSubject]
 ) {
 
@@ -51,7 +51,7 @@ object BbsSubjects {
  * @param title スレッドタイトル
  * @param resNum レス数
  */
-case class BbsSubject private (
+final case class BbsSubject private (
     key: ThreadKey,
     title: ThreadTitle,
     resNum: Int

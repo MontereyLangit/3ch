@@ -19,7 +19,7 @@ final case class AuthRateHistory(events: Vector[AuthRateEvent] = Vector.empty) {
   private def counted(recent: Vector[AuthRateEvent], kind: String, now: Double): (AuthRateHistory, AuthRateCounts) = {
     val same = recent.filter(_.kind == kind)
     val devices = AuthRateHistory.distinctDevices(recent)
-    if (same.size >= AuthRateHistory.kindLimit)
+    if (same.sizeIs >= AuthRateHistory.kindLimit)
       (AuthRateHistory(recent), AuthRateCounts(AuthRateHistory.kindLimit + 1, AuthRateHistory.kindLimit + 1, devices))
     else {
       val all = same :+ AuthRateEvent(kind, now)

@@ -4,7 +4,7 @@ import io._3ch.bbs.components.{BoardSettingsComponent, HeadlineComponent}
 import japgolly.scalajs.react.ScalaFnComponent
 import japgolly.scalajs.react.vdom.html_<^.*
 
-case class RightSidebarProps(bbs: String, headText: String, settings: Map[String, String])
+final case class RightSidebarProps(bbs: String, headText: String, settings: Map[String, String])
 
 /** 共通右サイドバー。PCは右端、モバイル等は本文の下に表示 */
 object RightSidebarComponent {

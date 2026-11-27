@@ -25,7 +25,7 @@ object AccountCapIsland {
   }
   private final case class Issued(name: String, password: String)
 
-  private def rows(raw: AccountCapProps): List[CapRow] = raw.caps.toList.map { cap =>
+  private def rows(raw: AccountCapProps): Vector[CapRow] = raw.caps.toVector.map { cap =>
     CapRow(cap.id, cap.name, cap.strong, cap.issuedAt, number(cap.revokedAt), cap.recentPosts.toList.take(5))
   }
   private def dateTime(seconds: Double): String = if seconds > 0 then io._3ch.common.text.JstTime.dateTime(seconds) else ""
@@ -55,7 +55,7 @@ object AccountCapIsland {
               if ok then done(json) else message.setState(AuthClient.text(json, "error", "操作できませんでした")).runNow()
             }.recover { case _ => busy.setState(false).runNow(); message.setState("通信できませんでした").runNow() }
         }
-      def revoked(id: String): List[CapRow] => List[CapRow] =
+      def revoked(id: String): Vector[CapRow] => Vector[CapRow] =
         _.map(row => if row.id == id && row.active then row.copy(revokedAt = Some(now)) else row)
       val issue = send("/auth/cap/issue", Seq("name" -> name.value.trim) ++ (if strong.value then Seq("strong" -> "1") else Nil)) { json =>
         val row = CapRow(AuthClient.text(json, "id"), name.value.trim, strong.value, now, None, Nil)

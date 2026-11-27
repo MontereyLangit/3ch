@@ -13,8 +13,54 @@ ThisBuild / scalaVersion := scala3Version
 ThisBuild / organization := "io._3ch"
 ThisBuild / version := "1.2.1"
 
+val wartsForTest: Seq[wartremover.Wart] = Seq(
+  Wart.ArrayEquals,
+  Wart.EitherProjectionPartial,
+  Wart.RedundantAsInstanceOf,
+  Wart.RedundantConversions,
+  Wart.Return,
+  Wart.ScalaApp,
+  Wart.StringPlusAny,
+  Wart.ThreadSleep,
+  Wart.TripleQuestionMark,
+  Wart.TryPartial
+)
+
+val wartsForMain: Seq[wartremover.Wart] = wartsForTest ++ Seq(
+  Wart.AnyVal,
+  Wart.CaseClassPrivateApply,
+  Wart.Enumeration,
+  Wart.ExplicitImplicitTypes,
+  Wart.FinalCaseClass,
+  Wart.GetGetOrElse,
+  Wart.ImplicitConversion,
+  Wart.IsInstanceOf,
+  Wart.IterableOps,
+  Wart.JavaConversions,
+  Wart.JavaSerializable,
+  Wart.LeakingSealed,
+  Wart.ListAppend,
+  Wart.ListUnapply,
+  Wart.Option2Iterable,
+  Wart.OptionPartial,
+  Wart.Product,
+  Wart.ReverseFind,
+  Wart.ReverseIterator,
+  Wart.ReverseTakeReverse,
+  Wart.SeqUpdated,
+  Wart.Serializable,
+  Wart.SizeIs,
+  Wart.SizeToLength,
+  Wart.SortFilter,
+  Wart.SortedMaxMin
+)
+
 lazy val commonSettings = Seq(
   scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked"),
+  // 規則の選び方は docs/development.md。JS 連携で避けられない AsInstanceOf・Null・Var・Any などは入れていない
+  Compile / compile / wartremoverErrors := wartsForMain,
+  Test / compile / wartremoverErrors := wartsForTest,
+  wartremoverExcluded += (Compile / sourceManaged).value,
   libraryDependencies += "org.scalameta" %%% "munit" % munitVersion % Test,
   testFrameworks += new TestFramework("munit.Framework")
 )

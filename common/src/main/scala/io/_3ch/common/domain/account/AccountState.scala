@@ -108,9 +108,9 @@ final case class AccountState(
     pending: Map[PendingKind, PendingToken] = Map.empty
 ) {
   def valid: Boolean = profile.valid && level.valid && roles.permitted(profile.kind) &&
-    tokens.forall(_.valid) && tokens.map(_.tokenId).distinct.size == tokens.size && tokens.map(_.hash).distinct.size == tokens.size &&
-    devices.size <= 10 && devices.forall(_.valid) && devices.map(_.hash).distinct.size == devices.size &&
-    caps.forall(_.valid) && caps.map(_.capId).distinct.size == caps.size && caps.map(_.hash).distinct.size == caps.size &&
+    tokens.forall(_.valid) && tokens.map(_.tokenId).distinct.sizeIs == tokens.size && tokens.map(_.hash).distinct.sizeIs == tokens.size &&
+    devices.sizeIs <= 10 && devices.forall(_.valid) && devices.map(_.hash).distinct.sizeIs == devices.size &&
+    caps.forall(_.valid) && caps.map(_.capId).distinct.sizeIs == caps.size && caps.map(_.hash).distinct.sizeIs == caps.size &&
     pending != null && pending.forall { case (kind, token) => token.valid && (kind == PendingKind.Email) == token.email.isDefined } &&
     readiness != null && credential != null &&
     (profile.kind match {

@@ -41,10 +41,10 @@ object CookieCodec {
 
   /** Cookie ヘッダから読む。同名の Cookie が複数ある場合は受け付けない */
   def fromHeader(header: String): Option[SignedSession] = {
-    val values = Option(header).toSeq.flatMap(_.split(";", -1)).map(_.trim).collect {
+    val values = Option(header).toList.flatMap(_.split(";", -1)).map(_.trim).collect {
       case cookie if cookie.startsWith(Name + "=") => cookie.substring(Name.length + 1)
     }
-    values.toList match {
+    values match {
       case value :: Nil => parse(value)
       case _            => None
     }

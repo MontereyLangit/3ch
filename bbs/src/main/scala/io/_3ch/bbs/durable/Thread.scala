@@ -235,7 +235,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
           }
       }
       _ <- rate.flatMap(PostRateFlow.boardRefusal(_, boardCode)).fold(Future.unit)(code => cancelCreation().map(_ => fail(code)))
-      verdict = rate.zip(judgement).headOption.fold[PostRateFlow.Verdict](PostRateFlow.Verdict.Store(Nil)) { case (r, j) =>
+      verdict = rate.zip(judgement).fold[PostRateFlow.Verdict](PostRateFlow.Verdict.Store(Nil)) { case (r, j) =>
         PostRateFlow.conclude(r, reply, j, boardCode, dat, datLine)
       }
       result <- verdict match {
@@ -322,7 +322,7 @@ class Thread(val state: DurableObjectState, env: WorkerEnv) extends DurableObjec
                 fields.remove(0, math.min(4, fields.length))
                 fields.prependAll(Seq.fill(4)("あぼーん"))
               } else {
-                while fields.length < 4 do fields += ""
+                while fields.lengthIs < 4 do fields += ""
                 fields(0) = escape(input.name); fields(1) = escape(input.mail); fields(3) = escape(input.message)
               }
               lines(number.toInt - 1) = fields.mkString("<>")

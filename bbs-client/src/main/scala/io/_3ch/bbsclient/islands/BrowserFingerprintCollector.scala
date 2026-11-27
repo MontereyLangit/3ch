@@ -38,8 +38,7 @@ object BrowserFingerprintCollector {
   private def renderer(): String = Try {
     val canvas = dom.document.createElement("canvas").asInstanceOf[dom.HTMLCanvasElement]
     val gl = Option(canvas.getContext("webgl")).orElse(Option(canvas.getContext("experimental-webgl")))
-    gl.fold("") { context =>
-      val dynamic = context.asInstanceOf[js.Dynamic]
+    gl.fold("") { dynamic =>
       val extension = dynamic.getExtension("WEBGL_debug_renderer_info")
       if (extension == null || js.isUndefined(extension)) ""
       else dynamic.getParameter(extension.UNMASKED_RENDERER_WEBGL).asInstanceOf[String]

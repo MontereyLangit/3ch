@@ -61,7 +61,7 @@ private[islands] object PostingSubmit {
       val init = new dom.RequestInit {}
       init.method = dom.HttpMethod.POST
       init.credentials = dom.RequestCredentials.`same-origin`
-      init.body = params.asInstanceOf[dom.URLSearchParams]
+      init.body = params
       dom.fetch("/test/bbs.cgi", init).toFuture.flatMap { r =>
         val charset = PostingResponse.charset(Option(r.headers.get("content-type")).getOrElse(""))
         r.arrayBuffer().toFuture.map { buffer =>
@@ -101,7 +101,7 @@ private[islands] object PostingSubmit {
     } else {
       val params = js.Dynamic.newInstance(js.Dynamic.global.URLSearchParams)(formData)
       params.set("submit", "書き込む")
-      val payload = params.toString().asInstanceOf[String]
+      val payload = params.toString()
       val response = postForm(payload).flatMap { first =>
         if first.auth == "login" then
           AuthClient.requestLogin().flatMap { ok =>

@@ -8,7 +8,7 @@ import scala.collection.immutable.ListMap
  * 板やスレの設定
  * @param value 設定名と設定値のマップ
  */
-case class BbsSettings(
+final case class BbsSettings(
     value: ListMap[String, String]
 ) {
 

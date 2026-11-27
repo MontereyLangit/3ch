@@ -92,48 +92,49 @@ object Json {
     private def parseObject(): JsonValue.Obj = {
       expect('{')
       skipWs()
-      var m = Map.empty[String, JsonValue]
       if (i < s.length && peek == '}') {
         i += 1
-        return JsonValue.Obj(m)
+        JsonValue.Obj(Map.empty)
+      } else {
+        var m = Map.empty[String, JsonValue]
+        var continue = true
+        while (continue) {
+          skipWs()
+          val key = parseString()
+          skipWs()
+          expect(':')
+          val value = parseValue()
+          m = m + (key -> value)
+          skipWs()
+          if (i < s.length && peek == ',') { i += 1 }
+          else { continue = false }
+        }
+        skipWs()
+        expect('}')
+        JsonValue.Obj(m)
       }
-      var continue = true
-      while (continue) {
-        skipWs()
-        val key = parseString()
-        skipWs()
-        expect(':')
-        val value = parseValue()
-        m = m + (key -> value)
-        skipWs()
-        if (i < s.length && peek == ',') { i += 1 }
-        else { continue = false }
-      }
-      skipWs()
-      expect('}')
-      JsonValue.Obj(m)
     }
 
     private def parseArray(): JsonValue.Arr = {
       expect('[')
       skipWs()
-      var items = List.empty[JsonValue]
       if (i < s.length && peek == ']') {
         i += 1
-        return JsonValue.Arr(items)
-      }
-      val buf = scala.collection.mutable.ListBuffer.empty[JsonValue]
-      var continue = true
-      while (continue) {
-        val v = parseValue()
-        buf += v
+        JsonValue.Arr(Nil)
+      } else {
+        val buf = scala.collection.mutable.ListBuffer.empty[JsonValue]
+        var continue = true
+        while (continue) {
+          val v = parseValue()
+          buf += v
+          skipWs()
+          if (i < s.length && peek == ',') { i += 1; skipWs() }
+          else { continue = false }
+        }
         skipWs()
-        if (i < s.length && peek == ',') { i += 1; skipWs() }
-        else { continue = false }
+        expect(']')
+        JsonValue.Arr(buf.toList)
       }
-      skipWs()
-      expect(']')
-      JsonValue.Arr(buf.toList)
     }
 
     private def parseString(): String = {

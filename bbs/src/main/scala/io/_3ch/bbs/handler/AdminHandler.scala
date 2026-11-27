@@ -83,7 +83,11 @@ object AdminHandler {
       "content-security-policy" ->
         "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
     )
-    if !truth(env.ADMIN_PASSWORD) then return js.Promise.resolve(Responses.response("管理者パスワードが未設定です。", 503, headers))
+    if !truth(env.ADMIN_PASSWORD) then js.Promise.resolve(Responses.response("管理者パスワードが未設定です。", 503, headers))
+    else authorized(r, e, env, headers)
+  }
+
+  private def authorized(r: Request, e: WorkerEnv, env: js.Dynamic, headers: js.Dictionary[String]): js.Promise[Response] = {
     val username = if truth(env.ADMIN_USER) then str(env.ADMIN_USER) else "admin"
     val credentialBytes = new TextEncoder().encode(s"$username:${str(env.ADMIN_PASSWORD)}")
     val credentials = (0 until credentialBytes.length).map(i => credentialBytes(i).toChar).mkString
@@ -172,7 +176,7 @@ object AdminHandler {
   }
 
   private def render(path: String, url: js.Dynamic, e: WorkerEnv): Future[(String, Int)] = {
-    val html: Future[String] = path match {
+    val html: PartialFunction[String, Future[String]] = {
       case "/admin" | "/admin/" =>
         Future.successful("<h1>管理画面top</h1><p>板名を指定して管理対象を開いてください。</p><form action=\"/admin/board\">" + input("bbs", "", "板名") +
           "<button>板管理</button></form><form action=\"/admin/threads\">" + input("bbs", "", "板名") + "<button>スレ管理</button></form>")
@@ -242,8 +246,7 @@ object AdminHandler {
       case "/admin/menu" => text(e, "bbsmenu.html").map(html =>
           "<h1>板一覧（bbsmenu.html）編集</h1><p>公開するHTMLを入力してください。保存後はこの内容を使用します。</p>" + form(area("html", html, "bbsmenu.html"), "save")
         )
-      case _ => return Future.successful(("<h1>ページがありません。</h1>", 404))
     }
-    html.map(_ -> 200)
+    html.lift(path).fold(Future.successful(("<h1>ページがありません。</h1>", 404)))(_.map(_ -> 200))
   }
 }
